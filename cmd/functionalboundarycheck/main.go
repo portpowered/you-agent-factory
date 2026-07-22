@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -128,21 +129,39 @@ func run(args []string, stderr io.Writer) error {
 }
 
 func checkAggregateProviderTests(root string) error {
+	return checkAggregateProviderTestsAgainst(root, grandfatheredAggregateProviderTestFiles)
+}
+
+func checkAggregateProviderTestsAgainst(root string, grandfathered map[string]struct{}) error {
 	providerRoot := filepath.Join(root, filepath.FromSlash(providerTestRoot))
 	entries, err := os.ReadDir(providerRoot)
 	if err != nil {
 		return fmt.Errorf("%s read aggregate provider tests: %w", diagnosticPrefix, err)
 	}
+	active := make(map[string]struct{}, len(grandfathered))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
 			continue
 		}
-		if _, grandfathered := grandfatheredAggregateProviderTestFiles[entry.Name()]; grandfathered {
-			continue
+		if _, recorded := grandfathered[entry.Name()]; !recorded {
+			return fmt.Errorf(
+				"%s new aggregate provider test prohibited: %s%s; place the test in the dedicated provider or domain subpackage",
+				diagnosticPrefix, providerTestRoot, entry.Name(),
+			)
 		}
+		active[entry.Name()] = struct{}{}
+	}
+	stale := make([]string, 0)
+	for name := range grandfathered {
+		if _, exists := active[name]; !exists {
+			stale = append(stale, name)
+		}
+	}
+	if len(stale) > 0 {
+		slices.Sort(stale)
 		return fmt.Errorf(
-			"%s new aggregate provider test prohibited: %s%s; place the test in the dedicated provider or domain subpackage",
-			diagnosticPrefix, providerTestRoot, entry.Name(),
+			"%s stale grandfathered aggregate provider test entry: %s%s; remove the migrated filename from grandfatheredAggregateProviderTestFiles so it cannot be reintroduced",
+			diagnosticPrefix, providerTestRoot, stale[0],
 		)
 	}
 	return nil

@@ -205,9 +205,7 @@ var fixture = config{ConfigureRuntime: func() {}}
 
 func TestCheckAggregateProviderTestsAcceptsGrandfatheredFiles(t *testing.T) {
 	root := t.TempDir()
-	for name := range grandfatheredAggregateProviderTestFiles {
-		writeFunctionalSourceAtRoot(t, root, providerTestRoot+name, "package providers\n")
-	}
+	writeAggregateProviderTests(t, root, grandfatheredAggregateProviderTestFiles)
 
 	if err := checkAggregateProviderTests(root); err != nil {
 		t.Fatalf("checkAggregateProviderTests() error = %v", err)
@@ -216,6 +214,7 @@ func TestCheckAggregateProviderTestsAcceptsGrandfatheredFiles(t *testing.T) {
 
 func TestCheckAggregateProviderTestsRejectsNewAggregateTest(t *testing.T) {
 	root := t.TempDir()
+	writeAggregateProviderTests(t, root, grandfatheredAggregateProviderTestFiles)
 	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"new_scenario_test.go", "package providers\n")
 
 	err := checkAggregateProviderTests(root)
@@ -227,22 +226,62 @@ func TestCheckAggregateProviderTestsRejectsNewAggregateTest(t *testing.T) {
 	}
 }
 
-func TestCheckAggregateProviderTestsAllowsGrandfatheredRemoval(t *testing.T) {
+func TestCheckAggregateProviderTestsRejectsStaleGrandfatheredEntry(t *testing.T) {
 	root := t.TempDir()
+	for name := range grandfatheredAggregateProviderTestFiles {
+		if name != "helpers_test.go" {
+			writeFunctionalSourceAtRoot(t, root, providerTestRoot+name, "package providers\n")
+		}
+	}
+
+	err := checkAggregateProviderTests(root)
+	if err == nil || !strings.Contains(err.Error(), "stale grandfathered aggregate provider test entry: tests/functional/providers/helpers_test.go") {
+		t.Fatalf("checkAggregateProviderTests() error = %v, want stale grandfathered entry failure", err)
+	}
+	if !strings.Contains(err.Error(), "remove the migrated filename from grandfatheredAggregateProviderTestFiles") {
+		t.Fatalf("checkAggregateProviderTests() error = %v, want allowlist-shrink remediation", err)
+	}
+}
+
+func TestCheckAggregateProviderTestsRejectsReintroducedRemovedException(t *testing.T) {
+	root := t.TempDir()
+	shrunk := copyStringSet(grandfatheredAggregateProviderTestFiles)
+	delete(shrunk, "helpers_test.go")
+	writeAggregateProviderTests(t, root, shrunk)
+
+	if err := checkAggregateProviderTestsAgainst(root, shrunk); err != nil {
+		t.Fatalf("checkAggregateProviderTestsAgainst() after migration error = %v", err)
+	}
 	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"helpers_test.go", "package providers\n")
+	err := checkAggregateProviderTestsAgainst(root, shrunk)
+	if err == nil || !strings.Contains(err.Error(), "new aggregate provider test prohibited: tests/functional/providers/helpers_test.go") {
+		t.Fatalf("checkAggregateProviderTestsAgainst() error = %v, want reintroduced test failure", err)
+	}
+}
+
+func TestCheckAggregateProviderTestsAcceptsDedicatedSubpackageTest(t *testing.T) {
+	root := t.TempDir()
+	writeAggregateProviderTests(t, root, grandfatheredAggregateProviderTestFiles)
+	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"codex/new_scenario_test.go", "package codex\n")
 
 	if err := checkAggregateProviderTests(root); err != nil {
 		t.Fatalf("checkAggregateProviderTests() error = %v", err)
 	}
 }
 
-func TestCheckAggregateProviderTestsAcceptsDedicatedSubpackageTest(t *testing.T) {
-	root := t.TempDir()
-	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"codex/new_scenario_test.go", "package codex\n")
-
-	if err := checkAggregateProviderTests(root); err != nil {
-		t.Fatalf("checkAggregateProviderTests() error = %v", err)
+func writeAggregateProviderTests(t *testing.T, root string, names map[string]struct{}) {
+	t.Helper()
+	for name := range names {
+		writeFunctionalSourceAtRoot(t, root, providerTestRoot+name, "package providers\n")
 	}
+}
+
+func copyStringSet(source map[string]struct{}) map[string]struct{} {
+	result := make(map[string]struct{}, len(source))
+	for value := range source {
+		result[value] = struct{}{}
+	}
+	return result
 }
 
 func writeFunctionalSource(t *testing.T, source string) (string, string) {
