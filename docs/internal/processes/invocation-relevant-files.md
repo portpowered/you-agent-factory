@@ -17,6 +17,27 @@ primary-result behavior.
   package's observed numeric floor and the wrapper package's documented
   measurement exception when it has no executable statements. Verify both with
   `make test-unit-coverage` and `make test-functional-coverage`.
+- The customer-implementable provider inference contract lives in
+  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+  through `ExecuteInvocation` so provider-authored drafts are validated for
+  provenance, invocation and item correlation, lifecycle ordering, terminal
+  result agreement, and exactly-once close before they reach orchestration.
+  Keep this boundary provider-neutral and test it with deterministic writers;
+  Factory Session publication identity, sequencing, retention, and replay stay
+  outside this package. Customer integrations can reuse
+  `inferencecontract/testkit.Run` with fresh factories for final-only,
+  streaming, and tool-lifecycle modes; pass at least two opaque identities so
+  conformance never depends on a built-in provider name. Reuse
+  `inferencecontract/testkit.RunAdverse` for normalized failure, cancellation,
+  deadline, response-sink backpressure, and terminal-state scenarios. A sink
+  write failure is terminal: preserve it for orchestration and reject every
+  later provider write or close without sending a competing completion. Once
+  an authoritative completed message represents success, reject a later
+  failure completion and discard the buffered terminal tail so orchestration
+  observes neither side of a contradictory outcome. Reject a second
+  authoritative completed message as `final_result_agreement`, even when it
+  uses a different item correlation, so no earlier represented result can be
+  overwritten before completion validation.
 
 ## CLI run and submit command contracts
 
@@ -243,6 +264,19 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
+- Complete operator-config provider/model updates belong in
+  `pkg/services/operator_settings.ConfigDocumentService`: validate and encode the
+  full candidate before filesystem side effects, publish through a uniquely
+  created same-directory temporary file, and treat `Rename` as the single commit
+  boundary after write, sync, close, permission, and cancellation checks. Share
+  one explicit persistence lock between service copies and reads so concurrent
+  callers remain deterministic on platforms where overlapping replacement and
+  reads otherwise produce sharing violations; failed attempts remove only their
+  own temporary artifact and never rewrite the committed destination directly.
+  Prompted setup should use a write-free function contract that receives the
+  current semantic defaults, maps EOF to an explicit cancellation outcome, and
+  delegates successful input to the same context-aware load/merge/persist
+  operation used by pre-supplied values.
 - Canonical `you config init` system bootstrap belongs in
   `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
   `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in

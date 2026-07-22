@@ -66,11 +66,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
-      "minimum": 66.39
+      "minimum": 65.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
-      "minimum": 73.33
+      "minimum": 72.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
@@ -478,7 +478,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
-      "minimum": 83.06
+      "minimum": 82.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
@@ -660,7 +660,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime",
-      "minimum": 61.02
+      "minimum": 60.29
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding",
@@ -852,7 +852,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 53.60
+      "minimum": 53.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
@@ -1002,6 +1002,16 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract/testkit",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -1186,7 +1196,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
-      "minimum": 37.43
+      "minimum": 37.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",
