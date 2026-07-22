@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -205,6 +206,142 @@ func TestConfigDocumentServicePersist_ConcurrentReadersSeeCompleteCandidates(t *
 	}
 	if final.BackendScopeID() != base.BackendScopeID() || !reflect.DeepEqual(final.FileConfig().WorkerPresets, base.FileConfig().WorkerPresets) {
 		t.Fatalf("final document lost unrelated values: %#v/%q", final.FileConfig(), final.BackendScopeID())
+	}
+}
+
+func TestConfigDocumentServiceConfigureProviderModel_InputPathsPersistEquivalentResults(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	promptedPath := filepath.Join(dir, "prompted.json")
+	suppliedPath := filepath.Join(dir, "supplied.json")
+	original := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"CODEX","workerModel":"existing"},"workerPresets":[{"id":"build","modelProvider":"codex"}]}`)
+	for _, path := range []string{promptedPath, suppliedPath} {
+		if err := os.WriteFile(path, original, 0o600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	service := persistedConfigService(testFiles, testCreateTemp)
+	provider, model := " anthropic ", " provider/model@next "
+	update := ProviderModelUpdate{Provider: &provider, Model: &model}
+	var promptedDefaults Defaults
+	prompted, err := service.ConfigureProviderModelPrompted(
+		context.Background(),
+		promptedPath,
+		func(_ context.Context, defaults Defaults) (ProviderModelUpdate, error) {
+			promptedDefaults = defaults
+			return update, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("ConfigureProviderModelPrompted() error = %v", err)
+	}
+	supplied, err := service.ConfigureProviderModel(context.Background(), suppliedPath, update)
+	if err != nil {
+		t.Fatalf("ConfigureProviderModel() error = %v", err)
+	}
+	if promptedDefaults != (Defaults{WorkerModelProvider: "CODEX", WorkerModel: "existing"}) {
+		t.Fatalf("prompt defaults = %#v, want existing defaults", promptedDefaults)
+	}
+	if !reflect.DeepEqual(prompted.FileConfig(), supplied.FileConfig()) || prompted.BackendScopeID() != supplied.BackendScopeID() {
+		t.Fatalf("prompted result = %#v/%q, supplied = %#v/%q", prompted.FileConfig(), prompted.BackendScopeID(), supplied.FileConfig(), supplied.BackendScopeID())
+	}
+	for _, path := range []string{promptedPath, suppliedPath} {
+		persisted, loadErr := service.Load(path)
+		if loadErr != nil {
+			t.Fatalf("Load(%q) error = %v", path, loadErr)
+		}
+		if !reflect.DeepEqual(persisted.FileConfig(), supplied.FileConfig()) || persisted.BackendScopeID() != supplied.BackendScopeID() {
+			t.Fatalf("persisted result at %q = %#v/%q, want %#v/%q", path, persisted.FileConfig(), persisted.BackendScopeID(), supplied.FileConfig(), supplied.BackendScopeID())
+		}
+	}
+}
+
+func TestConfigDocumentServiceConfigureProviderModelPrompted_InputStopsBeforePersistence(t *testing.T) {
+	t.Parallel()
+	promptFailure := errors.New("prompt failed")
+	for _, test := range []struct {
+		name    string
+		prompt  func(context.CancelFunc) ProviderModelPrompt
+		wantErr error
+	}{
+		{name: "EOF", prompt: func(context.CancelFunc) ProviderModelPrompt {
+			return func(context.Context, Defaults) (ProviderModelUpdate, error) { return ProviderModelUpdate{}, io.EOF }
+		}, wantErr: ErrProviderModelInputCanceled},
+		{name: "cancellation", prompt: func(context.CancelFunc) ProviderModelPrompt {
+			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
+				return ProviderModelUpdate{}, ErrProviderModelInputCanceled
+			}
+		}, wantErr: ErrProviderModelInputCanceled},
+		{name: "interrupt", prompt: func(context.CancelFunc) ProviderModelPrompt {
+			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
+				return ProviderModelUpdate{}, ErrProviderModelInputCanceled
+			}
+		}, wantErr: ErrProviderModelInputCanceled},
+		{name: "observed context cancellation", prompt: func(cancel context.CancelFunc) ProviderModelPrompt {
+			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
+				cancel()
+				provider := "codex"
+				return ProviderModelUpdate{Provider: &provider}, nil
+			}
+		}, wantErr: context.Canceled},
+		{name: "prompt error", prompt: func(context.CancelFunc) ProviderModelPrompt {
+			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
+				return ProviderModelUpdate{}, promptFailure
+			}
+		}, wantErr: promptFailure},
+	} {
+		for _, destination := range []string{"existing", "absent"} {
+			t.Run(test.name+"/"+destination, func(t *testing.T) {
+				t.Parallel()
+				dir := t.TempDir()
+				path := filepath.Join(dir, "config.json")
+				original := []byte(`{"defaults":{"workerModelProvider":"CODEX","workerModel":"existing"}}`)
+				if destination == "existing" {
+					if err := os.WriteFile(path, original, 0o600); err != nil {
+						t.Fatalf("WriteFile() error = %v", err)
+					}
+				}
+				createCalls := 0
+				service := persistedConfigService(testFiles, func(dir, pattern string) (TemporaryFile, error) {
+					createCalls++
+					return testCreateTemp(dir, pattern)
+				})
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				_, err := service.ConfigureProviderModelPrompted(ctx, path, test.prompt(cancel))
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("ConfigureProviderModelPrompted() error = %v, want %v", err, test.wantErr)
+				}
+				if createCalls != 0 {
+					t.Fatalf("temporary-file creations = %d, want zero", createCalls)
+				}
+				if destination == "existing" {
+					assertConfigBytesUnchanged(t, path, original)
+				} else if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) {
+					t.Fatalf("absent destination Stat() error = %v, want not exist", statErr)
+				}
+			})
+		}
+	}
+}
+
+func TestConfigDocumentServiceConfigureProviderModel_PreCanceledContextHasNoFilesystemEffects(t *testing.T) {
+	t.Parallel()
+	files := &faultFileSystem{FileSystem: testFiles}
+	createCalls := 0
+	service := persistedConfigService(files, func(dir, pattern string) (TemporaryFile, error) {
+		createCalls++
+		return testCreateTemp(dir, pattern)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	provider := "codex"
+	_, err := service.ConfigureProviderModel(ctx, filepath.Join(t.TempDir(), "config.json"), ProviderModelUpdate{Provider: &provider})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ConfigureProviderModel() error = %v, want context canceled", err)
+	}
+	if files.calls != 0 || createCalls != 0 {
+		t.Fatalf("filesystem calls = %d, temporary-file creations = %d; want zero", files.calls, createCalls)
 	}
 }
 

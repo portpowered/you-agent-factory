@@ -47,6 +47,11 @@ type ConfigDocumentService struct {
 	PersistenceLock sync.Locker
 }
 
+// ErrProviderModelInputCanceled is returned by a prompt when the operator
+// cancels or interrupts provider/model input. Prompt EOF is mapped to this
+// outcome as well.
+var ErrProviderModelInputCanceled = errors.New("provider/model input canceled")
+
 // MarshalInputInventoryJSON renders the operator config input inventory as stable JSON.
 func MarshalInputInventoryJSON(inventory InputInventory) ([]byte, error) {
 	payload, err := json.MarshalIndent(inventory, "", "  ")
@@ -147,6 +152,80 @@ func (service ConfigDocumentService) MergeProviderModelDefaults(
 		fields[defaultsField] = encoded
 	}
 	return service.validateFields(fields)
+}
+
+// ConfigureProviderModel applies pre-supplied values through the complete
+// transport-neutral load, merge, validation, and atomic persistence operation.
+func (service ConfigDocumentService) ConfigureProviderModel(
+	ctx context.Context,
+	path string,
+	update ProviderModelUpdate,
+) (ConfigDocument, error) {
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	document, err := service.Load(path)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	candidate, err := service.MergeProviderModelDefaults(document, update)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := service.Persist(ctx, path, candidate); err != nil {
+		return ConfigDocument{}, err
+	}
+	return candidate, nil
+}
+
+// ConfigureProviderModelPrompted acquires values through a write-free prompt,
+// then delegates successful input to ConfigureProviderModel. EOF, cancellation,
+// interrupt, and prompt failures return before persistence.
+func (service ConfigDocumentService) ConfigureProviderModelPrompted(
+	ctx context.Context,
+	path string,
+	prompt ProviderModelPrompt,
+) (ConfigDocument, error) {
+	if prompt == nil {
+		return ConfigDocument{}, fmt.Errorf("provider/model prompt is required")
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	document, err := service.Load(path)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	update, err := prompt(ctx, document.FileConfig().Defaults)
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, ErrProviderModelInputCanceled) {
+			return ConfigDocument{}, fmt.Errorf("acquire provider/model input: %w", ErrProviderModelInputCanceled)
+		}
+		return ConfigDocument{}, fmt.Errorf("acquire provider/model input: %w", err)
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	return service.ConfigureProviderModel(ctx, path, update)
+}
+
+func operationContextError(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("operator config context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("configure provider/model defaults: %w", err)
+	}
+	return nil
 }
 
 func (service ConfigDocumentService) validateProviderModelUpdate(update ProviderModelUpdate) (ProviderModelUpdate, error) {

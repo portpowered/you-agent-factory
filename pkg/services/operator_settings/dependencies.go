@@ -1,6 +1,7 @@
 package operatorsettings
 
 import (
+	"context"
 	"io"
 	"io/fs"
 )
@@ -28,6 +29,11 @@ type CreateTemporaryFile func(string, string) (TemporaryFile, error)
 // ProviderCatalog canonicalizes a supported operator provider identity. The
 // returned boolean is false when the supplied identity is not in the catalog.
 type ProviderCatalog func(string) (string, bool)
+
+// ProviderModelPrompt acquires provider/model values without writing operator
+// configuration. Existing defaults are supplied for presentation by the
+// transport that owns the prompt.
+type ProviderModelPrompt func(context.Context, Defaults) (ProviderModelUpdate, error)
 
 // IDGenerator supplies the opaque component of a local backend scope ID.
 type IDGenerator func() string
