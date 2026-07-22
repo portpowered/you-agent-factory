@@ -117,7 +117,7 @@ func NewStandalone(
 		}
 		return New(execution)
 	default:
-		return nil, factorysessions.NewExecutionValidationError(
+		return nil, factorysessionexecution.NewValidationError(
 			"provider",
 			"unsupported execution provider",
 		)

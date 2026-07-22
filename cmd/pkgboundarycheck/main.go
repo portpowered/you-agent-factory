@@ -53,7 +53,6 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions": {
 		"BuildProjectionContext":          {},
 		"BuildTargetFromConfig":           {},
-		"NewExecutionValidationError":     {},
 		"NewLogicalTargetValidationError": {},
 		"NewSessionID":                    {},
 	},

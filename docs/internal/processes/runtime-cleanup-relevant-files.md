@@ -627,6 +627,12 @@ on both sides of an existing root-to-implementation dependency belong under
 `factory_sessions/internal/contracts`, with only the canonical customer-facing
 name published at the root.
 
+When retiring root policy helpers or aliases, keep boundary-check inventories
+and synthetic guard coverage that prohibit transport use of those names. The
+guard remains useful as resurrection protection even after production no
+longer declares the symbol; remove only allowlist entries that permitted the
+retired root construction shape.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

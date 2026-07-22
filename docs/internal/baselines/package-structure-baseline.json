@@ -1794,11 +1794,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/execution_contract.go",
-      "target": "NewExecutionValidationError"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/projection.go",
       "target": "ProjectRuntimeContract"
     },

@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 )
 
@@ -90,7 +91,7 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 	if err := ctx.Err(); err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	if _, err := factorysessions.NormalizeControlRequest(control); err != nil {
+	if _, err := factorysessionexecution.NormalizeControlRequest(control); err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
 	activeFactory, err := s.dependencies.SessionFactory(sessionID)

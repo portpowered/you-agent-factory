@@ -140,21 +140,7 @@ var (
 	LifecycleControlLinksForSession        = execution.LifecycleControlLinksForSession
 	LiveLifecycleControlLogFields          = execution.LiveLifecycleControlLogFields
 	LiveLifecycleControlLinksForSession    = execution.LiveLifecycleControlLinksForSession
-	NormalizeApproveRequest                = execution.NormalizeApproveRequest
-	NormalizeControlRequest                = execution.NormalizeControlRequest
-	NormalizeEventReconnectRequest         = execution.NormalizeEventReconnectRequest
 	MaterializeEventReadStream             = execution.MaterializeEventReadStream
-	NormalizeInterruptDispatchRequest      = execution.NormalizeInterruptDispatchRequest
-	NormalizeListSessionsRequest           = execution.NormalizeListSessionsRequest
-	NormalizeResultRequest                 = execution.NormalizeResultRequest
-	NormalizeRetryDispatchRequest          = execution.NormalizeRetryDispatchRequest
-	NormalizeStartRequest                  = execution.NormalizeStartRequest
 )
 
 const LifecycleControlOutcomeClassNotFound = execution.LifecycleControlOutcomeClassNotFound
-
-// NewExecutionValidationError builds a durable-execution request validation
-// error without colliding with Factory Session discovery validation.
-func NewExecutionValidationError(field, message string) *ExecutionValidationError {
-	return execution.NewValidationError(field, message)
-}
