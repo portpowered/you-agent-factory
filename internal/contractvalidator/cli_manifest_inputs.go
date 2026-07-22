@@ -55,6 +55,7 @@ func cliInputValueDiagnostics(document string, input cliInputRecord) []Diagnosti
 		diagnostics = append(diagnostics, cliInputDiagnostic(document, input, "normalization", "cli.input.normalization-value-type",
 			"normalization is supported only for string and stringArray inputs"))
 	}
+	diagnostics = append(diagnostics, cliInputDefaultSourceDiagnostics(document, input)...)
 	for _, field := range []string{"defaultValue", "noOptionDefaultValue"} {
 		value, exists := input.record[field].(map[string]any)
 		if !exists {
@@ -80,6 +81,31 @@ func cliInputValueDiagnostics(document string, input cliInputRecord) []Diagnosti
 		}
 	}
 	return diagnostics
+}
+
+func cliInputDefaultSourceDiagnostics(document string, input cliInputRecord) []Diagnostic {
+	_, hasDefault := input.record["defaultValue"].(map[string]any)
+	manifestDefaultIndex := cliAcceptedSourceIndex(input.record, "manifest-default")
+	if hasDefault && manifestDefaultIndex < 0 {
+		return []Diagnostic{cliInputDiagnostic(document, input, "defaultValue", "cli.input.default-source-missing",
+			"defaultValue requires manifest-default in acceptedSources")}
+	}
+	if !hasDefault && manifestDefaultIndex >= 0 {
+		path := instancePath(append(input.path, "acceptedSources", fmt.Sprint(manifestDefaultIndex)))
+		return []Diagnostic{newDiagnostic("cli.input.default-value-missing", path,
+			"manifest-default in acceptedSources requires a typed defaultValue", document)}
+	}
+	return nil
+}
+
+func cliAcceptedSourceIndex(input map[string]any, source string) int {
+	values, _ := input["acceptedSources"].([]any)
+	for index, raw := range values {
+		if raw == source {
+			return index
+		}
+	}
+	return -1
 }
 
 func singleCLIInputValue(value map[string]any) (string, any) {

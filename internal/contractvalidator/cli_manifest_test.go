@@ -170,6 +170,21 @@ func TestCLIManifestDiagnosticsAcceptTypedValuesAndExplicitBindings(t *testing.T
 	}
 }
 
+func TestCLIManifestDiagnosticsAcceptRequiredInputWithoutDefault(t *testing.T) {
+	document := cliCanonicalInputTestDocument()
+	input := cliCanonicalTestFlag(document, "example.flag.name")
+	input["required"] = true
+	input["minCardinality"] = float64(1)
+	delete(input, "defaultValue")
+	delete(input, "noOptionDefaultValue")
+	input["acceptedSources"] = []any{"cli", "environment"}
+
+	diagnostics := cliManifestDiagnostics("contract.json", document)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want required input without default to be valid", diagnostics)
+	}
+}
+
 func TestCLIManifestDiagnosticsRejectInvalidTypedValues(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -199,6 +214,41 @@ func TestCLIManifestDiagnosticsRejectInvalidTypedValues(t *testing.T) {
 			test.mutate(input)
 			diagnostics := cliManifestDiagnostics("contract.json", document)
 			assertCLIDiagnostic(t, diagnostics, test.code, "/commands/example/flags/example.flag.name/"+test.field)
+		})
+	}
+}
+
+func TestCLIManifestDiagnosticsRejectDefaultSourceMismatches(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+		path   string
+	}{
+		{
+			name: "typed default without manifest source",
+			mutate: func(input map[string]any) {
+				input["acceptedSources"] = []any{"cli", "environment"}
+			},
+			code: "cli.input.default-source-missing",
+			path: "/commands/example/flags/example.flag.name/defaultValue",
+		},
+		{
+			name: "manifest source without typed default",
+			mutate: func(input map[string]any) {
+				delete(input, "defaultValue")
+			},
+			code: "cli.input.default-value-missing",
+			path: "/commands/example/flags/example.flag.name/acceptedSources/2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := cliCanonicalInputTestDocument()
+			test.mutate(cliCanonicalTestFlag(document, "example.flag.name"))
+			diagnostics := cliManifestDiagnostics("contract.json", document)
+			assertCLIDiagnostic(t, diagnostics, test.code, test.path)
 		})
 	}
 }

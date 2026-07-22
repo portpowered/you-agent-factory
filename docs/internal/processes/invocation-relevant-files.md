@@ -310,6 +310,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   generated family artifacts until the authored production manifest is migrated.
   Every `scope: inherited` flag must identify its persistent ancestor through
   `inheritedFromInputId` and preserve that source's public and value semantics.
+  Positional arguments are command-local; reject persistent or inherited
+  positional scope instead of accepting a declaration with no resolvable
+  ancestor identity. A canonical `defaultValue` is optional, but its presence
+  must exactly match the input declaring `manifest-default` in
+  `acceptedSources` so consumers never infer a default-source policy.
   Runtime handler bindings for an inherited flag must read the persistent
   ancestor's live storage; do not leave execution dependent on retired
   command-local storage after canonicalizing an input as inherited.

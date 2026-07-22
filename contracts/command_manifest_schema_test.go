@@ -131,7 +131,7 @@ func TestCommandManifestSchemaInheritedFlagRequiresExclusiveSourceReference(t *t
 	schema := commandManifestSchema(t)
 
 	t.Run("inherited flag requires source", func(t *testing.T) {
-		instance := readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json")).(map[string]any)
+		instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json"))).(map[string]any)
 		commands := instance["commands"].(map[string]any)
 		flags := commands["example.factory.watch"].(map[string]any)["flags"].(map[string]any)
 		delete(flags["example.factory.watch.flag.verbose"].(map[string]any), "inheritedFromInputId")
@@ -146,7 +146,7 @@ func TestCommandManifestSchemaInheritedFlagRequiresExclusiveSourceReference(t *t
 	})
 
 	t.Run("persistent flag forbids inherited source", func(t *testing.T) {
-		instance := readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json")).(map[string]any)
+		instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json"))).(map[string]any)
 		commands := instance["commands"].(map[string]any)
 		flags := commands["example.factory"].(map[string]any)["flags"].(map[string]any)
 		flags["example.factory.flag.verbose"].(map[string]any)["inheritedFromInputId"] = "example.flag.verbose"
@@ -159,6 +159,24 @@ func TestCommandManifestSchemaInheritedFlagRequiresExclusiveSourceReference(t *t
 			t.Fatalf("validation paths = %v, want %q", paths, wantPath)
 		}
 	})
+}
+
+func TestCommandManifestSchemaRejectsInheritedPositionalArgument(t *testing.T) {
+	t.Parallel()
+	schema := commandManifestSchema(t)
+	instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-canonical-input-kinds.json"))).(map[string]any)
+	commands := instance["commands"].(map[string]any)
+	arguments := commands["example.invoke"].(map[string]any)["arguments"].(map[string]any)
+	arguments["example.invoke.arg.count"].(map[string]any)["scope"] = "inherited"
+
+	err := schema.Validate(instance)
+	if err == nil {
+		t.Fatal("expected inherited positional argument to fail validation")
+	}
+	wantPath := "/commands/example.invoke/arguments/example.invoke.arg.count/scope"
+	if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+		t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+	}
 }
 
 func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {

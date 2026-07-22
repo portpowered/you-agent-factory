@@ -39,9 +39,9 @@
         },
         "example.invoke.arg.count": {
           "id": "example.invoke.arg.count", "name": "count", "position": 2, "kind": "positional", "valueType": "int",
-          "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": 1, "variadic": false,
-          "defaultValue": {"int": 2}, "enum": [], "pattern": "", "completion": "none", "doubleDash": "terminates-flags",
-          "acceptedSources": ["cli", "operator-config", "manifest-default"], "handlerBindingId": "example.invoke.binding.count", "visibility": "visible",
+          "scope": "local", "required": true, "minCardinality": 1, "maxCardinality": 1, "variadic": false,
+          "enum": [], "pattern": "", "completion": "none", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "operator-config"], "handlerBindingId": "example.invoke.binding.count", "visibility": "visible",
           "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.count", "state": "active", "since": "1.0.0"}
         },
         "example.invoke.arg.offset": {
@@ -55,7 +55,7 @@
           "id": "example.invoke.arg.labels", "name": "labels", "position": 4, "kind": "positional", "valueType": "stringArray",
           "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": -1, "variadic": true,
           "defaultValue": {"stringArray": ["default"]}, "enum": [], "pattern": "", "completion": "dynamic", "doubleDash": "terminates-flags",
-          "acceptedSources": ["cli", "stdin", "factory-signature-default"], "handlerBindingId": "example.invoke.binding.labels", "visibility": "visible",
+          "acceptedSources": ["cli", "stdin", "manifest-default"], "handlerBindingId": "example.invoke.binding.labels", "visibility": "visible",
           "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.labels", "state": "active", "since": "1.0.0"}
         }
       },
@@ -76,8 +76,8 @@
         },
         "example.invoke.flag.count": {
           "id": "example.invoke.flag.count", "kind": "named", "long": "count", "shorthand": "", "aliases": [], "scope": "local",
-          "valueType": "int", "required": true, "minCardinality": 1, "maxCardinality": 1, "defaultValue": {"int": 2},
-          "repeatable": false, "normalization": "", "completion": "none", "acceptedSources": ["cli", "manifest-default"],
+          "valueType": "int", "required": true, "minCardinality": 1, "maxCardinality": 1,
+          "repeatable": false, "normalization": "", "completion": "none", "acceptedSources": ["cli"],
           "handlerBindingId": "example.invoke.binding.flag-count", "visibility": "visible",
           "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.count", "state": "active", "since": "1.0.0"}
         },

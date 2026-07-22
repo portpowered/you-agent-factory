@@ -41,6 +41,30 @@ func TestCanonicalInputValueDecodingPreservesAuthoredTypes(t *testing.T) {
 	}
 }
 
+func TestCanonicalInputValueDecodingPreservesAbsentDefault(t *testing.T) {
+	payload := []byte(`{
+		"id":"example.flag.count",
+		"long":"count",
+		"aliases":[],
+		"scope":"local",
+		"valueType":"int",
+		"required":true,
+		"minCardinality":1,
+		"maxCardinality":1,
+		"repeatable":false,
+		"acceptedSources":["cli"],
+		"handlerBindingId":"example.binding.count"
+	}`)
+
+	var input climanifest.Flag
+	if err := json.Unmarshal(payload, &input); err != nil {
+		t.Fatalf("decode canonical input without default: %v", err)
+	}
+	if input.DefaultValue != nil {
+		t.Fatalf("defaultValue = %#v, want absent default", input.DefaultValue)
+	}
+}
+
 func TestCommand_InputLookups(t *testing.T) {
 	command := climanifest.Command{
 		ID: "you.session.show",

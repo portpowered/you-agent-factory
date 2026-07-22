@@ -304,11 +304,9 @@
           ]
         },
         "scope": {
-          "description": "The effective command scope of this positional input.",
+          "description": "The command-local scope of this positional input. Positional arguments are never persistent or inherited.",
           "enum": [
-            "local",
-            "persistent",
-            "inherited"
+            "local"
           ]
         },
         "required": {
@@ -415,7 +413,6 @@
             {
               "required": [
                 "scope",
-                "defaultValue",
                 "acceptedSources",
                 "handlerBindingId",
                 "visibility",
@@ -676,7 +673,6 @@
                 "kind",
                 "minCardinality",
                 "maxCardinality",
-                "defaultValue",
                 "acceptedSources",
                 "handlerBindingId"
               ],
