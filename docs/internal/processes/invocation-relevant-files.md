@@ -17,6 +17,27 @@ primary-result behavior.
   package's observed numeric floor and the wrapper package's documented
   measurement exception when it has no executable statements. Verify both with
   `make test-unit-coverage` and `make test-functional-coverage`.
+- The customer-implementable provider inference contract lives in
+  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+  through `ExecuteInvocation` so provider-authored drafts are validated for
+  provenance, invocation and item correlation, lifecycle ordering, terminal
+  result agreement, and exactly-once close before they reach orchestration.
+  Keep this boundary provider-neutral and test it with deterministic writers;
+  Factory Session publication identity, sequencing, retention, and replay stay
+  outside this package. Customer integrations can reuse
+  `inferencecontract/testkit.Run` with fresh factories for final-only,
+  streaming, and tool-lifecycle modes; pass at least two opaque identities so
+  conformance never depends on a built-in provider name. Reuse
+  `inferencecontract/testkit.RunAdverse` for normalized failure, cancellation,
+  deadline, response-sink backpressure, and terminal-state scenarios. A sink
+  write failure is terminal: preserve it for orchestration and reject every
+  later provider write or close without sending a competing completion. Once
+  an authoritative completed message represents success, reject a later
+  failure completion and discard the buffered terminal tail so orchestration
+  observes neither side of a contradictory outcome. Reject a second
+  authoritative completed message as `final_result_agreement`, even when it
+  uses a different item correlation, so no earlier represented result can be
+  overwritten before completion validation.
 
 ## CLI run and submit command contracts
 
@@ -255,6 +276,19 @@ response-stream output.
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
+- Complete operator-config provider/model updates belong in
+  `pkg/services/operator_settings.ConfigDocumentService`: validate and encode the
+  full candidate before filesystem side effects, publish through a uniquely
+  created same-directory temporary file, and treat `Rename` as the single commit
+  boundary after write, sync, close, permission, and cancellation checks. Share
+  one explicit persistence lock between service copies and reads so concurrent
+  callers remain deterministic on platforms where overlapping replacement and
+  reads otherwise produce sharing violations; failed attempts remove only their
+  own temporary artifact and never rewrite the committed destination directly.
+  Prompted setup should use a write-free function contract that receives the
+  current semantic defaults, maps EOF to an explicit cancellation outcome, and
+  delegates successful input to the same context-aware load/merge/persist
+  operation used by pre-supplied values.
 - Canonical `you config init` system bootstrap belongs in
   `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
   `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in
@@ -303,12 +337,56 @@ response-stream output.
   then requires complete channels, outputs, exits, effects, runtime constraints,
   and stable handler metadata for runnable records. Register every authored command
   manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
-  participants on same-command flag or argument IDs so diagnostics name the exact
-  record path. Compatibility records must not be copied into the primary manifest
+  participants on flag or argument IDs visible in the command's effective scope
+  so diagnostics name the exact record path. Group relationship participants are
+  unordered sets; dependency and conditional relationships direct `when` toward
+  their participant targets and must remain acyclic. Compatibility records must
+  not be copied into the primary manifest
   merely to make generation convenient. Apply family-completeness validators only
   to the manifest classification that owns that family: `LoadProduction` owns
   canonical run/submit validation, while `LoadCompatibility` must remain able to
   decode the separately classified workflow-only manifest.
+- Canonical flag and positional-input shapes are defined in
+  `contracts/cli/command-manifest.schema.json` and decoded by
+  `pkg/transports/cli/climanifest`. New canonical records use the shared typed
+  `defaultValue` / `noOptionDefaultValue` shape plus explicit cardinality,
+  accepted sources, and stable `handlerBindingId`; serialized `default`,
+  `noOptionDefault`, `changedDefault`, `binding`, and argument `channels` remain
+  compatibility fields for manifests not yet migrated. Preserve both shapes in
+  generated family artifacts until the authored production manifest is migrated.
+  Every `scope: inherited` flag must identify its persistent ancestor through
+  `inheritedFromInputId` and preserve that source's public and value semantics.
+  Positional arguments are command-local; reject persistent or inherited
+  positional scope instead of accepting a declaration with no resolvable
+  ancestor identity. A canonical `defaultValue` is optional, but its presence
+  must exactly match the input declaring `manifest-default` in
+  `acceptedSources` so consumers never infer a default-source policy.
+  Runtime handler bindings for an inherited flag must read the persistent
+  ancestor's live storage; do not leave execution dependent on retired
+  command-local storage after canonicalizing an input as inherited.
+  Declare canonical environment, operator-config, and stdin routing in command
+  `sourceBindings`, with an external key where applicable and an explicit input
+  target. Declare each canonical handler route in `handlerBindings`; its stable
+  ID is the value referenced by the input's `handlerBindingId`.
+  Every command containing a canonical input must declare a precedence record,
+  even when the command is not otherwise marked authoritative. That record uses
+  the exact highest-to-lowest order `cli`, `stdin`, `environment`,
+  `operator-config`, `manifest-default`, `factory-signature-default`.
+  `climanifest.CanonicalPrecedence` owns the pure policy: higher tiers replace
+  lower tiers, scalar observations from one binding
+  use the last value, repeated observations append in order, and multiple
+  same-tier bindings for one input are rejected.
+  Static-plus-Factory composition is owned by
+  `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
+  command and only the selected Factory's `InvocationSignatureConfig`. The pure
+  projection keeps manifest inputs separate from dynamic Factory parameters and
+  rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
+  and stable-binding collisions with sorted diagnostics that identify both
+  owners. Named and explicit-file selectors must not enter this composition
+  policy; equivalent selected signatures produce equivalent results.
+  Keep effective-scope spelling and inheritance checks in
+  `internal/contractvalidator` so schema-valid manifests still receive stable,
+  path-specific semantic diagnostics before generation or consumption.
 - Classification-aware workflow/MCP generation lives in
   `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
   metadata is emitted from `commands.json` into `mcp_family.json`, while approved

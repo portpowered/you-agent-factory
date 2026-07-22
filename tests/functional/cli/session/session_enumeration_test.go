@@ -56,6 +56,14 @@ func TestSessionEnumerationJSON(t *testing.T) {
 	if sessions.Sessions[0].FolderPath != dir {
 		t.Fatalf("session folder path = %q, want %q", sessions.Sessions[0].FolderPath, dir)
 	}
+
+	createInputs := support.FakeInputs(t.Context(), []string{
+		"you", "session", "create", "--json", "--dir", dir, "--port", "1",
+	})
+	err := process.Execute(createInputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "not reachable") {
+		t.Fatalf("Process.Execute(session create --json) error = %v, want accepted inherited flag and unreachable endpoint", err)
+	}
 }
 
 func startSessionProcess(

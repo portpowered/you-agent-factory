@@ -248,8 +248,6 @@ func sessionCreateFlagTarget(flag climanifest.Flag, cfg *sessioncli.CreateConfig
 		return flagTarget{stringValue: &cfg.TargetName}, nil
 	case "port":
 		return flagTarget{intValue: &cfg.Port}, nil
-	case "json":
-		return flagTarget{boolValue: &cfg.JSON}, nil
 	default:
 		return flagTarget{}, fmt.Errorf("unsupported create local flag %q", flag.Long)
 	}
@@ -261,8 +259,6 @@ func sessionListFlagTarget(flag climanifest.Flag, cfg *sessioncli.ListConfig) (f
 		return flagTarget{intValue: &cfg.Port}, nil
 	case "scope":
 		return flagTarget{stringValue: &cfg.Scope}, nil
-	case "json":
-		return flagTarget{boolValue: &cfg.JSON}, nil
 	default:
 		return flagTarget{}, fmt.Errorf("unsupported list local flag %q", flag.Long)
 	}
@@ -272,8 +268,6 @@ func sessionDeleteFlagTarget(flag climanifest.Flag, cfg *sessioncli.DeleteConfig
 	switch flag.Long {
 	case "port":
 		return flagTarget{intValue: &cfg.Port}, nil
-	case "json":
-		return flagTarget{boolValue: &cfg.JSON}, nil
 	default:
 		return flagTarget{}, fmt.Errorf("unsupported delete local flag %q", flag.Long)
 	}

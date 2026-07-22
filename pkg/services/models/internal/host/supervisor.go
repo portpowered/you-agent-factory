@@ -264,7 +264,7 @@ func (r *supervisedRuntime) waitForLoad(ctx context.Context, loadDone chan struc
 		case supervisedStateReady:
 			return nil
 		case supervisedStateFailed:
-			return r.failureOutcome()
+			return r.failureOutcomeLocked()
 		default:
 			return ErrRuntimeNotReady
 		}

@@ -107,9 +107,8 @@ func validateRunSubmitInputPolicy(manifest Manifest) error {
 	if err := validateBatchInputPolicy(manifest.Commands["you.submit.batch"]); err != nil {
 		return err
 	}
-	wantPrecedence := []string{"flags", "args", "env", "config", "stdin", "defaults"}
 	for _, record := range []Command{run, manifest.Commands["you.submit"], manifest.Commands["you.submit.batch"]} {
-		if !slices.Equal(record.Precedence.Order, wantPrecedence) {
+		if !record.Precedence.IsCanonical() {
 			return fmt.Errorf("command %q has contradictory input precedence", record.ID)
 		}
 	}

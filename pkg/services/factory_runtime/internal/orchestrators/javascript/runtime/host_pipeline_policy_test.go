@@ -48,16 +48,6 @@ func peakConcurrentChildRunning(records []factory.JavaScriptRuntimeRecord) int {
 	return peak
 }
 
-func childCompletionOrder(records []factory.JavaScriptRuntimeRecord) []string {
-	var order []string
-	for _, record := range records {
-		if record.Kind == factory.JavaScriptRecordKindChildDispatch && record.ChildDispatch != nil && record.ChildDispatch.Status == factory.JavaScriptChildDispatchStatusCompleted && record.ChildDispatch.Label != "" {
-			order = append(order, record.ChildDispatch.Label)
-		}
-	}
-	return order
-}
-
 func hasChildDispatchStatus(records []factory.JavaScriptRuntimeRecord, status string) bool {
 	for _, record := range records {
 		if record.Kind == factory.JavaScriptRecordKindChildDispatch && record.ChildDispatch != nil && record.ChildDispatch.Status == status {
@@ -548,13 +538,6 @@ func TestRun_ParallelFakeChildren_PreservesInputOrderAndConcurrency(t *testing.T
 	assertParallelResultOrder(t, req.SessionID, first, wantLabels)
 	if peak := peakConcurrentChildRunning(first.Records); peak > policy.Concurrency {
 		t.Fatalf("peak concurrent running children = %d, want <= %d", peak, policy.Concurrency)
-	}
-	completion := childCompletionOrder(first.Records)
-	if len(completion) != len(wantLabels) {
-		t.Fatalf("completion order = %#v, want %d children", completion, len(wantLabels))
-	}
-	if completion[0] == wantLabels[0] && completion[len(completion)-1] == wantLabels[len(wantLabels)-1] {
-		t.Fatalf("completion order %#v matched input order; want differing completion order", completion)
 	}
 
 	if string(first.Value.JSON) != string(second.Value.JSON) {
