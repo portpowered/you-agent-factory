@@ -2,12 +2,13 @@ package builtinsubagent_test
 
 import (
 	"encoding/json"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"os"
+	"io/fs"
 	"testing"
 
+	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 const (
@@ -55,7 +56,7 @@ func TestBuiltInSubagentFactoryJSON_DeclaresPromptsWithoutInlineBodies(t *testin
 
 func readPromptAsset(t *testing.T, path string) string {
 	t.Helper()
-	content, err := os.ReadFile(path)
+	content, err := fs.ReadFile(packagedfactories.Source(), "factories/subagent/"+path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)
 	}

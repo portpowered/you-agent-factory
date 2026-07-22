@@ -2,9 +2,10 @@ package builtinreview_test
 
 import (
 	"encoding/json"
-	"os"
+	"io/fs"
 	"testing"
 
+	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	builtinreview "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/review"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
@@ -15,7 +16,7 @@ func TestBuiltInReviewFactoryJSON_AssemblesDeclaredPromptAssets(t *testing.T) {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 	for _, tc := range []struct{ name, path string }{{"review-work-executor", "prompts/executor.md"}, {"review-work-reviewer", "prompts/reviewer.md"}} {
-		want, err := os.ReadFile(tc.path)
+		want, err := fs.ReadFile(packagedfactories.Source(), "factories/review/"+tc.path)
 		if err != nil {
 			t.Fatalf("ReadFile(%s): %v", tc.path, err)
 		}
