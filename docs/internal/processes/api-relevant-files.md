@@ -7,10 +7,9 @@ Use this map when changing the public REST contract.
   `internal/contractopenapiconverter` must translate those pairs to numeric
   Draft 2020-12 exclusive bounds so packaged Factory schemas preserve the same
   acceptance behavior.
-- The standalone `@you-agent-factory/factory-emulator` package keeps authored
-  scenario structure in `contracts/factory-emulator/scenario.schema.json`,
-  generated schema/type exports under `packages/factory-emulator`, and pure
-  runtime preflight and rule semantics in `src/parser.js` and `src/semantics.js`.
+- The canonical `@you-agent-factory/factory-emulator` package keeps authored
+  scenario structure, generated schema exports, runtime preflight, and rule
+  semantics together under `ui/packages/factory-emulator`.
   Keep semantic diagnostics as stable JSON-Pointer records, validate semantic
   references before any emulator activity, and exercise authored rule ordering,
   lineage, exhaustion, and unmatched behavior through the package's public API.
@@ -24,7 +23,7 @@ Use this map when changing the public REST contract.
   scenario's UTC `startAt`, and keep reset event-free so reruns reproduce event
   bytes and snapshots from the same immutable inputs.
 
-- Public TypeScript consumer contracts live in `packages/client`: generated
+- Public TypeScript consumer contracts live in `ui/packages/client`: generated
   OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases
   stay handwritten in `src/contracts.ts`. Recording shape validation consumes a
   byte-identical generated copy of the standalone API schema, while handwritten
@@ -32,15 +31,9 @@ Use this map when changing the public REST contract.
   `recording-parser.d.ts`. Compare validated RFC 3339 event times across the full
   schema domain with civil-date and offset arithmetic plus an explicit leap-second
   phase; JavaScript `Date` parsing does not support leap seconds and loses
-  precision beyond milliseconds. Regenerate the bundled API, staged contracts, client
-  projection, and client schema copy with `make generate-client`; use `make
-  client-test` for behavioral generated-drift rejection, typechecking, parser
-  behavior, and framework/host boundary evidence. Keep install-level contract evidence in
-  `scripts/client-packed-consumer.test.mjs`: pack both public packages, enforce
-  exact tarball inventories, install into a temporary directory outside the
-  repository, consume only declared package exports, and inspect the installed
-  dependency tree. Do not replace that observable package evidence with source
-  text scanning.
+  precision beyond milliseconds. Use the package-local `generate`, `verify`,
+  pack-inventory, and installed-consumer commands; `make
+  ui-public-package-release` composes those checks across the package family.
 - Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
   identity, state-change, and payload-lineage contracts live in `pkg/work`.
   Generated OpenAPI conversion remains at transport boundaries such as
@@ -105,7 +98,7 @@ Use this map when changing the public REST contract.
   event-level `oneOf` so event kinds that share a payload shape remain valid.
   Keep schema compilation, valid/malformed event and recording behavior, complete
   discriminator coverage, and repeated byte stability in
-  `factory_recording_schema_test.go`; `make generate-client` and
+  `factory_recording_schema_test.go`; the UI client package generator and
   `client-generated-check` also generate/check contract staging.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
@@ -840,18 +833,18 @@ dashboard state, and event connections. This agrees with
 - Initializer-backed MCP serve composition belongs in `pkg/wire/process.go` (backing-service selection and typed graph construction), `pkg/initializer` (lifecycle), and `pkg/transports/cli/mcp/serve.go` (stdio adaptation only). Pass the exact wire-built durable execution service through the graph to `pkg/transports/mcp/server`; never construct persistence or execution services at the CLI boundary. Focused production-composition coverage lives in `pkg/root/root_test.go` and `pkg/wire/process_test.go`, with protocol smoke coverage in `pkg/transports/cli/mcp/serve_*_test.go`.
 - Real-backend dashboard browser proofs can launch the same initializer-backed API transport path through `tests/functional/internal/support/cmd/browser_api_harness` (`compose.InjectAPITransport`), then point `ui/integration/browser-test-harness.mjs` at that local API origin. Keep live dashboard state on a real factory directory, seed durable workflow sessions through the service durable-session API, and use URL- or widget-level selection on the existing dashboard surface rather than introducing a browser-only backend double. Treat this path as one bounded customer-facing proof of the existing session-detail inspection lane, not as a replacement for the fast fixture-backed unit/component coverage or `factory-session-detail-panel.stories.tsx` Storybook verification that should remain the default regression surface. The harness supports `--start-mode sync|async`: reuse `sync` for terminal inspection paths and `async` with a long-running workflow fixture (for example `busy-loop.workflow.js`) when the dashboard proof must tolerate explicit loading or non-terminal durable status before detail becomes inspectable. For terminal dispatch-detail plus artifact-drilldown coverage, `agent-run-fake-child.workflow.js` is the narrow seeded fixture that already projects `dispatch-1`, JavaScript execution mode, and `child-artifact-1` through the shared durable inspection APIs. Reuse the focused lane `make test-ui-durable-session-real-backend` (`cd ui && bun run test:integration:durable-session-real-backend`) to rerun only `ui/integration/durable-session-real-backend.integration.test.mjs` and `ui/integration/browser-test-harness.real-backend-setup.integration.test.mjs`; file lists live in `ui/scripts/ui-integration-targets.mjs`.
 - The canonical bounded operator proof for the shipped durable JavaScript session slice belongs in `docs/reference/sessions.md` under the reusable proof artifact matrix. When a lane needs exact validate, lifecycle-control, and dashboard-detail closeout evidence, reuse `pkg/transports/cli/workflow/validate_test.go`, the durable lifecycle tests in `pkg/service/runtime_session_runtime_test.go`, and `ui/integration/durable-session-real-backend.integration.test.mjs` rather than adding a parallel proof guide or a new broad browser harness.
-- The Factory Emulator scenario contract is authored at `contracts/factory-emulator/scenario.schema.json`; its publishable schema and TypeScript surfaces live in `packages/factory-emulator/` and are regenerated by `scripts/generate-emulator.mjs`. Treat the schema as the only authored structural source: the generator must traverse its properties, requiredness, references, variants, and runtime-only bounds when emitting TypeScript rather than maintaining a parallel handwritten type template. Retain byte-stable and schema-mutation generator coverage whenever the public scenario vocabulary changes.
-- Factory Emulator parsing belongs in `packages/factory-emulator/src/parser.js` with its TypeScript public contract in `parser.ts`: keep it a pure preflight boundary that returns JSON-Pointer diagnostics and validates Factory support before any emulator activity or canonical Factory event can begin.
+- The Factory Emulator scenario contract and generator live under `ui/packages/factory-emulator`; `schema/scenario.schema.json` is the publishable schema and `scripts/generate-scenario-schema.mjs` owns its freshness check. Retain byte-stable and schema-mutation coverage whenever the public scenario vocabulary changes.
+- Factory Emulator parsing belongs in `ui/packages/factory-emulator/src/scenario.ts`: keep it a pure preflight boundary that returns structured diagnostics and validates Factory support before any emulator activity or canonical Factory event can begin.
 - The published, host-controlled Factory Emulator visualizer lives in `ui/packages/components/src/factory-emulator`. `FactoryEmulatorControls` receives all execution state and callbacks as props; it must not import an emulator runtime, timer, event history, replay state, or dashboard store. Keep the four permitted speeds in its typed public contract, delegate Step as one callback invocation, and add each category entrypoint to `category-paths.ts`, `package.json`, `tsconfig.build.json`, and the package root exports.
 - The Factory Emulator's accepted definition boundary must compile the canonical
   generated `packages/api/generated/schemas/factory.schema.json`, not a
-  handwritten subset. `scripts/generate-emulator.mjs` copies those exact bytes
-  into the publishable emulator package; apply full structural validation after
+  handwritten subset. The package-local generator copies those exact bytes into
+  the publishable emulator package; apply full structural validation after
   plain-data checks and before emulator capability or scenario-semantic checks,
   then prove malformed definitions cannot reach sink activity.
-- Factory Emulator supported-capability inspection and Factory subset validation share `packages/factory-emulator/src/support.js`; expose support through `inspectEmulatorSupport()` rather than duplicating parser acceptance policy. Published parser-validated scenario documents live in `packages/factory-emulator/src/examples.js`.
-- Factory Emulator command lifecycle, calculate/write/commit publication, rejected-transaction retry, deterministic safety enforcement, cooperative yielding, terminal close ownership, and detached status/state projection live in `packages/factory-emulator/src/session.js`, with pure limit normalization/diagnostics in `limits.js`, iterative node/depth-bounded plain-data boundary validation in `data-only.js`, plain command-error construction in `data-error.js`, the public declaration surface in `session.ts`, and direct asynchronous behavior proofs in `test/session.test.mjs`. Validate Factory, scenario, limits, and submission configuration before copying, property access, or identity derivation so class instances, accessors, and other non-data values never execute caller code or enter retained state and canonical events; inspect submission array cardinality through an exception-safe own descriptor before traversal, and normalize proxy inspection or structured-clone failures into the matching detached configuration/submission error family. Detach accepted limits before normalization so later caller mutation cannot change execution policy. Enforce calculated-state budgets before sink IO, keep scheduler calculation pure in `scheduler.js`, do not move sink IO or pending recovery state into either pure module, and expose both rejected command values and bounded status error metadata as detached structured-cloneable data while canonical batch history remains sink-owned. Caller-owned sink failures may be propagated unchanged, but normalize their retained status messages to strings defensively because thrown values and `Error.message` are not guaranteed to satisfy the public data contract.
+- Factory Emulator supported-capability inspection and Factory subset validation share `ui/packages/factory-emulator/src/compatibility.ts`; do not duplicate parser acceptance policy.
+- Factory Emulator command lifecycle, calculate/write/commit publication, rejected-transaction retry, deterministic safety enforcement, and detached state projection live in `ui/packages/factory-emulator/src/session.ts`, with pure scheduling in `scheduler.ts` and direct asynchronous behavior proofs in `session.test.ts`.
 - The Factory Emulator event budget must admit the mandatory atomic two-event bootstrap. Keep the `maxEvents` minimum in `limits.js` aligned with bootstrap behavior, reject smaller policies before sink activity, and prove the smallest accepted budget can pause after bootstrap with a virtual-time diagnostic and still close.
 - Bound Factory Emulator scheduler materialization separately from cooperative cadence: inspect retained Work in resumable `maxSynchronousWorkItems` chunks before building an atomic dispatch/completion batch, return the exact candidate indexes and lineage lookup to pure calculation so it cannot rescan retained Work, and apply replacements plus detach command-result state with the same chunk/yield cadence rather than whole-state clones. Pause after observing the first over-limit eligible Work, and use the session-owned `yieldControl` boundary between Work chunks and after `maxSynchronousBatches` calculations so host tasks can run without changing canonical event order. Check initial and interactive submission cardinality before traversing members, and keep the shared data-only walk iterative with explicit total-node and depth bounds so hostile wide or deep inputs reject as plain diagnostics before cloning rather than consuming unbounded synchronous work or leaking a host stack error.
 - Factory Emulator token ownership starts with submission identity in `session.js`; scripted dispatch lineage, authored-rule cursor state, and output-token derivation belong to the pure scheduler calculation. Treat authored IDs as arbitrary schema-valid strings when using plain-object indexes: read only own properties and define updates as own data properties so names such as `__proto__`, `constructor`, and `toString` cannot invoke prototype behavior. Keep token/lineage identity observable through contract-valid Work tags, dispatch-response metadata, and bounded state rather than adding Petri-only fields to canonical customer event schemas, and prove cursor behavior through emitted session events instead of identity-helper-only tests.
-- `make generate-emulator` runs the non-mutating `--check` mode of `scripts/generate-emulator.mjs`; it compares every published schema and TypeScript artifact with deterministic source-derived output and reports the exact regenerate-and-commit remediation when drift is found.
+- `bun run check:generated` in `ui/packages/factory-emulator` compares the published schema with deterministic source-derived output and reports the exact regenerate-and-commit remediation when drift is found.

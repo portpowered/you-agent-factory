@@ -18,6 +18,8 @@ env:
   # Keep this pinned version aligned with ui/package.json's packageManager value.
   BUN_VERSION: 1.3.12
   GORELEASER_VERSION: v2.12.7
+  NODE_VERSION: 24
+  NPM_VERSION: 11.15.0
 
 jobs:
   resolve-release-tag:
@@ -67,6 +69,9 @@ jobs:
     name: Publish GitHub Release
     needs: resolve-release-tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - name: Check out release commit
         uses: actions/checkout@v4
@@ -92,9 +97,30 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Set up trusted-publishing-compatible Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Pin trusted-publishing-compatible npm
+        run: npm install --global npm@${{ env.NPM_VERSION }}
+
       - name: Install dashboard dependencies
         working-directory: ui
         run: bun install --frozen-lockfile
+
+      - name: Prepare the canonical frontend package release candidates
+        run: >-
+          make ui-public-package-publish-prepare
+          PACKAGE_VERSION="${{ needs.resolve-release-tag.outputs.release_version }}"
+          PACKAGE_OUTPUT=".artifacts/public-release-candidate"
+
+      - name: Publish and verify the canonical frontend package family
+        working-directory: ui
+        run: >-
+          npm run publish:public-packages --
+          --candidate-directory ../.artifacts/public-release-candidate
+          --tag latest --provenance
 
       - name: Publish GitHub release assets from the tagged commit
         env:

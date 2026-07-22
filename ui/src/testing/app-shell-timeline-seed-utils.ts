@@ -1,9 +1,9 @@
+import { projectFactoryTopology } from "@you-agent-factory/factory-replay";
 import type {
   DashboardSnapshot,
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
-import { projectFactoryTopology } from "../../packages/factory-replay/src/index.js";
 import {
   emptyHostedFactoryReplayProjection,
   useFactoryTimelineStore,

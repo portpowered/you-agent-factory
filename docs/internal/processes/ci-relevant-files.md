@@ -1,15 +1,6 @@
 # CI Relevant Files
 
-- `make verify-api` includes `make generate-emulator`, which is the freshness gate for the public Factory Emulator generated contract. Keep it non-mutating so CI rejects stale committed artifacts with a maintainer-actionable regeneration command.
-
 ## Pull-request verification workflow
-
-- Public standalone package checks belong in explicit root Make targets and in
-  the gates that already execute those targets. For `packages/factory-emulator`,
-  `make factory-emulator-typecheck` installs and typechecks the package, while
-  `make factory-emulator-test` runs its behavioral and packed isolated-consumer
-  tests; root `make typecheck` and `make test` compose those targets so the
-  Development Package workflow exercises the same contract.
 
 - The five public frontend packages under `ui/packages/` share a family-level
   dependency gate at `ui/scripts/check-public-package-boundaries.mjs`. Keep the
@@ -27,6 +18,15 @@
   installed. The emulator's `verify:release` intentionally omits only its
   change-scope development check; the ordinary package `verify` command retains
   that additional repository-scope guard.
+
+- `make ui-public-package-publish-prepare PACKAGE_VERSION=<semver>` builds the
+  canonical five-package family, stages manifests with one version and aligned
+  internal dependency pins, and writes registry-format tarballs plus evidence
+  under `.artifacts/public-packages` by default. The Development Package
+  workflow runs this command as a read-only pull-request dry run, publishes an
+  immutable `dev` version after protected `main` succeeds, and the tagged
+  release workflow publishes the release semver under `latest`. Publication
+  uses npm trusted publishing and verifies every exact version after upload.
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable

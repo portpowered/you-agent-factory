@@ -1,12 +1,11 @@
+import { projectFactoryWorldAtTick } from "@you-agent-factory/factory-replay";
 import { describe, expect, it } from "vitest";
-
-import { projectFactoryWorldAtTick } from "../../../../../../packages/factory-replay/src/index.js";
 import type { FactoryEvent } from "../../../../api/events";
-import { projectSnapshot } from "./projectSnapshot";
 import {
   hostedFactoryReplayReducer,
   reconstructFactoryReplayState,
 } from "./buildSnapshot";
+import { projectSnapshot } from "./projectSnapshot";
 
 function factoryStateEvent(
   id: string,
@@ -39,7 +38,9 @@ describe("factory replay kernel compatibility", () => {
       tick: 1,
     });
 
-    expect(kernel.world).toEqual(projectSnapshot(reconstructFactoryReplayState(events, 1)));
+    expect(kernel.world).toEqual(
+      projectSnapshot(reconstructFactoryReplayState(events, 1)),
+    );
     expect(kernel.world.factory_state).toBe("RUNNING");
     expect(kernel.appliedEvents.map((event) => event.id)).toEqual([
       "event-selected",

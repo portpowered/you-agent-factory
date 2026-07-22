@@ -75,6 +75,9 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
+      - name: Verify the canonical frontend package release family
+        run: make ui-public-package-release
+
       - name: Build snapshot candidate artifacts without publishing
         run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --snapshot --clean -f .goreleaser.yml
 
