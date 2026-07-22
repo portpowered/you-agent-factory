@@ -425,25 +425,17 @@ function InvocationExamples({
             <Text className="font-medium" variant="supporting">
               {example.name}
             </Text>
-            {example.description ? (
+            {example.description.value ? (
               <Text
                 className="text-on-surface-variant"
                 variant="supporting"
               >
-                {example.description}
+                {example.description.value}
               </Text>
             ) : null}
-            {example.argv && example.argv.length > 0 ? (
+            {Object.keys(example.args).length > 0 ? (
               <Text className="font-mono text-xs" variant="supporting">
-                {example.argv.join(" ")}
-              </Text>
-            ) : null}
-            {example.stdin ? (
-              <Text
-                className="text-on-surface-variant"
-                variant="supporting"
-              >
-                {messages.invocation.exampleStdin(example.stdin)}
+                {JSON.stringify(example.args)}
               </Text>
             ) : null}
           </div>

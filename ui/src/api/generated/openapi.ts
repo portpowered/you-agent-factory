@@ -4027,6 +4027,8 @@ export interface components {
       invocationReturn?: components["schemas"]["InvocationReturn"];
       /** @description Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior. */
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
+      /** @description Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper. */
+      examples?: components["schemas"]["FactoryInvocationExample"][];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -4104,8 +4106,6 @@ export interface components {
       unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
       /** @description Optional customer-facing hint for the factory's primary output shape. */
       outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
-      /** @description Example invocations rendered in docs, help, and inspection surfaces. */
-      examples?: components["schemas"]["FactoryInvocationExample"][];
     };
     /** @description One canonical invocation parameter declared on a factory. */
     FactoryInvocationParameter: {
@@ -4183,12 +4183,14 @@ export interface components {
     FactoryInvocationExample: {
       /** @description Stable example name. */
       name: string;
-      /** @description Customer-facing explanation of what the example does. */
-      description?: string;
-      /** @description CLI-style argument vector rendered after factory selection. */
-      argv?: string[];
-      /** @description Example stdin payload when the signature routes stdin into one parameter. */
-      stdin?: string;
+      /** @description Localized customer-facing explanation of what the example does. */
+      description: components["schemas"]["NameValue"];
+      /** @description Structured invocation arguments; values are never parsed or executed while loading the Factory. */
+      args: components["schemas"]["FactoryInvocationArguments"];
+    };
+    /** @description Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings. */
+    FactoryInvocationArguments: {
+      [key: string]: string | string[];
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {

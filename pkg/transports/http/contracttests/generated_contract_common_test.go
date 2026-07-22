@@ -427,6 +427,9 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 	outputContractMode := factoryapi.FactoryInvocationOutputContractModeInline
 	return factoryapi.Factory{
 		Name: "customer-support-triage",
+		Examples: &[]factoryapi.FactoryInvocationExample{
+			generatedFactoryInvocationExample("basic", map[string]interface{}{"input": "brief.md"}),
+		},
 		InvocationSignature: &factoryapi.FactoryInvocationSignature{
 			UnknownNamedArgumentPolicy: &unknownNamedPolicy,
 			Parameters: &[]factoryapi.FactoryInvocationParameter{{
@@ -442,10 +445,6 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 			OutputContract: &factoryapi.FactoryInvocationOutputContract{
 				Mode: &outputContractMode,
 			},
-			Examples: &[]factoryapi.FactoryInvocationExample{{
-				Name: "basic",
-				Argv: &[]string{"brief.md"},
-			}},
 		},
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
@@ -480,6 +479,28 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 				{WorkType: "task", State: "failed"},
 			},
 		}},
+	}
+}
+
+func generatedFactoryInvocationExample(name string, args map[string]interface{}) factoryapi.FactoryInvocationExample {
+	generatedArgs := make(factoryapi.FactoryInvocationArguments, len(args))
+	for key, value := range args {
+		var union factoryapi.FactoryInvocationArguments_AdditionalProperties
+		switch typed := value.(type) {
+		case string:
+			_ = union.FromFactoryInvocationArguments0(typed)
+		case []string:
+			_ = union.FromFactoryInvocationArguments1(typed)
+		}
+		generatedArgs[key] = union
+	}
+	return factoryapi.FactoryInvocationExample{
+		Name: name,
+		Description: factoryapi.NameValue{
+			Type:  factoryapi.LOCALIZABLEASSET,
+			Value: name,
+		},
+		Args: generatedArgs,
 	}
 }
 

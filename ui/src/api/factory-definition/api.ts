@@ -58,6 +58,7 @@ type FactoryInvocationParameterBinding =
   FactorySchemas["FactoryInvocationParameterBinding"];
 type FactoryInvocationSignature =
   FactorySchemas["FactoryInvocationSignature"];
+type FactoryNameValue = FactorySchemas["NameValue"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
@@ -81,6 +82,8 @@ type FactoryWorkType = FactorySchemas["WorkType"];
 type FactoryWorkTypeHandlingBehavior =
   FactorySchemas["WorkTypeHandlingBehavior"];
 const FACTORY_KEYS = new Set([
+  "description",
+  "examples",
   "factoryDirectory",
   "guards",
   "id",
@@ -105,7 +108,6 @@ const FACTORY_GUARD_KEYS = new Set([
   "type",
 ]);
 const INVOCATION_SIGNATURE_KEYS = new Set([
-  "examples",
   "outputContract",
   "parameters",
   "unknownNamedArgumentPolicy",
@@ -133,11 +135,11 @@ const INVOCATION_OUTPUT_CONTRACT_KEYS = new Set([
   "pathParameter",
 ]);
 const INVOCATION_EXAMPLE_KEYS = new Set([
-  "argv",
+  "args",
   "description",
   "name",
-  "stdin",
 ]);
+const NAME_VALUE_KEYS = new Set(["id", "locales", "type", "value", "values"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["handlingBehavior", "id", "name", "states"]);
 const WORK_TYPE_HANDLING_BEHAVIOR_VALUES =
@@ -376,6 +378,8 @@ function decodeFactoryDefinition(
     name: readRequiredString(value, "name", path),
   };
   const id = readOptionalString(value, "id", path);
+  const description = readOptionalObject(value, "description", path, decodeNameValue);
+  const examples = readOptionalArray(value, "examples", path, decodeInvocationExample);
   const factoryDirectory = readOptionalString(value, "factoryDirectory", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
@@ -415,6 +419,12 @@ function decodeFactoryDefinition(
 
   if (id !== undefined) {
     factory.id = id;
+  }
+  if (description !== undefined) {
+    factory.description = description;
+  }
+  if (examples !== undefined) {
+    factory.examples = examples;
   }
   if (factoryDirectory !== undefined) {
     factory.factoryDirectory = factoryDirectory;
@@ -489,12 +499,6 @@ function decodeInvocationSignature(
     path,
     decodeInvocationOutputContract,
   );
-  const examples = readOptionalArray(
-    record,
-    "examples",
-    path,
-    decodeInvocationExample,
-  );
 
   if (parameters !== undefined) {
     signature.parameters = parameters;
@@ -504,9 +508,6 @@ function decodeInvocationSignature(
   }
   if (outputContract !== undefined) {
     signature.outputContract = outputContract;
-  }
-  if (examples !== undefined) {
-    signature.examples = examples;
   }
   return signature;
 }
@@ -651,22 +652,44 @@ function decodeInvocationExample(
   rejectUnknownKeys(record, INVOCATION_EXAMPLE_KEYS, path);
 
   const example: FactoryInvocationExample = {
+    args: decodeInvocationExampleArgs(record.args, `${path}.args`),
+    description: decodeNameValue(record.description, `${path}.description`),
     name: readRequiredString(record, "name", path),
   };
-  const description = readOptionalString(record, "description", path);
-  const argv = readOptionalStringArray(record, "argv", path);
-  const stdin = readOptionalString(record, "stdin", path);
-
-  if (description !== undefined) {
-    example.description = description;
-  }
-  if (argv !== undefined) {
-    example.argv = argv;
-  }
-  if (stdin !== undefined) {
-    example.stdin = stdin;
-  }
   return example;
+}
+
+function decodeNameValue(value: unknown, path: string): FactoryNameValue {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, NAME_VALUE_KEYS, path);
+  const result: FactoryNameValue = {
+    type: readRequiredEnum(record, "type", path, new Set(["LOCALIZABLE_ASSET"])),
+    value: readRequiredString(record, "value", path),
+  };
+  const id = readOptionalString(record, "id", path);
+  const locales = readOptionalStringArray(record, "locales", path);
+  const values = readOptionalStringMap(record, "values", path);
+  if (id !== undefined) result.id = id;
+  if (locales !== undefined) result.locales = locales;
+  if (values !== undefined) result.values = values;
+  return result;
+}
+
+function decodeInvocationExampleArgs(value: unknown, path: string) {
+  const record = expectObject(value, path);
+  const args: Record<string, string | string[]> = {};
+  for (const [key, item] of Object.entries(record)) {
+    if (typeof item === "string") {
+      args[key] = item;
+      continue;
+    }
+    if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) {
+      args[key] = item;
+      continue;
+    }
+    throw new FactoryDefinitionAPIError(`${path}.${key} must be a string or array of strings`);
+  }
+  return args;
 }
 
 function decodeInputType(value: unknown, path: string): FactoryInputType {

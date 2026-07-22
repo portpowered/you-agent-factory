@@ -113,6 +113,16 @@ func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
 	if strings.TrimSpace(string(apiCfg.Name)) == "" {
 		return fmt.Errorf("factory.name is required")
 	}
+	if apiCfg.Examples != nil {
+		for index, example := range *apiCfg.Examples {
+			if strings.TrimSpace(example.Name) == "" {
+				return fmt.Errorf("factory.examples[%d].name must be a non-empty string", index)
+			}
+			if example.Args == nil {
+				return fmt.Errorf("factory.examples[%d].args is required", index)
+			}
+		}
+	}
 	return nil
 }
 
@@ -156,6 +166,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		InputTypes:          inputTypesAPIFromInternal(cfg.InputTypes),
 		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
 		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
+		Examples:            invocationExamplesAPIFromInternal(cfg.Examples),
 		Orchestrator:        orchestratorAPIFromInternal(cfg),
 		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
 		Resources:           resourcesAPIFromInternal(cfg.Resources),
@@ -199,7 +210,6 @@ func invocationSignatureAPIFromInternal(value *interfaces.InvocationSignatureCon
 		Parameters:                 invocationParametersAPIFromInternal(value.Parameters),
 		UnknownNamedArgumentPolicy: invocationUnknownNamedArgumentPolicyPtr(value.UnknownNamedArgumentPolicy),
 		OutputContract:             invocationOutputContractAPIFromInternal(value.OutputContract),
-		Examples:                   invocationExamplesAPIFromInternal(value.Examples),
 	}
 }
 
@@ -294,12 +304,34 @@ func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleCo
 	for i, example := range examples {
 		values[i] = factoryapi.FactoryInvocationExample{
 			Name:        example.Name,
-			Description: stringPtrIfNotEmpty(example.Description),
-			Argv:        stringSlicePtr(example.Argv),
-			Stdin:       stringPtrIfNotEmpty(example.Stdin),
+			Description: *NameValueAPIFromInternal(&example.Description),
+			Args:        invocationExampleArgsAPIFromInternal(example.Args),
 		}
 	}
 	return &values
+}
+
+func invocationExampleArgsAPIFromInternal(args map[string]interface{}) factoryapi.FactoryInvocationArguments {
+	values := make(factoryapi.FactoryInvocationArguments, len(args))
+	for name, value := range args {
+		var union factoryapi.FactoryInvocationArguments_AdditionalProperties
+		switch typed := value.(type) {
+		case string:
+			_ = union.FromFactoryInvocationArguments0(typed)
+		case []string:
+			_ = union.FromFactoryInvocationArguments1(append([]string(nil), typed...))
+		case []interface{}:
+			items := make([]string, 0, len(typed))
+			for _, item := range typed {
+				if text, ok := item.(string); ok {
+					items = append(items, text)
+				}
+			}
+			_ = union.FromFactoryInvocationArguments1(items)
+		}
+		values[name] = union
+	}
+	return values
 }
 
 func validatePortableLayoutBoundaryJSON(data []byte) error {

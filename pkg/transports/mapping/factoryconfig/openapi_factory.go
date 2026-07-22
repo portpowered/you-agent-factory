@@ -96,6 +96,9 @@ func normalizeFactoryInputJSON(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := mapLegacyInvocationExamples(normalized); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, fmt.Errorf("normalize factory input payload: %w", err)
@@ -183,7 +186,7 @@ func normalizeFactoryJSONValuePreservingKeys(value any) any {
 }
 
 func preservesObjectKeys(fieldName string) bool {
-	return fieldName == "env" || fieldName == "metadata" || fieldName == "values"
+	return fieldName == "args" || fieldName == "env" || fieldName == "metadata" || fieldName == "values"
 }
 
 func normalizeCanonicalFactoryInputFields(v any) (any, error) {

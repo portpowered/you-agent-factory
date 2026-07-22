@@ -202,10 +202,6 @@ func assertGeneratedOpenAPISurfaceTypes(
 		OutputContract: &factoryapi.FactoryInvocationOutputContract{
 			Mode: &outputContractMode,
 		},
-		Examples: &[]factoryapi.FactoryInvocationExample{{
-			Name: "basic",
-			Argv: &[]string{"brief.md"},
-		}},
 	}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{
 		RequestId: workRequest.RequestId,
@@ -260,8 +256,8 @@ func assertGeneratedInvocationSignatureTypesUsable(t *testing.T, invocationSigna
 	if invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil {
 		t.Fatal("generated invocation signature parameters should be usable")
 	}
-	if invocationSignature.OutputContract == nil || invocationSignature.Examples == nil {
-		t.Fatal("generated invocation signature contract and examples should be usable")
+	if invocationSignature.OutputContract == nil {
+		t.Fatal("generated invocation signature output contract should be usable")
 	}
 }
 

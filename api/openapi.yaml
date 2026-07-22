@@ -8187,6 +8187,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/FactoryInvocationSignature'
           description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+        examples:
+          type: array
+          description: Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationExample'
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -8319,11 +8324,6 @@ components:
           allOf:
             - $ref: '#/components/schemas/FactoryInvocationOutputContract'
           description: Optional customer-facing hint for the factory's primary output shape.
-        examples:
-          type: array
-          description: Example invocations rendered in docs, help, and inspection surfaces.
-          items:
-            $ref: '#/components/schemas/FactoryInvocationExample'
     FactoryInvocationParameter:
       type: object
       additionalProperties: false
@@ -8458,22 +8458,31 @@ components:
       additionalProperties: false
       required:
         - name
+        - description
+        - args
       description: One example invocation for docs, help, and packaged-factory inspection.
       properties:
         name:
           type: string
+          minLength: 1
           description: Stable example name.
         description:
-          type: string
-          description: Customer-facing explanation of what the example does.
-        argv:
-          type: array
-          description: CLI-style argument vector rendered after factory selection.
-          items:
-            type: string
-        stdin:
-          type: string
-          description: Example stdin payload when the signature routes stdin into one parameter.
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localized customer-facing explanation of what the example does.
+        args:
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationArguments'
+          description: Structured invocation arguments; values are never parsed or executed while loading the Factory.
+    FactoryInvocationArguments:
+      type: object
+      description: Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings.
+      additionalProperties:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
     InvocationReturn:
       type: object
       additionalProperties: false

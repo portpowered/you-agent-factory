@@ -15,8 +15,13 @@ Use this map when changing the public REST contract.
 - Factory output key normalization in
   `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve keys
   inside opaque maps. Add new map-valued contract fields such as localized
-  `NameValue.values` to `preservesObjectKeys`; otherwise canonicalization can
-  rewrite customer-authored keys such as BCP 47 locale tags.
+  `NameValue.values` or structured invocation-example `args` to
+  `preservesObjectKeys`; otherwise canonicalization can rewrite
+  customer-authored locale tags or argument names.
+- OpenAPI maps whose `additionalProperties` use `oneOf` generate typed Go union
+  wrappers. Convert those wrappers explicitly at transport mapping boundaries;
+  keep the internal representation limited to the allowed variants so JSON and
+  YAML round trips do not silently widen or mutate values.
 
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in

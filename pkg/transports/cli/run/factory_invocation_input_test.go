@@ -1,8 +1,10 @@
 package run
 
 import (
+	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -21,6 +23,35 @@ func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
 	data, err := loadFactoryInvocationHelpData("you", RunConfig{FactoryConfigPath: "workflow.mjs"})
 	if err != nil || data != nil {
 		t.Fatalf("loadFactoryInvocationHelpData(JavaScript) = (%#v, %v)", data, err)
+	}
+}
+
+func TestFormatFactoryInvocationHelp_RendersTopLevelStructuredExamples(t *testing.T) {
+	data := factoryInvocationHelpData{
+		factoryName:   "example-factory",
+		selectionText: "named factory example-factory",
+		commandPrefix: "you run --named example-factory",
+		signature: &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+			{Name: "input", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+			{Name: "tag", ExternalName: "tag", ValueMode: "REPEATED", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+		}},
+		examples: []interfaces.InvocationExampleConfig{{
+			Name: "tagged",
+			Description: interfaces.NameValueConfig{
+				Type: interfaces.NameValueTypeLocalizableAsset, Value: "Run with two tags.",
+			},
+			Args: interfaces.InvocationExampleArguments{"input": "hello world", "tag": []string{"alpha", "beta"}},
+		}},
+	}
+
+	output := formatFactoryInvocationHelp(data)
+	for _, want := range []string{
+		"# Run with two tags.",
+		"you run --named example-factory 'hello world' --tag alpha --tag beta",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("help output missing %q:\n%s", want, output)
+		}
 	}
 }
 

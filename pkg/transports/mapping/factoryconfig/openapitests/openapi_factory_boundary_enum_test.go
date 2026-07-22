@@ -3,6 +3,7 @@ package openapitests
 import (
 	"encoding/base64"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -10,7 +11,76 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"gopkg.in/yaml.v3"
 )
+
+func TestFactoryInvocationExamples_CanonicalRoundTripPreservesLocalizedStructuredValues(t *testing.T) {
+	payload := []byte(`{"name":"examples","invocationSignature":{"parameters":[{"name":"input","required":true,"bindings":[{"kind":"NAMED"}]},{"name":"tag","valueMode":"REPEATED","bindings":[{"kind":"NAMED"}]}]},"examples":[{"name":"multiline","description":{"type":"LOCALIZABLE_ASSET","value":"Base explanation","locales":["en-US"],"values":{"fr-FR":"Explication"},"id":"example-multiline"},"args":{"input":"first line\nsecond line","tag":["alpha","beta"]}}]}`)
+	cfg, err := FactoryConfigFromOpenAPIJSON(payload)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	wantDescription := interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "Base explanation", Locales: []string{"en-US"}, Values: map[string]string{"fr-FR": "Explication"}, ID: "example-multiline"}
+	if len(cfg.Examples) != 1 || !reflect.DeepEqual(cfg.Examples[0].Description, wantDescription) {
+		t.Fatalf("examples = %#v, want localized example", cfg.Examples)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if strings.Contains(string(canonical), `"argv"`) || strings.Contains(string(canonical), `"invocationSignature":{"examples"`) {
+		t.Fatalf("canonical output retained legacy examples: %s", canonical)
+	}
+	roundTripped, err := FactoryConfigFromOpenAPIJSON(canonical)
+	if err != nil || !reflect.DeepEqual(roundTripped.Examples, cfg.Examples) {
+		t.Fatalf("round-trip examples = %#v, error = %v", roundTripped.Examples, err)
+	}
+}
+
+func TestFactoryInvocationExamples_LegacyInputMapsThroughInvocationNormalizer(t *testing.T) {
+	payload := []byte(`{"name":"legacy-examples","invocationSignature":{"parameters":[{"name":"input","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]},{"name":"tag","externalName":"tag","valueMode":"REPEATED","bindings":[{"kind":"NAMED"}]}],"examples":[{"name":"legacy","description":"Legacy explanation","argv":["hello","--tag","alpha","--tag=beta"]}]}}`)
+	cfg, err := FactoryConfigFromOpenAPIJSON(payload)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if got := cfg.Examples[0].Args["input"]; got != "hello" {
+		t.Fatalf("args.input = %#v, want hello", got)
+	}
+	if got := cfg.Examples[0].Args["tag"]; !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("args.tag = %#v", got)
+	}
+}
+
+func TestFactoryInvocationExamples_RejectsDualSourcesAndInvalidArgumentShapes(t *testing.T) {
+	tests := []struct{ name, payload, want string }{
+		{"dual sources", `{"name":"conflict","examples":[],"invocationSignature":{"examples":[]}}`, "examples and invocationSignature.examples cannot both be defined"},
+		{"invalid canonical value", `{"name":"invalid","examples":[{"name":"bad","description":{"type":"LOCALIZABLE_ASSET","value":"Bad"},"args":{"count":3}}]}`, "factory.examples[0].args: count must be a string or array of strings"},
+		{"invalid legacy value", `{"name":"invalid","invocationSignature":{"parameters":[],"examples":[{"name":"bad","argv":[3]}]}}`, "factory.invocationSignature.examples[0].argv[0] must be a string"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := FactoryConfigFromOpenAPIJSON([]byte(test.payload))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestFactoryInvocationExamples_YAMLRepresentationPreservesStructuredValues(t *testing.T) {
+	cfg := interfaces.FactoryConfig{Name: "yaml", Examples: []interfaces.InvocationExampleConfig{{Name: "yaml-example", Description: interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "YAML example", ID: "yaml-example-id", Locales: []string{"en-US"}, Values: map[string]string{"es-ES": "Ejemplo YAML"}}, Args: interfaces.InvocationExampleArguments{"input": "line one\nline two", "tag": []string{"one", "two"}}}}}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	var decoded interfaces.FactoryConfig
+	if err := yaml.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if !reflect.DeepEqual(decoded.Examples, cfg.Examples) {
+		t.Fatalf("decoded examples = %#v, want %#v", decoded.Examples, cfg.Examples)
+	}
+}
 
 func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationContent(t *testing.T) {
 	const maxEmbeddedImageBytes = 2 * 1024 * 1024

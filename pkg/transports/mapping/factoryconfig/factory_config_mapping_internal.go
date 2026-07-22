@@ -15,11 +15,9 @@ import (
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
 	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
-	description, err := nameValueInternalFromAPI(apiCfg.Description, "factory.description")
-	if err != nil {
+	if err := mapFactoryMetadataInternalFromAPI(&cfg, apiCfg.Description, apiCfg.Examples); err != nil {
 		return interfaces.FactoryConfig{}, err
 	}
-	cfg.Description = description
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
@@ -71,6 +69,20 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 		cfg.Workstations = workstations
 	}
 	return cfg, nil
+}
+
+func mapFactoryMetadataInternalFromAPI(cfg *interfaces.FactoryConfig, description *factoryapi.NameValue, examples *[]factoryapi.FactoryInvocationExample) error {
+	mappedDescription, err := nameValueInternalFromAPI(description, "factory.description")
+	if err != nil {
+		return err
+	}
+	mappedExamples, err := invocationExamplesInternalFromAPI(examples)
+	if err != nil {
+		return err
+	}
+	cfg.Description = mappedDescription
+	cfg.Examples = mappedExamples
+	return nil
 }
 
 // FactoryConfigFromOpenAPI converts the generated OpenAPI factory model into
@@ -151,7 +163,6 @@ func invocationSignatureInternalFromAPI(value *factoryapi.FactoryInvocationSigna
 		Parameters:                 invocationParametersInternalFromAPI(value.Parameters),
 		UnknownNamedArgumentPolicy: enumStringValue(value.UnknownNamedArgumentPolicy),
 		OutputContract:             invocationOutputContractInternalFromAPI(value.OutputContract),
-		Examples:                   invocationExamplesInternalFromAPI(value.Examples),
 	}
 }
 
@@ -206,20 +217,43 @@ func invocationOutputContractInternalFromAPI(value *factoryapi.FactoryInvocation
 	}
 }
 
-func invocationExamplesInternalFromAPI(examples *[]factoryapi.FactoryInvocationExample) []interfaces.InvocationExampleConfig {
+func invocationExamplesInternalFromAPI(examples *[]factoryapi.FactoryInvocationExample) ([]interfaces.InvocationExampleConfig, error) {
 	if examples == nil {
-		return nil
+		return nil, nil
 	}
 	values := make([]interfaces.InvocationExampleConfig, len(*examples))
 	for i, example := range *examples {
+		description, err := nameValueFromOpenAPI(example.Description, fmt.Sprintf("factory.examples[%d].description", i))
+		if err != nil {
+			return nil, err
+		}
+		args, err := invocationExampleArgsInternalFromAPI(example.Args)
+		if err != nil {
+			return nil, fmt.Errorf("factory.examples[%d].args: %w", i, err)
+		}
 		values[i] = interfaces.InvocationExampleConfig{
 			Name:        example.Name,
-			Description: stringValue(example.Description),
-			Argv:        stringSliceValue(example.Argv),
-			Stdin:       stringValue(example.Stdin),
+			Description: description,
+			Args:        args,
 		}
 	}
-	return values
+	return values, nil
+}
+
+func invocationExampleArgsInternalFromAPI(args factoryapi.FactoryInvocationArguments) (interfaces.InvocationExampleArguments, error) {
+	values := make(interfaces.InvocationExampleArguments, len(args))
+	for name, value := range args {
+		if scalar, err := value.AsFactoryInvocationArguments0(); err == nil {
+			values[name] = scalar
+			continue
+		}
+		list, err := value.AsFactoryInvocationArguments1()
+		if err != nil {
+			return nil, fmt.Errorf("%s must be a string or array of strings", name)
+		}
+		values[name] = append([]string(nil), list...)
+	}
+	return values, nil
 }
 
 func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHandlingBehavior) []string {

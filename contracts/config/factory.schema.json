@@ -146,32 +146,53 @@
       ],
       "type": "string"
     },
+    "FactoryInvocationArguments": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ]
+      },
+      "description": "Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings.",
+      "type": "object"
+    },
     "FactoryInvocationExample": {
       "additionalProperties": false,
       "description": "One example invocation for docs, help, and packaged-factory inspection.",
       "properties": {
-        "argv": {
-          "description": "CLI-style argument vector rendered after factory selection.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "args": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationArguments"
+            }
+          ],
+          "description": "Structured invocation arguments; values are never parsed or executed while loading the Factory."
         },
         "description": {
-          "description": "Customer-facing explanation of what the example does.",
-          "type": "string"
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Localized customer-facing explanation of what the example does."
         },
         "name": {
           "description": "Stable example name.",
-          "type": "string"
-        },
-        "stdin": {
-          "description": "Example stdin payload when the signature routes stdin into one parameter.",
+          "minLength": 1,
           "type": "string"
         }
       },
       "required": [
-        "name"
+        "name",
+        "description",
+        "args"
       ],
       "type": "object"
     },
@@ -352,13 +373,6 @@
       "additionalProperties": false,
       "description": "Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.",
       "properties": {
-        "examples": {
-          "description": "Example invocations rendered in docs, help, and inspection surfaces.",
-          "items": {
-            "$ref": "#/$defs/FactoryInvocationExample"
-          },
-          "type": "array"
-        },
         "outputContract": {
           "allOf": [
             {
@@ -2550,6 +2564,13 @@
         }
       ],
       "description": "Optional localized customer-facing explanation of this Factory."
+    },
+    "examples": {
+      "description": "Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.",
+      "items": {
+        "$ref": "#/$defs/FactoryInvocationExample"
+      },
+      "type": "array"
     },
     "factoryDirectory": {
       "description": "Directory that contained the factory.json used for this serialized runtime config.",

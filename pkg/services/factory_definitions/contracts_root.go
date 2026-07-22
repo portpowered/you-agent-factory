@@ -43,6 +43,7 @@ type ModelOperationSlot = workerconfig.ModelOperationSlot
 type ResourceConfig = resource.Config
 type InvocationSignatureConfig = contracts.InvocationSignatureConfig
 type InvocationExampleConfig = contracts.InvocationExampleConfig
+type InvocationExampleArguments = contracts.InvocationExampleArguments
 type InvocationOutputContractConfig = contracts.InvocationOutputContractConfig
 type InvocationParameterConfig = contracts.InvocationParameterConfig
 type ModelOperationBinding = contracts.ModelOperationBinding

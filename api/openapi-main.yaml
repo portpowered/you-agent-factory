@@ -2154,6 +2154,8 @@ components:
       $ref: './components/schemas/data-models/FactoryInvocationOutputContractMode.yaml'
     FactoryInvocationExample:
       $ref: './components/schemas/data-models/FactoryInvocationExample.yaml'
+    FactoryInvocationArguments:
+      $ref: './components/schemas/data-models/FactoryInvocationArguments.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:

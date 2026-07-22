@@ -382,13 +382,15 @@ func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *
 				FileExtension: ".md",
 				Description:   "Writes markdown to disk",
 			},
-			Examples: []interfaces.InvocationExampleConfig{{
-				Name:        "basic",
-				Description: "Basic invocation",
-				Argv:        []string{"brief.md", "--output=result.md"},
-				Stdin:       "stdin prompt",
-			}},
 		},
+		Examples: []interfaces.InvocationExampleConfig{{
+			Name: "basic",
+			Description: interfaces.NameValueConfig{
+				Type: interfaces.NameValueTypeLocalizableAsset, Value: "Basic invocation",
+				Locales: []string{"en-US"}, Values: map[string]string{"fr-FR": "Invocation de base"}, ID: "example-basic",
+			},
+			Args: map[string]interface{}{"input": "brief.md\nsecond line", "tag": []string{"alpha", "beta"}},
+		}},
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "story",
 			States: []interfaces.StateConfig{
@@ -417,6 +419,9 @@ func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *
 
 	if !reflect.DeepEqual(expanded.InvocationSignature, original.InvocationSignature) {
 		t.Fatalf("expanded invocationSignature = %#v, want %#v", expanded.InvocationSignature, original.InvocationSignature)
+	}
+	if !reflect.DeepEqual(expanded.Examples, original.Examples) {
+		t.Fatalf("expanded examples = %#v, want %#v", expanded.Examples, original.Examples)
 	}
 }
 

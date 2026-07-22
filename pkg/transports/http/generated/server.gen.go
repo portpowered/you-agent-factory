@@ -1293,6 +1293,9 @@ type Factory struct {
 	// Description Optional localized customer-facing explanation of this Factory.
 	Description *NameValue `json:"description,omitempty"`
 
+	// Examples Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.
+	Examples *[]FactoryInvocationExample `json:"examples,omitempty"`
+
 	// FactoryDirectory Directory that contained the factory.json used for this serialized runtime config.
 	FactoryDirectory *string `json:"factoryDirectory,omitempty"`
 
@@ -1658,19 +1661,30 @@ type FactoryGuard struct {
 // FactoryGuardType Factory-level guard condition attached at the root factory definition.
 type FactoryGuardType string
 
+// FactoryInvocationArguments Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings.
+type FactoryInvocationArguments map[string]FactoryInvocationArguments_AdditionalProperties
+
+// FactoryInvocationArguments0 defines model for .
+type FactoryInvocationArguments0 = string
+
+// FactoryInvocationArguments1 defines model for .
+type FactoryInvocationArguments1 = []string
+
+// FactoryInvocationArguments_AdditionalProperties defines model for FactoryInvocationArguments.AdditionalProperties.
+type FactoryInvocationArguments_AdditionalProperties struct {
+	union json.RawMessage
+}
+
 // FactoryInvocationExample One example invocation for docs, help, and packaged-factory inspection.
 type FactoryInvocationExample struct {
-	// Argv CLI-style argument vector rendered after factory selection.
-	Argv *[]string `json:"argv,omitempty"`
+	// Args Structured invocation arguments; values are never parsed or executed while loading the Factory.
+	Args FactoryInvocationArguments `json:"args"`
 
-	// Description Customer-facing explanation of what the example does.
-	Description *string `json:"description,omitempty"`
+	// Description Localized customer-facing explanation of what the example does.
+	Description NameValue `json:"description"`
 
 	// Name Stable example name.
 	Name string `json:"name"`
-
-	// Stdin Example stdin payload when the signature routes stdin into one parameter.
-	Stdin *string `json:"stdin,omitempty"`
 }
 
 // FactoryInvocationOutputContract Customer-facing output hint for a factory invocation signature.
@@ -1753,9 +1767,6 @@ type FactoryInvocationParameterValueMode string
 
 // FactoryInvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
 type FactoryInvocationSignature struct {
-	// Examples Example invocations rendered in docs, help, and inspection surfaces.
-	Examples *[]FactoryInvocationExample `json:"examples,omitempty"`
-
 	// OutputContract Optional customer-facing hint for the factory's primary output shape.
 	OutputContract *FactoryInvocationOutputContract `json:"outputContract,omitempty"`
 
@@ -7749,6 +7760,68 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryInvocationArguments0 returns the union data inside the FactoryInvocationArguments_AdditionalProperties as a FactoryInvocationArguments0
+func (t FactoryInvocationArguments_AdditionalProperties) AsFactoryInvocationArguments0() (FactoryInvocationArguments0, error) {
+	var body FactoryInvocationArguments0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryInvocationArguments0 overwrites any union data inside the FactoryInvocationArguments_AdditionalProperties as the provided FactoryInvocationArguments0
+func (t *FactoryInvocationArguments_AdditionalProperties) FromFactoryInvocationArguments0(v FactoryInvocationArguments0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryInvocationArguments0 performs a merge with any union data inside the FactoryInvocationArguments_AdditionalProperties, using the provided FactoryInvocationArguments0
+func (t *FactoryInvocationArguments_AdditionalProperties) MergeFactoryInvocationArguments0(v FactoryInvocationArguments0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryInvocationArguments1 returns the union data inside the FactoryInvocationArguments_AdditionalProperties as a FactoryInvocationArguments1
+func (t FactoryInvocationArguments_AdditionalProperties) AsFactoryInvocationArguments1() (FactoryInvocationArguments1, error) {
+	var body FactoryInvocationArguments1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryInvocationArguments1 overwrites any union data inside the FactoryInvocationArguments_AdditionalProperties as the provided FactoryInvocationArguments1
+func (t *FactoryInvocationArguments_AdditionalProperties) FromFactoryInvocationArguments1(v FactoryInvocationArguments1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryInvocationArguments1 performs a merge with any union data inside the FactoryInvocationArguments_AdditionalProperties, using the provided FactoryInvocationArguments1
+func (t *FactoryInvocationArguments_AdditionalProperties) MergeFactoryInvocationArguments1(v FactoryInvocationArguments1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryInvocationArguments_AdditionalProperties) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactoryInvocationArguments_AdditionalProperties) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

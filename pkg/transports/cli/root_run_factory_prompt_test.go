@@ -190,7 +190,7 @@ func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
 		"Default: safe.",
 		"Path parameter: output",
 		"you run --named alpha 'Fix the lint issues' --mode safe --output report.md",
-		"printf '%s\\n' 'Fix the lint issues' | you run --named alpha --mode fast",
+		"you run --named alpha 'Fix the lint issues' --mode fast",
 		"Existing operational flags such as `--no-record`, `--with-mock-workers`, `--server`, and `--json` still apply.",
 	} {
 		if !strings.Contains(got, want) {

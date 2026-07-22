@@ -284,15 +284,15 @@ var productionBoundarySources = []struct {
 }{
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/openapi_factory.go",
-		sha256Hex:    "0578d65c0cd14ce4e0f4a98a9276396db8a4f1fa9bf97e2870a92a3d0806fdb8",
+		sha256Hex:    "df9518e4dcadf48e05acb4463edd5e5d07d739022021fda61adfc66f3d6debef",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
-		sha256Hex:    "061ec49c463a1b2aa7f67d4a88ed3a0a019c99f4addef2ec42e0faeb08780e1b",
+		sha256Hex:    "92e28064ff982807683155b793678070df1ccec390a1f134ed025761781420a2",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
-		sha256Hex:    "8ac413d16835695c7151ac0eb45e7e3742ceac85c109d4137052b8b000bf838d",
+		sha256Hex:    "e4cf0939261875b3530e0d2bf8bb1e6b9237be31c599447a862d6f953f035815",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/layout_annotations.go",
@@ -304,11 +304,27 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "pkg/services/factory_definitions/contracts/factory_config.go",
-		sha256Hex:    "168e7412ff843326500ebdeda70bbadc354d06a042f81c4840e463f4c1e27e15",
+		sha256Hex:    "edcad0ddc8956599e7f6e7ede52a1e42d30b685c453c4ea01de31e7d3ba612e8",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",
-		sha256Hex:    "5f0954c9f06bf8a2e6ca49f30c79022441e57e25b069cb6b54261eb256d6ce33",
+		sha256Hex:    "92f660a1240801fb670ffc16394b1c9b734517ffbd8918bf283276b223cfcc05",
+	},
+	{
+		relativePath: "pkg/transports/mapping/factoryconfig/invocation_examples_compatibility.go",
+		sha256Hex:    "7b8776d353629db97017868a44cb58c5ccea74587151b041c5342e398a0a210c",
+	},
+	{
+		relativePath: "api/components/schemas/data-models/FactoryInvocationExample.yaml",
+		sha256Hex:    "e04e41c3df980d8579771f369dc86fbeaae83a5d6d8071aad9ed5c669dc89007",
+	},
+	{
+		relativePath: "api/components/schemas/data-models/FactoryInvocationArguments.yaml",
+		sha256Hex:    "ba9c7395c66a2dfbf09c7c772d5c5d706b07370e6162269a8902b3b01686ff7d",
+	},
+	{
+		relativePath: "api/components/schemas/data-models/FactoryInvocationSignature.yaml",
+		sha256Hex:    "e70aa93b9da94bcb1e6e85dbea07ac74cf9270eb17ad6347566b032061d2ecf9",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/WorkerType.yaml",

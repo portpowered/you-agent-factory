@@ -377,6 +377,16 @@ describe("normalizeFactoryDefinition", () => {
   it("accepts canonical invocation signatures from the generated factory contract", () => {
     expect(
       normalizeFactoryDefinition({
+        examples: [
+          {
+            args: { input: "draft this", outputFormat: "json" },
+            description: {
+              type: "LOCALIZABLE_ASSET",
+              value: "Invoke with a named output override",
+            },
+            name: "named-output",
+          },
+        ],
         invocationSignature: {
           parameters: [
             {
@@ -404,18 +414,20 @@ describe("normalizeFactoryDefinition", () => {
             mode: "JSON",
             pathParameter: "outputPath",
           },
-          examples: [
-            {
-              argv: ["brief.md", "--output=json"],
-              description: "Invoke with a named output override",
-              name: "named-output",
-              stdin: "draft this",
-            },
-          ],
         },
         name: "agent-factory",
       }),
     ).toEqual({
+      examples: [
+        {
+          args: { input: "draft this", outputFormat: "json" },
+          description: {
+            type: "LOCALIZABLE_ASSET",
+            value: "Invoke with a named output override",
+          },
+          name: "named-output",
+        },
+      ],
       invocationSignature: {
         parameters: [
           {
@@ -443,14 +455,6 @@ describe("normalizeFactoryDefinition", () => {
           mode: "JSON",
           pathParameter: "outputPath",
         },
-        examples: [
-          {
-            argv: ["brief.md", "--output=json"],
-            description: "Invoke with a named output override",
-            name: "named-output",
-            stdin: "draft this",
-          },
-        ],
       },
       name: "agent-factory",
     });

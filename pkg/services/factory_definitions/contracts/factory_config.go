@@ -7,6 +7,7 @@ package factorycontracts
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"gopkg.in/yaml.v3"
 )
 
 const NameValueTypeLocalizableAsset = namevalue.TypeLocalizableAsset
@@ -169,6 +171,7 @@ type FactoryConfig struct {
 	InputTypes          []InputTypeConfig               `json:"input_types,omitempty"`
 	InvocationReturn    *InvocationReturnConfig         `json:"invocation_return,omitempty"`
 	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
+	Examples            []InvocationExampleConfig       `json:"examples,omitempty" yaml:"examples,omitempty"`
 	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes           []WorkTypeConfig                `json:"work_types"`
 	Resources           []factoryresource.Config        `json:"resources"`
@@ -358,7 +361,66 @@ type InvocationSignatureConfig = work.InvocationSignatureConfig
 type InvocationParameterConfig = work.InvocationParameterConfig
 type InvocationParameterBindingConfig = work.InvocationParameterBindingConfig
 type InvocationOutputContractConfig = work.InvocationOutputContractConfig
-type InvocationExampleConfig = work.InvocationExampleConfig
+type InvocationExampleConfig struct {
+	Name        string                     `json:"name" yaml:"name"`
+	Description NameValueConfig            `json:"description" yaml:"description"`
+	Args        InvocationExampleArguments `json:"args" yaml:"args"`
+}
+
+// InvocationExampleArguments is the structured, inert argument payload stored
+// in a Factory example. Values are deliberately limited to the same scalar and
+// repeated string forms accepted by invocation requests.
+type InvocationExampleArguments map[string]interface{}
+
+func (a *InvocationExampleArguments) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	values := make(InvocationExampleArguments, len(raw))
+	for name, value := range raw {
+		var scalar string
+		if err := json.Unmarshal(value, &scalar); err == nil {
+			values[name] = scalar
+			continue
+		}
+		var repeated []string
+		if err := json.Unmarshal(value, &repeated); err != nil {
+			return fmt.Errorf("args.%s must be a string or array of strings", name)
+		}
+		values[name] = repeated
+	}
+	*a = values
+	return nil
+}
+
+func (a *InvocationExampleArguments) UnmarshalYAML(node *yaml.Node) error {
+	var raw map[string]interface{}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	values := make(InvocationExampleArguments, len(raw))
+	for name, value := range raw {
+		switch typed := value.(type) {
+		case string:
+			values[name] = typed
+		case []interface{}:
+			repeated := make([]string, len(typed))
+			for index, item := range typed {
+				text, ok := item.(string)
+				if !ok {
+					return fmt.Errorf("args.%s[%d] must be a string", name, index)
+				}
+				repeated[index] = text
+			}
+			values[name] = repeated
+		default:
+			return fmt.Errorf("args.%s must be a string or array of strings", name)
+		}
+	}
+	*a = values
+	return nil
+}
 
 type WorkTypeConfig struct {
 	ID               string           `json:"id,omitempty" yaml:"id,omitempty"`
