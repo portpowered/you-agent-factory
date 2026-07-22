@@ -198,6 +198,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"OperatorSettingsCreateTemporaryFile":             {typeName: "operatorsettings.CreateTemporaryFile", effect: "create atomic operator-configuration writes"},
 		"OperatorSettingsIDGenerator":                     {typeName: "operatorsettings.IDGenerator", effect: "generate local backend-scope identities"},
 		"SystemInitializationInspectPath":                 {typeName: "systeminitialization.InspectPath", effect: "inspect system-initialization configuration paths"},
+		"SystemInitializationMigrationFileSystem":         {typeName: "systeminitialization.LegacyFactoryMigrationFileSystem", effect: "migrate customer-owned Factories from the retired global catalog"},
 
 		"Clock":                          {typeName: "platformclock.Source", effect: "supply process time to runtime and automation adapters"},
 		"SubmissionRecorder":             {typeName: "recordings.SubmissionRecorder", effect: "observe canonical submission recording"},

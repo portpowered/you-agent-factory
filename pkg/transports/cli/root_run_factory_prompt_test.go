@@ -21,7 +21,7 @@ func defaultNamedFactoriesRootForTest() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"), nil
+	return filepath.Join(homeDir, ".you-agent-factory", "factories"), nil
 }
 
 func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T) {

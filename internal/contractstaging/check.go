@@ -31,11 +31,12 @@ type stagedFile struct {
 // ArtifactsDependencies lets unit tests replace expensive operations in
 // artifact orchestration without changing production behavior.
 type ArtifactsDependencies struct {
-	Join             func(contractjoiner.Input) ([]contractjoiner.Document, []contractvalidator.Diagnostic)
-	ReadRawArtifact  func(path string) ([]byte, error)
-	ProjectOpenAPI   func(canonical []byte, policy OpenAPIBytePolicy) ([]byte, error)
-	GenerateSchema   func(repositoryRoot string) ([]byte, error)
-	GenerateManifest func(repositoryRoot string, artifacts map[string][]byte) ([]byte, error)
+	Join                      func(contractjoiner.Input) ([]contractjoiner.Document, []contractvalidator.Diagnostic)
+	ReadRawArtifact           func(path string) ([]byte, error)
+	ProjectOpenAPI            func(canonical []byte, policy OpenAPIBytePolicy) ([]byte, error)
+	GenerateSchema            func(repositoryRoot string) ([]byte, error)
+	GenerateStandaloneSchemas func(repositoryRoot string) (map[string][]byte, error)
+	GenerateManifest          func(repositoryRoot string, artifacts map[string][]byte) ([]byte, error)
 }
 
 // Empty reports whether package staging exactly matches canonical joined output.
@@ -156,7 +157,7 @@ func artifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDepe
 		}
 		return nil, fmt.Errorf("join canonical contracts: %s", payload)
 	}
-	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+2)
+	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+4)
 	for _, document := range documents {
 		payload, err := contractjoiner.MarshalCanonicalJSON(document.Value)
 		if err != nil {
@@ -185,6 +186,13 @@ func artifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDepe
 	}
 	expected[FactorySchemaAuthoredPath] = factorySchema
 	expected[factorySchemaTarget] = factorySchema
+	standaloneSchemas, err := dependencies.GenerateStandaloneSchemas(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	for path, payload := range standaloneSchemas {
+		expected[path] = payload
+	}
 	manifest, err := dependencies.GenerateManifest(repositoryRoot, expected)
 	if err != nil {
 		return nil, err
@@ -199,11 +207,12 @@ func normalizeArtifactsDependencies(repositoryRoot string, requested ArtifactsDe
 		return "", ArtifactsDependencies{}, fmt.Errorf("resolve repository root: %w", err)
 	}
 	resolved := ArtifactsDependencies{
-		Join:             contractjoiner.Join,
-		ReadRawArtifact:  os.ReadFile,
-		ProjectOpenAPI:   ProjectStagedOpenAPI,
-		GenerateSchema:   generateFactorySchema,
-		GenerateManifest: generateManifest,
+		Join:                      contractjoiner.Join,
+		ReadRawArtifact:           os.ReadFile,
+		ProjectOpenAPI:            ProjectStagedOpenAPI,
+		GenerateSchema:            generateFactorySchema,
+		GenerateStandaloneSchemas: generateStandaloneFactorySchemas,
+		GenerateManifest:          generateManifest,
 	}
 	if requested.Join != nil {
 		resolved.Join = requested.Join
@@ -216,6 +225,9 @@ func normalizeArtifactsDependencies(repositoryRoot string, requested ArtifactsDe
 	}
 	if requested.GenerateSchema != nil {
 		resolved.GenerateSchema = requested.GenerateSchema
+	}
+	if requested.GenerateStandaloneSchemas != nil {
+		resolved.GenerateStandaloneSchemas = requested.GenerateStandaloneSchemas
 	}
 	if requested.GenerateManifest != nil {
 		resolved.GenerateManifest = requested.GenerateManifest

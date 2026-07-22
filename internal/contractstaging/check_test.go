@@ -104,7 +104,38 @@ func writeCheckFixture(t *testing.T, root, path, contents string) {
 
 func canonicalFixture(path string) string {
 	if path == "api/openapi.yaml" {
-		return "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n"
+		return `components:
+  schemas:
+    Factory:
+      type: object
+      properties:
+        child:
+          $ref: '#/components/schemas/Child'
+    Child:
+      type: string
+    FactoryEvent:
+      type: object
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          enum: [READY]
+        payload:
+          $ref: '#/components/schemas/ReadyPayload'
+      discriminator:
+        propertyName: type
+        mapping:
+          READY: '#/components/schemas/ReadyPayload'
+    FactoryRecording:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryEvent'
+    ReadyPayload:
+      type: object
+`
 	}
 	return "canonical:" + path
 }

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/replayfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence(t *testing.T) {

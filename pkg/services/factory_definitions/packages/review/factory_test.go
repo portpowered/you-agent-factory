@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestBuiltInFactoryJSON_LoadsReviewGatedTopology(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
+	cfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
@@ -62,11 +62,11 @@ func assertFactoryConfigValid(t *testing.T, cfg *interfaces.FactoryConfig) {
 }
 
 func TestMaterializedFactory_RetainsReviewGate(t *testing.T) {
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
+	dir, err := factorydefinitioncomposition.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON, factoryvalidation.New(nil))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	loaded, err := factorydefinitioncomposition.LoadDirectory(dir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
@@ -77,14 +77,14 @@ func TestMaterializedFactory_RetainsReviewGate(t *testing.T) {
 }
 
 func TestMaterializedFactory_AcceptsWorkerModelConfigurationWithoutWeakeningReviewGate(t *testing.T) {
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
+	dir, err := factorydefinitioncomposition.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON, factoryvalidation.New(nil))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 	setMaterializedWorkerModel(t, dir, "review-work-executor", "CODEX", "gpt-5-codex")
 	setMaterializedWorkerModel(t, dir, "review-work-reviewer", "CODEX", "gpt-5-codex")
 
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	loaded, err := factorydefinitioncomposition.LoadDirectory(dir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestMaterializedFactory_AcceptsWorkerModelConfigurationWithoutWeakeningRevi
 }
 
 func TestBuiltInFactoryJSON_RejectsUnsupportedWorkerModelProvider(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
+	cfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}

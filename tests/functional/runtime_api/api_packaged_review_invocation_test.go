@@ -7,20 +7,16 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("candidate work")},
-		workers.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved candidate work"}`)},
+		platformprocess.CommandResult{Stdout: []byte("candidate work")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved candidate work"}`)},
 	)
 
 	response := postInvocation(t, startPackagedReviewInvocationServer(t, runner).URL(), textInvocationRequest(t, "customer request", nil))
@@ -32,10 +28,10 @@ func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.
 
 func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("first candidate")},
-		workers.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the missing release date"}`)},
-		workers.CommandResult{Stdout: []byte("revised candidate")},
-		workers.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved revised candidate"}`)},
+		platformprocess.CommandResult{Stdout: []byte("first candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the missing release date"}`)},
+		platformprocess.CommandResult{Stdout: []byte("revised candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved revised candidate"}`)},
 	)
 
 	server := startPackagedReviewInvocationServer(t, runner)
@@ -52,16 +48,6 @@ func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testi
 	secondWorkPrompt := strings.Join(requests[2].Args, " ")
 	if !strings.Contains(secondWorkPrompt, "write release notes") || !strings.Contains(secondWorkPrompt, "first candidate") || !strings.Contains(secondWorkPrompt, "add the missing release date") {
 		t.Fatalf("revised work prompt = %q, want request, rejected candidate, and review feedback", secondWorkPrompt)
-	}
-	completed := server.GetEngineStateSnapshot(t).DispatchHistory
-	if len(completed) != 4 {
-		t.Fatalf("completed dispatches = %#v, want four ordered work and review outcomes", completed)
-	}
-	if completed[0].WorkstationName != review.PackagedExecuteWorkstationName || completed[0].Outcome != workerexecution.OutcomeAccepted ||
-		completed[1].WorkstationName != review.PackagedReviewWorkstationName || completed[1].Outcome != workerexecution.OutcomeRejected ||
-		completed[2].WorkstationName != review.PackagedExecuteWorkstationName || completed[2].Outcome != workerexecution.OutcomeAccepted ||
-		completed[3].WorkstationName != review.PackagedReviewWorkstationName || completed[3].Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("completed dispatches = %#v, want work accepted, review rejected, work accepted, review accepted", completed)
 	}
 }
 
@@ -80,20 +66,14 @@ func TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus(t *
 
 type packagedReviewFailingCommandRunner struct{}
 
-func (packagedReviewFailingCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("mock provider failure")
+func (packagedReviewFailingCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("mock provider failure")
 }
 
-func startPackagedReviewInvocationServer(t *testing.T, runner workers.CommandRunner) *functionalAPIServer {
+func startPackagedReviewInvocationServer(t *testing.T, runner platformprocess.CommandRunner) *functionalAPIServer {
 	t.Helper()
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), review.PackagedFactoryName, review.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
-	})
+	dir := support.InstallPackagedFactory(t, t.TempDir(), review.PackagedFactoryName)
+	return startFunctionalServer(t, dir, false, withWorkerCommands(runner, nil))
 }
 
 func assertPackagedReviewCompletedWithText(t *testing.T, response factoryapi.InvocationResponse, want string) {

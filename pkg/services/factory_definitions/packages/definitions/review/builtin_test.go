@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	builtinreview "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/review"
+	builtinreview "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/review"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestBuiltInReviewFactoryJSON_AssemblesDeclaredPromptAssets(t *testing.T) {

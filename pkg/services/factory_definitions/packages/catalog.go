@@ -9,6 +9,7 @@ import (
 	builtinfusion "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/goal"
 	builtinquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/quorum"
+	builtinreview "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/review"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent"
 	builtintts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/tts"
 )
@@ -36,6 +37,11 @@ var catalog = map[string]Definition{
 		Name:    "@you/quorum",
 		Project: "builtin-quorum",
 		JSON:    builtinquorum.BuiltInFactoryJSON,
+	},
+	"@you/review": {
+		Name:    "@you/review",
+		Project: "builtin-review",
+		JSON:    builtinreview.BuiltInReviewFactoryJSON,
 	},
 	"@you/subagent": {
 		Name:    "@you/subagent",

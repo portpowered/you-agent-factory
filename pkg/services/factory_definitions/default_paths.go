@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	sharedFactoryHomeDirName = ".you-agent-factory"
-	namedFactoriesDirName    = "you-agent-factories"
-	projectFactoriesDirName  = "factory"
+	sharedFactoryHomeDirName    = ".you-agent-factory"
+	namedFactoriesDirName       = "factories"
+	legacyNamedFactoriesDirName = "you-agent-factories"
+	projectFactoriesDirName     = "factory"
 )
 
 // NamedFactoryRoots contains the ordered project and global catalog roots used
@@ -17,6 +18,12 @@ const (
 type NamedFactoryRoots struct {
 	Project string
 	Global  string
+}
+
+// LegacyNamedFactoriesRoot returns the retired global catalog root used only
+// for lossless initialization-time migration.
+func LegacyNamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(homeDir, sharedFactoryHomeDirName, legacyNamedFactoriesDirName)
 }
 
 // NamedFactoriesRoot returns the Factory Definitions-owned global catalog root.

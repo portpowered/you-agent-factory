@@ -70,6 +70,7 @@ const (
 	ValidationCodeFactoryVersionStale                    = "factory.version.stale"
 	ValidationCodeFactoryRuntimeNotIdle                  = "factory.runtime.notIdle"
 	ValidationCodeLayoutUnknownNodeReference             = "factory.layout.unknownNodeReference"
+	ValidationCodeLayoutEmptyStateUnknownNodeReference   = "factory.layout.emptyState.unknownNodeReference"
 	ValidationCodeWorkerWorkstationBehaviorCompatibility = "workstation-worker-behavior-compatibility"
 )
 
@@ -302,6 +303,7 @@ func (r ValidationResult) BlockingTargets() []ValidationTarget {
 			continue
 		}
 		if IsLayoutValidationCode(target.Code) &&
+			target.Code != ValidationCodeLayoutEmptyStateUnknownNodeReference &&
 			!(target.Code == ValidationCodeLayoutUnknownNodeReference &&
 				IsBundledFileGraphNodeID(target.Subject.ID)) {
 			continue

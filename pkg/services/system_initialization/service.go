@@ -57,6 +57,16 @@ type Service interface {
 // missing, file, and directory paths during system initialization.
 type InspectPath func(string) (fs.FileInfo, error)
 
+// LegacyFactoryMigrationFileSystem is the exact filesystem effect required to
+// move customer-owned Factories from the retired global catalog root.
+type LegacyFactoryMigrationFileSystem interface {
+	Stat(string) (fs.FileInfo, error)
+	ReadFile(string) ([]byte, error)
+	ReadDir(string) ([]fs.DirEntry, error)
+	MkdirAll(string, fs.FileMode) error
+	Rename(string, string) error
+}
+
 type OperatorSettings interface {
 	LoadFileConfig(string) (operatorconfig.FileConfig, error)
 	EnsureLocalBackendScope(string) (operatorconfig.ResolvedBackendScope, error)

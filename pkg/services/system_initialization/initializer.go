@@ -19,6 +19,7 @@ type Initializer struct {
 	operatorSettings  OperatorSettings
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
 	inspectPath       InspectPath
+	migrationFiles    LegacyFactoryMigrationFileSystem
 }
 
 // New constructs the canonical service from already-selected collaborators.
@@ -27,6 +28,7 @@ func New(
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 	inspectPath InspectPath,
+	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
@@ -37,11 +39,15 @@ func New(
 	if inspectPath == nil {
 		return nil, fmt.Errorf("construct system initialization: inspect path edge is required")
 	}
+	if migrationFiles == nil {
+		return nil, fmt.Errorf("construct system initialization: legacy Factory migration filesystem is required")
+	}
 	return &Initializer{
 		operatorSettings:  operatorSettings,
 		packagedInstaller: packagedInstaller,
 		definitions:       append([]factorydefinitions.PackagedDefinition(nil), definitions...),
 		inspectPath:       inspectPath,
+		migrationFiles:    migrationFiles,
 	}, nil
 }
 
@@ -74,9 +80,15 @@ func (initializer *Initializer) Initialize(
 	if initializer.inspectPath == nil {
 		return Result{}, fmt.Errorf("initialize system: inspect path edge is required")
 	}
+	if initializer.migrationFiles == nil {
+		return Result{}, fmt.Errorf("initialize system: legacy Factory migration filesystem is required")
+	}
 
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	namedFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
+	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot, initializer.migrationFiles); err != nil {
+		return Result{}, err
+	}
 
 	if err := ensureSystemConfigParentIsDirectory(configPath, initializer.inspectPath); err != nil {
 		return Result{}, err

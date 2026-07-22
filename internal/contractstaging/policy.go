@@ -12,9 +12,11 @@ import (
 const joinedOutputDirectory = "packages/api/generated/joined"
 
 const (
-	manifestTarget            = "packages/api/generated/manifest.json"
-	FactorySchemaAuthoredPath = "contracts/config/factory.schema.json"
-	factorySchemaTarget       = "packages/api/generated/schemas/factory.schema.json"
+	manifestTarget               = "packages/api/generated/manifest.json"
+	FactorySchemaAuthoredPath    = "contracts/config/factory.schema.json"
+	factorySchemaTarget          = "packages/api/generated/schemas/factory.schema.json"
+	factoryEventSchemaTarget     = "packages/api/generated/schemas/factory-event.schema.json"
+	factoryRecordingSchemaTarget = "packages/api/generated/schemas/factory-recording.schema.json"
 )
 
 // RawArtifact maps one canonical repository artifact into its package-facing
@@ -73,6 +75,7 @@ func SourceIdentityPaths() []string {
 		"docs/internal/contract/factory-schema-b16-gaps.json",
 		"internal/contractstaging/factory_schema.go",
 		"internal/contractstaging/factory_schema_b16_gaps.go",
+		"internal/contractstaging/factory_recording_schema.go",
 		"internal/contractstaging/manifest.go",
 		"internal/contractstaging/openapi.go",
 		"internal/contractstaging/policy.go",
@@ -93,14 +96,20 @@ func SourceIdentityPaths() []string {
 // AllowedArtifacts returns the complete reviewed generated artifact set in
 // deterministic repository-relative path order.
 func AllowedArtifacts() []string {
-	artifacts := make([]string, 0, len(joinedRoots)+len(rawArtifacts)+2)
+	artifacts := make([]string, 0, len(joinedRoots)+len(rawArtifacts)+4)
 	for _, root := range joinedRoots {
 		artifacts = append(artifacts, filepath.ToSlash(filepath.Join(joinedOutputDirectory, root)))
 	}
 	for _, artifact := range rawArtifacts {
 		artifacts = append(artifacts, artifact.Target)
 	}
-	artifacts = append(artifacts, manifestTarget, factorySchemaTarget)
+	artifacts = append(
+		artifacts,
+		manifestTarget,
+		factorySchemaTarget,
+		factoryEventSchemaTarget,
+		factoryRecordingSchemaTarget,
+	)
 	sort.Strings(artifacts)
 	return artifacts
 }

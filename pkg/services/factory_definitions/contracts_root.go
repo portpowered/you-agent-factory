@@ -223,10 +223,15 @@ type (
 	FactoryEventType                                 = contracts.FactoryEventType
 	FactoryInvocationResult                          = contracts.FactoryInvocationResult
 	FactoryLayoutBoundsConfig                        = contracts.FactoryLayoutBoundsConfig
+	FactoryLayoutAnnotationConfig                    = contracts.FactoryLayoutAnnotationConfig
 	FactoryLayoutConfig                              = contracts.FactoryLayoutConfig
 	FactoryLayoutEdgeConfig                          = contracts.FactoryLayoutEdgeConfig
+	FactoryLayoutEmptyStateConfig                    = contracts.FactoryLayoutEmptyStateConfig
 	FactoryLayoutGroupConfig                         = contracts.FactoryLayoutGroupConfig
+	FactoryLayoutImageConfig                         = contracts.FactoryLayoutImageConfig
+	FactoryLayoutImageSourceConfig                   = contracts.FactoryLayoutImageSourceConfig
 	FactoryLayoutNodeConfig                          = contracts.FactoryLayoutNodeConfig
+	FactoryLayoutNoteConfig                          = contracts.FactoryLayoutNoteConfig
 	FactoryLayoutPointConfig                         = contracts.FactoryLayoutPointConfig
 	FactoryLayoutPreferencesConfig                   = contracts.FactoryLayoutPreferencesConfig
 	FactoryLayoutSizeConfig                          = contracts.FactoryLayoutSizeConfig

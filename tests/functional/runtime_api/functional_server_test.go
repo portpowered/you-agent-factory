@@ -35,7 +35,7 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	t.Helper()
 
 	body, err := json.Marshal(factoryapi.SubmitWorkRequest{
-		Name:         "functional-server-submit",
+		Name:         functionalServerStringPtr("functional-server-submit"),
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	})
@@ -60,6 +60,8 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	}
 	return result.TraceId
 }
+
+func functionalServerStringPtr(value string) *string { return &value }
 
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -27,10 +30,10 @@ import (
 func TestAPIServerStarterWithListenerOwnsOneListenerInvocation(t *testing.T) {
 	t.Run("missing listener", func(t *testing.T) {
 		starter := APIServerStarterWithListener(nil)
-		if err := starter(context.Background(), nil, 0, zap.NewNop()); err == nil || !strings.Contains(err.Error(), "listener is required") {
+		if err := starter(context.Background(), platformhttpserver.StartRequest{}); err == nil || !strings.Contains(err.Error(), "listener is required") {
 			t.Fatalf("first starter call error = %v, want missing listener diagnostic", err)
 		}
-		if err := starter(context.Background(), nil, 0, zap.NewNop()); err == nil || !strings.Contains(err.Error(), "already used") {
+		if err := starter(context.Background(), platformhttpserver.StartRequest{}); err == nil || !strings.Contains(err.Error(), "already used") {
 			t.Fatalf("repeated starter call error = %v, want single-use diagnostic", err)
 		}
 	})
@@ -44,7 +47,11 @@ func TestAPIServerStarterWithListenerOwnsOneListenerInvocation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		starter := APIServerStarterWithListener(listener)
-		if err := starter(ctx, nil, listener.Addr().(*net.TCPAddr).Port, zap.NewNop()); err != nil {
+		if err := starter(ctx, platformhttpserver.StartRequest{
+			Handler: http.NotFoundHandler(),
+			Port:    listener.Addr().(*net.TCPAddr).Port,
+			Logger:  zap.NewNop(),
+		}); err != nil {
 			t.Fatalf("starter with canceled production server error = %v", err)
 		}
 	})

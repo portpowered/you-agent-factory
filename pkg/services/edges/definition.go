@@ -112,6 +112,7 @@ type Edges struct {
 	OperatorSettingsCreateTemporaryFile             operatorsettings.CreateTemporaryFile
 	OperatorSettingsIDGenerator                     operatorsettings.IDGenerator
 	SystemInitializationInspectPath                 systeminitialization.InspectPath
+	SystemInitializationMigrationFileSystem         systeminitialization.LegacyFactoryMigrationFileSystem
 
 	Clock                              platformclock.Source
 	SubmissionRecorder                 recordings.SubmissionRecorder
@@ -411,6 +412,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.SystemInitializationInspectPath != nil {
 		defaults.SystemInitializationInspectPath = replacements.SystemInitializationInspectPath
+	}
+	if replacements.SystemInitializationMigrationFileSystem != nil {
+		defaults.SystemInitializationMigrationFileSystem = replacements.SystemInitializationMigrationFileSystem
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock

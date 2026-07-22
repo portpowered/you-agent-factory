@@ -294,13 +294,17 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	if err := requireNumber(layout, "schemaVersion", "layout"); err != nil {
 		return err
 	}
-	if err := validateLayoutNodeArray(layout, "nodes", "layout"); err != nil {
+	totalImageBytes := 0
+	if err := validateLayoutNodeArray(layout, "nodes", "layout", &totalImageBytes); err != nil {
 		return err
 	}
 	if err := validateLayoutEdgeArray(layout, "edges", "layout"); err != nil {
 		return err
 	}
 	if err := validateLayoutGroupArray(layout, "groups", "layout"); err != nil {
+		return err
+	}
+	if err := validateLayoutAnnotationArray(layout, "annotations", "layout", &totalImageBytes); err != nil {
 		return err
 	}
 	if err := validateOptionalPointObject(layout, "viewport", "layout", true, "zoom"); err != nil {
@@ -312,14 +316,15 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	return nil
 }
 
-func validateLayoutNodeArray(parent map[string]any, key string, path string) error {
+func validateLayoutNodeArray(parent map[string]any, key string, path string, totalImageBytes *int) error {
 	values, ok, err := optionalObjectArray(parent, key, path)
 	if !ok || err != nil {
 		return err
 	}
+	seenEmptyStateNodeIDs := make(map[string]struct{}, len(values))
 	for index, node := range values {
 		nodePath := fmt.Sprintf("%s.%s[%d]", path, key, index)
-		if err := requireString(node, "id", nodePath); err != nil {
+		if err := requireNonBlankString(node, "id", nodePath); err != nil {
 			return err
 		}
 		if err := validateOptionalPointObject(node, "position", nodePath, true); err != nil {
@@ -327,6 +332,21 @@ func validateLayoutNodeArray(parent map[string]any, key string, path string) err
 		}
 		if err := validateOptionalSizeObject(node, "size", nodePath, false); err != nil {
 			return err
+		}
+		imageBytes, err := validateLayoutNodeEmptyState(node, nodePath)
+		if err != nil {
+			return err
+		}
+		if imageBytes > 0 || nodeHasTextEmptyState(node) {
+			nodeID := node["id"].(string)
+			if _, duplicate := seenEmptyStateNodeIDs[nodeID]; duplicate {
+				return fmt.Errorf("%s.emptyState duplicates an empty state for canonical node %q", nodePath, nodeID)
+			}
+			seenEmptyStateNodeIDs[nodeID] = struct{}{}
+		}
+		*totalImageBytes += imageBytes
+		if *totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
+			return fmt.Errorf("%s.emptyState.image.source.data exceeds the %d-byte Factory embedded-image budget", nodePath, factoryLayoutEmbeddedImageTotalMaxBytes)
 		}
 	}
 	return nil
@@ -568,6 +588,7 @@ func factoryLayoutAPIFromInternal(layout *interfaces.FactoryLayoutConfig) *facto
 		Nodes:         factoryLayoutNodesAPIFromInternal(layout.Nodes),
 		Edges:         factoryLayoutEdgesAPIFromInternal(layout.Edges),
 		Groups:        factoryLayoutGroupsAPIFromInternal(layout.Groups),
+		Annotations:   factoryLayoutAnnotationsAPIFromInternal(layout.Annotations),
 		Viewport:      factoryLayoutViewportAPIFromInternal(layout.Viewport),
 		Preferences:   factoryLayoutPreferencesAPIFromInternal(layout.Preferences),
 	}
@@ -581,10 +602,11 @@ func factoryLayoutNodesAPIFromInternal(nodes []interfaces.FactoryLayoutNodeConfi
 	values := make([]factoryapi.FactoryLayoutNode, len(nodes))
 	for i, node := range nodes {
 		values[i] = factoryapi.FactoryLayoutNode{
-			Id:       node.ID,
-			Position: factoryLayoutPointAPIFromInternal(node.Position),
-			Size:     factoryLayoutSizeAPIFromInternal(node.Size),
-			Locked:   node.Locked,
+			Id:         node.ID,
+			Position:   factoryLayoutPointAPIFromInternal(node.Position),
+			Size:       factoryLayoutSizeAPIFromInternal(node.Size),
+			Locked:     node.Locked,
+			EmptyState: factoryLayoutEmptyStateAPIFromInternal(node.EmptyState),
 		}
 	}
 	return &values

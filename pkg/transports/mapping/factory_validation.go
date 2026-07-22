@@ -125,12 +125,21 @@ func FactoryValidationTargetToAPI(target interfaces.ValidationTarget) factoryapi
 		Code:     target.Code,
 		Severity: factoryValidationSeverityToAPI(target.Severity),
 		Message:  target.Message,
+		Path:     factoryValidationPathToAPI(target.Path),
 		Subject: factoryapi.FactoryValidationSubject{
 			Type:     factoryValidationSubjectTypeToAPI(target.Subject.Type),
 			Id:       target.Subject.ID,
 			Location: factoryValidationSubjectLocationToAPI(target.Subject.Location),
 		},
 	}
+}
+
+func factoryValidationPathToAPI(path string) *string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	return &path
 }
 
 func factoryValidationSeverityToAPI(severity interfaces.ValidationSeverity) factoryapi.FactoryValidationSeverity {

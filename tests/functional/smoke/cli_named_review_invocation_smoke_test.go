@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection(t *testing.T) {
@@ -77,14 +77,7 @@ func runNamedReviewInvocationCLIJSON(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	factoryDir, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		review.PackagedFactoryName,
-		review.BuiltInFactoryJSON,
-	)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(%s): %v", review.PackagedFactoryName, err)
-	}
+	factoryDir := support.InstallPackagedFactory(t, homeDir, review.PackagedFactoryName)
 	if configure != nil {
 		configure(t, factoryDir)
 	}
@@ -151,9 +144,9 @@ func writePackagedReviewMockWorkers(t *testing.T) (string, string) {
 		writePackagedReviewMockWorkerPOSIX(t, scriptDir, invocationPath)
 	}
 	command, args := packagedReviewMockWorkerCommand(scriptDir)
-	cfg := factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{
-		{WorkerName: "review-work-executor", WorkstationName: review.PackagedExecuteWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
-		{WorkerName: "review-work-reviewer", WorkstationName: review.PackagedReviewWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
+	cfg := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{
+		{WorkerName: "review-work-executor", WorkstationName: review.PackagedExecuteWorkstationName, RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: command, Args: args}},
+		{WorkerName: "review-work-reviewer", WorkstationName: review.PackagedReviewWorkstationName, RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: command, Args: args}},
 	}}
 	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-review.json"), invocationPath
 }

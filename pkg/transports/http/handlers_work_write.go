@@ -312,7 +312,7 @@ func (s *Server) submitWorkRequestFromDecoded(
 	}
 
 	submitReq := workdomain.SubmitRequest{
-		Name:                   strings.TrimSpace(req.Name),
+		Name:                   strings.TrimSpace(stringValue(req.Name)),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                stringValue(req.TraceId),

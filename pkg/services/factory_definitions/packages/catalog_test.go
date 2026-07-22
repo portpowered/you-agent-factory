@@ -16,6 +16,7 @@ func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
 		factorydefinitions.PackagedFusionFactoryName,
 		factorydefinitions.PackagedGoalFactoryName,
 		factorydefinitions.PackagedQuorumFactoryName,
+		factorydefinitions.PackagedReviewFactoryName,
 		factorydefinitions.PackagedSubagentFactoryName,
 		factorydefinitions.PackagedTTSFactoryName,
 	}

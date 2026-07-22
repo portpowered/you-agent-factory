@@ -247,6 +247,15 @@ func provideSystemInitializationInspectPath(
 	return os.Stat
 }
 
+func provideSystemInitializationLegacyFactoryMigrationFileSystem(
+	edges serviceedges.Edges,
+) systeminitialization.LegacyFactoryMigrationFileSystem {
+	if edges.SystemInitializationMigrationFileSystem != nil {
+		return edges.SystemInitializationMigrationFileSystem
+	}
+	return platformfilesystem.Local{}
+}
+
 func provideOperatorConfigLoader(files operatorsettings.FileSystem) operatorsettings.ConfigLoader {
 	return func(path string) (operatorsettings.FileConfig, error) {
 		return operatorsettings.LoadFileConfig(files, path)
@@ -289,6 +298,7 @@ func provideSystemInitializationService(
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitialization.InspectPath,
+	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	return systeminitialization.New(
 		systeminitialization.OperatorSettingsFunctions{
@@ -298,6 +308,7 @@ func provideSystemInitializationService(
 		packagedinstallation.New(persistence, packagedInstallationFileSystem),
 		factorypackages.All(),
 		inspectPath,
+		migrationFiles,
 	)
 }
 

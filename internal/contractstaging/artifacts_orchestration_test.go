@@ -45,6 +45,13 @@ func TestArtifactsWithDependenciesOrchestratesPipelineInExpectedOrder(t *testing
 			callLog = append(callLog, "generateSchema")
 			return []byte("schema"), nil
 		},
+		GenerateStandaloneSchemas: func(_ string) (map[string][]byte, error) {
+			callLog = append(callLog, "generateStandaloneSchemas")
+			return map[string][]byte{
+				factoryEventSchemaTarget:     []byte("event-schema"),
+				factoryRecordingSchemaTarget: []byte("recording-schema"),
+			}, nil
+		},
 		GenerateManifest: func(_ string, artifacts map[string][]byte) ([]byte, error) {
 			callLog = append(callLog, "generateManifest")
 			if _, ok := artifacts[factorySchemaTarget]; !ok {
@@ -71,6 +78,7 @@ func TestArtifactsWithDependenciesOrchestratesPipelineInExpectedOrder(t *testing
 		"read:mock-workers.schema.json",
 		"read:runtime-api.json",
 		"generateSchema",
+		"generateStandaloneSchemas",
 		"generateManifest",
 	}
 	if !reflect.DeepEqual(callLog, expected) {
@@ -128,8 +136,11 @@ func TestArtifactsWithDependencies_PropagatesManifestFailure(t *testing.T) {
 		Join: func(contractjoiner.Input) ([]contractjoiner.Document, []contractvalidator.Diagnostic) {
 			return []contractjoiner.Document{}, nil
 		},
-		ReadRawArtifact:  func(string) ([]byte, error) { return []byte("raw"), nil },
-		GenerateSchema:   func(string) ([]byte, error) { return []byte("schema"), nil },
+		ReadRawArtifact: func(string) ([]byte, error) { return []byte("raw"), nil },
+		GenerateSchema:  func(string) ([]byte, error) { return []byte("schema"), nil },
+		GenerateStandaloneSchemas: func(string) (map[string][]byte, error) {
+			return map[string][]byte{}, nil
+		},
 		GenerateManifest: func(string, map[string][]byte) ([]byte, error) { return nil, errors.New("manifest failed") },
 	})
 	if err == nil || !strings.Contains(err.Error(), "manifest failed") {

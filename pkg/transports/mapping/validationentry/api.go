@@ -9,9 +9,50 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
+
+// ValidateEditableFactorySnapshot retains the transport-level compatibility
+// entrypoint used by callers that only need detached layout and topology
+// validation. Application composition uses MapEditableFactorySnapshot with the
+// Factory Definitions-owned validation operation.
+func ValidateEditableFactorySnapshot(
+	snapshot *interfaces.FactorySnapshot,
+	_ interfaces.WorkstationLoader,
+) error {
+	if snapshot == nil {
+		return fmt.Errorf("%w: Factory snapshot is required", interfaces.ErrInvalidNamedFactory)
+	}
+	payload := append([]byte(nil), (*snapshot)...)
+	if err := factorymapping.ValidatePortableLayoutBoundaryJSON(payload); err != nil {
+		if target, ok := factorymapping.PortableLayoutValidationTarget(err); ok {
+			return apisurface.NewTopologyValidationError(
+				"Factory layout contains an invalid authored value.",
+				apisurface.FactoryValidationTargetsToAPI([]interfaces.ValidationTarget{target}),
+			)
+		}
+		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
+	}
+	var submitted factoryapi.Factory
+	if err := snapshot.Decode(&submitted); err != nil {
+		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
+	}
+	cfg, err := factorymapping.FactoryConfigFromOpenAPI(submitted)
+	if err != nil {
+		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
+	}
+	result := factoryvalidation.New(nil).Validate(context.Background(), &cfg, nil)
+	if !result.HasBlockingTargets() {
+		return nil
+	}
+	return apisurface.NewTopologyValidationError(
+		"Factory topology contains invalid graph references.",
+		apisurface.FactoryValidationTargetsToAPI(result.BlockingTargets()),
+	)
+}
 
 // MapFactoryJSONForPersistence maps one serialized public Factory definition
 // into a detached pre-persist request. It does not invoke validation or

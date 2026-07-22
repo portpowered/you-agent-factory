@@ -4,7 +4,7 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factory/packages/packageassets"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 )
 
 //go:embed factory.json

@@ -49,8 +49,8 @@ func TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies(t *testing.T
 	if response.StatusCode() != http.StatusNotFound || response.JSON404 == nil {
 		t.Fatalf("generated response = %#v, want typed 404 from functional HTTP host", response)
 	}
-	if response.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
-		t.Fatalf("generated error code = %q, want %q", response.JSON404.Code, generatedclient.RESPONSEEVENTSESSIONNOTFOUND)
+	if response.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
+		t.Fatalf("generated error code = %q, want %q", response.JSON404.Code, generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	}()
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-rest-client-success",
+		Name:         stringPtr("generated-rest-client-success"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated REST client success"},
 	})
@@ -101,7 +101,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	if failure.StatusCode() != http.StatusNotFound || failure.JSON404 == nil {
 		t.Fatalf("generated failure response = %#v, want typed 404", failure)
 	}
-	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
+	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
 		t.Fatalf("generated API error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", failure.JSON404)
 	}
 
@@ -138,7 +138,7 @@ func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 	host := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(generatedRESTStreamingRunner{}, nil))
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-rest-client-context-bounds",
+		Name:         stringPtr("generated-rest-client-context-bounds"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated REST client context bounds"},
 	})

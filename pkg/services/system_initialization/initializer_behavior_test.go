@@ -17,6 +17,18 @@ type fakeOperatorSettings struct {
 	loadCalls, ensureCalls []string
 }
 
+type localMigrationFileSystem struct{}
+
+func (localMigrationFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
+func (localMigrationFileSystem) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
+func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
+func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+
 func (fake *fakeOperatorSettings) LoadFileConfig(path string) (operatorsettings.FileConfig, error) {
 	fake.loadCalls = append(fake.loadCalls, path)
 	return operatorsettings.FileConfig{}, fake.loadErr
@@ -53,7 +65,7 @@ func newTestInitializer(
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
 	t.Helper()
-	initializer, err := New(settings, installer, definitions, os.Stat)
+	initializer, err := New(settings, installer, definitions, os.Stat, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -85,6 +97,68 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	}
 	if len(installer.calls) != 1 || installer.calls[0].root != result.NamedFactoriesRoot {
 		t.Fatalf("installer calls = %#v", installer.calls)
+	}
+}
+
+func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.T) {
+	homeDir := t.TempDir()
+	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "@you", "goal")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := []byte("customer-owned\n")
+	if err := os.WriteFile(filepath.Join(legacyDir, "customer-edit.txt"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	canonicalDir := filepath.Join(result.NamedFactoriesRoot, "@you", "goal")
+	got, err := os.ReadFile(filepath.Join(canonicalDir, "customer-edit.txt"))
+	if err != nil || string(got) != string(marker) {
+		t.Fatalf("migrated customer edit = %q, %v", got, err)
+	}
+	if _, err := os.Stat(legacyDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy directory remains after migration: %v", err)
+	}
+}
+
+func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
+	homeDir := t.TempDir()
+	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "customer")
+	canonicalDir := filepath.Join(factorydefinitions.NamedFactoriesRoot(homeDir), "customer")
+	for _, dir := range []string{legacyDir, canonicalDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	if err == nil || !strings.Contains(err.Error(), "without overwriting") {
+		t.Fatalf("Initialize() conflict error = %v", err)
+	}
+	for _, dir := range []string{legacyDir, canonicalDir} {
+		if _, statErr := os.Stat(dir); statErr != nil {
+			t.Fatalf("conflict changed %s: %v", dir, statErr)
+		}
+	}
+}
+
+func TestInitializeRejectsInvalidLegacyCurrentFactoryPointer(t *testing.T) {
+	homeDir := t.TempDir()
+	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(legacyRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRoot, factorydefinitions.CurrentFactoryPointerFile), []byte("../outside-root\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	if err == nil || !strings.Contains(err.Error(), "list legacy global Factories") {
+		t.Fatalf("Initialize() error = %v, want legacy inventory guidance", err)
 	}
 }
 
@@ -125,7 +199,7 @@ func TestInit_RejectsSystemConfigParentThatIsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	inspect := func(string) (os.FileInfo, error) { return occupied, nil }
-	initializer, err := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, inspect)
+	initializer, err := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, inspect, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -152,7 +226,7 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 		return nil, inspectErr
 	}
 
-	initializer, constructionErr := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, inspect)
+	initializer, constructionErr := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, inspect, localMigrationFileSystem{})
 	if constructionErr != nil {
 		t.Fatalf("New() error = %v", constructionErr)
 	}
@@ -223,13 +297,13 @@ func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) 
 }
 
 func TestNewRequiresInjectedServices(t *testing.T) {
-	if initializer, err := New(nil, &fakePackagedInstaller{}, nil, os.Stat); err == nil || initializer != nil {
+	if initializer, err := New(nil, &fakePackagedInstaller{}, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
 		t.Fatalf("New(nil Operator Settings) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, nil, nil, os.Stat); err == nil || initializer != nil {
+	if initializer, err := New(&fakeOperatorSettings{}, nil, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
 		t.Fatalf("New(nil packaged installer) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, nil); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
+	if initializer, err := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, nil, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
 		t.Fatalf("New(nil inspect path) = (%#v, %v), want nil and inspect-path error", initializer, err)
 	}
 }

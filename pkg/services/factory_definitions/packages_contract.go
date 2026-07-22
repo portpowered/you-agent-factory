@@ -14,4 +14,5 @@ const (
 	PackagedDeepResearchFactoryName = "@you/deep-research"
 	PackagedFusionFactoryName       = "@you/fusion"
 	PackagedGoalFactoryName         = "@you/goal"
+	PackagedReviewFactoryName       = "@you/review"
 )

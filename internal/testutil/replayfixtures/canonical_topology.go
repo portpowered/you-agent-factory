@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/events/snapshot"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot"
 )
 
 // CanonicalTopologyReplacementEvents returns backend-produced topology events
@@ -30,7 +30,10 @@ func CanonicalTopologyReplacementEvents() ([]interfaces.FactoryEvent, error) {
 }
 
 func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, tick, sequence int, factory *interfaces.FactoryConfig) (interfaces.FactoryEvent, error) {
-	mapper := config.ConfigMapper{}
+	mapper, err := definitionmapping.New(func() string { return "fixture-id" })
+	if err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("construct topology fixture mapper: %w", err)
+	}
 	net, err := mapper.Map(context.Background(), factory)
 	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture: %w", err)
@@ -40,7 +43,7 @@ func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, ti
 		Workers:      mapWorkers(factory.Workers),
 		Workstations: mapWorkstations(factory.Workstations),
 	}
-	factorySnapshot := snapshot.FromInitialStructure(projections.ProjectInitialStructure(net, lookup))
+	factorySnapshot := snapshot.FromInitialStructure(state.ProjectInitialStructure(net, lookup))
 	var payload []byte
 	if eventType == interfaces.FactoryEventTypeFactoryChange {
 		payload, err = json.Marshal(interfaces.FactoryChangeEventPayload{Factory: factorySnapshot})

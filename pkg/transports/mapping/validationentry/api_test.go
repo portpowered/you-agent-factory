@@ -7,8 +7,10 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 const (

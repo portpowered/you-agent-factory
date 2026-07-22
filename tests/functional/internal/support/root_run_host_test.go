@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/root"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -57,8 +56,8 @@ func TestRootRunFunctionalHostStartsThroughCustomerRESTAndSSE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
-	if result.ExitCode != root.ExitSuccess {
-		t.Fatalf("canceled root.Run exit code = %d, want %d", result.ExitCode, root.ExitSuccess)
+	if result.ExitCode != 0 {
+		t.Fatalf("canceled process exit code = %d, want 0", result.ExitCode)
 	}
 	if result.Outcome != support.RootRunProcessStopped {
 		t.Fatalf("canceled root.Run outcome = %q, want %q", result.Outcome, support.RootRunProcessStopped)
@@ -93,7 +92,7 @@ func TestRootRunFunctionalHostContextCancellationCompletesAndReleasesListener(t 
 	if !finished {
 		t.Fatal("Result() reports unfinished after Done() closed")
 	}
-	if result.ExitCode != root.ExitSuccess || result.Outcome != support.RootRunProcessStopped {
+	if result.ExitCode != 0 || result.Outcome != support.RootRunProcessStopped {
 		t.Fatalf("Result() = %#v, want clean stopped outcome", result)
 	}
 
@@ -149,7 +148,7 @@ func TestRootRunFunctionalHostShutdownIsBoundedAndIdempotent(t *testing.T) {
 	if first != second {
 		t.Fatalf("repeated Shutdown() result = %#v, want %#v", second, first)
 	}
-	if first.ExitCode != root.ExitSuccess || first.Outcome != support.RootRunProcessStopped {
+	if first.ExitCode != 0 || first.Outcome != support.RootRunProcessStopped {
 		t.Fatalf("Shutdown() result = %#v, want clean stopped outcome", first)
 	}
 }

@@ -128,7 +128,7 @@ func newGoalFailureNamedRunEnvironmentWithInvocation(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	factoryDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
+	factoryDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "@you", "goal")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll named Factory fixture: %v", err)
 	}
