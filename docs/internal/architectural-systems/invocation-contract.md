@@ -55,15 +55,16 @@ session-scoped SSE counterpart on the API:
 | --- | --- | --- |
 | Primary result (default) | Default `you run --factory` or `--named` | Only the configured `primaryResult` on success |
 | Human response-stream | `--output response-stream` | Human-readable progress, then the same primary result |
-| NDJSON automation | Global `--json` with `--output response-stream` | One JSON record per non-empty stdout line; streamed events use `recordType=response_event` with a nested public `FactoryResponseEvent`; an available invocation ends with exactly one terminal `recordType=invocation_result` record |
+| NDJSON automation | Global `--json` with `--output response-stream` | One JSON record per non-empty stdout line; streamed events use `recordType=factory_event` with a nested canonical `FactoryEvent`; an available invocation ends with exactly one terminal `recordType=invocation_result` whose `response` is the `InvocationResponse` |
 
-The session API exposes the same public `FactoryResponseEvent` contract on
+The session API separately exposes the public `FactoryResponseEvent` contract on
 `GET /factory-sessions/{session_id}/response-events`. That route is ephemeral
 observation separate from canonical `GET /factory-sessions/{session_id}/events`
 Factory event replay. Reconnect with `after_sequence`; stale retained cursors
 begin with `STREAM_GAP` instead of silently skipping loss. Response-event
 history is bounded and session-scoped — it does not promise durable
-process-restart replay beyond the retention window.
+process-restart replay beyond the retention window, and it is not the CLI
+lifecycle presentation source.
 
 Provider streaming fidelity varies: native-streaming providers may emit
 incremental public response events; final-only providers may emit only terminal

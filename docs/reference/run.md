@@ -210,9 +210,12 @@ automation output. Each non-empty stdout line is one complete JSON record.
 Streamed events use `recordType=factory_event` with a nested canonical
 `FactoryEvent`, including its unchanged session sequence context. An available
 invocation response ends with exactly one terminal `recordType=invocation_result`
-record. That terminal record is always the final line, including when stdout is
-slow. NDJSON mode does not emit retired private progress, compaction, gap, or
-`primary_result` record shapes from earlier releases.
+record whose `response` field is the `InvocationResponse`. That terminal record
+is always the final line, including when stdout is slow. Provider response,
+diagnostic, Provider Session, delta, and tool-call fields are omitted from event
+payloads at this presentation boundary. NDJSON mode does not emit retired
+private progress, compaction, gap, or `primary_result` record shapes from
+earlier releases.
 
 ```bash
 you --json run --factory ./factory.json --output response-stream "Summarize the changelog"

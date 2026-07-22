@@ -918,6 +918,10 @@ func newJSONFactoryEventRenderer(
 	return &jsonFactoryEventRenderer{stream: presentation.OpenLosslessFactoryEventStream(
 		output,
 		func(event interfaces.FactoryEvent) ([]byte, bool) {
+			event, ok := factoryEventForPublicPresentation(event)
+			if !ok {
+				return nil, false
+			}
 			encoded, err := json.Marshal(factoryEventJSONRecord{
 				RecordType: factoryEventJSONRecordType,
 				Event:      event,
@@ -946,9 +950,9 @@ func (renderer *jsonFactoryEventRenderer) writeFinalInvocationResult(
 		return fmt.Errorf("Factory Event renderer is nil")
 	}
 	first, err := renderer.stream.Finalize(func(writer io.Writer, _ bool) error {
-		encoded, encodeErr := json.Marshal(responseStreamJSONInvocationResultRecord{
+		encoded, encodeErr := json.Marshal(factoryEventJSONInvocationResultRecord{
 			RecordType: responseStreamJSONRecordInvocationResult,
-			Invocation: apisurface.InvocationResponseFromResult(result),
+			Response:   apisurface.InvocationResponseFromResult(result),
 		})
 		if encodeErr != nil {
 			return fmt.Errorf("marshal Factory Event terminal record: %w", encodeErr)
@@ -969,4 +973,9 @@ func (renderer *jsonFactoryEventRenderer) writeFinalInvocationResult(
 type factoryEventJSONRecord struct {
 	RecordType string                  `json:"recordType"`
 	Event      interfaces.FactoryEvent `json:"event"`
+}
+
+type factoryEventJSONInvocationResultRecord struct {
+	RecordType string                        `json:"recordType"`
+	Response   factoryapi.InvocationResponse `json:"response"`
 }

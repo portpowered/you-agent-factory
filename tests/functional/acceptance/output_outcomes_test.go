@@ -12,13 +12,13 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	outputModeResponseStreamJSONRecordResponseEvent = "response_event"
-	outputModeResponseStreamJSONRecordInvocation    = "invocation_result"
+	outputModeResponseStreamJSONRecordFactoryEvent = "factory_event"
+	outputModeResponseStreamJSONRecordInvocation   = "invocation_result"
 )
 
 func TestPrimaryOutputMode_SuccessfulNamedGoal_WritesAuthoritativePrimaryResultOnly(t *testing.T) {
@@ -155,6 +155,27 @@ func TestStreamOutputMode_JSONMode_EmitsCanonicalNDJSONRecordsWithTerminalInvoca
 	}
 }
 
+func TestStreamOutputMode_JSONMode_FailureBeforeSessionWritesNoTerminalRecord(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow built-CLI JSON response-stream pre-session failure acceptance")
+	}
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	result, err := session.Run(ctx,
+		"--json", "run", "--named", "@you/missing", "--output", "response-stream", "--no-record", "prompt",
+	)
+	if err == nil || result.ExitCode == 0 {
+		t.Fatalf("expected pre-session failure, got result=%#v err=%v", result, err)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("stdout = %q, want no Factory Event or terminal record", result.Stdout)
+	}
+}
+
 func TestStreamOutputMode_PrimaryAndStreamModesAgreeOnTerminalOutcome(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow built-CLI primary-only vs response-stream parity acceptance")
@@ -242,19 +263,19 @@ func namedGoalOutputRunArgs(
 
 type responseStreamJSONInvocationResultRecord struct {
 	RecordType string                        `json:"recordType"`
-	Invocation factoryapi.InvocationResponse `json:"invocation"`
+	Response   factoryapi.InvocationResponse `json:"response"`
 }
 
-type responseStreamJSONResponseEventRecord struct {
-	RecordType string                               `json:"recordType"`
-	Event      factorysessions.FactoryResponseEvent `json:"event"`
+type responseStreamJSONFactoryEventRecord struct {
+	RecordType string                          `json:"recordType"`
+	Event      factorydefinitions.FactoryEvent `json:"event"`
 }
 
 type responseStreamParsedRecord struct {
 	RecordType string
 	Raw        json.RawMessage
 	Invocation factoryapi.InvocationResponse
-	Event      factorysessions.FactoryResponseEvent
+	Event      factorydefinitions.FactoryEvent
 }
 
 func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedRecord, error) {
@@ -277,7 +298,7 @@ func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedReco
 		}
 		recordType := strings.TrimSpace(envelope.RecordType)
 		if recordType != outputModeResponseStreamJSONRecordInvocation &&
-			recordType != outputModeResponseStreamJSONRecordResponseEvent {
+			recordType != outputModeResponseStreamJSONRecordFactoryEvent {
 			return nil, fmt.Errorf("unsupported recordType %q in line %q", recordType, line)
 		}
 		record := responseStreamParsedRecord{
@@ -286,20 +307,26 @@ func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedReco
 		}
 		switch recordType {
 		case outputModeResponseStreamJSONRecordInvocation:
+			if err := requireNDJSONRecordShape(line, "response"); err != nil {
+				return nil, err
+			}
 			var invocation responseStreamJSONInvocationResultRecord
 			if err := json.Unmarshal([]byte(line), &invocation); err != nil {
 				return nil, fmt.Errorf("decode invocation_result line %q: %w", line, err)
 			}
-			record.Invocation = invocation.Invocation
-		case outputModeResponseStreamJSONRecordResponseEvent:
-			var responseEvent responseStreamJSONResponseEventRecord
-			if err := json.Unmarshal([]byte(line), &responseEvent); err != nil {
-				return nil, fmt.Errorf("decode response_event line %q: %w", line, err)
+			record.Invocation = invocation.Response
+		case outputModeResponseStreamJSONRecordFactoryEvent:
+			if err := requireNDJSONRecordShape(line, "event"); err != nil {
+				return nil, err
 			}
-			if err := factorysessions.ValidateFactoryResponseEvent(responseEvent.Event); err != nil {
-				return nil, fmt.Errorf("validate response_event line %q: %w", line, err)
+			var factoryEvent responseStreamJSONFactoryEventRecord
+			if err := json.Unmarshal([]byte(line), &factoryEvent); err != nil {
+				return nil, fmt.Errorf("decode factory_event line %q: %w", line, err)
 			}
-			record.Event = responseEvent.Event
+			if factoryEvent.Event.SchemaVersion == "" || factoryEvent.Event.Id == "" || factoryEvent.Event.Type == "" {
+				return nil, fmt.Errorf("factory_event line is incomplete: %q", line)
+			}
+			record.Event = factoryEvent.Event
 		}
 		records = append(records, record)
 	}
@@ -307,6 +334,17 @@ func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedReco
 		return nil, fmt.Errorf("no NDJSON records in stdout")
 	}
 	return records, nil
+}
+
+func requireNDJSONRecordShape(line, payloadKey string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(line), &fields); err != nil {
+		return err
+	}
+	if len(fields) != 2 || len(fields["recordType"]) == 0 || len(fields[payloadKey]) == 0 {
+		return fmt.Errorf("record must contain only recordType and %s: %q", payloadKey, line)
+	}
+	return nil
 }
 
 func responseStreamTerminalInvocation(records []responseStreamParsedRecord) (factoryapi.InvocationResponse, error) {
@@ -353,16 +391,27 @@ func assertInvocationTerminalOutcomeParity(
 func assertResponseStreamJSONRecordsUseCanonicalVocabulary(t *testing.T, records []responseStreamParsedRecord) {
 	t.Helper()
 
+	previousSequence := -1
+	previousSessionSequence := -1
 	for _, record := range records {
 		switch record.RecordType {
-		case outputModeResponseStreamJSONRecordResponseEvent:
-			if record.Event.Kind == "" || record.Event.Phase == "" {
-				t.Fatalf("response_event record missing canonical kind/phase: %#v", record.Event)
+		case outputModeResponseStreamJSONRecordFactoryEvent:
+			if record.Event.Context.Sequence <= previousSequence {
+				t.Fatalf("Factory Event sequence %d follows %d", record.Event.Context.Sequence, previousSequence)
 			}
-			if strings.Contains(string(record.Raw), "PROGRESS_FRAGMENT") ||
-				strings.Contains(string(record.Raw), "RESPONSE_FRAGMENT") ||
-				strings.Contains(string(record.Raw), "response.output_text.delta") {
-				t.Fatalf("response_event record uses legacy fragment dialect: %s", string(record.Raw))
+			previousSequence = record.Event.Context.Sequence
+			if record.Event.Context.SessionSequence != nil {
+				if *record.Event.Context.SessionSequence <= previousSessionSequence {
+					t.Fatalf("Factory Session sequence %d follows %d", *record.Event.Context.SessionSequence, previousSessionSequence)
+				}
+				previousSessionSequence = *record.Event.Context.SessionSequence
+			}
+			var payload any
+			if err := json.Unmarshal(record.Event.Payload, &payload); err != nil {
+				t.Fatalf("decode Factory Event payload: %v", err)
+			}
+			if key := firstPrivateFactoryEventPayloadKey(payload); key != "" {
+				t.Fatalf("factory_event contains provider-only field %q: %s", key, record.Raw)
 			}
 		case outputModeResponseStreamJSONRecordInvocation:
 			continue
@@ -370,6 +419,29 @@ func assertResponseStreamJSONRecordsUseCanonicalVocabulary(t *testing.T, records
 			t.Fatalf("unsupported recordType %q", record.RecordType)
 		}
 	}
+}
+
+func firstPrivateFactoryEventPayloadKey(value any) string {
+	switch value := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
+			if _, exists := value[key]; exists {
+				return key
+			}
+		}
+		for _, child := range value {
+			if key := firstPrivateFactoryEventPayloadKey(child); key != "" {
+				return key
+			}
+		}
+	case []any:
+		for _, child := range value {
+			if key := firstPrivateFactoryEventPayloadKey(child); key != "" {
+				return key
+			}
+		}
+	}
+	return ""
 }
 
 func assertHumanResponseStreamAvoidsLegacyDialect(t *testing.T, stdout string) {

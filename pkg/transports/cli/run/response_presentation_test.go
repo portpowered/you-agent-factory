@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -86,6 +87,96 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	for _, forbidden := range []string{providerResponse, providerOutput, "INFERENCE_RESPONSE"} {
 		if strings.Contains(output.String(), forbidden) {
 			t.Fatalf("human lifecycle exposed private provider value %q: %s", forbidden, output.String())
+		}
+	}
+}
+
+func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
+	const providerCanary = "PRIVATE_PROVIDER_CHUNK_71f2"
+	providerResponse := providerCanary
+	events := append(canonicalJavaScriptFactoryEvents(), canonicalFactoryEventWithPayload(
+		4,
+		factorydefinitions.FactoryEventTypeInferenceResponse,
+		workerexecution.InferenceResponseEventPayload{
+			Diagnostics:     json.RawMessage(`{"schemaVersion":"agent-factory.response-event.v1","textDelta":"PRIVATE_PROVIDER_CHUNK_71f2"}`),
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", ID: providerCanary},
+			Response:        &providerResponse,
+		},
+	))
+
+	var output strings.Builder
+	renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+	renderer.PresentFactoryEvents(events)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		RequestID: "request-ndjson", Status: factorydefinitions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != len(events)+1 {
+		t.Fatalf("NDJSON records = %d, want %d:\n%s", len(lines), len(events)+1, output.String())
+	}
+	for index, line := range lines[:len(events)] {
+		assertFactoryEventNDJSONRecord(t, line, events[index], index)
+	}
+	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1])
+	for _, forbidden := range []string{providerCanary, "textDelta", "providerSession", "FactoryResponseEvent"} {
+		if strings.Contains(output.String(), forbidden) {
+			t.Fatalf("NDJSON exposed provider-only value %q:\n%s", forbidden, output.String())
+		}
+	}
+	if !strings.Contains(string(events[len(events)-1].Payload), providerCanary) {
+		t.Fatal("presentation redaction mutated canonical Factory Event history")
+	}
+}
+
+func assertFactoryEventNDJSONRecord(
+	t *testing.T, line string, want factorydefinitions.FactoryEvent, index int,
+) {
+	t.Helper()
+	var record map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(line), &record); err != nil {
+		t.Fatalf("decode event record %d: %v", index, err)
+	}
+	if len(record) != 2 || string(record["recordType"]) != `"factory_event"` || len(record["event"]) == 0 {
+		t.Fatalf("event record %d has invalid discriminator shape: %s", index, line)
+	}
+	var event factorydefinitions.FactoryEvent
+	if err := json.Unmarshal(record["event"], &event); err != nil {
+		t.Fatalf("decode event %d: %v", index, err)
+	}
+	if event.Context.Sequence != want.Context.Sequence || event.Context.SessionSequence == nil ||
+		*event.Context.SessionSequence != *want.Context.SessionSequence {
+		t.Fatalf("event %d sequence context changed: %#v", index, event.Context)
+	}
+}
+
+func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
+	t.Helper()
+	var record map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(line), &record); err != nil {
+		t.Fatalf("decode terminal record: %v", err)
+	}
+	if len(record) != 2 || string(record["recordType"]) != `"invocation_result"` || len(record["response"]) == 0 {
+		t.Fatalf("terminal record has invalid discriminator shape: %s", line)
+	}
+}
+
+func TestJSONFactoryEventRenderer_WithoutTerminalWritesOnlyFactoryEvents(t *testing.T) {
+	var output strings.Builder
+	renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+	renderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents())
+	renderer.stopProgressRendering()
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("NDJSON records = %d, want 3 Factory Events:\n%s", len(lines), output.String())
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, `"recordType":"factory_event"`) || strings.Contains(line, "invocation_result") {
+			t.Fatalf("unexpected no-terminal record: %s", line)
 		}
 	}
 }

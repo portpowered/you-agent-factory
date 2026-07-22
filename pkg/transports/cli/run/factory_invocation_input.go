@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -386,6 +387,46 @@ func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResul
 	}
 	_, err = fmt.Fprintln(output, string(encoded))
 	return err
+}
+
+func factoryEventForPublicPresentation(event interfaces.FactoryEvent) (interfaces.FactoryEvent, bool) {
+	var payload any
+	decoder := json.NewDecoder(bytes.NewReader(event.Payload))
+	decoder.UseNumber()
+	if len(event.Payload) == 0 || decoder.Decode(&payload) != nil {
+		event.Payload = json.RawMessage(`{}`)
+		return event, true
+	}
+	payload = redactPrivateFactoryEventPayload(payload)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return interfaces.FactoryEvent{}, false
+	}
+	event.Payload = encoded
+	return event, true
+}
+
+func redactPrivateFactoryEventPayload(value any) any {
+	if list, ok := value.([]any); ok {
+		for index, child := range list {
+			list[index] = redactPrivateFactoryEventPayload(child)
+		}
+		return list
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	if object["schemaVersion"] == string(factorysessions.ResponseEventSchemaVersionV1) {
+		return map[string]any{}
+	}
+	for _, key := range []string{"diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
+		delete(object, key)
+	}
+	for key, child := range object {
+		object[key] = redactPrivateFactoryEventPayload(child)
+	}
+	return object
 }
 
 func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {

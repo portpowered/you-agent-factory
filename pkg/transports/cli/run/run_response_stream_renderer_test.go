@@ -719,11 +719,11 @@ func assertSlowWriterCanonicalRecords(t *testing.T, output string, eventCount in
 			t.Fatalf("Factory Event line %d = %#v", index, record)
 		}
 	}
-	var finalRecord responseStreamJSONInvocationResultRecord
+	var finalRecord factoryEventJSONInvocationResultRecord
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
 		t.Fatalf("decode final invocation result: %v", err)
 	}
-	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult || finalRecord.Invocation.RequestId != "req-slow-writer" {
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult || finalRecord.Response.RequestId != "req-slow-writer" {
 		t.Fatalf("final record = %#v", finalRecord)
 	}
 }

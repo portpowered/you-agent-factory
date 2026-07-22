@@ -536,11 +536,11 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 		if len(lines) < 1 {
 			t.Fatalf("expected NDJSON output, got empty stdout")
 		}
-		var finalRecord responseStreamJSONInvocationResultRecord
+		var finalRecord factoryEventJSONInvocationResultRecord
 		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
 			t.Fatalf("unmarshal final invocation_result record: %v\n%s", err, lines[len(lines)-1])
 		}
-		assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, result)
+		assertInvocationResponseMatchesFactoryResult(t, finalRecord.Response, result)
 	}
 }
 
@@ -674,14 +674,14 @@ func assertSlowStdoutJSONResponseStreamOutput(t *testing.T, output *gatedRespons
 	if !foundProgress {
 		t.Fatalf("NDJSON output missing factory_event records:\n%s", got)
 	}
-	var finalRecord responseStreamJSONInvocationResultRecord
+	var finalRecord factoryEventJSONInvocationResultRecord
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
 		t.Fatalf("unmarshal final invocation_result record: %v\n%s", err, lines[len(lines)-1])
 	}
 	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
 		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, responseStreamJSONRecordInvocationResult)
 	}
-	assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, apisurface.FactoryInvocationResult{
+	assertInvocationResponseMatchesFactoryResult(t, finalRecord.Response, apisurface.FactoryInvocationResult{
 		RequestID: "req-1",
 		TraceID:   "trace-1",
 		Status:    interfaces.InvocationTerminalStatusCompleted,
