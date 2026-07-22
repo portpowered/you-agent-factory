@@ -188,22 +188,46 @@ func TestNamedGoalResponseStream_HumanModeUsesCanonicalHumanFormatNotLegacyDiale
 	}
 
 	assertNamedGoalHumanResponseStreamAvoidsLegacyDialect(t, stdout)
+	lifecycleLines := 0
 	for _, line := range strings.Split(stdout, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || trimmed == "--- primary result ---" {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "progress:") ||
-			strings.HasPrefix(trimmed, "reasoning:") ||
-			strings.HasPrefix(trimmed, "tool:") ||
-			strings.HasPrefix(trimmed, "stream gap:") {
+		if isNamedGoalCustomerFactoryLifecycleLine(trimmed) {
+			lifecycleLines++
 			continue
 		}
 		if trimmed == packagedGoalMockWorkerAcceptedSummary {
 			continue
 		}
-		t.Fatalf("unexpected human response-stream line %q outside canonical response-event contract", trimmed)
+		t.Fatalf("unexpected human response-stream line %q outside canonical Factory Event presentation", trimmed)
 	}
+	if lifecycleLines == 0 {
+		t.Fatalf("stdout has no customer Factory lifecycle lines:\n%s", stdout)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(stdout), packagedGoalMockWorkerAcceptedSummary) {
+		t.Fatalf("final response is not last on stdout:\n%s", stdout)
+	}
+}
+
+func isNamedGoalCustomerFactoryLifecycleLine(line string) bool {
+	closingBracket := strings.Index(line, "] ")
+	if !strings.HasPrefix(line, "[") || closingBracket < 2 {
+		return false
+	}
+	message := line[closingBracket+2:]
+	for _, prefix := range []string{
+		"work accepted", "work moved", "Factory Session started", "Factory Session completed",
+		"workstation queued", "workstation started", "workstation completed", "workstation failed", "workstation interrupted",
+		"inference started", "inference completed", "inference failed", "workflow phase", "workflow checkpoint written",
+		"final output updated",
+	} {
+		if strings.HasPrefix(message, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestNamedGoalResponseStream_DurableFactoryEventsOmitInternalStreamTerms(t *testing.T) {

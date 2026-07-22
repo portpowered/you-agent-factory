@@ -682,7 +682,6 @@ func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
 }
 
 func provideRunOpener(
-	validate factorysessions.ResponseEventValidator,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
@@ -696,7 +695,7 @@ func provideRunOpener(
 	) (*runcli.Operation, error) {
 		return runcli.Open(
 			ctx, cfg, buildRunner, invocation, presentation,
-			validate, prepareWorkTarget, loadMockWorkers, buildRuntimeRequest,
+			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest,
 		)
 	}
 }
@@ -737,10 +736,6 @@ func provideRunRuntimeRunnerBuilder(
 			}, nil
 		})
 	}, nil
-}
-
-func provideResponseEventValidator() factorysessions.ResponseEventValidator {
-	return factorysessions.ValidateFactoryResponseEvent
 }
 
 func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {

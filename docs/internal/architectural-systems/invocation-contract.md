@@ -48,27 +48,43 @@ submission and waiting stay outside the Work package.
 
 ## Invocation output and observation
 
-Supported one-shot invocations expose three stdout modes on the CLI and a
+Supported one-shot invocations expose four stdout modes on the CLI and a
 session-scoped SSE counterpart on the API:
 
 | Mode | How to select | What stdout or SSE carries |
 | --- | --- | --- |
 | Primary result (default) | Default `you run --factory` or `--named` | Only the configured `primaryResult` on success |
+| Single JSON | Global `--json` | Exactly one terminal `InvocationResponse` |
 | Human response-stream | `--output response-stream` | Human-readable progress, then the same primary result |
-| NDJSON automation | Global `--json` with `--output response-stream` | One JSON record per non-empty stdout line; streamed events use `recordType=response_event` with a nested public `FactoryResponseEvent`; an available invocation ends with exactly one terminal `recordType=invocation_result` record |
+| NDJSON automation | Global `--json` with `--output response-stream` | One JSON record per non-empty stdout line; streamed events use `recordType=factory_event` with a nested canonical `FactoryEvent`; an available invocation ends with exactly one terminal `recordType=invocation_result` whose `response` is the `InvocationResponse` |
 
-The session API exposes the same public `FactoryResponseEvent` contract on
+All four modes write invocation failures through one stderr boundary as exactly
+one API `ErrorResponse` JSON object and preserve a failing process exit. A
+pre-terminal failure leaves stdout empty. A failed terminal
+`InvocationResponse` is still emitted once in modes whose stdout contract
+includes terminal responses; quiet mode remains terminal-value-only and emits
+no failure value.
+
+The session API separately exposes the public `FactoryResponseEvent` contract on
 `GET /factory-sessions/{session_id}/response-events`. That route is ephemeral
 observation separate from canonical `GET /factory-sessions/{session_id}/events`
 Factory event replay. Reconnect with `after_sequence`; stale retained cursors
 begin with `STREAM_GAP` instead of silently skipping loss. Response-event
 history is bounded and session-scoped — it does not promise durable
-process-restart replay beyond the retention window.
+process-restart replay beyond the retention window, and it is not the CLI
+lifecycle presentation source.
 
 Provider streaming fidelity varies: native-streaming providers may emit
 incremental public response events; final-only providers may emit only terminal
 semantic snapshots. Authoritative invocation success remains `primaryResult` and
 canonical Factory event facts even when intermediate observation is sparse.
+
+CLI lifecycle presentation attaches an invocation-local canonical Factory Event
+consumer before live execution. Default sessions drain retained-then-live event
+streams, durable JavaScript execution publishes phase and checkpoint projections
+to that callback as runtime records arrive, and replay supplies finite canonical
+history through the same consumer. The terminal `InvocationResponse` remains a
+separate final value; provider response streams are never a CLI lifecycle source.
 
 For copyable examples, cursor semantics, typed HTTP outcomes, and provider
 fidelity guidance, use `you docs run`, `you docs sessions`, and `you docs
