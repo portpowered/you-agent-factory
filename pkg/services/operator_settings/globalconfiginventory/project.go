@@ -45,7 +45,7 @@ func topologyUnknownFieldPolicies() []UnknownFieldPolicy {
 	return []UnknownFieldPolicy{
 		{
 			Package: ownerOperatorSettings,
-			Policy:  "settings parsing uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+			Policy:  "settings loading uses the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
 		},
 		{
 			Package: ownerOperatorSettings,

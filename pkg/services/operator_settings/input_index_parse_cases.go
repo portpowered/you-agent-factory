@@ -70,7 +70,7 @@ func parseInvalidDefaultsInputCases() []InputCase {
 			Fixture:     "invalid/malformed-json.json",
 			Description: "malformed JSON fails parse",
 			ErrorFragments: []string{
-				"decode operator config JSON",
+				"decode generated global config",
 			},
 		},
 		{

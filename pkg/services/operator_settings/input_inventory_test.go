@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/globalconfiginventory"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
@@ -69,7 +70,7 @@ func runIndexedInputCase(t *testing.T, inputCase operatorconfig.InputCase) {
 	t.Helper()
 
 	switch inputCase.Entrypoint {
-	case "ParseFileConfig":
+	case "DecodeGlobalConfig":
 		runParseFileConfigCase(t, inputCase)
 	case "LoadFileConfig":
 		runLoadFileConfigCase(t, inputCase)
@@ -84,7 +85,7 @@ func runParseFileConfigCase(t *testing.T, inputCase operatorconfig.InputCase) {
 	t.Helper()
 
 	data := readFixture(t, inputCase.Fixture)
-	cfg, err := operatorconfig.ParseFileConfig(data)
+	cfg, err := globalconfigmapping.Decode(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("ParseFileConfig() error = %v, want accept", err)
@@ -108,7 +109,7 @@ func runLoadFileConfigCase(t *testing.T, inputCase operatorconfig.InputCase) {
 		path = writeFixtureToTemp(t, inputCase.Fixture)
 	}
 
-	cfg, err := operatorconfig.LoadFileConfig(platformfilesystem.Local{}, path)
+	cfg, err := operatorconfig.LoadFileConfig(platformfilesystem.Local{}, globalconfigmapping.Decode, path)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("LoadFileConfig() error = %v, want accept", err)
@@ -183,7 +184,7 @@ func defaultsFromLayers(t *testing.T, layers *operatorconfig.ResolveLayers) oper
 	t.Helper()
 
 	if layers.FileFixture != "" {
-		cfg, err := operatorconfig.ParseFileConfig(readFixture(t, layers.FileFixture))
+		cfg, err := globalconfigmapping.Decode(readFixture(t, layers.FileFixture))
 		if err != nil {
 			t.Fatalf("ParseFileConfig(file fixture) error = %v", err)
 		}
@@ -195,7 +196,7 @@ func defaultsFromLayers(t *testing.T, layers *operatorconfig.ResolveLayers) oper
 	}
 }
 
-func assertFileConfigExpectation(t *testing.T, cfg operatorconfig.FileConfig, want *operatorconfig.FileConfigExpectation) {
+func assertFileConfigExpectation(t *testing.T, cfg operatorconfig.Config, want *operatorconfig.FileConfigExpectation) {
 	t.Helper()
 
 	if want == nil {

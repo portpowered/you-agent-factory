@@ -12,7 +12,7 @@ func ProjectInputInventory() InputInventory {
 
 	return InputInventory{
 		FormatVersion: InputInventoryFormatVersion,
-		UnknownFieldPolicy: "ParseFileConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, " +
+		UnknownFieldPolicy: "the generated GlobalConfig decoder uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, " +
 			"unknown nested keys, and trailing JSON values",
 		PrecedenceChain: PrecedenceChain,
 		Cases:           cases,

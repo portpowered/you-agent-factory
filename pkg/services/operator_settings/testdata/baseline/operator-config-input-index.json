@@ -1,12 +1,12 @@
 {
   "formatVersion": "operator-config-input/v1",
-  "unknownFieldPolicy": "ParseFileConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+  "unknownFieldPolicy": "the generated GlobalConfig decoder uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
   "precedenceChain": "file \u003c env \u003c flag",
   "cases": [
     {
       "id": "valid-defaults-only",
       "category": "parse-defaults",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "accept",
       "fixture": "valid/defaults-only.json",
       "description": "defaults.workerModelProvider and defaults.workerModel parse from file",
@@ -20,7 +20,7 @@
     {
       "id": "valid-backend-scope-sibling",
       "category": "parse-defaults",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "accept",
       "fixture": "valid/backend-scope-sibling.json",
       "description": "operatorconfig tolerates sibling backendScopeID without returning it on FileConfig",
@@ -34,7 +34,7 @@
     {
       "id": "valid-worker-presets-canonicalized",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "accept",
       "fixture": "valid/worker-presets-canonicalized.json",
       "description": "workerPresets ids, providers, models, and reasoningEffort are trimmed and canonicalized",
@@ -53,7 +53,7 @@
     {
       "id": "valid-worker-presets-missing",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "accept",
       "fixture": "valid/worker-presets-missing.json",
       "description": "missing workerPresets array is backward compatible",
@@ -66,18 +66,18 @@
     {
       "id": "invalid-malformed-json",
       "category": "parse-defaults",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/malformed-json.json",
       "description": "malformed JSON fails parse",
       "errorFragments": [
-        "decode operator config JSON"
+        "decode generated global config"
       ]
     },
     {
       "id": "invalid-unknown-top-level",
       "category": "parse-unknown-field",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/unknown-top-level.json",
       "description": "unknown top-level keys are rejected under strict decode",
@@ -88,7 +88,7 @@
     {
       "id": "invalid-unknown-nested-defaults",
       "category": "parse-unknown-field",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/unknown-nested-defaults.json",
       "description": "unknown nested defaults keys are rejected under strict decode",
@@ -99,7 +99,7 @@
     {
       "id": "invalid-trailing-json",
       "category": "parse-unknown-field",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/trailing-json.json",
       "description": "trailing JSON values after the root object are rejected",
@@ -110,7 +110,7 @@
     {
       "id": "invalid-preset-empty-id",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-empty-id.json",
       "description": "workerPresets[].id must be non-empty after trim",
@@ -122,7 +122,7 @@
     {
       "id": "invalid-preset-duplicate-id",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-duplicate-id.json",
       "description": "duplicate workerPresets[].id values are rejected",
@@ -134,7 +134,7 @@
     {
       "id": "invalid-preset-missing-provider",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-missing-provider.json",
       "description": "workerPresets[].modelProvider is required",
@@ -146,7 +146,7 @@
     {
       "id": "invalid-preset-symbolic-provider",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-symbolic-provider.json",
       "description": "symbolic DEFAULT provider is rejected in worker presets",
@@ -159,7 +159,7 @@
     {
       "id": "invalid-preset-unsupported-provider",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-unsupported-provider.json",
       "description": "unsupported workerPresets[].modelProvider values are rejected",
@@ -172,7 +172,7 @@
     {
       "id": "invalid-preset-unsupported-reasoning",
       "category": "parse-worker-presets",
-      "entrypoint": "ParseFileConfig",
+      "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-unsupported-reasoning.json",
       "description": "unsupported workerPresets[].reasoningEffort values are rejected",

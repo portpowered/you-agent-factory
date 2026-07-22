@@ -28,8 +28,12 @@ type CreateTemporaryFile func(string, string) (TemporaryFile, error)
 // IDGenerator supplies the opaque component of a local backend scope ID.
 type IDGenerator func() string
 
+// ConfigDecoder maps serialized global configuration into domain values.
+// Wire supplies the OpenAPI-generated contract decoder at the transport boundary.
+type ConfigDecoder func([]byte) (Config, error)
+
 // ConfigLoader loads the operator-owned configuration from an explicit path.
-type ConfigLoader func(string) (FileConfig, error)
+type ConfigLoader func(string) (Config, error)
 
 // BackendScopeEnsurer resolves and persists the local backend identity.
 type BackendScopeEnsurer func(string) (ResolvedBackendScope, error)

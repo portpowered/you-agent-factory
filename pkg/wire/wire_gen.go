@@ -66,7 +66,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	directoryCreator := provideRunDirectoryCreator()
 	opener := provideBrowserOpener()
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
-	defaultsResolver := provideOperatorDefaultsResolver(fileSystem)
+	configDecoder := provideOperatorConfigDecoder()
+	defaultsResolver := provideOperatorDefaultsResolver(fileSystem, configDecoder)
 	providersessionsService, err := provideProviderSessions(edges2)
 	if err != nil {
 		return nil, err
@@ -102,7 +103,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	loader := provideFactoryDefinitionLoader(v4, v5, v6, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v7, portableBundledFileInspection, v8)
 	validationService := provideFactoryDefinitionValidationService(javaScriptWorkflows, loader)
 	v9 := provideFactoryDefinitionValidator(validationService)
-	configLoader := provideOperatorConfigLoader(fileSystem)
+	configLoader := provideOperatorConfigLoader(fileSystem, configDecoder)
 	durableExecutionFactory := provideDurableExecutionFactory(configLoader)
 	workerExecutionFactory := provideWorkerExecutionFactory()
 	modelsService, err := provideModelsService(edges2)
@@ -460,6 +461,7 @@ var apiSet = wire.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apis
 var servicesSet = wire.NewSet(factorysessions.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
+	provideOperatorConfigDecoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
 	provideOperatorConfigLoader,

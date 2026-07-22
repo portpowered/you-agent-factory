@@ -3,11 +3,8 @@
 package operatorsettings
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -47,9 +44,9 @@ type WorkerPreset struct {
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
-// FileConfig is the validated operator-owned configuration read from disk.
-// TODO: this should be defined in the openAPI schema file and the generated schema file should derive from the open API defintiion.
-type FileConfig struct {
+// Config holds normalized operator settings after the serialized global-config
+// contract has been decoded at the transport boundary.
+type Config struct {
 	Defaults      Defaults
 	WorkerPresets []WorkerPreset
 }
@@ -85,57 +82,38 @@ func DefaultConfigPath(homeDir string) string {
 
 // LoadFileDefaults reads operator defaults from path. A missing file returns
 // empty defaults without error. Malformed JSON fails with an error naming path.
-func LoadFileDefaults(files FileSystem, path string) (Defaults, error) {
-	cfg, err := LoadFileConfig(files, path)
+func LoadFileDefaults(files FileSystem, decode ConfigDecoder, path string) (Defaults, error) {
+	cfg, err := LoadFileConfig(files, decode, path)
 	return cfg.Defaults, err
 }
 
 // LoadFileConfig reads and validates the operator-owned configuration. A
 // missing file returns an empty configuration without error.
-func LoadFileConfig(files FileSystem, path string) (FileConfig, error) {
+func LoadFileConfig(files FileSystem, decode ConfigDecoder, path string) (Config, error) {
 	data, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return FileConfig{}, nil
+			return Config{}, nil
 		}
-		return FileConfig{}, fmt.Errorf("read operator config %s: %w", path, err)
+		return Config{}, fmt.Errorf("read operator config %s: %w", path, err)
 	}
-	cfg, err := ParseFileConfig(data)
+	if decode == nil {
+		return Config{}, fmt.Errorf("parse operator config %s: global config decoder is required", path)
+	}
+	cfg, err := decode(data)
 	if err != nil {
-		return FileConfig{}, fmt.Errorf("parse operator config %s: %w", path, err)
+		return Config{}, fmt.Errorf("parse operator config %s: %w", path, err)
 	}
 	return cfg, nil
 }
 
-// ParseFileDefaults validates operator config JSON bytes.
-func ParseFileDefaults(data []byte) (Defaults, error) {
-	cfg, err := ParseFileConfig(data)
-	return cfg.Defaults, err
-}
-
-// ParseFileConfig validates operator config JSON bytes, including file-only
-// worker presets.
-func ParseFileConfig(data []byte) (FileConfig, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
-	var cfg struct {
-		BackendScopeID string         `json:"backendScopeID"`
-		Defaults       Defaults       `json:"defaults"`
-		WorkerPresets  []WorkerPreset `json:"workerPresets"`
-	}
-	if err := decoder.Decode(&cfg); err != nil {
-		return FileConfig{}, fmt.Errorf("decode operator config JSON: %w", err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return FileConfig{}, fmt.Errorf("decode operator config JSON: unexpected trailing JSON")
-	}
+// Normalize trims decoded values and validates file-only worker presets.
+func (cfg Config) Normalize() (Config, error) {
 	presets, err := validateWorkerPresets(cfg.WorkerPresets)
 	if err != nil {
-		return FileConfig{}, err
+		return Config{}, err
 	}
-	return FileConfig{Defaults: Defaults{
+	return Config{Defaults: Defaults{
 		WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 		WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
 	}, WorkerPresets: presets}, nil

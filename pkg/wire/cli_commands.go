@@ -21,6 +21,7 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const (
@@ -71,9 +72,13 @@ func provideSubmitPayloadReader() work.PayloadFileReader {
 	return work.NewPayloadFileReader(platformfilesystem.Local{})
 }
 
-func provideOperatorDefaultsResolver(files operatorsettings.FileSystem) operatorsettings.DefaultsResolver {
+func provideOperatorConfigDecoder() operatorsettings.ConfigDecoder {
+	return globalconfigmapping.Decode
+}
+
+func provideOperatorDefaultsResolver(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.DefaultsResolver {
 	return func(home string, environment operatorsettings.Defaults, flags operatorsettings.FlagOverrides) (operatorsettings.ResolvedDefaults, error) {
-		return operatorsettings.ResolveFromHomeWithEnvironment(files, home, environment, flags)
+		return operatorsettings.ResolveFromHomeWithEnvironment(files, decode, home, environment, flags)
 	}
 }
 

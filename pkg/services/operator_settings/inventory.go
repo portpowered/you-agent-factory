@@ -13,7 +13,7 @@ const (
 	outcomeAccept = "accept"
 	outcomeReject = "reject"
 
-	entrypointParseFileConfig = "ParseFileConfig"
+	entrypointParseFileConfig = "DecodeGlobalConfig"
 	entrypointLoadFileConfig  = "LoadFileConfig"
 	entrypointResolve         = "Resolve"
 

@@ -27,7 +27,7 @@
   "unknownFieldPolicy": [
     {
       "package": "operator_settings",
-      "policy": "settings parsing uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+      "policy": "settings loading uses the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
     },
     {
       "package": "operator_settings",

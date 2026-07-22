@@ -2110,16 +2110,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/operator_config.go",
-      "target": "ParseFileConfig"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/operator_config.go",
-      "target": "ParseFileDefaults"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/operator_config.go",
       "target": "Resolve"
     },
     {

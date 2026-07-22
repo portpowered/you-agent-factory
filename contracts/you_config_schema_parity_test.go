@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operator_settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -142,7 +143,7 @@ func runOperatorConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, 
 	rule := parityRuleForCase("operator_settings", inputCase.ID, inputCase.Outcome, inputCase.Fixture != "")
 
 	switch inputCase.Entrypoint {
-	case "ParseFileConfig":
+	case "DecodeGlobalConfig":
 		runOperatorParseSchemaParityCase(t, schema, inputCase, rule)
 	case "LoadFileConfig":
 		runOperatorLoadSchemaParityCase(t, schema, inputCase, rule)
@@ -180,7 +181,7 @@ func runOperatorParseSchemaParityCase(
 	data := readOperatorFixture(t, inputCase.Fixture)
 	assertSchemaParityForFixture(t, schema, rule, data)
 
-	cfg, err := operator_settings.ParseFileConfig(data)
+	cfg, err := globalconfigmapping.Decode(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("ParseFileConfig() error = %v, want accept", err)
@@ -216,7 +217,7 @@ func runOperatorLoadSchemaParityCase(
 		path = writeOperatorFixtureToTemp(t, inputCase.Fixture)
 	}
 
-	cfg, err := operator_settings.LoadFileConfig(platformfilesystem.Local{}, path)
+	cfg, err := operator_settings.LoadFileConfig(platformfilesystem.Local{}, globalconfigmapping.Decode, path)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("LoadFileConfig() error = %v, want accept", err)
@@ -481,7 +482,7 @@ func writeSystemFixtureToTemp(t *testing.T, rel string) string {
 func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveLayers) operator_settings.Defaults {
 	t.Helper()
 	if layers.FileFixture != "" {
-		cfg, err := operator_settings.ParseFileConfig(readOperatorFixture(t, layers.FileFixture))
+		cfg, err := globalconfigmapping.Decode(readOperatorFixture(t, layers.FileFixture))
 		if err != nil {
 			t.Fatalf("ParseFileConfig(file fixture) error = %v", err)
 		}
@@ -493,7 +494,7 @@ func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveL
 	}
 }
 
-func assertOperatorFileConfigExpectation(t *testing.T, cfg operator_settings.FileConfig, want *operator_settings.FileConfigExpectation) {
+func assertOperatorFileConfigExpectation(t *testing.T, cfg operator_settings.Config, want *operator_settings.FileConfigExpectation) {
 	t.Helper()
 	if want == nil {
 		t.Fatal("accept case missing expectedFileConfig")

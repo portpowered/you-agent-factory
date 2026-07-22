@@ -249,9 +249,9 @@ func provideSystemInitializationLegacyFactoryMigrationFileSystem(
 	return platformfilesystem.Local{}
 }
 
-func provideOperatorConfigLoader(files operatorsettings.FileSystem) operatorsettings.ConfigLoader {
-	return func(path string) (operatorsettings.FileConfig, error) {
-		return operatorsettings.LoadFileConfig(files, path)
+func provideOperatorConfigLoader(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.ConfigLoader {
+	return func(path string) (operatorsettings.Config, error) {
+		return operatorsettings.LoadFileConfig(files, decode, path)
 	}
 }
 
