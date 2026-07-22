@@ -1,12 +1,11 @@
-import { describe, expect, it } from "vitest";
-
 import {
   type FactoryWorkProgressProjection,
   projectFactoryActivityAtTick,
   projectFactoryLoadAtTick,
   projectFactoryTopologyAtTick,
   projectFactoryWorkProgressAtTick,
-} from "../../../../../../packages/factory-replay/src/index.js";
+} from "@you-agent-factory/factory-replay";
+import { describe, expect, it } from "vitest";
 import type { FactoryEvent } from "../../../../../api/events";
 import { buildFactoryTimelineSnapshot } from "../buildSnapshot";
 

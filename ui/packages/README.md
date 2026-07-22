@@ -213,3 +213,21 @@ This package family is frontend-only. Its contracts and canonical-compatible
 emulator events reuse the existing public API vocabulary, but adopting these
 packages does not imply changes to the backend, authored OpenAPI, generated Go
 code, CLI behavior, hosted execution, or functional-test surface.
+
+## Maintainer publication
+
+The five frontend packages are versioned and published as one family. Prepare
+registry-format tarballs locally without publishing with:
+
+```sh
+make ui-public-package-publish-prepare \
+  PACKAGE_VERSION=1.2.3 \
+  PACKAGE_OUTPUT=.artifacts/public-packages
+```
+
+Pull requests run the same candidate preparation as a dry run. Successful
+protected-main builds publish an immutable `0.0.0-dev.<run>.<commit>` family
+under the npm `dev` tag. A successful `vX.Y.Z` release-candidate workflow lets
+the release workflow publish all five packages at `X.Y.Z` under `latest` using
+npm trusted publishing. Internal package dependency and peer-dependency pins
+are rewritten only in the staged tarballs so every published family is aligned.

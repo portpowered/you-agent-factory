@@ -1,5 +1,5 @@
+import { canonicalizeFactoryEvents } from "@you-agent-factory/factory-replay";
 import { create, type StateCreator } from "zustand";
-import { canonicalizeFactoryEvents } from "../../../../../packages/factory-replay/src/index.js";
 import type { FactoryEvent } from "../../../api/events";
 import {
   correlationTokenForIdentityScope,

@@ -69,12 +69,15 @@ jobs:
       - name: Validate package allowlist, packing, and isolated consumption
         run: make api-package-pack-smoke
 
+      - name: Validate the canonical frontend package release family
+        run: make ui-public-package-release
+
   dry-run-candidate:
     name: Build and Smoke Exact Candidate (No Publish)
     if: github.event_name == 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -88,6 +91,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        run: make ui-deps
 
       - name: Authorize, prepare, and smoke the exact candidate without publishing
         shell: bash
@@ -116,6 +127,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Prepare the canonical frontend package candidates
+        run: >-
+          make ui-public-package-publish-prepare
+          PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.event.pull_request.head.sha }}"
+          PACKAGE_OUTPUT=".artifacts/public-development-candidate"
+
+      - name: Upload the frontend package candidates and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-development-candidate-${{ github.run_id }}
+          path: .artifacts/public-development-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
   prepare-main-candidate:
     name: Prepare Protected Main Candidate
     if: >-
@@ -124,7 +149,7 @@ jobs:
       github.repository == 'portpowered/you-agent-factory'
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -138,6 +163,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        run: make ui-deps
 
       - name: Authorize and prepare the exact protected-main candidate
         run: >-
@@ -160,6 +193,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Prepare the canonical frontend package candidates
+        run: >-
+          make ui-public-package-publish-prepare
+          PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.sha }}"
+          PACKAGE_OUTPUT=".artifacts/public-development-candidate"
+
+      - name: Upload the frontend package candidates and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-development-main-candidate-${{ github.run_id }}
+          path: .artifacts/public-development-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
   publish-main-candidate:
     name: Publish and Verify Protected Main Candidate
     if: >-
@@ -171,7 +218,7 @@ jobs:
       - prepare-main-candidate
     environment: development-publishing
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       id-token: write
@@ -196,6 +243,12 @@ jobs:
           name: api-development-main-candidate-${{ github.run_id }}
           path: .artifacts/api-development-candidate
 
+      - name: Download the canonical frontend package candidates
+        uses: actions/download-artifact@v4
+        with:
+          name: public-development-main-candidate-${{ github.run_id }}
+          path: .artifacts/public-development-candidate
+
       - name: Authorize, reconcile, publish once when absent, and verify exact consumption
         run: >-
           node scripts/api-package-development-command.mjs
@@ -207,3 +260,10 @@ jobs:
           --repository "${{ github.repository }}"
           --source-commit "${{ github.sha }}"
           --workspace-directory "${{ github.workspace }}"
+
+      - name: Publish and verify the canonical frontend package family
+        working-directory: ui
+        run: >-
+          npm run publish:public-packages --
+          --candidate-directory ../.artifacts/public-development-candidate
+          --tag dev --provenance

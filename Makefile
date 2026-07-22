@@ -133,6 +133,7 @@ endef
 
 .PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
+.PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
 
 
@@ -631,6 +632,12 @@ ui-components-verify:
 	$(MAKE) ui-components-storybook
 	$(MAKE) ui-components-boundary
 	$(MAKE) ui-components-dependency-direction
+
+ui-public-package-release:
+	cd ui && $(UI_SCRIPT) verify:public-packages
+
+ui-public-package-publish-prepare:
+	cd ui && $(UI_SCRIPT) publish:public-packages:prepare -- --version "$(PACKAGE_VERSION)" --output-directory "$(abspath $(or $(PACKAGE_OUTPUT),.artifacts/public-packages))"
 
 clean:
 	$(GO) clean ./...

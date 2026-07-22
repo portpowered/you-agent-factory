@@ -134,26 +134,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/events": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Stream process-global factory events (compatibility-only)
-     * @description Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
-     */
-    get: operations["getEvents"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/factory-sessions/{session_id}/events": {
     parameters: {
       query?: never;
@@ -375,27 +355,6 @@ export interface paths {
      * @description Canonical Factory preview surface for JavaScript orchestrator factories. Resolves orchestrator source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints before Factory Session start.
      */
     post: operations["previewFactory"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/workflow-previews": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Preview workflow validation and policy (obsolete)
-     * @deprecated
-     * @description Obsolete Batch 001 compatibility alias for POST /factories/preview. Returns the same Factory preview contract while callers migrate to canonical Factory preview semantics.
-     */
-    post: operations["previewWorkflow"];
     delete?: never;
     options?: never;
     head?: never;
@@ -4809,16 +4768,6 @@ export interface components {
       resultConstraints: components["schemas"]["WorkflowResultConstraints"];
     };
     /**
-     * @deprecated
-     * @description Obsolete Batch 001 compatibility alias for FactoryPreviewRequest. Prefer POST /factories/preview for canonical Factory preview semantics.
-     */
-    WorkflowPreviewRequest: components["schemas"]["FactoryPreviewRequest"];
-    /**
-     * @deprecated
-     * @description Obsolete Batch 001 compatibility alias for FactoryPreviewResult. Prefer POST /factories/preview for canonical Factory preview semantics.
-     */
-    WorkflowPreviewResult: components["schemas"]["FactoryPreviewResult"];
-    /**
      * @description Validation severity for one factory validation target.
      * @enum {string}
      */
@@ -5730,33 +5679,6 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
-  getEvents: {
-    parameters: {
-      query?: {
-        /** @description Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. */
-        after_event_id?: components["parameters"]["AfterEventId"];
-        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
-        after_sequence?: components["parameters"]["AfterSequence"];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Factory event stream. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/event-stream": string;
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      500: components["responses"]["InternalError"];
-    };
-  };
   getEventsBySessionId: {
     parameters: {
       query?: {
@@ -6063,32 +5985,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["FactoryPreviewResult"];
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      500: components["responses"]["InternalError"];
-    };
-  };
-  previewWorkflow: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["WorkflowPreviewRequest"];
-      };
-    };
-    responses: {
-      /** @description Compatibility alias of Factory preview validation and policy projection. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WorkflowPreviewResult"];
         };
       };
       400: components["responses"]["BadRequest"];

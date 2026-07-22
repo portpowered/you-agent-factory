@@ -1,15 +1,15 @@
 import {
   type FactoryActivityProjection,
   type FactoryLoadProjection,
-  type FactoryWorkStateOccupancyEvidence,
   type FactoryTopologyProjection,
   type FactoryWorkProgressProjection,
   type FactoryWorkProgressStateEvidence,
+  type FactoryWorkStateOccupancyEvidence,
   projectFactoryActivity,
   projectFactoryLoad,
   projectFactoryTopology,
   projectFactoryWorkProgress,
-} from "../../../../../../packages/factory-replay/src/index.js";
+} from "@you-agent-factory/factory-replay";
 import type {
   DashboardRuntime,
   DashboardSnapshot,
