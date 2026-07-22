@@ -159,6 +159,9 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Fac
 	if cfg == nil {
 		return factoryapi.Factory{}, nil
 	}
+	if err := validateInternalFactoryMetadata(cfg); err != nil {
+		return factoryapi.Factory{}, err
+	}
 	examples, err := invocationExamplesAPIFromInternal(cfg.Examples)
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -182,6 +185,46 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Fac
 		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
 		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
 	}, nil
+}
+
+func validateInternalFactoryMetadata(cfg *interfaces.FactoryConfig) error {
+	if err := validateInternalNameValue(cfg.Description, "factory.description"); err != nil {
+		return err
+	}
+	for index := range cfg.WorkTypes {
+		if err := validateInternalNameValue(cfg.WorkTypes[index].Description, fmt.Sprintf("factory.workTypes[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Workers {
+		if err := validateInternalNameValue(cfg.Workers[index].Description, fmt.Sprintf("factory.workers[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Workstations {
+		if err := validateInternalNameValue(cfg.Workstations[index].Description, fmt.Sprintf("factory.workstations[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Examples {
+		if strings.TrimSpace(cfg.Examples[index].Name) == "" {
+			return fmt.Errorf("factory.examples[%d].name must be a non-empty string", index)
+		}
+		if err := validateInternalNameValue(&cfg.Examples[index].Description, fmt.Sprintf("factory.examples[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInternalNameValue(value *interfaces.NameValueConfig, path string) error {
+	if value == nil {
+		return nil
+	}
+	if err := value.Validate(); err != nil {
+		return fmt.Errorf("%s.%w", path, err)
+	}
+	return nil
 }
 
 // NameValueAPIFromInternal maps a validated internal localized value into the

@@ -81,6 +81,85 @@ func TestFactoryEntityDescriptionValidationReportsEntityPath(t *testing.T) {
 	}
 }
 
+func TestCanonicalWritersRejectInvalidFactoryMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		mutate   func(*interfaces.FactoryConfig)
+		wantPath string
+	}{
+		{
+			name: "factory unsupported discriminator",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Description = localizedDescription("factory", "Factory")
+				cfg.Description.Type = "TEXT"
+			},
+			wantPath: "factory.description.type",
+		},
+		{
+			name: "work type blank fallback",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.WorkTypes = []interfaces.WorkTypeConfig{{
+					Name: "task", Description: localizedDescription("work-type", " "),
+				}}
+			},
+			wantPath: "factory.workTypes[0].description.value",
+		},
+		{
+			name: "worker non-canonical locale",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				description := localizedDescription("worker", "Worker")
+				description.Locales = []string{"en-us"}
+				cfg.Workers = []interfaces.FactoryWorkerConfig{{Name: "worker", Description: description}}
+			},
+			wantPath: "factory.workers[0].description.locales[0]",
+		},
+		{
+			name: "workstation unsupported discriminator",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				description := localizedDescription("workstation", "Workstation")
+				description.Type = "TEXT"
+				cfg.Workstations = []interfaces.FactoryWorkstationConfig{{Name: "station", Description: description}}
+			},
+			wantPath: "factory.workstations[0].description.type",
+		},
+		{
+			name: "example non-canonical locale",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				description := *localizedDescription("example", "Example")
+				description.Values = map[string]string{"fr-fr": "Exemple"}
+				cfg.Examples = []interfaces.InvocationExampleConfig{{Name: "sample", Description: description, Args: map[string]interface{}{}}}
+			},
+			wantPath: `factory.examples[0].description.values["fr-fr"]`,
+		},
+		{
+			name: "example blank name",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Examples = []interfaces.InvocationExampleConfig{{
+					Name: " ", Description: *localizedDescription("example", "Example"), Args: map[string]interface{}{},
+				}}
+			},
+			wantPath: "factory.examples[0].name",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &interfaces.FactoryConfig{Name: "metadata-validation"}
+			test.mutate(cfg)
+
+			_, apiErr := FactoryConfigToOpenAPI(cfg)
+			if apiErr == nil || !strings.Contains(apiErr.Error(), test.wantPath) {
+				t.Fatalf("FactoryConfigToOpenAPI() error = %v, want path %q", apiErr, test.wantPath)
+			}
+
+			_, flattenErr := NewFactoryConfigMapper().Flatten(cfg)
+			if flattenErr == nil || !strings.Contains(flattenErr.Error(), test.wantPath) {
+				t.Fatalf("Flatten() error = %v, want path %q", flattenErr, test.wantPath)
+			}
+		})
+	}
+}
+
 func TestFactoryEntityDescriptionsKeepStrictUnknownFieldRejection(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 	payloads := []string{
