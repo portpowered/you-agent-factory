@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
@@ -20,9 +21,46 @@ const (
 )
 
 var forbiddenRequestBatchImports = []string{
-	"github.com/portpowered/infinite-you/pkg/factory/",
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/",
 	"github.com/portpowered/infinite-you/pkg/service",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri",
+}
+
+var forbiddenCompositionImports = []string{
+	"github.com/portpowered/infinite-you/pkg/initializer",
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeinput",
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/projections",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
+	"github.com/portpowered/infinite-you/pkg/services/workers/executor",
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection",
+	"github.com/portpowered/infinite-you/pkg/wire",
+}
+
+var forbiddenCompositionCalls = map[string]struct{}{
+	"AssertReplaySucceeds":                  {},
+	"BuildRuntimeScope":                     {},
+	"GetEngineStateSnapshot":                {},
+	"NewProviderErrorSmokeHarness":          {},
+	"NewReplayHarness":                      {},
+	"NewRuntimeBuilder":                     {},
+	"NewRuntimeBuilderWithModelsFactory":    {},
+	"NewRuntimeFactory":                     {},
+	"NewServiceTestHarness":                 {},
+	"SetCustomExecutor":                     {},
+	"StartFunctionalServerWithConfig":       {},
+	"WithRuntimeScheduler":                  {},
+	"WithWorkerExecutor":                    {},
+	"startFunctionalServerWithConfig":       {},
+	"startReplayFunctionalServerWithConfig": {},
+}
+
+var forbiddenFunctionalConfigFields = map[string]struct{}{
+	"Configure":        {},
+	"ConfigureEdges":   {},
+	"ConfigureRuntime": {},
 }
 
 type config struct {
@@ -42,7 +80,93 @@ func run(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return checkSource(cfg.root, cfg.path)
+	if err := checkSource(cfg.root, cfg.path); err != nil {
+		return err
+	}
+	return checkFunctionalCompositionTree(cfg.root)
+}
+
+func checkFunctionalCompositionTree(root string) error {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("%s resolve repository root: %w", diagnosticPrefix, err)
+	}
+	functionalRoot := filepath.Join(absRoot, "tests", "functional")
+	return filepath.WalkDir(functionalRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		relative, err := filepath.Rel(absRoot, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		fileSet := token.NewFileSet()
+		file, err := parser.ParseFile(fileSet, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("%s parse %s: %w", diagnosticPrefix, relative, err)
+		}
+		for _, spec := range file.Imports {
+			importPath, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return fmt.Errorf("%s read import in %s: %w", diagnosticPrefix, relative, err)
+			}
+			for _, forbidden := range forbiddenCompositionImports {
+				if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
+					return fmt.Errorf(
+						"%s prohibited secondary composition import: %s (%s); build the customer process through root.BuildProcess and override only edges.Edges",
+						diagnosticPrefix, importPath, relative,
+					)
+				}
+			}
+		}
+		file, err = parser.ParseFile(fileSet, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("%s parse %s: %w", diagnosticPrefix, relative, err)
+		}
+		var prohibited string
+		ast.Inspect(file, func(node ast.Node) bool {
+			if field, ok := node.(*ast.KeyValueExpr); ok {
+				if name, ok := field.Key.(*ast.Ident); ok {
+					if _, forbidden := forbiddenFunctionalConfigFields[name.Name]; forbidden {
+						prohibited = name.Name
+						return false
+					}
+				}
+			}
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			name := calledName(call.Fun)
+			if _, forbidden := forbiddenCompositionCalls[name]; forbidden {
+				prohibited = name
+				return false
+			}
+			return prohibited == ""
+		})
+		if prohibited != "" {
+			return fmt.Errorf(
+				"%s prohibited functional composition or configuration seam: %s (%s); use customer CLI arguments and override only edges.Edges",
+				diagnosticPrefix, prohibited, relative,
+			)
+		}
+		return nil
+	})
+}
+
+func calledName(expression ast.Expr) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		return value.Sel.Name
+	default:
+		return ""
+	}
 }
 
 func parseConfig(args []string, stderr io.Writer) (config, error) {

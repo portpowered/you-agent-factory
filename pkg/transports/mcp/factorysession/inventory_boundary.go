@@ -8,124 +8,6 @@ import (
 )
 
 const (
-	// AliasInventoryBaselineRelativePath is the reviewed MCP compatibility alias inventory fixture.
-	AliasInventoryBaselineRelativePath = "contracts/testdata/baseline/mcp-aliases.json"
-)
-
-// AliasInventory is a pure, read-only projection of workflow compatibility aliases.
-type AliasInventory struct {
-	FormatVersion   string                `json:"formatVersion"`
-	ProtocolVersion string                `json:"protocolVersion"`
-	Aliases         []AliasInventoryEntry `json:"aliases"`
-}
-
-// AliasInventoryEntry records one compatibility alias mapped to its canonical tool.
-type AliasInventoryEntry struct {
-	Name              string `json:"name"`
-	CanonicalName     string `json:"canonicalName"`
-	CompatibilityOnly bool   `json:"compatibilityOnly"`
-	Description       string `json:"description"`
-}
-
-// ProjectAliasInventory builds a sorted alias inventory from DiscoverCompatibilityAliases.
-func ProjectAliasInventory() (AliasInventory, error) {
-	return ProjectAliasInventoryFromDiscovered(DiscoverCompatibilityAliases())
-}
-
-// ProjectAliasInventoryFromDiscovered builds one alias inventory document from an
-// explicit compatibility-alias slice. Production callers should use ProjectAliasInventory.
-func ProjectAliasInventoryFromDiscovered(aliases []CompatibilityAlias) (AliasInventory, error) {
-	entries := make([]AliasInventoryEntry, 0, len(aliases))
-	for _, alias := range aliases {
-		entries = append(entries, AliasInventoryEntry{
-			Name:              alias.Name,
-			CanonicalName:     alias.CanonicalName,
-			CompatibilityOnly: alias.CompatibilityOnly,
-			Description:       alias.Description,
-		})
-	}
-	slices.SortFunc(entries, func(left, right AliasInventoryEntry) int {
-		return strings.Compare(left.Name, right.Name)
-	})
-	return AliasInventory{
-		FormatVersion:   ToolInventoryFormatVersion,
-		ProtocolVersion: ToolInventoryProtocolVersion,
-		Aliases:         entries,
-	}, nil
-}
-
-// MarshalAliasInventoryJSON encodes one alias inventory document with stable map key order.
-func MarshalAliasInventoryJSON(inventory AliasInventory) ([]byte, error) {
-	return json.Marshal(inventory)
-}
-
-// VerifyProjectedAliasInventory projects the alias inventory and fails when any alias
-// does not resolve exactly once to a discovered canonical tool or appears in the
-// canonical tool inventory baseline.
-func VerifyProjectedAliasInventory() error {
-	inventory, err := ProjectAliasInventory()
-	if err != nil {
-		return err
-	}
-	return VerifyAliasInventory(inventory)
-}
-
-// VerifyAliasInventory fails when any alias does not resolve to a discovered canonical
-// tool, when ResolveToolName disagrees with the recorded mapping, or when an alias name
-// appears in the canonical tool inventory.
-func VerifyAliasInventory(inventory AliasInventory) error {
-	canonicalNames := canonicalToolNameSet()
-	toolInventory, err := ProjectToolInventory()
-	if err != nil {
-		return err
-	}
-	canonicalInventoryNames := make(map[string]struct{}, len(toolInventory.Tools))
-	for _, tool := range toolInventory.Tools {
-		canonicalInventoryNames[tool.Name] = struct{}{}
-	}
-
-	seenAliasNames := make(map[string]struct{}, len(inventory.Aliases))
-	for _, alias := range inventory.Aliases {
-		if _, duplicate := seenAliasNames[alias.Name]; duplicate {
-			return fmt.Errorf("compatibility alias %q appears more than once in alias inventory", alias.Name)
-		}
-		seenAliasNames[alias.Name] = struct{}{}
-
-		if _, inCanonicalInventory := canonicalInventoryNames[alias.Name]; inCanonicalInventory {
-			return fmt.Errorf("compatibility alias %q must not appear in canonical tool inventory", alias.Name)
-		}
-		if !alias.CompatibilityOnly {
-			return fmt.Errorf("compatibility alias %q must be marked compatibility-only", alias.Name)
-		}
-		if ResolveToolName(alias.Name) != alias.CanonicalName {
-			return fmt.Errorf(
-				"compatibility alias %q resolves to %q, want %q",
-				alias.Name,
-				ResolveToolName(alias.Name),
-				alias.CanonicalName,
-			)
-		}
-		if _, ok := canonicalNames[alias.CanonicalName]; !ok {
-			return fmt.Errorf(
-				"compatibility alias %q canonical target %q is not discoverable",
-				alias.Name,
-				alias.CanonicalName,
-			)
-		}
-	}
-	return nil
-}
-
-func canonicalToolNameSet() map[string]struct{} {
-	tools := DiscoverTools()
-	names := make(map[string]struct{}, len(tools))
-	for _, tool := range tools {
-		names[tool.Name] = struct{}{}
-	}
-	return names
-}
-
-const (
 	// ResultPolicyInventoryBaselineRelativePath is the reviewed MCP CallToolResult
 	// success transport policy inventory fixture.
 	ResultPolicyInventoryBaselineRelativePath = "contracts/testdata/baseline/mcp-result-policy.json"
@@ -281,7 +163,6 @@ func EncodeSuccessCallToolResult(toolResponse json.RawMessage) map[string]any {
 				"text": string(toolResponse),
 			},
 		},
-		"isError": false,
 	}
 }
 
@@ -452,8 +333,8 @@ func verifySuccessCallToolResultFixture(fixture ResultPolicyFixture) error {
 	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
 		return fmt.Errorf("result-policy fixture %q callToolResult: %w", fixture.Name, err)
 	}
-	if decoded["isError"] != false {
-		return fmt.Errorf("result-policy fixture %q isError = %#v, want false", fixture.Name, decoded["isError"])
+	if isError, present := decoded["isError"]; present && isError != false {
+		return fmt.Errorf("result-policy fixture %q isError = %#v, want false or omitted", fixture.Name, isError)
 	}
 	if _, ok := decoded["structuredContent"]; ok {
 		return fmt.Errorf("result-policy fixture %q must not include structuredContent", fixture.Name)
@@ -517,18 +398,18 @@ func projectProtocolErrorFixtures() ([]ProtocolErrorFixture, error) {
 	fixtures := []ProtocolErrorFixture{
 		{
 			Name:        "tools_call_missing_tool_name",
-			Description: "Representative invalid-params JSON-RPC error for tools/call with a missing tool name.",
+			Description: "SDK invalid-params JSON-RPC error for tools/call with a missing tool name.",
 			RequestLine: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`,
 			JSONRPCResponse: json.RawMessage(
-				`{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"tool name is required"}}`,
+				`{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"unknown tool \"\""}}`,
 			),
 		},
 		{
 			Name:        "unknown_method",
-			Description: "Representative unknown-method JSON-RPC error for an unsupported MCP method.",
+			Description: "SDK JSON-RPC error for an unsupported MCP method.",
 			RequestLine: `{"jsonrpc":"2.0","id":3,"method":"nope"}`,
 			JSONRPCResponse: json.RawMessage(
-				`{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"method not found: nope"}}`,
+				`{"jsonrpc":"2.0","id":3,"error":{"code":0,"message":"JSON RPC not handled: \"nope\" unsupported"}}`,
 			),
 		},
 	}
@@ -589,8 +470,8 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
 		return fmt.Errorf("domain-error fixture %q callToolResult: %w", fixture.Name, err)
 	}
-	if decoded["isError"] != false {
-		return fmt.Errorf("domain-error fixture %q isError = %#v, want false", fixture.Name, decoded["isError"])
+	if isError, present := decoded["isError"]; present && isError != false {
+		return fmt.Errorf("domain-error fixture %q isError = %#v, want false or omitted", fixture.Name, isError)
 	}
 	return nil
 }
@@ -623,8 +504,8 @@ func verifyProtocolErrorFixture(fixture ProtocolErrorFixture) error {
 	if response.Result != nil {
 		return fmt.Errorf("protocol-error fixture %q jsonRpcResponse must not include result", fixture.Name)
 	}
-	if response.Error.Code != -32601 && response.Error.Code != -32602 {
-		return fmt.Errorf("protocol-error fixture %q error.code = %d, want -32601 or -32602", fixture.Name, response.Error.Code)
+	if response.Error.Code != 0 && response.Error.Code != -32601 && response.Error.Code != -32602 {
+		return fmt.Errorf("protocol-error fixture %q error.code = %d, want SDK generic, method-not-found, or invalid-params code", fixture.Name, response.Error.Code)
 	}
 	if strings.TrimSpace(response.Error.Message) == "" {
 		return fmt.Errorf("protocol-error fixture %q error.message is required", fixture.Name)
@@ -637,14 +518,7 @@ type jsonRPCErrorInventory struct {
 	Message string `json:"message"`
 }
 
-// VerifyProjectedMCPBoundaryInventories projects alias and result-policy inventories
-// and fails when alias non-primacy or transport-policy fixtures drift from live behavior.
+// VerifyProjectedMCPBoundaryInventories verifies the result-policy inventory.
 func VerifyProjectedMCPBoundaryInventories() error {
-	if err := VerifyProjectedAliasInventory(); err != nil {
-		return err
-	}
-	if err := VerifyProjectedResultPolicyInventory(); err != nil {
-		return err
-	}
-	return nil
+	return VerifyProjectedResultPolicyInventory()
 }

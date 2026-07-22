@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -39,7 +40,7 @@ func TestPause_OmittedSessionIDRoutesToDefaultCompatibilitySession(t *testing.T)
 	}))
 	defer srv.Close()
 
-	if err := Pause(LifecycleControlConfig{
+	if err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server: srv.URL,
 		Output: &bytes.Buffer{},
 	}); err != nil {
@@ -61,7 +62,7 @@ func TestPause_NamedLiveSessionIDRoutesWithoutDurableValidation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := Pause(LifecycleControlConfig{
+	if err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &bytes.Buffer{},
@@ -77,7 +78,7 @@ func TestPause_HumanOutputReportsPausedOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-pause-001",
 		Output:    &out,
@@ -103,7 +104,7 @@ func TestPause_HumanOutputReportsAlreadyPausedOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-paused-001",
 		Output:    &out,
@@ -134,7 +135,7 @@ func TestPause_HumanOutputReportsInvalidStateOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-awaiting-001",
 		Output:    &out,
@@ -156,7 +157,7 @@ func TestPause_SuccessReturnsAcceptedOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-pause-001",
 		JSON:      true,
@@ -193,7 +194,7 @@ func TestPause_NoOpReturnsNoOpOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-paused-001",
 		JSON:      true,
@@ -229,7 +230,7 @@ func TestPause_InvalidStateReturnsTypedRejection(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-awaiting-001",
 		JSON:      true,
@@ -260,7 +261,7 @@ func TestPause_NotFoundReturnsDistinctError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-missing-001",
 		Output:    &bytes.Buffer{},
@@ -277,7 +278,7 @@ func TestPause_NotFoundReturnsDistinctError(t *testing.T) {
 }
 
 func TestPause_UnreachableHostReturnsTransportError(t *testing.T) {
-	err := Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    "http://127.0.0.1:1",
 		SessionID: "dur-sess-pause-001",
 		Output:    &bytes.Buffer{},
@@ -302,7 +303,7 @@ func TestResume_HumanOutputReportsResumedOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-paused-001",
 		Output:    &out,
@@ -328,7 +329,7 @@ func TestResume_HumanOutputReportsAlreadyRunningOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-running-001",
 		Output:    &out,
@@ -357,7 +358,7 @@ func TestResume_SuccessReturnsAcceptedOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-paused-001",
 		JSON:      true,
@@ -393,7 +394,7 @@ func TestResume_OmittedSessionIDRoutesToDefaultCompatibilitySession(t *testing.T
 	}))
 	defer srv.Close()
 
-	if err := Resume(LifecycleControlConfig{
+	if err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server: srv.URL,
 		Output: &bytes.Buffer{},
 	}); err != nil {
@@ -415,7 +416,7 @@ func TestResume_NamedLiveSessionIDRoutesWithoutDurableValidation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := Resume(LifecycleControlConfig{
+	if err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &bytes.Buffer{},
@@ -441,7 +442,7 @@ func TestResume_HumanOutputReportsInvalidStateOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-awaiting-001",
 		Output:    &out,
@@ -473,7 +474,7 @@ func TestResume_InvalidStateReturnsTypedRejection(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-awaiting-001",
 		JSON:      true,
@@ -504,7 +505,7 @@ func TestResume_NotFoundReturnsDistinctError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-missing-001",
 		Output:    &bytes.Buffer{},
@@ -521,7 +522,7 @@ func TestResume_NotFoundReturnsDistinctError(t *testing.T) {
 }
 
 func TestResume_UnreachableHostReturnsTransportError(t *testing.T) {
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    "http://127.0.0.1:1",
 		SessionID: "dur-sess-paused-001",
 		Output:    &bytes.Buffer{},
@@ -546,7 +547,7 @@ func TestResume_NoOpAlreadyRunningReturnsNoOpOutcome(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Resume(LifecycleControlConfig{
+	err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-running-001",
 		JSON:      true,
@@ -614,7 +615,7 @@ func TestLifecycleControl_OutcomesDistinguishableWithoutHTTPStatusText(t *testin
 			defer srv.Close()
 
 			var out bytes.Buffer
-			err := Pause(LifecycleControlConfig{
+			err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 				Server:    srv.URL,
 				SessionID: "dur-sess-001",
 				JSON:      true,

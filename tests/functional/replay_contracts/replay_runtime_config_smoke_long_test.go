@@ -3,7 +3,6 @@
 package replay_contracts
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,13 +10,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,80 +31,44 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 		Payload:    []byte(`{"title":"canonical workstation smoke"}`),
 	})
 
-	loaded, err := config.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	assertCanonicalSmokeWorkstation(t, loaded.Workstation, "step-one", "worker-a")
-
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed")
-	assertRecordedDispatchHistory(t, h)
+	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, recordServer.URL(), 10*time.Second)
+	assertReplaySessionPlaces(t, support.GetDefaultSession(t, recordServer.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:failed": 0,
+	})
+	assertRecordedDispatchHistory(t, recordServer.GetFactoryEvents(t))
 	assertProviderSawCanonicalWorkstationPrompt(t, provider)
+	recordServer.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertCanonicalReplayWorkstationMap(t, artifactPath, artifact)
-	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(artifact.Factory)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	assertCanonicalSmokeWorkstation(t, replayRuntime.Workstation, "step-one", "worker-a")
 
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove original fixture: %v", err)
 	}
-	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	replayHarness.Service.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed")
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	assertReplaySessionPlaces(t, support.GetDefaultSession(t, replayServer.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:failed": 0,
+	})
+	replayServer.Stop(t)
 }
 
-func assertCanonicalSmokeWorkstation(
-	t *testing.T,
-	lookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
-	name string,
-	workerName string,
-) {
+func assertRecordedDispatchHistory(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-
-	workstation, ok := lookup(name)
-	if !ok {
-		t.Fatalf("expected workstation %q", name)
-	}
-	if workstation.WorkerTypeName != workerName {
-		t.Fatalf("%s worker = %q, want %q", name, workstation.WorkerTypeName, workerName)
-	}
-	if workstation.Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("%s runtime type = %q, want %q", name, workstation.Type, interfaces.WorkstationTypeModel)
-	}
-	if !strings.Contains(workstation.PromptTemplate, "Do the work.") {
-		t.Fatalf("%s prompt template = %q, want split workstation prompt", name, workstation.PromptTemplate)
-	}
-}
-
-func assertRecordedDispatchHistory(t *testing.T, h *testutil.ServiceTestHarness) {
-	t.Helper()
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
 	if got := countReplayEvents(events, factoryapi.FactoryEventTypeDispatchRequest); got != 2 {
 		t.Fatalf("DISPATCH_CREATED events = %d, want 2", got)
 	}

@@ -507,7 +507,7 @@ Maintainers reviewing `@you/goal` public-contract follow-on PRs should verify:
 | `make generate-api` diff | Generated artifacts change only when authored OpenAPI changes |
 | `make api-smoke` | Bundled contract, drift checks, and integration smoke pass after public delta |
 | `pkg/transports/http/contracttests/openapi_contract_surface_test.go` | Factory data-model schemas remain contract-complete when `Workstation` grows |
-| `pkg/config/mappingtests/` or factory validation tests | Factory JSON round-trips `workPropagation` through config mapping |
+| `pkg/transports/mapping/factoryconfig/mappingtests/` or factory validation tests | Factory JSON round-trips `workPropagation` through config mapping |
 | Absence of `SessionResponseStream*` in `api/components/` | Internal stream models did not leak into public contract |
 | Stories 001–002 reviewer tables | Invocation, events, and lifecycle reuse unchanged by `workPropagation` work |
 

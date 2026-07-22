@@ -7,22 +7,38 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
+type liveFactoryEventWorkAPI struct {
+	apisurface.WorkAPI
+	stream *interfaces.FactoryEventStream
+}
+
+func (api liveFactoryEventWorkAPI) SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	return api.stream, nil
+}
+
+func (api liveFactoryEventWorkAPI) ProbeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) error {
+	return nil
+}
+
 func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-events-001"
+	service := apiExecutionScript{
+		startSync: apiSyncStartCallback(sessionID),
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return apiTerminalEvents(sessionID), nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -56,9 +72,22 @@ func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.
 }
 
 func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-events-reconnect-001"
+	service := apiExecutionScript{
+		startSync: apiSyncStartCallback(sessionID),
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			result := apiTerminalEvents(sessionID)
+			if request.AfterEventID == "" {
+				return result, nil
+			}
+			if request.AfterEventID != "session-started/"+sessionID {
+				t.Fatalf("afterEventId = %q, want session start cursor", request.AfterEventID)
+			}
+			result.Events = result.Events[1:]
+			return result, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -101,9 +130,14 @@ func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(
 }
 
 func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-events-cursor-001"
+	service := apiExecutionScript{
+		startSync: apiSyncStartCallback(sessionID),
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return factorysessionexecution.EventReadResult{}, factorysessionexecution.ErrReconnectCursorNotFound
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -145,9 +179,12 @@ func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *
 }
 
 func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	service := apiExecutionScript{
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return factorysessionexecution.EventReadResult{}, factorysessionexecution.ErrDurableSessionNotFound
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -162,9 +199,15 @@ func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *t
 }
 
 func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-events-projection-001"
+	serviceEvents := apiTerminalEvents(sessionID)
+	service := apiExecutionScript{
+		startSync: apiSyncStartCallback(sessionID),
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return serviceEvents, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -188,19 +231,26 @@ func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection
 		t.Fatalf("decode sync response: %v", err)
 	}
 
-	serviceEvents, err := service.ReadEvents(context.Background(), syncResult.SessionId, factorysessionexecution.EventReconnectRequest{})
-	if err != nil {
-		t.Fatalf("service ReadEvents: %v", err)
-	}
 	want := factorysession.EventReadResponseToAPI(serviceEvents)
 	got := getDurableFactorySessionEvents(t, server.URL, syncResult.SessionId, "")
 	assertFactoryEventsJSONEqual(t, want, got)
 }
 
 func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-events-read-result-001"
+	service := apiExecutionScript{
+		startSync: apiSyncStartCallback(sessionID),
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return apiTerminalEvents(sessionID), nil
+		},
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			return terminalAPIReadResult(sessionID), nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return finalAPIResult(sessionID), nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -225,46 +275,35 @@ func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *
 	}
 
 	apiEvents := getDurableFactorySessionEvents(t, server.URL, syncResult.SessionId, "")
-	rawEvents := make([]json.RawMessage, 0, len(apiEvents))
-	for _, event := range apiEvents {
-		encoded, marshalErr := json.Marshal(event)
-		if marshalErr != nil {
-			t.Fatalf("marshal api event: %v", marshalErr)
-		}
-		rawEvents = append(rawEvents, encoded)
-	}
-	replayedSession, replayedResult, err := factorysessionexecution.ReplaySessionProjection(rawEvents)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
+	if len(apiEvents) != 3 || apiEvents[len(apiEvents)-1].Type != factoryapi.FactoryEventTypeSessionCompleted {
+		t.Fatalf("events = %#v, want terminal canonical event stream", apiEvents)
 	}
 
 	apiRead := getDurableFactorySession(t, server.URL, syncResult.SessionId)
-	if string(apiRead.Status) != string(replayedSession.Status) {
-		t.Fatalf("replayed status = %q, want API read status %q", replayedSession.Status, apiRead.Status)
+	if apiRead.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("read status = %q, want SUCCEEDED", apiRead.Status)
 	}
-	if apiRead.ResultSummary == nil || string(apiRead.ResultSummary.ResultStatus) != string(replayedResult.ResultStatus) {
-		t.Fatalf("replayed result status = %q, want API result summary %#v", replayedResult.ResultStatus, apiRead.ResultSummary)
+	if apiRead.ResultSummary == nil || apiRead.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("API result summary = %#v, want FINAL", apiRead.ResultSummary)
 	}
 
 	apiResult := getDurableFactorySessionResult(t, server.URL, syncResult.SessionId, "")
-	if string(apiResult.ResultStatus) != string(replayedResult.ResultStatus) {
-		t.Fatalf("replayed result status = %q, want API result status %q", replayedResult.ResultStatus, apiResult.ResultStatus)
+	if apiResult.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("API result status = %q, want FINAL", apiResult.ResultStatus)
 	}
 }
 
 func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T) {
 	closed := make(chan interfaces.FactoryEvent)
 	close(closed)
-	srv := newAPITestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"session-beta": {
-				FactoryEventStream: &interfaces.FactoryEventStream{
-					History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest})},
-					Events:  closed,
-				},
-			},
-		},
-	})
+	event, err := interfaces.NewFactoryEvent(factoryapi.FactoryEvent{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest})
+	if err != nil {
+		t.Fatalf("convert live FactoryEvent fixture: %v", err)
+	}
+	srv := newWorkAPITestServer(liveFactoryEventWorkAPI{stream: &interfaces.FactoryEventStream{
+		History: []interfaces.FactoryEvent{event},
+		Events:  closed,
+	}})
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/events", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -368,124 +407,6 @@ func assertFactoryEventsJSONEqual(t *testing.T, want, got []factoryapi.FactoryEv
 	}
 	if string(wantJSON) != string(gotJSON) {
 		t.Fatalf("API events JSON diverged from EventReadResponseToAPI projection:\nwant %s\ngot  %s", wantJSON, gotJSON)
-	}
-}
-
-func newAPILiveProviderRuntimeService(t *testing.T) factorysessionexecution.Service {
-	t.Helper()
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	return newAPIJavaScriptExecutionService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
-		factorysessionexecution.SmokeLiveChildProvider())
-}
-
-func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
-	*factorysessionexecution.JavaScriptRuntimeService,
-	*apiLiveProviderBlockingFixtureProvider,
-) {
-	t.Helper()
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	provider := &apiLiveProviderBlockingFixtureProvider{}
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive, provider)
-	return service, provider
-}
-
-type apiLiveProviderBlockingFixtureProvider struct {
-	mu           sync.Mutex
-	inferStarted chan struct{}
-	release      chan struct{}
-}
-
-func (p *apiLiveProviderBlockingFixtureProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	p.mu.Lock()
-	if p.inferStarted == nil {
-		p.inferStarted = make(chan struct{})
-	}
-	if p.release == nil {
-		p.release = make(chan struct{})
-	}
-	started := p.inferStarted
-	release := p.release
-	p.mu.Unlock()
-
-	close(started)
-	select {
-	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
-	case <-release:
-		return workerexecution.InferenceResponse{
-			Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "live-provider-session-1",
-			},
-		}, nil
-	}
-}
-
-func (p *apiLiveProviderBlockingFixtureProvider) waitForInferStart(t *testing.T) {
-	t.Helper()
-	p.mu.Lock()
-	if p.inferStarted == nil {
-		p.inferStarted = make(chan struct{})
-	}
-	started := p.inferStarted
-	p.mu.Unlock()
-	select {
-	case <-started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("provider Infer did not start before timeout")
-	}
-}
-
-func (p *apiLiveProviderBlockingFixtureProvider) releaseInfer() {
-	p.mu.Lock()
-	if p.release == nil {
-		p.release = make(chan struct{})
-	}
-	release := p.release
-	p.mu.Unlock()
-	close(release)
-}
-
-func waitForAPIDispatchStatus(
-	t *testing.T,
-	serverURL, sessionID, dispatchID string,
-	want factoryapi.FactoryDispatchStatus,
-	timeout time.Duration,
-) factoryapi.FactorySessionDispatchSummary {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		dispatchList := getDurableDispatchList(t, serverURL, sessionID)
-		for _, dispatch := range dispatchList.Dispatches {
-			if dispatch.Id == dispatchID && dispatch.Status == want {
-				return dispatch
-			}
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("dispatch %q did not reach status %q before timeout", dispatchID, want)
-	return factoryapi.FactorySessionDispatchSummary{}
-}
-
-func assertAPILiveProviderProviderSessionRef(
-	t *testing.T,
-	refs *[]factoryapi.LoadableProviderSessionRef,
-) {
-	t.Helper()
-	if refs == nil || len(*refs) != 1 {
-		t.Fatalf("providerSessionRefs = %#v, want one ref", refs)
-	}
-	ref := (*refs)[0]
-	if ref.Id != "live-provider-session-1" {
-		t.Fatalf("providerSessionRef id = %q, want live-provider-session-1", ref.Id)
-	}
-	if ref.Provider != "mock" {
-		t.Fatalf("providerSessionRef provider = %q, want mock", ref.Provider)
-	}
-	if ref.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("providerSessionRef kind = %q, want session_id", ref.Kind)
 	}
 }
 

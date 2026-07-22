@@ -3,11 +3,29 @@
 package factorysnapshot
 
 import (
+	"encoding/json"
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
+
+// ObjectFromFactoryConfig maps an authored Factory Definition through the
+// generated public contract at the transport boundary.
+func ObjectFromFactoryConfig(
+	factoryConfig *interfaces.FactoryConfig,
+) (map[string]any, error) {
+	payload, err := json.Marshal(factorymapping.FactoryConfigToOpenAPI(factoryConfig))
+	if err != nil {
+		return nil, fmt.Errorf("encode Factory snapshot boundary: %w", err)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(payload, &object); err != nil {
+		return nil, fmt.Errorf("decode Factory snapshot boundary: %w", err)
+	}
+	return object, nil
+}
 
 // ToAPI decodes a Factory-owned canonical snapshot into the generated public
 // transport contract at the HTTP boundary.

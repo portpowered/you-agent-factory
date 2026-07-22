@@ -1,26 +1,26 @@
 package stress_test
 
 import (
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
-func firstInputToken(rawTokens any) factorytoken.Token {
+func firstInputToken(rawTokens any) factoryruntime.RuntimeToken {
 	switch tokens := rawTokens.(type) {
 	case []any:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return factoryruntime.RuntimeToken{}
 		}
-		tok, ok := tokens[0].(factorytoken.Token)
+		tok, ok := tokens[0].(factoryruntime.RuntimeToken)
 		if !ok {
-			return factorytoken.Token{}
+			return factoryruntime.RuntimeToken{}
 		}
 		return tok
-	case []factorytoken.Token:
+	case []factoryruntime.RuntimeToken:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return factoryruntime.RuntimeToken{}
 		}
 		return tokens[0]
 	default:
-		return factorytoken.Token{}
+		return factoryruntime.RuntimeToken{}
 	}
 }

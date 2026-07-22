@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -25,10 +24,10 @@ const (
 
 func TestFactorySessionSSEUnknownSession_ReturnsTypedNotFoundWithinBoundedTimeout(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	checkpoint := FactorySessionSSECheckpoint{
 		AfterEventID:  factorySessionSSEUnknownCursorEventID,
 		AfterSequence: factorySessionSSESessionSequencePointer(7),
@@ -64,39 +63,38 @@ func TestFactorySessionSSEUnknownSession_ReturnsTypedNotFoundWithinBoundedTimeou
 func TestFactorySessionSSEUnknownSession_NeverFallsBackToDefaultOrOtherSession(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
 	defaultSessionID := "~default"
-	root := fixture.RootMockFactory()
-	root.SessionFactories[defaultSessionID] = &testutil.MockFactory{
-		FactoryEventStream: &interfaces.FactoryEventStream{
+	root := fixture.WorkAPI()
+	defaultEvent := testAPIFactoryEvent(
+		t,
+		factoryapi.FactoryEventTypeRunRequest,
+		factorySessionSSEDefaultFallbackEventID,
+		factoryapi.FactoryEventContext{
+			Tick:            0,
+			Sequence:        0,
+			SessionSequence: factorySessionSSESessionSequencePointer(0),
+			EventTime:       factorySessionSSEFixtureEventTime,
+			SessionId:       &defaultSessionID,
+		},
+		factoryapi.RunRequestEventPayload{
+			RecordedAt: factorySessionSSEFixtureEventTime,
+			Factory:    factoryapi.Factory{Name: "default-session-factory"},
+		},
+	)
+	root.SetSession(defaultSessionID, factorySessionEventProgram{
+		stream: interfaces.FactoryEventStream{
 			StreamGenerationID:  "b08-sse-default-stream-gen",
 			BackendScopeID:      "b08-sse-default-backend-scope",
 			LogicalSessionKeyID: "b08-sse-default-logical-key",
 			FactorySessionID:    defaultSessionID,
-			History: []interfaces.FactoryEvent{
-				testutil.FactoryEvent(t, testAPIFactoryEvent(
-					t,
-					factoryapi.FactoryEventTypeRunRequest,
-					factorySessionSSEDefaultFallbackEventID,
-					factoryapi.FactoryEventContext{
-						Tick:            0,
-						Sequence:        0,
-						SessionSequence: factorySessionSSESessionSequencePointer(0),
-						EventTime:       factorySessionSSEFixtureEventTime,
-						SessionId:       &defaultSessionID,
-					},
-					factoryapi.RunRequestEventPayload{
-						RecordedAt: factorySessionSSEFixtureEventTime,
-						Factory:    factoryapi.Factory{Name: "default-session-factory"},
-					},
-				)),
-			},
-			Events: make(chan interfaces.FactoryEvent, 1),
+			History:             factorySessionSSEEventsFromAPI(t, []factoryapi.FactoryEvent{defaultEvent}),
+			Events:              make(chan interfaces.FactoryEvent, 1),
 		},
-	}
+	})
 
 	server := httptest.NewServer(newAPITestServer(root).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	resp := harness.GetSessionEvents(server.URL, factorySessionSSEUnknownSessionID, "", "")
 	defer func() { _ = resp.Body.Close() }()
 
@@ -110,10 +108,10 @@ func TestFactorySessionSSEUnknownSession_NeverFallsBackToDefaultOrOtherSession(t
 
 func TestFactorySessionSSEUnknownSession_JSONProbeClassifiesUnknownSessionDistinctFromCursorStale(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	recovery, resp := harness.ProbeRecovery(
 		server.URL,
 		factorySessionSSEUnknownSessionID,
@@ -140,10 +138,10 @@ func TestFactorySessionSSEUnknownSession_JSONProbeClassifiesUnknownSessionDistin
 
 func TestFactorySessionSSEBoundedTimeoutReportsSelectorCheckpointAndLastFrame(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	checkpoint := FactorySessionSSECheckpoint{AfterEventID: fixture.Retained[0].Id}
 	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, checkpoint)
 	defer stream.Close()
@@ -206,10 +204,10 @@ func TestFactorySessionSSECallerCancellationIsPromptAndTerminal(t *testing.T) {
 	for attempt := 0; attempt < 10; attempt++ {
 		t.Run(fmt.Sprintf("attempt-%02d", attempt), func(t *testing.T) {
 			fixture := NewFactorySessionSSEFixture(t)
-			server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+			server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 			defer server.Close()
 
-			harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+			harness := newFactorySessionSSEHarness(t, 2*time.Second)
 			ctx, cancel := context.WithCancel(context.Background())
 			stream, err := harness.TryOpenFromCheckpoint(
 				ctx,

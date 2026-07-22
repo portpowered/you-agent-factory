@@ -3,39 +3,10 @@
 package runtime_api
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
-
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 )
-
-func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {
-	t.Helper()
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(loaded, replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()))
-	if err != nil {
-		t.Fatalf("FactorySnapshotFromLoadedConfig: %v", err)
-	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	mapper := factoryconfig.ConfigMapper{}
-	replayNet, err := mapper.Map(context.Background(), replayRuntimeCfg.Factory)
-	if err != nil {
-		t.Fatalf("Map replay factory: %v", err)
-	}
-	return projections.ProjectInitialStructure(replayNet, replayRuntimeCfg)
-}
 
 func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
 	t.Helper()

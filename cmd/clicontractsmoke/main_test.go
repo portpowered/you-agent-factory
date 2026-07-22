@@ -2,17 +2,25 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clicontract"
 )
 
+type sourceStoreFunc func(string) ([]byte, error)
+
+func (read sourceStoreFunc) Read(path string) ([]byte, error) { return read(path) }
+
+func testSourceStore() generatedartifacts.SourceStore { return sourceStoreFunc(os.ReadFile) }
+
 func TestRunAcceptsCompleteProductionTree(t *testing.T) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	if status := run(repositoryRoot(t), "", stdout, stderr); status != 0 {
+	if status := run(testSourceStore(), repositoryRoot(t), "", stdout, stderr); status != 0 {
 		t.Fatalf("run() status = %d, want 0; stderr = %q", status, stderr.String())
 	}
 	if stdout.String() != successMessage+"\n" || stderr.Len() != 0 {
@@ -28,7 +36,6 @@ func TestRunPropagatesDeliberateViolationDiagnostics(t *testing.T) {
 		{clicontract.ViolationUncontractedCommand, `uncontracted-command: stable ID "you.experimental" path "you experimental"`},
 		{clicontract.ViolationStaleMetadata, `stale-generated-metadata: stable ID "you" path "you" field "name"`},
 		{clicontract.ViolationMissingHandler, `missing-handler: stable ID "you.run" path "you run" field "handler"`},
-		{clicontract.ViolationAliasAsCanonical, `compatibility-alias-as-canonical: stable ID "you.workflow.preview" path "you workflow preview" field "classification"`},
 	}
 
 	for _, tc := range tests {
@@ -36,7 +43,7 @@ func TestRunPropagatesDeliberateViolationDiagnostics(t *testing.T) {
 			var previous string
 			for iteration := 0; iteration < 2; iteration++ {
 				stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-				if status := run(repositoryRoot(t), string(tc.violation), stdout, stderr); status != 1 {
+				if status := run(testSourceStore(), repositoryRoot(t), string(tc.violation), stdout, stderr); status != 1 {
 					t.Fatalf("run() status = %d, want 1", status)
 				}
 				if stdout.Len() != 0 || !strings.Contains(stderr.String(), tc.want) {
@@ -53,7 +60,7 @@ func TestRunPropagatesDeliberateViolationDiagnostics(t *testing.T) {
 
 func TestRunRejectsUnknownViolation(t *testing.T) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	if status := run(repositoryRoot(t), "unknown", stdout, stderr); status != 1 {
+	if status := run(testSourceStore(), repositoryRoot(t), "unknown", stdout, stderr); status != 1 {
 		t.Fatalf("run() status = %d, want 1", status)
 	}
 	if stdout.Len() != 0 || !strings.Contains(stderr.String(), `unknown deliberate CLI contract violation "unknown"`) {

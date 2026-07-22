@@ -2,6 +2,7 @@ package commandregistry_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	workservice "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -98,12 +100,12 @@ func TestListRunEUsesHandwrittenServicePath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	listCfg := workcli.ListConfig{}
+	listCfg := workcli.ListConfig{Context: context.Background()}
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
-			Config:    &listCfg,
-			Server:    stringPtr(srv.URL),
-			ListWork:  workcli.List,
+			Config:   &listCfg,
+			Server:   stringPtr(srv.URL),
+			ListWork: workcli.NewList(testHTTPProtocol(t), commandRegistryListPreparation{}),
 		}),
 		ShowRunE:      noopRunE,
 		MoveRunE:      noopRunE,
@@ -131,6 +133,15 @@ func TestListRunEUsesHandwrittenServicePath(t *testing.T) {
 	}
 }
 
+type commandRegistryListPreparation struct{}
+
+func (commandRegistryListPreparation) PrepareListRequest(
+	_ context.Context,
+	options workservice.ListOptions,
+) (workservice.PreparedListRequest, error) {
+	return workservice.PreparedListRequest{Options: options, FilterSummary: "test"}, nil
+}
+
 func TestShowRunEUsesHandwrittenServicePath(t *testing.T) {
 	var gotMethod string
 	var gotPath string
@@ -151,13 +162,13 @@ func TestShowRunEUsesHandwrittenServicePath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	showCfg := workcli.ShowConfig{}
+	showCfg := workcli.ShowConfig{Context: context.Background()}
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE: noopRunE,
 		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
 			Config:   &showCfg,
 			Server:   stringPtr(srv.URL),
-			ShowWork: workcli.Show,
+			ShowWork: workcli.NewShow(testHTTPProtocol(t)),
 		}),
 		MoveRunE:      noopRunE,
 		VisualizeRunE: noopRunE,
@@ -208,14 +219,14 @@ func TestMoveRunEUsesHandwrittenServicePath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	moveCfg := workcli.MoveConfig{}
+	moveCfg := workcli.MoveConfig{Context: context.Background()}
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE: noopRunE,
 		ShowRunE: noopRunE,
 		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
 			Config:   &moveCfg,
 			Server:   stringPtr(srv.URL),
-			MoveWork: workcli.Move,
+			MoveWork: workcli.NewMove(testHTTPProtocol(t)),
 		}),
 		VisualizeRunE: noopRunE,
 	})
@@ -261,8 +272,11 @@ func TestVisualizeRunERemainsLocalReadOnly(t *testing.T) {
 		ShowRunE: noopRunE,
 		MoveRunE: noopRunE,
 		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
-			Format:    &format,
-			Visualize: workcli.Visualize,
+			Format: &format,
+			Visualize: func(cfg workcli.VisualizeConfig) error {
+				_, err := io.WriteString(cfg.Output, "flowchart TD\n")
+				return err
+			},
 		}),
 	})
 	if err != nil {
@@ -287,7 +301,7 @@ func TestVisualizeRunERemainsLocalReadOnly(t *testing.T) {
 
 func TestListRunEWritesDiagnosticsToConfiguredWriter(t *testing.T) {
 	var diagnostic bytes.Buffer
-	listCfg := workcli.ListConfig{}
+	listCfg := workcli.ListConfig{Context: context.Background()}
 	runE := commandregistry.ListRunE(commandregistry.ListBinding{
 		Config: &listCfg,
 		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {

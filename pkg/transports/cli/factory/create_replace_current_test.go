@@ -2,6 +2,7 @@ package factory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -19,12 +20,12 @@ func TestCreateFromFile_WritesHumanReadableConfirmation(t *testing.T) {
 	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
 
 	var out strings.Builder
-	if err := CreateFromFile(CreateFromFileConfig{
+	if err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:   "gamma",
 		From:   from,
 		Dir:    rootDir,
 		Output: &out,
-	}); err != nil {
+	}, factorydefinitions.NamedFactoryPersistenceResult{Name: "gamma", FactoryDir: filepath.Join(rootDir, "gamma")}, nil, nil); err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
 	}
 
@@ -39,22 +40,18 @@ func TestCreateFromFile_SetCurrentUpdatesPointer(t *testing.T) {
 	rootDir := t.TempDir()
 	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
 
-	if err := CreateFromFile(CreateFromFileConfig{
+	if err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:       "gamma",
 		From:       from,
 		Dir:        rootDir,
 		SetCurrent: true,
 		Output:     ioDiscard(t),
+	}, factorydefinitions.NamedFactoryPersistenceResult{Name: "gamma", FactoryDir: filepath.Join(rootDir, "gamma")}, nil, func(request factorydefinitions.NamedFactoryPersistenceRequest) {
+		if !request.SetCurrent {
+			t.Fatal("SetCurrent = false, want true")
+		}
 	}); err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
-	}
-
-	current, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
-	if err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
-	}
-	if current != "gamma" {
-		t.Fatalf("current = %q, want gamma", current)
 	}
 }
 
@@ -63,13 +60,13 @@ func TestCreateFromFile_JSONEmitsStructuredConfirmation(t *testing.T) {
 	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
 
 	var out bytes.Buffer
-	if err := CreateFromFile(CreateFromFileConfig{
+	if err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:   "gamma",
 		From:   from,
 		Dir:    rootDir,
 		JSON:   true,
 		Output: &out,
-	}); err != nil {
+	}, factorydefinitions.NamedFactoryPersistenceResult{Name: "gamma", FactoryDir: filepath.Join(rootDir, "gamma")}, nil, nil); err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
 	}
 
@@ -87,7 +84,7 @@ func TestReplaceCurrent_WritesHumanReadableConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	var out strings.Builder
-	if err := ReplaceCurrent(ReplaceCurrentConfig{Server: serverBase(t, srv), Output: &out}); err != nil {
+	if err := NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background(), Server: serverBase(t, srv), Output: &out}); err != nil {
 		t.Fatalf("ReplaceCurrent: %v", err)
 	}
 
@@ -115,7 +112,7 @@ func TestReplaceCurrent_UsesSessionScopedPath(t *testing.T) {
 	defer srv.Close()
 
 	var out strings.Builder
-	if err := ReplaceCurrent(ReplaceCurrentConfig{
+	if err := NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session-beta",
 		Output:    &out,
@@ -146,7 +143,7 @@ func TestReplaceCurrent_SurfacesUnexpectedHTTPErrorBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := ReplaceCurrent(ReplaceCurrentConfig{Server: serverBase(t, srv), Output: io.Discard})
+	err := NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background(), Server: serverBase(t, srv), Output: io.Discard})
 	if err == nil {
 		t.Fatal("expected error")
 	}

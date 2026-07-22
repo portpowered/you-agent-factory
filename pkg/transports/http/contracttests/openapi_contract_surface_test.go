@@ -188,6 +188,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factories/{factory_id}/factory/~current",
 		"/factories/{factory_id}/factory/~current/editable-definition",
 		"/factory-sessions/{session_id}/factory/editable-definition",
+		"/events",
 	} {
 		if _, ok := paths[retiredPath]; ok {
 			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
@@ -398,7 +399,6 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
-		"/events":                                {"get"},
 		"/status":                                {"get"},
 		"/models":                                {"get"},
 		"/models/{model_name}":                   {"get"},

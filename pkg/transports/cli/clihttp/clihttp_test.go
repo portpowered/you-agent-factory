@@ -1,580 +1,154 @@
 package clihttp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"time"
 )
 
-type listSessionsResponse struct {
-	Sessions []string `json:"sessions"`
+type doerFunc func(*http.Request) (*http.Response, error)
+
+func (f doerFunc) Do(request *http.Request) (*http.Response, error) { return f(request) }
+
+type clockSequence struct {
+	values []time.Time
+	index  int
 }
 
-func TestGetJSON_DecodesSuccessResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Fatalf("method = %s, want GET", r.Method)
-		}
-		if r.URL.Path != "/factory-sessions" {
-			t.Fatalf("path = %q, want /factory-sessions", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(listSessionsResponse{Sessions: []string{"~default"}}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
+type trackedBody struct {
+	io.Reader
+	closed bool
+}
 
-	var result listSessionsResponse
-	resp, err := GetJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL+"/factory-sessions",
-		&result,
-		RequestOptions{EndpointPath: "/factory-sessions", LogLabel: "session list"},
-	)
+func (b *trackedBody) Close() error { b.closed = true; return nil }
+
+func (c *clockSequence) Now() time.Time { value := c.values[c.index]; c.index++; return value }
+
+func TestNewProtocolRequiresExactEdges(t *testing.T) {
+	t.Parallel()
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0)}}
+	doer := doerFunc(func(*http.Request) (*http.Response, error) { return nil, nil })
+	if _, err := NewProtocol(nil, clock); err == nil || err.Error() != "HTTP doer is required" {
+		t.Fatalf("nil doer error = %v", err)
+	}
+	if _, err := NewProtocol(doer, nil); err == nil || err.Error() != "HTTP clock is required" {
+		t.Fatalf("nil clock error = %v", err)
+	}
+}
+
+func TestProtocolGetJSONReturnsResponseMetadata(t *testing.T) {
+	start := time.Unix(10, 0)
+	clock := &clockSequence{values: []time.Time{start, start.Add(37 * time.Millisecond)}}
+	protocol, err := NewProtocol(doerFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet {
+			t.Fatalf("method = %s", request.Method)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"sessions":["~default"]}`))}, nil
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Sessions []string `json:"sessions"`
+	}
+	result, err := protocol.GetJSON(context.Background(), "http://factory.test/factory-sessions", &response)
 	if err != nil {
 		t.Fatalf("GetJSON: %v", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	defer result.HTTP.Body.Close()
+	if result.Duration != 37*time.Millisecond {
+		t.Fatalf("duration = %s", result.Duration)
 	}
-	if len(result.Sessions) != 1 || result.Sessions[0] != "~default" {
-		t.Fatalf("result = %#v", result)
+	if len(response.Sessions) != 1 || response.Sessions[0] != "~default" {
+		t.Fatalf("response = %#v", response)
 	}
 }
 
-func TestGetJSON_ReturnsResponseForAPIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Message: "invalid session",
-			Code:    factoryapi.ErrorResponseCode("INVALID_REQUEST"),
-			Family:  factoryapi.ErrorFamilyBadRequest,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
+func TestProtocolJSONMethodsSetBodyHeadersAndExpectedStatuses(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, method string
+		status       int
+		invoke       func(Protocol) (Response, error)
+	}{
+		{name: "post", method: http.MethodPost, status: http.StatusOK, invoke: func(p Protocol) (Response, error) {
+			return p.PostJSON(context.Background(), "http://factory.test", strings.NewReader(`{}`), nil)
+		}},
+		{name: "post created", method: http.MethodPost, status: http.StatusCreated, invoke: func(p Protocol) (Response, error) {
+			return p.PostJSONCreated(context.Background(), "http://factory.test", strings.NewReader(`{}`), nil)
+		}},
+		{name: "put", method: http.MethodPut, status: http.StatusOK, invoke: func(p Protocol) (Response, error) {
+			return p.PutJSON(context.Background(), "http://factory.test", strings.NewReader(`{}`), nil)
+		}},
+		{name: "put created", method: http.MethodPut, status: http.StatusCreated, invoke: func(p Protocol) (Response, error) {
+			return p.PutJSONCreated(context.Background(), "http://factory.test", strings.NewReader(`{}`), nil)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+			protocol, err := NewProtocol(doerFunc(func(request *http.Request) (*http.Response, error) {
+				if request.Method != test.method {
+					t.Fatalf("method = %s", request.Method)
+				}
+				if got := request.Header.Get("Content-Type"); got != "application/json" {
+					t.Fatalf("Content-Type = %q", got)
+				}
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader(""))}, nil
+			}), clock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := test.invoke(protocol)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer result.HTTP.Body.Close()
+		})
+	}
+}
+
+func TestProtocolPreservesDurationOnTransportAndDecodeErrors(t *testing.T) {
+	t.Run("transport", func(t *testing.T) {
+		clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, int64(9*time.Millisecond))}}
+		protocol, _ := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) { return nil, io.ErrUnexpectedEOF }), clock)
+		result, err := protocol.GetJSON(context.Background(), "http://factory.test", nil)
+		if !errors.Is(err, io.ErrUnexpectedEOF) || result.Duration != 9*time.Millisecond {
+			t.Fatalf("result = %#v, err = %v", result, err)
 		}
-	}))
-	defer srv.Close()
-
-	var result listSessionsResponse
-	resp, err := GetJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		&result,
-		RequestOptions{EndpointPath: "/factory-sessions", LogLabel: "session list"},
-	)
-	if err != nil {
-		t.Fatalf("GetJSON: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
-
-	errResp, ok := DecodeAPIError(resp)
-	if !ok {
-		t.Fatal("DecodeAPIError = false, want true")
-	}
-	if errResp.Message != "invalid session" {
-		t.Fatalf("message = %q", errResp.Message)
-	}
-}
-
-func TestGetJSON_PropagatesTransportFailure(t *testing.T) {
-	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-		return nil, io.ErrUnexpectedEOF
-	})}
-
-	var diagnostics bytes.Buffer
-	_, err := GetJSON(
-		context.Background(),
-		client,
-		"http://127.0.0.1:1/factory-sessions",
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/factory-sessions",
-			LogLabel:     "session list",
-		},
-	)
-	if err == nil {
-		t.Fatal("GetJSON: want transport error")
-	}
-	if !strings.Contains(diagnostics.String(), "session list response endpointPath=/factory-sessions error=unreachable") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestGetJSON_LogsStatusDiagnosticForNonOK(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	var diagnostics bytes.Buffer
-	resp, err := GetJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/work",
-			LogLabel:     "work list",
-		},
-	)
-	if err != nil {
-		t.Fatalf("GetJSON: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if !strings.Contains(diagnostics.String(), "work list response endpointPath=/work status=500") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestPostJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
-	var gotMethod string
-	var gotContentType string
-	var gotBody string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotContentType = r.Header.Get("Content-Type")
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
+	})
+	t.Run("decode", func(t *testing.T) {
+		clock := &clockSequence{values: []time.Time{time.Unix(2, 0), time.Unix(2, int64(11*time.Millisecond))}}
+		body := &trackedBody{Reader: strings.NewReader("{")}
+		protocol, _ := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+		}), clock)
+		result, err := protocol.GetJSON(context.Background(), "http://factory.test", &struct{}{})
+		if err == nil || result.Duration != 11*time.Millisecond {
+			t.Fatalf("result = %#v, err = %v", result, err)
 		}
-		gotBody = string(body)
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "accepted"}); err != nil {
-			t.Fatalf("encode response: %v", err)
+		if !body.closed {
+			t.Fatal("decode failure did not close response body")
 		}
-	}))
-	defer srv.Close()
+	})
+}
 
-	var result map[string]string
-	resp, err := PostJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL+"/work",
-		strings.NewReader(`{"name":"demo"}`),
-		&result,
-		RequestOptions{EndpointPath: "/work", LogLabel: "work submit"},
-	)
-	if err != nil {
-		t.Fatalf("PostJSON: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if gotMethod != http.MethodPost {
-		t.Fatalf("method = %q, want POST", gotMethod)
-	}
-	if gotContentType != "application/json" {
-		t.Fatalf("content-type = %q, want application/json", gotContentType)
-	}
-	if gotBody != `{"name":"demo"}` {
-		t.Fatalf("body = %q", gotBody)
-	}
-	if result["status"] != "accepted" {
-		t.Fatalf("result = %#v", result)
+func TestProtocolRejectsNilSuccessfulResponse(t *testing.T) {
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+	protocol, _ := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) { return nil, nil }), clock)
+	if _, err := protocol.GetJSON(context.Background(), "http://factory.test", nil); err == nil || err.Error() != "HTTP doer returned a nil response" {
+		t.Fatalf("error = %v", err)
 	}
 }
 
-func TestPostJSONCreated_DecodesSuccessResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Fatalf("content-type = %q, want application/json", r.Header.Get("Content-Type"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(map[string]string{"workId": "work-1"}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PostJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL+"/work",
-		strings.NewReader(`{"name":"demo"}`),
-		&result,
-		RequestOptions{EndpointPath: "/work", LogLabel: "submit"},
-	)
-	if err != nil {
-		t.Fatalf("PostJSONCreated: %v", err)
+func TestDecodeAPIError(t *testing.T) {
+	response := &http.Response{Body: io.NopCloser(strings.NewReader(`{"message":"invalid session"}`))}
+	decoded, ok := DecodeAPIError(response)
+	if !ok || decoded.Message != "invalid session" {
+		t.Fatalf("decoded = %#v, ok = %t", decoded, ok)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", resp.StatusCode)
-	}
-	if result["workId"] != "work-1" {
-		t.Fatalf("result = %#v", result)
-	}
-}
-
-func TestPostJSONCreated_ReturnsResponseForNonCreatedStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Message: "invalid work",
-			Code:    factoryapi.ErrorResponseCode("INVALID_REQUEST"),
-			Family:  factoryapi.ErrorFamilyBadRequest,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PostJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		strings.NewReader(`{"name":"demo"}`),
-		&result,
-		RequestOptions{EndpointPath: "/work", LogLabel: "submit"},
-	)
-	if err != nil {
-		t.Fatalf("PostJSONCreated: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
-}
-
-func TestPostJSONCreated_PropagatesTransportFailure(t *testing.T) {
-	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-		return nil, io.ErrUnexpectedEOF
-	})}
-
-	var diagnostics bytes.Buffer
-	_, err := PostJSONCreated(
-		context.Background(),
-		client,
-		"http://127.0.0.1:1/work",
-		strings.NewReader(`{"name":"demo"}`),
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/work",
-			LogLabel:     "submit",
-		},
-	)
-	if err == nil {
-		t.Fatal("PostJSONCreated: want transport error")
-	}
-	if !strings.Contains(diagnostics.String(), "submit response endpointPath=/work error=unreachable") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestPostJSONCreated_LogsStatusDiagnosticForNonCreated(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	var diagnostics bytes.Buffer
-	resp, err := PostJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		strings.NewReader(`{"name":"demo"}`),
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/work",
-			LogLabel:     "submit",
-		},
-	)
-	if err != nil {
-		t.Fatalf("PostJSONCreated: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if !strings.Contains(diagnostics.String(), "submit response endpointPath=/work status=500") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestPutJSONCreated_DecodesSuccessResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Fatalf("method = %s, want PUT", r.Method)
-		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Fatalf("content-type = %q, want application/json", r.Header.Get("Content-Type"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(map[string]string{"batchId": "batch-1"}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PutJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL+"/work/batch",
-		strings.NewReader(`{"items":[]}`),
-		&result,
-		RequestOptions{EndpointPath: "/work/batch", LogLabel: "submit batch"},
-	)
-	if err != nil {
-		t.Fatalf("PutJSONCreated: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", resp.StatusCode)
-	}
-	if result["batchId"] != "batch-1" {
-		t.Fatalf("result = %#v", result)
-	}
-}
-
-func TestPutJSONCreated_ReturnsResponseForNonCreatedStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Message: "invalid batch",
-			Code:    factoryapi.ErrorResponseCode("INVALID_REQUEST"),
-			Family:  factoryapi.ErrorFamilyBadRequest,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PutJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		strings.NewReader(`{"items":[]}`),
-		&result,
-		RequestOptions{EndpointPath: "/work/batch", LogLabel: "submit batch"},
-	)
-	if err != nil {
-		t.Fatalf("PutJSONCreated: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
-}
-
-func TestPutJSONCreated_PropagatesTransportFailure(t *testing.T) {
-	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-		return nil, io.ErrUnexpectedEOF
-	})}
-
-	var diagnostics bytes.Buffer
-	_, err := PutJSONCreated(
-		context.Background(),
-		client,
-		"http://127.0.0.1:1/work/batch",
-		strings.NewReader(`{"items":[]}`),
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/work/batch",
-			LogLabel:     "submit batch",
-		},
-	)
-	if err == nil {
-		t.Fatal("PutJSONCreated: want transport error")
-	}
-	if !strings.Contains(diagnostics.String(), "submit batch response endpointPath=/work/batch error=unreachable") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestPutJSONCreated_LogsStatusDiagnosticForNonCreated(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	var diagnostics bytes.Buffer
-	resp, err := PutJSONCreated(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		strings.NewReader(`{"items":[]}`),
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/work/batch",
-			LogLabel:     "submit batch",
-		},
-	)
-	if err != nil {
-		t.Fatalf("PutJSONCreated: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if !strings.Contains(diagnostics.String(), "submit batch response endpointPath=/work/batch status=500") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestPutJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
-	var gotMethod string
-	var gotContentType string
-	var gotBody string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotContentType = r.Header.Get("Content-Type")
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		gotBody = string(body)
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{"version": "2"}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PutJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL+"/factory-sessions/~default/factory",
-		strings.NewReader(`{"name":"alpha"}`),
-		&result,
-		RequestOptions{EndpointPath: "/factory-sessions/~default/factory", LogLabel: "factory save-current"},
-	)
-	if err != nil {
-		t.Fatalf("PutJSON: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if gotMethod != http.MethodPut {
-		t.Fatalf("method = %q, want PUT", gotMethod)
-	}
-	if gotContentType != "application/json" {
-		t.Fatalf("content-type = %q, want application/json", gotContentType)
-	}
-	if gotBody != `{"name":"alpha"}` {
-		t.Fatalf("body = %q", gotBody)
-	}
-	if result["version"] != "2" {
-		t.Fatalf("result = %#v", result)
-	}
-}
-
-func TestPutJSON_ReturnsResponseForNonOKStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Message: "stale factory version",
-			Code:    factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION"),
-			Family:  factoryapi.ErrorFamilyConflict,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var result map[string]string
-	resp, err := PutJSON(
-		context.Background(),
-		srv.Client(),
-		srv.URL,
-		strings.NewReader(`{"name":"alpha"}`),
-		&result,
-		RequestOptions{EndpointPath: "/factory-sessions/~default/factory", LogLabel: "factory save-current"},
-	)
-	if err != nil {
-		t.Fatalf("PutJSON: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", resp.StatusCode)
-	}
-}
-
-func TestPutJSON_PropagatesTransportFailure(t *testing.T) {
-	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-		return nil, io.ErrUnexpectedEOF
-	})}
-
-	var diagnostics bytes.Buffer
-	_, err := PutJSON(
-		context.Background(),
-		client,
-		"http://127.0.0.1:1/factory-sessions/~default/factory",
-		strings.NewReader(`{"name":"alpha"}`),
-		nil,
-		RequestOptions{
-			Diagnostics:  &diagnostics,
-			Verbose:      true,
-			EndpointPath: "/factory-sessions/~default/factory",
-			LogLabel:     "factory save-current",
-		},
-	)
-	if err == nil {
-		t.Fatal("PutJSON: want transport error")
-	}
-	if !strings.Contains(diagnostics.String(), "factory save-current response endpointPath=/factory-sessions/~default/factory error=unreachable") {
-		t.Fatalf("diagnostics = %q", diagnostics.String())
-	}
-}
-
-func TestDecodeAPIError_ReturnsFalseWithoutMessage(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"code":"INVALID_REQUEST","family":"client"}`))
-	}))
-	defer srv.Close()
-
-	resp, err := http.Get(srv.URL)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	defer resp.Body.Close()
-
-	_, ok := DecodeAPIError(resp)
-	if ok {
-		t.Fatal("DecodeAPIError = true, want false")
-	}
-}
-
-type roundTripperFunc func(*http.Request) (*http.Response, error)
-
-func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return fn(req)
 }

@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	compatibilityInventorySchemaID      = "https://schemas.portpowered.com/you/contracts/compatibility-inventory.schema.json"
-	compatibilityVocabularySchemaID     = "https://schemas.portpowered.com/you/contracts/common/compatibility-inventory.schema.json"
-	compatibilityInventoryFixtureRoot   = "compatibility-inventory"
+	compatibilityInventorySchemaID    = "https://schemas.portpowered.com/you/contracts/compatibility-inventory.schema.json"
+	compatibilityVocabularySchemaID   = "https://schemas.portpowered.com/you/contracts/common/compatibility-inventory.schema.json"
+	compatibilityInventoryFixtureRoot = "compatibility-inventory"
 )
 
 func TestCompatibilityInventorySchemaFixtures(t *testing.T) {
@@ -34,11 +34,11 @@ func TestCompatibilityInventorySchemaFixtures(t *testing.T) {
 	)
 
 	tests := []struct {
-		name           string
-		fixture        string
-		valid          bool
-		wantPath       string
-		semanticOnly   bool
+		name         string
+		fixture      string
+		valid        bool
+		wantPath     string
+		semanticOnly bool
 	}{
 		{name: "valid mcp retain-temporarily", fixture: "valid-mcp-retain.json", valid: true},
 		{name: "valid api remove-now", fixture: "valid-api-remove-now.json", valid: true},

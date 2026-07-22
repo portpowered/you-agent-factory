@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,64 +21,56 @@ func TestExecutorFailure_NoFailureArcs(t *testing.T) {
 		[]workerexecution.InferenceResponse{{}},
 		[]error{errors.New("executor crashed")},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:failed" {
-			if tok.History.LastError == "" {
-				t.Error("expected LastError to be set on failed token")
-			}
-			break
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
+	for _, event := range server.GetFactoryEvents(t) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
 		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Error == nil || *payload.Error == "" {
+			t.Error("public dispatch response error is empty")
+		}
+		server.Stop(t)
+		return
 	}
+	t.Fatal("Factory Event history has no dispatch response")
 }
 
 func TestExecutorFailure_OutcomeFailed_NoFailureArcs(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("work"))
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stderr:   []byte("provider unavailable"),
 		ExitCode: 1,
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 5*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
 }
 
 func TestExecutorFailure_WithFailureArcs(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("work"))
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stderr:   []byte("intentional failure"),
 		ExitCode: 1,
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 5*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 }
 
 func TestExecutorSuccess_TokenAtOutputPlace(t *testing.T) {
@@ -86,13 +80,6 @@ func TestExecutorSuccess_TokenAtOutputPlace(t *testing.T) {
 	provider := testutil.NewMockProvider(
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init")
+	session := support.RunFactoryToCompletion(t, dir, provider, 5*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0})
 }

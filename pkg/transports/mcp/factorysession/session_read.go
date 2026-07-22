@@ -3,7 +3,7 @@ package factorysession
 import (
 	"context"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -15,7 +15,11 @@ type ListSessionsInput struct {
 
 // ListSessions returns scoped Factory Session summaries through the
 // you.factory_session.list MCP tool.
-func ListSessions(service factorysessionexecution.Service, input ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
+func ListSessions(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
@@ -24,12 +28,15 @@ func ListSessions(service factorysessionexecution.Service, input ListSessionsInp
 	listReq, err := apifactorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{
 		Scope: input.Scope,
 	})
+	if err == nil {
+		listReq, err = prepare.PrepareListSessions(listReq)
+	}
 	if err != nil {
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
 	}
 
-	result, err := service.ListSessions(context.Background(), listReq)
+	result, err := service.ListSessions(ctx, listReq)
 	if err != nil {
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
@@ -46,14 +53,18 @@ type GetSessionInput struct {
 
 // GetSession returns one durable Factory Session inspection read model through
 // the you.factory_session.get MCP tool.
-func GetSession(service factorysessionexecution.Service, input GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
+func GetSession(ctx context.Context, service factorysessionexecution.ExecutionService, input GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := service.GetSession(context.Background(), sessionID)
+	result, err := service.GetSession(ctx, sessionID)
 	if err != nil {
 		envelope := readErrorEnvelope(sessionID, err)
 		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{Error: &envelope}
@@ -72,7 +83,11 @@ type GetResultInput struct {
 
 // GetResult retrieves one durable Factory Session result through the
 // you.factory_session.get_result MCP tool.
-func GetResult(service factorysessionexecution.Service, input GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
+func GetResult(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}
@@ -83,13 +98,16 @@ func GetResult(service factorysessionexecution.Service, input GetResultInput) To
 		IncludeArtifacts: input.IncludeArtifacts,
 	}
 	resultReq, err := apifactorysession.ResultRequestFromAPI(params)
+	if err == nil {
+		resultReq, err = prepare.PrepareResult(resultReq)
+	}
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := service.GetResult(context.Background(), sessionID, resultReq)
+	result, err := service.GetResult(ctx, sessionID, resultReq)
 	if err != nil {
 		envelope := readErrorEnvelope(sessionID, err)
 		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,27 +14,21 @@ import (
 )
 
 func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
-	restoreExecCommand(t)
-	execCommand = fakeUnitLaneCommand
-	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
-	t.Setenv("UNITLANE_HELPER_LIST_STDOUT", strings.Join([]string{
-		modulePath + "/pkg/factory",
-		modulePath + "/tests/release",
-		modulePath + "/tests/functional/runtime_api",
-		modulePath + "/cmd/factory",
-		modulePath + "/tests/stress",
-		modulePath + "/tests/factory/scripts",
-		modulePath + "/pkg/factory",
-	}, "\r\n"))
+	root := t.TempDir()
+	writeTestPackageFile(t, root, "factory")
+	writeTestPackageFile(t, root, "services/factory_definitions/loading/runtimetests")
+	writeTestPackageFile(t, root, "transports/http/contracttests")
+	writeTestPackageFile(t, root, "transports/http/servertests/factorysessionsse")
+	writeTestPackageFile(t, root, "services/factory_runtime/exhaustiontests")
+	writeTestPackageFile(t, root, "services/workers/provider/functionaltests")
+	writeTestPackageFile(t, root, "ignored/testdata/nested")
 
-	packages, err := discoverPackages("./...")
+	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
 	if err != nil {
-		t.Fatalf("discoverPackages() error = %v", err)
+		t.Fatalf("discoverPackagesUnder() error = %v", err)
 	}
 	want := []string{
-		modulePath + "/cmd/factory",
 		modulePath + "/pkg/factory",
-		modulePath + "/tests/factory/scripts",
 	}
 	if !slices.Equal(packages, want) {
 		t.Fatalf("discoverPackages() = %v, want %v", packages, want)
@@ -41,32 +36,23 @@ func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 }
 
 func TestDiscoverPackagesReportsListFailure(t *testing.T) {
-	restoreExecCommand(t)
-	execCommand = fakeUnitLaneCommand
-	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
-	t.Setenv("UNITLANE_HELPER_LIST_FAIL", "1")
-	t.Setenv("UNITLANE_HELPER_LIST_STDERR", "list failed")
-
-	_, err := discoverPackages("./...")
-	if err == nil || err.Error() != "exit status 2\nlist failed" {
-		t.Fatalf("discoverPackages() error = %v, want list failure with stderr", err)
+	_, err := discoverPackagesUnder(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg")
+	if err == nil {
+		t.Fatal("discoverPackagesUnder() error = nil, want missing-root failure")
 	}
 }
 
 func TestRunExecutesOnlyDiscoveredUnitPackages(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
 	execCommand = fakeUnitLaneCommand
+	discoverUnitPackages = func(string) ([]string, error) {
+		return []string{modulePath + "/pkg/factory"}, nil
+	}
 	os.Args = []string{"unitlane", "-count=2", "-jobs=3", "-timeout=2m"}
 	flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
 
 	argsFile := t.TempDir() + "/go-test-args.txt"
 	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
-	t.Setenv("UNITLANE_HELPER_LIST_STDOUT", strings.Join([]string{
-		modulePath + "/pkg/factory",
-		modulePath + "/tests/functional/runtime_api",
-		modulePath + "/tests/stress",
-		modulePath + "/tests/release",
-	}, "\n"))
 	t.Setenv("UNITLANE_HELPER_TEST_ARGS_FILE", argsFile)
 
 	if err := run(); err != nil {
@@ -77,7 +63,7 @@ func TestRunExecutesOnlyDiscoveredUnitPackages(t *testing.T) {
 		t.Fatalf("read captured args: %v", err)
 	}
 	got := strings.Split(strings.TrimSpace(string(gotBytes)), "\n")
-	want := []string{"test", "-p=3", "-short", modulePath + "/pkg/factory", "-count=2", "-timeout=2m0s"}
+	want := []string{"test", "-p=3", "-vet=off", "-short", modulePath + "/pkg/factory", "-count=2", "-timeout=2m0s"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("run() go test args = %v, want %v", got, want)
 	}
@@ -86,10 +72,12 @@ func TestRunExecutesOnlyDiscoveredUnitPackages(t *testing.T) {
 func TestRunReportsTestFailure(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
 	execCommand = fakeUnitLaneCommand
+	discoverUnitPackages = func(string) ([]string, error) {
+		return []string{modulePath + "/pkg/factory"}, nil
+	}
 	os.Args = []string{"unitlane"}
 	flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
 	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
-	t.Setenv("UNITLANE_HELPER_LIST_STDOUT", modulePath+"/pkg/factory")
 	t.Setenv("UNITLANE_HELPER_TEST_FAIL", "1")
 
 	err := run()
@@ -127,13 +115,6 @@ func TestUnitlaneFakeGoProcess(t *testing.T) {
 	}
 
 	switch args[1] {
-	case "list":
-		fmt.Fprint(os.Stdout, os.Getenv("UNITLANE_HELPER_LIST_STDOUT"))
-		fmt.Fprint(os.Stderr, os.Getenv("UNITLANE_HELPER_LIST_STDERR"))
-		if os.Getenv("UNITLANE_HELPER_LIST_FAIL") == "1" {
-			os.Exit(2)
-		}
-		os.Exit(0)
 	case "test":
 		if path := os.Getenv("UNITLANE_HELPER_TEST_ARGS_FILE"); path != "" {
 			if err := os.WriteFile(path, []byte(strings.Join(args[1:], "\n")), 0o600); err != nil {
@@ -179,11 +160,24 @@ func restoreArgsFlagsAndCommand(t *testing.T) {
 	t.Helper()
 	originalArgs := os.Args
 	originalFlags := flag.CommandLine
+	originalDiscover := discoverUnitPackages
 	restoreExecCommand(t)
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlags
+		discoverUnitPackages = originalDiscover
 	})
+}
+
+func writeTestPackageFile(t *testing.T, root, relativeDir string) {
+	t.Helper()
+	dir := filepath.Join(root, filepath.FromSlash(relativeDir))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create test package directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package_test.go"), []byte("package fixture\n"), 0o600); err != nil {
+		t.Fatalf("write test package file: %v", err)
+	}
 }
 
 func TestParseConfigDefaultsToShortMode(t *testing.T) {
@@ -192,7 +186,7 @@ func TestParseConfigDefaultsToShortMode(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
 
 	got := parseConfig()
-	if got != (config{count: 1, jobs: 2, root: "./...", short: true, timeout: 5 * time.Minute}) {
-		t.Fatalf("parseConfig() = %+v", got)
+	if got != (config{count: 0, jobs: 32, root: "./pkg/...", short: true, timeout: 5 * time.Minute, vet: false}) {
+		t.Fatalf("parseConfig() = %+v, expected count: %v, jobs: %v", got, 0, 32)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/boundedio"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -43,6 +44,13 @@ type FactorySessionSSEKeepaliveSignal struct {
 type FactorySessionSSEHarness struct {
 	t       *testing.T
 	timeout time.Duration
+	doer    HTTPDoer
+	ctx     context.Context
+}
+
+// HTTPDoer is the explicit HTTP edge used by the SSE test harness.
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
 // FactorySessionSSEStreamIdentity preserves the four independent identities
@@ -178,7 +186,7 @@ type FactorySessionSSEStream struct {
 	reader     *bufio.Reader
 	ctx        context.Context
 	cancel     context.CancelFunc
-	pending    <-chan factorySessionSSEReadResult
+	pending    *boundedio.Pending[factorySessionSSEReadResult]
 	lastFrame  FactorySessionSSEFrame
 	hasFrame   bool
 	sessionID  string
@@ -187,19 +195,25 @@ type FactorySessionSSEStream struct {
 
 // NewFactorySessionSSEHarness returns a harness that fails closed when a read
 // exceeds the supplied timeout. Zero timeout uses the package default.
-func NewFactorySessionSSEHarness(t *testing.T, timeout time.Duration) *FactorySessionSSEHarness {
+func NewFactorySessionSSEHarness(t *testing.T, timeout time.Duration, doer HTTPDoer, ctx context.Context) *FactorySessionSSEHarness {
 	t.Helper()
 	if timeout <= 0 {
 		timeout = defaultFactorySessionSSEHarnessTimeout
 	}
-	return &FactorySessionSSEHarness{t: t, timeout: timeout}
+	if doer == nil {
+		t.Fatal("Factory Session SSE HTTP doer is required")
+	}
+	if ctx == nil {
+		t.Fatal("Factory Session SSE caller context is required")
+	}
+	return &FactorySessionSSEHarness{t: t, timeout: timeout, doer: doer, ctx: ctx}
 }
 
 // Open starts GET /factory-sessions/{sessionID}/events with an optional raw query
 // string (without leading "?").
 func (h *FactorySessionSSEHarness) Open(serverURL, sessionID, query string) *FactorySessionSSEStream {
 	h.t.Helper()
-	stream, err := h.tryOpen(context.Background(), serverURL, sessionID, query, FactorySessionSSECheckpoint{})
+	stream, err := h.tryOpen(h.ctx, serverURL, sessionID, query, FactorySessionSSECheckpoint{})
 	if err != nil {
 		h.t.Fatalf("open session SSE stream: %v", err)
 	}
@@ -217,14 +231,14 @@ func (h *FactorySessionSSEHarness) tryOpen(
 	if query != "" {
 		path += "?" + query
 	}
-	ctx, cancel := context.WithCancel(callerContext)
+	ctx, cancel := boundedio.CancelScope(callerContext)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+path, nil)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("new session SSE request for session %q: %w", sessionID, err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.doer.Do(req)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("GET %s: %w", path, err)
@@ -271,7 +285,7 @@ func (h *FactorySessionSSEHarness) OpenFromCheckpoint(
 	h.t.Helper()
 
 	stream, err := h.tryOpen(
-		context.Background(),
+		h.ctx,
 		serverURL,
 		sessionID,
 		factorySessionSSECheckpointQuery(checkpoint),
@@ -383,7 +397,7 @@ func (s *FactorySessionSSEStream) TryWaitForKeepalive(timeout time.Duration) (Fa
 		return signal, fmt.Errorf("%w: missing Connection keep-alive header", errFactorySessionSSEKeepaliveMissing)
 	}
 
-	if err := s.setReadDeadline(time.Now().Add(timeout)); err == nil {
+	if err := s.setReadDeadline(boundedio.Deadline(timeout)); err == nil {
 		defer s.clearReadDeadline()
 		frame, ok, readErr := tryReadNextSSEFrame(s.reader)
 		if readErr != nil {
@@ -399,11 +413,9 @@ func (s *FactorySessionSSEStream) TryWaitForKeepalive(timeout time.Duration) (Fa
 		return factorySessionSSEKeepaliveSignalFromFrame(signal, frame)
 	}
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	<-timer.C
+	boundedio.Wait(timeout)
 
-	if err := s.setReadDeadline(time.Now().Add(25 * time.Millisecond)); err == nil {
+	if err := s.setReadDeadline(boundedio.Deadline(25 * time.Millisecond)); err == nil {
 		defer s.clearReadDeadline()
 		_, ok, readErr := tryReadNextSSEFrame(s.reader)
 		if readErr != nil && !isFactorySessionSSEHarnessReadTimeout(readErr) {
@@ -480,9 +492,9 @@ func (s *FactorySessionSSEStream) TryReadNextEvent(timeout time.Duration) (facto
 	if timeout <= 0 {
 		timeout = s.timeout
 	}
-	deadline := time.Now().Add(timeout)
+	deadline := boundedio.Deadline(timeout)
 	for {
-		remaining := time.Until(deadline)
+		remaining := boundedio.Remaining(deadline)
 		if remaining <= 0 {
 			return factoryapi.FactoryEvent{}, s.readError(
 				FactorySessionSSEReadOutcomeWaitingTimeout,
@@ -515,22 +527,15 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 		return FactorySessionSSEFrame{}, readErr
 	}
 	if s.pending == nil {
-		done := make(chan factorySessionSSEReadResult, 1)
-		s.pending = done
-		go func() {
+		s.pending = boundedio.Start(func() factorySessionSSEReadResult {
 			frame, ok, err := tryReadNextSSEFrame(s.reader)
-			done <- factorySessionSSEReadResult{frame: frame, ok: ok, err: err}
-		}()
+			return factorySessionSSEReadResult{frame: frame, ok: ok, err: err}
+		})
 	}
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	var callerCanceled <-chan struct{}
-	if s.ctx != nil {
-		callerCanceled = s.ctx.Done()
-	}
-	select {
-	case result := <-s.pending:
+	result, waitErr := s.pending.Await(s.ctx, timeout)
+	switch {
+	case waitErr == nil:
 		s.pending = nil
 		if readErr := s.callerCancellationError(timeout); readErr != nil {
 			return FactorySessionSSEFrame{}, readErr
@@ -551,17 +556,17 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 		s.lastFrame = result.frame
 		s.hasFrame = true
 		return result.frame, nil
-	case <-timer.C:
+	case errors.Is(waitErr, boundedio.ErrTimeout):
 		return FactorySessionSSEFrame{}, s.readError(
 			FactorySessionSSEReadOutcomeWaitingTimeout,
 			timeout,
 			errFactorySessionSSEHarnessTimeout,
 		)
-	case <-callerCanceled:
+	default:
 		return FactorySessionSSEFrame{}, s.readError(
 			FactorySessionSSEReadOutcomeCallerCanceled,
 			timeout,
-			s.ctx.Err(),
+			waitErr,
 		)
 	}
 }
@@ -614,7 +619,7 @@ func (h *FactorySessionSSEHarness) GetSessionEvents(
 	if query != "" {
 		path += "?" + query
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
+	ctx, cancel := boundedio.TimeoutScope(h.ctx, h.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+path, nil)
 	if err != nil {
@@ -623,7 +628,7 @@ func (h *FactorySessionSSEHarness) GetSessionEvents(
 	if accept != "" {
 		req.Header.Set("Accept", accept)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.doer.Do(req)
 	if err != nil {
 		h.t.Fatalf("GET %s: %v", path, err)
 	}

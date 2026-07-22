@@ -10,15 +10,14 @@ import (
 	"testing"
 	"time"
 
-	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/internal/testutil/factorysessionfixtures"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type gatedResponseStreamWriter struct {
@@ -29,31 +28,28 @@ type gatedResponseStreamWriter struct {
 }
 
 type recordingResponseEventAttachable struct {
-	store      *responseeventstore.SessionResponseEventStore
+	cursor     *factorysessionfixtures.ResponseEventCursor
 	subscribed chan struct{}
 	once       sync.Once
 }
 
 func newRecordingResponseEventAttachable() *recordingResponseEventAttachable {
 	return &recordingResponseEventAttachable{
-		store:      responseeventstore.NewSessionResponseEventStore("session-1"),
+		cursor:     factorysessionfixtures.NewResponseEventCursor(defaultResponseStreamProgressQueueCapacity + 16),
 		subscribed: make(chan struct{}),
 	}
 }
 
 func (a *recordingResponseEventAttachable) SubscribeSessionResponseEventsFromLatest(
 	string,
-) (*responseeventstore.Subscription, error) {
-	subscription, err := a.store.Subscribe(a.store.LatestSequence())
-	if err == nil {
-		a.once.Do(func() { close(a.subscribed) })
-	}
-	return subscription, err
+) (factorysessions.ResponseEventCursor, error) {
+	a.once.Do(func() { close(a.subscribed) })
+	return a.cursor, nil
 }
 
-func (a *recordingResponseEventAttachable) publish(event responseevents.FactoryResponseEvent) error {
-	_, err := a.store.Publish(event)
-	return err
+func (a *recordingResponseEventAttachable) publish(event factorysessions.FactoryResponseEvent) error {
+	a.cursor.Batches <- []factorysessions.FactoryResponseEvent{event}
+	return nil
 }
 
 type stubResponseEventInvocationService struct {
@@ -63,7 +59,7 @@ type stubResponseEventInvocationService struct {
 
 func (s stubResponseEventInvocationService) SubscribeSessionResponseEventsFromLatest(
 	sessionID string,
-) (*responseeventstore.Subscription, error) {
+) (factorysessions.ResponseEventCursor, error) {
 	return s.attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
 }
 
@@ -106,12 +102,12 @@ func (w *gatedResponseStreamWriter) blockedWriteAttemptsCount() int64 {
 func floodCanonicalHumanProgress(sink responseEventSink, count int) {
 	for i := 0; i < count; i++ {
 		event := humanResponseEvent(
-			responseevents.KindProgress,
-			responseevents.PhaseUpdated,
-			responseevents.ProgressPayload{Label: "working"},
+			factorysessions.ResponseEventKindProgress,
+			factorysessions.ResponseEventPhaseUpdated,
+			factorysessions.ResponseEventProgress{Label: "working"},
 		)
 		event.Sequence = int64(i + 1)
-		sink.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+		sink.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 	}
 }
 
@@ -127,13 +123,13 @@ func TestResponseStreamProgressWriter_EnqueueDoesNotBlockWhenOutputSlow(t *testi
 
 	output := &gatedResponseStreamWriter{}
 	output.block()
-	writer := newResponseStreamProgressWriter(output)
+	writer := testResponsePresentation().OpenBestEffortOutput(output)
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for i := 0; i < defaultResponseStreamProgressQueueCapacity+8; i++ {
-			writer.enqueue([]byte("line"))
+			_ = writer.Enqueue([]byte("line"))
 		}
 	}()
 
@@ -143,28 +139,28 @@ func TestResponseStreamProgressWriter_EnqueueDoesNotBlockWhenOutputSlow(t *testi
 		t.Fatal("enqueue blocked while terminal output was slow")
 	}
 
-	if got := writer.droppedProgressLines(); got == 0 {
+	if got := writer.Dropped(); got == 0 {
 		t.Fatalf("dropped lines = 0, want backlog drops when queue is full")
 	}
 
 	output.release()
-	writer.stopAndDrain()
+	_ = writer.CloseAndDrain()
 }
 
 func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryResult(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	planning := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	planning := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "planning"})
 	planning.Sequence = 1
-	reviewing := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "reviewing"})
+	reviewing := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "reviewing"})
 	reviewing.Sequence = 2
-	message := humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
-		ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "goal completed",
+	message := humanResponseEvent(factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventMessageDelta{
+		ContentBlockIndex: 0, ContentBlockKind: factorysessions.ResponseEventContentBlockText, TextDelta: "goal completed",
 	})
 	message.Sequence = 3
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{planning, reviewing, message})
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{planning, reviewing, message})
 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status: interfaces.InvocationTerminalStatusCompleted,
@@ -209,13 +205,13 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 	longPayload := strings.Repeat("x", maxHumanProgressLineBytes+32)
-	first := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: longPayload})
+	first := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: longPayload})
 	first.Sequence = 1
-	duplicate := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "duplicate"})
+	duplicate := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "duplicate"})
 	duplicate.Sequence = 1
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{first, duplicate})
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{first, duplicate})
 
 	renderer.stopProgressRendering()
 	got := output.String()
@@ -235,12 +231,12 @@ func TestHumanResponseStreamRenderer_SuppressesTokenUsageProgress(t *testing.T) 
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	usage := humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 120, OutputTokens: 34})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	usage := humanResponseEvent(factorysessions.ResponseEventKindUsage, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventUsage{InputTokens: 120, OutputTokens: 34})
 	usage.Sequence = 1
-	progress := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "reviewing plan"})
+	progress := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "reviewing plan"})
 	progress.Sequence = 2
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{usage, progress})
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{usage, progress})
 
 	renderer.stopProgressRendering()
 	got := output.String()
@@ -258,7 +254,7 @@ func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		PrimaryResult: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
@@ -276,7 +272,7 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeForBlockedFailure(t 
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-blocked",
 		TraceID:   "trace-blocked",
@@ -315,10 +311,10 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *tes
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	progress := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "waiting for review"})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	progress := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "waiting for review"})
 	progress.Sequence = 1
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{progress})
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{progress})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status:    interfaces.InvocationTerminalStatusTimedOut,
 		ErrorCode: "INVOCATION_TIMED_OUT",
@@ -344,7 +340,7 @@ func TestHumanResponseStreamRenderer_WritesUnresolvedPrimaryResultOutcome(t *tes
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
@@ -363,7 +359,7 @@ func TestJSONResponseStreamRenderer_EmitsInvocationResultRecordForFailedOutcome(
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-interrupted",
 		TraceID:   "trace-interrupted",
@@ -404,12 +400,12 @@ func TestJSONResponseStreamRenderer_EmitsCanonicalResponseEventsAndInvocationRes
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	events := []responseevents.FactoryResponseEvent{
-		canonicalResponseEventFixture(41, responseevents.KindMessage),
-		canonicalResponseEventFixture(42, responseevents.KindStreamGap),
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
+	events := []factorysessions.FactoryResponseEvent{
+		canonicalResponseEventFixture(41, factorysessions.ResponseEventKindMessage),
+		canonicalResponseEventFixture(42, factorysessions.ResponseEventKindStreamGap),
 	}
-	renderer.onResponseEvents(events)
+	renderer.PresentResponseEvents(events)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-1",
 		TraceID:   "trace-1",
@@ -457,7 +453,7 @@ func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *test
 	output.block()
 	eventsPublished := make(chan struct{})
 	attachable := newRecordingResponseEventAttachable()
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -526,7 +522,7 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 	text := "goal completed"
 	var output strings.Builder
 	attachable := newRecordingResponseEventAttachable()
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -535,7 +531,7 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 					<-attachable.subscribed
-					if err := attachable.publish(canonicalResponseEventFixture(1, responseevents.KindMessage)); err != nil {
+					if err := attachable.publish(canonicalResponseEventFixture(1, factorysessions.ResponseEventKindMessage)); err != nil {
 						return apisurface.FactoryInvocationResult{}, err
 					}
 					return apisurface.FactoryInvocationResult{
@@ -576,7 +572,7 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 
 func publishCanonicalResponseEventFixtures(attachable *recordingResponseEventAttachable, count int) error {
 	for index := 1; index <= count; index++ {
-		if err := attachable.publish(canonicalResponseEventFixture(int64(index), responseevents.KindMessage)); err != nil {
+		if err := attachable.publish(canonicalResponseEventFixture(int64(index), factorysessions.ResponseEventKindMessage)); err != nil {
 			return fmt.Errorf("publish canonical response event %d: %w", index, err)
 		}
 	}
@@ -610,7 +606,7 @@ func assertSlowWriterCanonicalRecords(t *testing.T, output string, eventCount in
 func TestJSONResponseStreamRenderer_CanonicalEventBytesMatchAPIPayload(t *testing.T) {
 	t.Parallel()
 
-	event := canonicalResponseEventFixture(42, responseevents.KindMessage)
+	event := canonicalResponseEventFixture(42, factorysessions.ResponseEventKindMessage)
 	domainBytes, err := json.Marshal(event)
 	if err != nil {
 		t.Fatalf("marshal canonical event fixture: %v", err)
@@ -624,8 +620,8 @@ func TestJSONResponseStreamRenderer_CanonicalEventBytesMatchAPIPayload(t *testin
 		t.Fatalf("marshal generated API event fixture: %v", err)
 	}
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 	renderer.stopProgressRendering()
 	var wire struct {
 		RecordType string          `json:"recordType"`
@@ -646,9 +642,9 @@ func TestJSONResponseStreamRenderer_EmitsOnlyPublicRecordTypes(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{
-		canonicalResponseEventFixture(42, responseevents.KindStreamGap),
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{
+		canonicalResponseEventFixture(42, factorysessions.ResponseEventKindStreamGap),
 	})
 	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -671,7 +667,7 @@ func TestHumanResponseStreamRenderer_SuppressesTerminalOutputBacklog(t *testing.
 
 	output := &gatedResponseStreamWriter{}
 	output.block()
-	renderer := newHumanResponseStreamRenderer(output)
+	renderer := newHumanResponseStreamRenderer(output, testResponsePresentation(), testResponseEventValidator())
 	floodCanonicalHumanProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
 
 	output.release()
@@ -693,7 +689,7 @@ func TestJSONResponseStreamRenderer_EmitsOnlyInvocationResultWithoutEvents(t *te
 	t.Parallel()
 
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status: interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{
@@ -712,15 +708,15 @@ func TestJSONResponseStreamRenderer_EmitsOnlyInvocationResultWithoutEvents(t *te
 	}
 }
 
-func canonicalResponseEventFixture(sequence int64, kind responseevents.Kind) responseevents.FactoryResponseEvent {
+func canonicalResponseEventFixture(sequence int64, kind factorysessions.ResponseEventKind) factorysessions.FactoryResponseEvent {
 	payload := json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"Hello"}`)
-	phase := responseevents.PhaseDelta
-	if kind == responseevents.KindStreamGap {
+	phase := factorysessions.ResponseEventPhaseDelta
+	if kind == factorysessions.ResponseEventKindStreamGap {
 		payload = json.RawMessage(`{"fromSequence":1,"toSequence":2,"reason":"retention_eviction"}`)
-		phase = responseevents.PhaseUpdated
+		phase = factorysessions.ResponseEventPhaseUpdated
 	}
-	return responseevents.FactoryResponseEvent{
-		SchemaVersion:    responseevents.SchemaVersionV1,
+	return factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
 		EventID:          fmt.Sprintf("event-%d", sequence),
 		Sequence:         sequence,
 		RecordedAt:       time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
@@ -728,12 +724,12 @@ func canonicalResponseEventFixture(sequence int64, kind responseevents.Kind) res
 		RunID:            "run-1",
 		Kind:             kind,
 		Phase:            phase,
-		Provenance: responseevents.Provenance{
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:        "test-provider",
 			NativeEventType: "message.delta",
-			Delivery:        responseevents.DeliveryNativeStream,
-			Representation:  responseevents.RepresentationDelta,
-			Fidelity:        responseevents.FidelityLossless,
+			Delivery:        factorysessions.ResponseEventDeliveryNativeStream,
+			Representation:  factorysessions.ResponseEventRepresentationDelta,
+			Fidelity:        factorysessions.ResponseEventFidelityLossless,
 		},
 		Payload:    payload,
 		DispatchID: "dispatch-1",
@@ -748,18 +744,18 @@ func TestResponseEventAttachment_DeliversCanonicalEvents(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	attachment := startResponseEventAttachment(ctx, attachable, factorysessions.DefaultSessionID, sink)
+	attachment := testResponsePresentation().Attach(ctx, attachable, factorysessions.DefaultSessionID, sink)
 	if attachment == nil {
 		t.Fatal("expected attachment")
 	}
-	defer attachment.stop()
+	defer attachment.Stop()
 
 	select {
 	case <-attachable.subscribed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected canonical response-event subscription")
 	}
-	event := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "working"})
+	event := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "working"})
 	if err := attachable.publish(event); err != nil {
 		t.Fatalf("publish response event: %v", err)
 	}
@@ -780,7 +776,7 @@ type countingResponseEventSink struct {
 	eventCount atomic.Int64
 }
 
-func (s *countingResponseEventSink) onResponseEvents(events []responseevents.FactoryResponseEvent) {
+func (s *countingResponseEventSink) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
 	s.eventCount.Add(int64(len(events)))
 }
 
@@ -791,20 +787,20 @@ func (s *countingResponseEventSink) events() int64 {
 func TestResponseStreamNDJSON_PublicVocabularyDecodesAfterPrivateRemoval(t *testing.T) {
 	t.Parallel()
 
-	event := responseevents.FactoryResponseEvent{
-		SchemaVersion:    responseevents.SchemaVersionV1,
+	event := factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
 		EventID:          "event-migration-1",
 		Sequence:         1,
 		FactorySessionID: "session-1",
 		RunID:            "run-1",
-		Kind:             responseevents.KindProgress,
-		Phase:            responseevents.PhaseUpdated,
+		Kind:             factorysessions.ResponseEventKindProgress,
+		Phase:            factorysessions.ResponseEventPhaseUpdated,
 		Payload:          []byte(`{"label":"planning","message":"next step"}`),
-		Provenance: responseevents.Provenance{
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:       "test-provider",
-			Delivery:       responseevents.DeliverySynthesized,
-			Representation: responseevents.RepresentationNotification,
-			Fidelity:       responseevents.FidelityNormalized,
+			Delivery:       factorysessions.ResponseEventDeliverySynthesized,
+			Representation: factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:       factorysessions.ResponseEventFidelityNormalized,
 		},
 		DispatchID: "dispatch-1",
 	}
@@ -817,11 +813,11 @@ func TestResponseStreamNDJSON_PublicVocabularyDecodesAfterPrivateRemoval(t *test
 		},
 	}
 
-	lines, err := parityfixtures.EncodeTransportCLINDJSON([]responseevents.FactoryResponseEvent{event}, invocation)
+	lines, err := encodePublicResponseStreamFixtures([]factorysessions.FactoryResponseEvent{event}, invocation)
 	if err != nil {
 		t.Fatalf("EncodeTransportCLINDJSON: %v", err)
 	}
-	decodedEvents, decodedInvocation, err := parityfixtures.DecodeTransportCLINDJSON(lines)
+	decodedEvents, decodedInvocation, err := decodePublicResponseStreamFixtures(lines)
 	if err != nil {
 		t.Fatalf("DecodeTransportCLINDJSON: %v", err)
 	}
@@ -842,7 +838,7 @@ func TestResponseStreamNDJSON_PublicVocabularyDecodesAfterPrivateRemoval(t *test
 func TestResponseStreamNDJSON_RendererOutputDecodesThroughPublicContract(t *testing.T) {
 	t.Parallel()
 
-	event := canonicalResponseEventFixture(2, responseevents.KindMessage)
+	event := canonicalResponseEventFixture(2, factorysessions.ResponseEventKindMessage)
 	result := apisurface.FactoryInvocationResult{
 		RequestID: "req-migration-2",
 		Status:    interfaces.InvocationTerminalStatusCompleted,
@@ -852,12 +848,12 @@ func TestResponseStreamNDJSON_RendererOutputDecodesThroughPublicContract(t *test
 	}
 
 	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer := newJSONResponseStreamRenderer(&output, testResponsePresentation())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 	if err := renderer.writeFinalInvocationResult(result); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
-	if _, _, err := parityfixtures.DecodeTransportCLINDJSON(strings.Split(strings.TrimSpace(output.String()), "\n")); err != nil {
+	if _, _, err := decodePublicResponseStreamFixtures(strings.Split(strings.TrimSpace(output.String()), "\n")); err != nil {
 		t.Fatalf("renderer output must decode through public transport contract: %v\n%s", err, output.String())
 	}
 }

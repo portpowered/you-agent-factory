@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type sleepyExecutor struct{ sleep time.Duration }

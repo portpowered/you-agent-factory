@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,14 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
@@ -123,10 +120,6 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 	if reloaded.WorkTypes == nil || len(*reloaded.WorkTypes) != 1 || (*reloaded.WorkTypes)[0].Name != "story" {
 		t.Fatalf("reloaded default factory work types = %#v, want story", reloaded.WorkTypes)
 	}
-	if _, err := config.ReadCurrentFactoryPointer(rootDir); !os.IsNotExist(err) {
-		t.Fatalf("default factory save current pointer error = %v, want missing pointer", err)
-	}
-
 	storyResp := submitWorkAndExpectStatus(t, server.URL(), "story", "saved-default", http.StatusCreated)
 	var storySubmit factoryapi.SubmitWorkResponse
 	decodeJSONResponse(t, storyResp, &storySubmit, "decode story submit response")
@@ -284,9 +277,12 @@ func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *t
 func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-	if _, err := config.PersistNamedFactory(rootDir, "beta", functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
+	createNamedFactoryFixture(
+		t,
+		rootDir,
+		"beta",
+		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
+	)
 
 	server := startFactoryTransformationServer(t, rootDir)
 	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")
@@ -314,8 +310,6 @@ func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsol
 		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
 	}
 	assertFactoryWorkType(t, defaultCurrent, "alpha-task", "default current factory after session save")
-	assertCurrentFactoryPointer(t, rootDir, "alpha")
-
 	storyResp := submitWorkForSessionAndExpectStatus(t, server.URL(), betaSessionID, "story", "session-story", http.StatusCreated)
 	var storySubmit factoryapi.SubmitWorkResponse
 	decodeJSONResponse(t, storyResp, &storySubmit, "decode session story submit response")
@@ -369,9 +363,9 @@ func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T
 	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
 		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
 	}
-	if !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDuplicateIdentifier) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingWorkerReference) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+	if !hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDuplicateIdentifier) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingWorkerReference) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingPlaceReference) {
 		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
 	}
 }
@@ -610,21 +604,40 @@ func startFactoryTransformationServer(t *testing.T, rootDir string) *support.Fun
 		FactoryDir:                rootDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.Logger = zap.NewNop()
-		},
 	})
 }
 
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
-	if _, err := config.PersistNamedFactory(rootDir, name, functionalNamedFactoryPayloadWithWorkType(t, name, workType)); err != nil {
-		t.Fatalf("PersistNamedFactory(%s): %v", name, err)
+
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	if err := config.WriteCurrentFactoryPointer(rootDir, name); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", name, err)
+	support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
+}
+
+func createNamedFactoryFixture(
+	t *testing.T,
+	rootDir string,
+	name string,
+	payload []byte,
+) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
+	return support.CreateNamedFactoryAtRoot(
+		t,
+		sourceDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
 }
 
 func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
@@ -711,8 +724,9 @@ func putFactoryForSessionRequestExpectStatusWithClient(
 		t.Fatalf("PUT %s: %v", path, err)
 	}
 	if resp.StatusCode != wantStatus {
+		payload, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("PUT %s status = %d, want %d", path, resp.StatusCode, wantStatus)
+		t.Fatalf("PUT %s status = %d, want %d: %s", path, resp.StatusCode, wantStatus, payload)
 	}
 	return resp
 }

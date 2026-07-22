@@ -1,0 +1,55 @@
+package factory_visualization
+
+import (
+	"context"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+)
+
+type currentRuntimeSource struct {
+	reader factorysessions.RuntimeReader
+}
+
+// NewCurrentRuntimeSource adapts the currently selected Factory Session to the
+// exact observation capability consumed by Factory Visualization.
+func NewCurrentRuntimeSource(reader factorysessions.RuntimeReader) Source {
+	return &currentRuntimeSource{reader: reader}
+}
+
+func (s *currentRuntimeSource) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope,
+) (stream *factorydefinitions.FactoryEventStream, err error) {
+	if s == nil || s.reader == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	err = s.reader.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
+		if runtime == nil || runtime.Factory == nil {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
+		var subscribeErr error
+		stream, subscribeErr = runtime.Factory.SubscribeFactoryEvents(ctx, reconnect, scope)
+		return subscribeErr
+	})
+	return stream, err
+}
+
+func (s *currentRuntimeSource) GetEngineStateSnapshot(
+	ctx context.Context,
+) (snapshot *factoryruntime.StateSnapshot, err error) {
+	if s == nil || s.reader == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	err = s.reader.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
+		if runtime == nil || runtime.Factory == nil {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
+		var snapshotErr error
+		snapshot, snapshotErr = runtime.Factory.GetEngineStateSnapshot(ctx)
+		return snapshotErr
+	})
+	return snapshot, err
+}

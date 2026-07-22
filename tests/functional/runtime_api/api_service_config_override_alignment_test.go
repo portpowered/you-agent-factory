@@ -5,33 +5,31 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider server alignment"}`))
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("step one complete. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("step two complete. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("step one complete. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("step two complete. COMPLETE")},
 	)
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = runner
-		},
+		nil,
+		withWorkerCommands(runner, nil),
 	)
 
-	snapshot := waitForFunctionalServerCompletion(t, server, 10*time.Second)
-	categories := categorizeFunctionalState(snapshot)
+	status := waitForFunctionalServerCompletion(t, server, 10*time.Second)
+	categories := functionalStateCategoriesFromStatus(status)
 	if categories.Terminal != 1 {
 		t.Fatalf("terminal token count = %d, want 1", categories.Terminal)
 	}
@@ -45,17 +43,16 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 	testutil.WriteSeedFile(t, dir, "task", []byte("script server alignment"))
 
 	runner := support.NewRecordingCommandRunner("script alignment output")
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.CommandRunnerOverride = runner
-		},
+		nil,
+		withWorkerCommands(nil, runner),
 	)
 
-	snapshot := waitForFunctionalServerCompletion(t, server, 10*time.Second)
-	categories := categorizeFunctionalState(snapshot)
+	status := waitForFunctionalServerCompletion(t, server, 10*time.Second)
+	categories := functionalStateCategoriesFromStatus(status)
 	if categories.Terminal != 1 {
 		t.Fatalf("terminal token count = %d, want 1", categories.Terminal)
 	}

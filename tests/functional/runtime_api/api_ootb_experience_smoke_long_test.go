@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,7 +22,7 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 		Payload:    []byte(`{"title":"Hello World"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 	if initialStatus.FactoryState == "" {
@@ -60,7 +59,7 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 		Payload:    []byte(`{"title":"Multi-stage test"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
 	if stringPointerValue(token.WorkTypeName) != "task" {
@@ -89,7 +88,7 @@ func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
 		Payload:    []byte(`{"title":"Status check"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 	if initialStatus.FactoryState == "" {

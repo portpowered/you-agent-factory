@@ -3,18 +3,17 @@
 package workerdiagnostics
 
 import (
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	domaindiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // SafeWorkDiagnosticsFromGenerated converts generated safe diagnostics to the
 // canonical worker-owned boundary.
-func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostics) *domaindiagnostics.SafeWorkDiagnostics {
+func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostics) *workerexecution.SafeWorkDiagnostics {
 	if diagnostics == nil {
 		return nil
 	}
-	out := &domaindiagnostics.SafeWorkDiagnostics{
+	out := &workerexecution.SafeWorkDiagnostics{
 		RenderedPrompt: renderedPromptFromGenerated(diagnostics.RenderedPrompt),
 		Provider:       providerFromGenerated(diagnostics.Provider),
 		AgentRun:       SafeAgentRunDiagnosticFromGenerated(diagnostics.AgentRun),
@@ -28,7 +27,7 @@ func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostic
 
 // GeneratedSafeWorkDiagnostics converts canonical worker diagnostics to the
 // generated event contract.
-func GeneratedSafeWorkDiagnostics(diagnostics *domaindiagnostics.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
+func GeneratedSafeWorkDiagnostics(diagnostics *workerexecution.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
 	if diagnostics == nil {
 		return nil
 	}
@@ -42,12 +41,6 @@ func GeneratedSafeWorkDiagnostics(diagnostics *domaindiagnostics.SafeWorkDiagnos
 		return nil
 	}
 	return out
-}
-
-// GeneratedSafeWorkDiagnosticsFromWorkDiagnostics projects worker-internal
-// diagnostics through the canonical safe boundary into the generated contract.
-func GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *workerexecution.WorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	return GeneratedSafeWorkDiagnostics(domaindiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics))
 }
 
 // GeneratedWorkFailureMetadata maps canonical failure metadata to the public contract.
@@ -77,7 +70,7 @@ func GeneratedProviderSessionMetadata(session *workerexecution.ProviderSessionMe
 		return nil
 	}
 	return &factoryapi.ProviderSessionMetadata{
-		Provider: stringPtrIfNotEmpty(workerexecution.CanonicalProviderSessionProvider(session.Provider)),
+		Provider: stringPtrIfNotEmpty(session.Provider),
 		Kind:     stringPtrIfNotEmpty(session.Kind),
 		Id:       stringPtrIfNotEmpty(session.ID),
 	}
@@ -89,24 +82,24 @@ func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMet
 		return nil
 	}
 	return &workerexecution.ProviderSessionMetadata{
-		Provider: workerexecution.CanonicalProviderSessionProvider(stringValue(session.Provider)),
+		Provider: stringValue(session.Provider),
 		Kind:     stringValue(session.Kind),
 		ID:       stringValue(session.Id),
 	}
 }
 
-func renderedPromptFromGenerated(diagnostic *factoryapi.RenderedPromptDiagnostic) *domaindiagnostics.SafeRenderedPromptDiagnostic {
+func renderedPromptFromGenerated(diagnostic *factoryapi.RenderedPromptDiagnostic) *workerexecution.SafeRenderedPromptDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
-	return &domaindiagnostics.SafeRenderedPromptDiagnostic{
+	return &workerexecution.SafeRenderedPromptDiagnostic{
 		SystemPromptHash: stringValue(diagnostic.SystemPromptHash),
 		UserMessageHash:  stringValue(diagnostic.UserMessageHash),
 		Variables:        stringMapValue(diagnostic.Variables),
 	}
 }
 
-func generatedRenderedPrompt(diagnostic *domaindiagnostics.SafeRenderedPromptDiagnostic) *factoryapi.RenderedPromptDiagnostic {
+func generatedRenderedPrompt(diagnostic *workerexecution.SafeRenderedPromptDiagnostic) *factoryapi.RenderedPromptDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
@@ -117,11 +110,11 @@ func generatedRenderedPrompt(diagnostic *domaindiagnostics.SafeRenderedPromptDia
 	}
 }
 
-func providerFromGenerated(diagnostic *factoryapi.ProviderDiagnostic) *domaindiagnostics.SafeProviderDiagnostic {
+func providerFromGenerated(diagnostic *factoryapi.ProviderDiagnostic) *workerexecution.SafeProviderDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
-	return &domaindiagnostics.SafeProviderDiagnostic{
+	return &workerexecution.SafeProviderDiagnostic{
 		Provider:         stringValue(diagnostic.Provider),
 		Model:            stringValue(diagnostic.Model),
 		RequestMetadata:  stringMapValue(diagnostic.RequestMetadata),
@@ -129,7 +122,7 @@ func providerFromGenerated(diagnostic *factoryapi.ProviderDiagnostic) *domaindia
 	}
 }
 
-func generatedProvider(diagnostic *domaindiagnostics.SafeProviderDiagnostic) *factoryapi.ProviderDiagnostic {
+func generatedProvider(diagnostic *workerexecution.SafeProviderDiagnostic) *factoryapi.ProviderDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
@@ -187,7 +180,7 @@ func generatedInvocation(diagnostic *workerexecution.InvocationDiagnostic) *fact
 }
 
 // GeneratedSafeAgentRunDiagnostic maps canonical agent-run diagnostics to the public contract.
-func GeneratedSafeAgentRunDiagnostic(diagnostic *domaindiagnostics.SafeAgentRunDiagnostic) *factoryapi.SafeAgentRunDiagnostic {
+func GeneratedSafeAgentRunDiagnostic(diagnostic *workerexecution.SafeAgentRunDiagnostic) *factoryapi.SafeAgentRunDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
@@ -214,11 +207,11 @@ func GeneratedSafeAgentRunDiagnostic(diagnostic *domaindiagnostics.SafeAgentRunD
 }
 
 // SafeAgentRunDiagnosticFromGenerated maps public agent-run diagnostics to the canonical contract.
-func SafeAgentRunDiagnosticFromGenerated(diagnostic *factoryapi.SafeAgentRunDiagnostic) *domaindiagnostics.SafeAgentRunDiagnostic {
+func SafeAgentRunDiagnosticFromGenerated(diagnostic *factoryapi.SafeAgentRunDiagnostic) *workerexecution.SafeAgentRunDiagnostic {
 	if diagnostic == nil {
 		return nil
 	}
-	out := &domaindiagnostics.SafeAgentRunDiagnostic{
+	out := &workerexecution.SafeAgentRunDiagnostic{
 		ExecutionBehavior: enumStringValue(diagnostic.ExecutionBehavior),
 		FailureClass:      stringValue(diagnostic.FailureClass),
 		RecoveryAction:    stringValue(diagnostic.RecoveryAction),
@@ -241,7 +234,7 @@ func SafeAgentRunDiagnosticFromGenerated(diagnostic *factoryapi.SafeAgentRunDiag
 }
 
 // GeneratedFactoryWorldAgentRunInspectionView maps canonical agent-run diagnostics to the world-view contract.
-func GeneratedFactoryWorldAgentRunInspectionView(diagnostic *domaindiagnostics.SafeAgentRunDiagnostic) *factoryapi.FactoryWorldAgentRunInspectionView {
+func GeneratedFactoryWorldAgentRunInspectionView(diagnostic *workerexecution.SafeAgentRunDiagnostic) *factoryapi.FactoryWorldAgentRunInspectionView {
 	if diagnostic == nil {
 		return nil
 	}
@@ -264,7 +257,7 @@ func GeneratedFactoryWorldAgentRunInspectionView(diagnostic *domaindiagnostics.S
 	return out
 }
 
-func generatedToolDiagnostics(entries []domaindiagnostics.AgentRunToolDiagnostic) *[]factoryapi.AgentRunToolDiagnosticEntry {
+func generatedToolDiagnostics(entries []workerexecution.AgentRunToolDiagnostic) *[]factoryapi.AgentRunToolDiagnosticEntry {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -275,7 +268,7 @@ func generatedToolDiagnostics(entries []domaindiagnostics.AgentRunToolDiagnostic
 	return &out
 }
 
-func generatedTranscript(entries []domaindiagnostics.AgentRunTranscriptEntry) *[]factoryapi.AgentRunTranscriptEntry {
+func generatedTranscript(entries []workerexecution.AgentRunTranscriptEntry) *[]factoryapi.AgentRunTranscriptEntry {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -286,24 +279,24 @@ func generatedTranscript(entries []domaindiagnostics.AgentRunTranscriptEntry) *[
 	return &out
 }
 
-func toolDiagnosticsFromGenerated(entries []factoryapi.AgentRunToolDiagnosticEntry) []domaindiagnostics.AgentRunToolDiagnostic {
+func toolDiagnosticsFromGenerated(entries []factoryapi.AgentRunToolDiagnosticEntry) []workerexecution.AgentRunToolDiagnostic {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make([]domaindiagnostics.AgentRunToolDiagnostic, 0, len(entries))
+	out := make([]workerexecution.AgentRunToolDiagnostic, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, domaindiagnostics.AgentRunToolDiagnostic{ToolName: stringValue(entry.ToolName), Phase: stringValue(entry.Phase), Detail: stringValue(entry.Detail)})
+		out = append(out, workerexecution.AgentRunToolDiagnostic{ToolName: stringValue(entry.ToolName), Phase: stringValue(entry.Phase), Detail: stringValue(entry.Detail)})
 	}
 	return out
 }
 
-func transcriptFromGenerated(entries []factoryapi.AgentRunTranscriptEntry) []domaindiagnostics.AgentRunTranscriptEntry {
+func transcriptFromGenerated(entries []factoryapi.AgentRunTranscriptEntry) []workerexecution.AgentRunTranscriptEntry {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make([]domaindiagnostics.AgentRunTranscriptEntry, 0, len(entries))
+	out := make([]workerexecution.AgentRunTranscriptEntry, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, domaindiagnostics.AgentRunTranscriptEntry{Role: stringValue(entry.Role), Summary: stringValue(entry.Summary)})
+		out = append(out, workerexecution.AgentRunTranscriptEntry{Role: stringValue(entry.Role), Summary: stringValue(entry.Summary)})
 	}
 	return out
 }

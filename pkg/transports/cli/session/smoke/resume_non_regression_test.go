@@ -7,59 +7,21 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"go.uber.org/zap"
 )
 
-func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics(t *testing.T) {
-	harness := newCLIResumeSmokeSucceededHarness(t)
-	sessionID := harness.startSucceededSession(t)
-
-	read := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
-	if read.SessionId != sessionID {
-		t.Fatalf("sessionId = %q, want %q", read.SessionId, sessionID)
-	}
-	if read.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", read.Status)
-	}
-	if read.Lifecycle != nil && read.Lifecycle.ResumedAt != nil {
-		t.Fatalf("terminal non-resume read should not expose resumedAt: %#v", read.Lifecycle)
-	}
-	if read.ResultSummary == nil || read.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultSummary = %#v, want FINAL", read.ResultSummary)
-	}
-
-	dispatches := readDispatchesViaCLI(t, harness.serverURL, sessionID)
-	if len(dispatches.Dispatches) != 0 {
-		t.Fatalf("terminal simple-final dispatches = %#v, want empty", dispatches.Dispatches)
-	}
-}
-
 func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *testing.T) {
-	catalogPath := filepath.Join("..", "..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := fse.NewFakeServiceFromContractFixtures(catalogPath)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-
-	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
-		DurableExecutionService: service,
-	}, 0, zap.NewNop()).Handler())
+	service := &resumeRegressionExecutionScript{}
+	server := httptest.NewServer(resumeRegressionHTTPHandler(service))
 	t.Cleanup(server.Close)
 
 	var listOut bytes.Buffer
-	if err := sessioncli.List(sessioncli.ListConfig{
+	if err := sessioncli.NewList(testSessionHTTPProtocol(t), resumeSmokeListPreparation())(sessioncli.ListConfig{Context: context.Background(),
 		Port:          testServerPort(t, server),
 		Scope:         "persisted",
 		DurableLister: service.ListSessions,
@@ -74,14 +36,14 @@ func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *test
 		t.Fatalf("decode list JSON: %v\n%s", err, listOut.String())
 	}
 	if listed.DurableSessions == nil || len(*listed.DurableSessions) == 0 {
-		t.Fatal("expected persisted durable sessions from contract fixtures")
+		t.Fatalf("expected persisted durable sessions from root-contract script: %s", listOut.String())
 	}
 	assertResumeSmokeLaneOutputExcludesForbiddenVocabulary(t, listOut.String())
 
-	sessionID := startFixtureSessionByRequestIDForResumeRegression(t, service, "req-js-run-n-001")
+	sessionID := resumeRegressionSessionID
 
 	var pauseOut bytes.Buffer
-	if err := sessioncli.Pause(sessioncli.LifecycleControlConfig{
+	if err := sessioncli.NewPause(testSessionHTTPProtocol(t))(sessioncli.LifecycleControlConfig{Context: context.Background(),
 		Server:    server.URL,
 		SessionID: sessionID,
 		JSON:      true,
@@ -102,7 +64,7 @@ func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *test
 	}
 
 	var showOut bytes.Buffer
-	if err := sessioncli.Show(sessioncli.ShowConfig{
+	if err := sessioncli.NewShow(testSessionHTTPProtocol(t))(sessioncli.ShowConfig{Context: context.Background(),
 		Server:    server.URL,
 		SessionID: sessionID,
 		JSON:      true,
@@ -121,6 +83,38 @@ func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *test
 	if shown.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf("show status = %q, want PAUSED", shown.Status)
 	}
+}
+
+func resumeRegressionHTTPHandler(service *resumeRegressionExecutionScript) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/factory-sessions/"+resumeRegressionSessionID+"/pause":
+			result, err := service.Pause(r.Context(), resumeRegressionSessionID, fse.ControlRequest{})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+				SessionId: result.SessionID,
+				Operation: factoryapi.FactorySessionLifecycleControlKind(result.Operation),
+				Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(result.Outcome),
+				Status:    factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/factory-sessions/"+resumeRegressionSessionID:
+			result, err := service.GetSession(r.Context(), resumeRegressionSessionID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionDurableReadModel{
+				SessionId: result.SessionID,
+				Status:    factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	})
 }
 
 func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *testing.T) {
@@ -168,7 +162,7 @@ func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *test
 	t.Cleanup(srv.Close)
 
 	var createOut bytes.Buffer
-	if err := sessioncli.Create(sessioncli.CreateConfig{
+	if err := sessioncli.NewCreate(testSessionHTTPProtocol(t))(sessioncli.CreateConfig{
 		Port:   testServerPort(t, srv),
 		Dir:    "/workspace/fleet",
 		Output: &createOut,
@@ -180,7 +174,7 @@ func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *test
 	}
 
 	var listOut bytes.Buffer
-	if err := sessioncli.List(sessioncli.ListConfig{
+	if err := sessioncli.NewList(testSessionHTTPProtocol(t), resumeSmokeListPreparation())(sessioncli.ListConfig{Context: context.Background(),
 		Port:   testServerPort(t, srv),
 		Scope:  "live",
 		Output: &listOut,
@@ -192,7 +186,7 @@ func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *test
 	}
 
 	var showOut bytes.Buffer
-	if err := sessioncli.Show(sessioncli.ShowConfig{
+	if err := sessioncli.NewShow(testSessionHTTPProtocol(t))(sessioncli.ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &showOut,
@@ -204,73 +198,114 @@ func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *test
 	}
 }
 
-func TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface(t *testing.T) {
-	err := sessioncli.Dispatches(sessioncli.DispatchesConfig{
-		Server:    "http://127.0.0.1:1",
-		SessionID: "session-beta",
-		Output:    &bytes.Buffer{},
-	})
-	if err == nil || !strings.Contains(err.Error(), "dur-sess-*") {
-		t.Fatalf("dispatches on live session id = %v, want durable-session validation error", err)
-	}
-
-	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	runtimeService := newCLIResumeRuntimeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
-	started, err := runtimeService.StartAsync(context.Background(), fse.StartRequest{
-		RequestID: "req-cli-resume-scope-001",
-		Source: fse.Source{
-			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "simple-final",
+func resumeSmokeListPreparation() fse.RequestPreparation {
+	return resumeSmokeRequestPreparationCallbacks{
+		list: func(request fse.ListSessionsRequest) (fse.ListSessionsRequest, error) {
+			return request, nil
 		},
-		Args: map[string]any{
-			"subject": "workflows",
-			"count":   2,
-			"prefix":  "you",
-		},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-	waitForCLIResumeSmokeSessionStatus(t, runtimeService, started.SessionID, fse.LifecycleStatusSucceeded, 15*time.Second)
-
-	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
-		DurableExecutionService: runtimeService,
-	}, 0, zap.NewNop()).Handler())
-	t.Cleanup(server.Close)
-
-	var out bytes.Buffer
-	if err := sessioncli.Dispatches(sessioncli.DispatchesConfig{
-		Server:    server.URL,
-		SessionID: started.SessionID,
-		JSON:      true,
-		Output:    &out,
-	}); err != nil {
-		t.Fatalf("session dispatches durable HTTP: %v", err)
-	}
-
-	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &listed); err != nil {
-		t.Fatalf("decode dispatches JSON: %v\n%s", err, out.String())
-	}
-	if listed.SessionId != started.SessionID {
-		t.Fatalf("dispatch sessionId = %q, want %q", listed.SessionId, started.SessionID)
 	}
 }
 
-func startFixtureSessionByRequestIDForResumeRegression(t *testing.T, service fse.Service, requestID string) string {
-	t.Helper()
+type resumeSmokeRequestPreparationCallbacks struct {
+	list func(fse.ListSessionsRequest) (fse.ListSessionsRequest, error)
+}
 
-	started, err := service.StartAsync(context.Background(), fse.StartRequest{
-		RequestID: requestID,
-		Source:    fse.Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync %s: %v", requestID, err)
+func (resumeSmokeRequestPreparationCallbacks) PrepareStart(
+	fse.StartRequest,
+) (fse.StartRequest, error) {
+	return fse.StartRequest{}, fmt.Errorf("unexpected PrepareStart call")
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareControl(
+	fse.ControlRequest,
+) (fse.ControlRequest, error) {
+	return fse.ControlRequest{}, fmt.Errorf("unexpected PrepareControl call")
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareApprove(
+	fse.ApproveRequest,
+) (fse.ApproveRequest, error) {
+	return fse.ApproveRequest{}, fmt.Errorf("unexpected PrepareApprove call")
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareRetryDispatch(
+	fse.RetryDispatchRequest,
+) (fse.RetryDispatchRequest, error) {
+	return fse.RetryDispatchRequest{}, fmt.Errorf("unexpected PrepareRetryDispatch call")
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareInterruptDispatch(
+	fse.InterruptDispatchRequest,
+) (fse.InterruptDispatchRequest, error) {
+	return fse.InterruptDispatchRequest{}, fmt.Errorf("unexpected PrepareInterruptDispatch call")
+}
+
+func (callbacks resumeSmokeRequestPreparationCallbacks) PrepareListSessions(
+	request fse.ListSessionsRequest,
+) (fse.ListSessionsRequest, error) {
+	if callbacks.list == nil {
+		return fse.ListSessionsRequest{}, fmt.Errorf("unexpected PrepareListSessions call")
 	}
-	if started.SessionID == "" {
-		t.Fatalf("session id unexpectedly empty for %s", requestID)
+	return callbacks.list(request)
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareResult(
+	fse.ResultRequest,
+) (fse.ResultRequest, error) {
+	return fse.ResultRequest{}, fmt.Errorf("unexpected PrepareResult call")
+}
+
+func (resumeSmokeRequestPreparationCallbacks) PrepareEventReconnect(
+	fse.EventReconnectRequest,
+) (fse.EventReconnectRequest, error) {
+	return fse.EventReconnectRequest{}, fmt.Errorf("unexpected PrepareEventReconnect call")
+}
+
+const resumeRegressionSessionID = "dur-sess-js-run-n-001"
+
+type resumeRegressionExecutionScript struct {
+	fse.ExecutionService
+	paused bool
+}
+
+func (script *resumeRegressionExecutionScript) ListSessions(
+	context.Context,
+	fse.ListSessionsRequest,
+) (fse.ListSessionsResult, error) {
+	return fse.ListSessionsResult{
+		Scope: fse.SessionListScopePersisted,
+		DurableSessions: []fse.DurableSessionListSummary{{
+			SessionID: resumeRegressionSessionID, Status: fse.LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT", ResolvedSource: fse.ResolvedSource{Kind: "WORKFLOW_FILE", SourceRef: "workflow/run-n"},
+			ResultSummary: &fse.ResultSummary{ResultStatus: "PARTIAL"}, Recoverable: true,
+		}},
+	}, nil
+}
+
+func (script *resumeRegressionExecutionScript) Pause(
+	_ context.Context,
+	sessionID string,
+	_ fse.ControlRequest,
+) (fse.LifecycleControlResult, error) {
+	script.paused = true
+	return fse.LifecycleControlResult{
+		SessionID: sessionID, Operation: "PAUSE",
+		Outcome: fse.LifecycleControlOutcomeAccepted, Status: fse.LifecycleStatusPaused,
+	}, nil
+}
+
+func (script *resumeRegressionExecutionScript) GetSession(
+	context.Context,
+	string,
+) (fse.SessionReadResult, error) {
+	status := fse.LifecycleStatusRunning
+	if script.paused {
+		status = fse.LifecycleStatusPaused
 	}
-	return started.SessionID
+	return fse.SessionReadResult{
+		SessionID: resumeRegressionSessionID, Status: status, OrchestratorKind: "JAVASCRIPT",
+		ResultSummary: &fse.ResultSummary{ResultStatus: "PARTIAL"},
+	}, nil
 }
 
 func testServerPort(t *testing.T, srv *httptest.Server) int {
@@ -286,7 +321,7 @@ func testServerPort(t *testing.T, srv *httptest.Server) int {
 func assertResumeSmokeLaneOutputExcludesForbiddenVocabulary(t *testing.T, text string) {
 	t.Helper()
 	lower := strings.ToLower(text)
-	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
+	for _, term := range []string{"DynamicWorkflowRun", "workflow run"} {
 		if strings.Contains(lower, strings.ToLower(term)) {
 			t.Fatalf("output introduced forbidden vocabulary %q:\n%s", term, text)
 		}

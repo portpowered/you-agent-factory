@@ -1,0 +1,707 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_definitions/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/fake_service_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/resume.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/recordings/projections/world_state.go",
+      "owner": "backend-maintainers",
+      "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/executor/workstation_executor_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/cli/root_run_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/cli/run/run_invocation_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/http/server_factory_sessions_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated same-package factory-session and provider-session transport tests remain together until HTTP transport package-count pressure is relieved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go#TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: this end-to-end current-factory layout round-trip test keeps save, reload, persistence, and runtime assertions on one contract seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/persistence/integrationtests/cli_config_migration_test.go#assertDeterministicExpandedRuntimeConfig",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/persistence/integrationtests/cli_config_migration_test.go#assertExistingSplitDefinitionsPreserved",
+      "owner": "backend-maintainers",
+      "removalReason": "this helper keeps the preserved split-definition contract inline across all authored files."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/scaffold/init_test.go#assertInitScaffoldFilesCanonical",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/scaffold/init_test.go#assertRalphRuntimeConfig",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertGeneratedBatchEvents",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertOrderedEventPayloads",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_modes_test.go#TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_modes_test.go#TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go#assertSafeBoundaryRequestView",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/control.go#applyRuntimeAcceptedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_fixture.go#parseFakeScenarioFromFixture",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_fixture.go#sessionReadFromFixtureMap",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service.go#FakeService.applyLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service.go#FakeService.mutateSessionForControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fixtures/inspection_test.go#TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go#TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/lifecycle.go#EvaluateLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/listing.go#MatchesDurableSessionListFilters",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/listing.go#matchesLifecycleTimeFilters",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution/resume.go#validateDurableResumeFacts",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/protobuf_decoder.go#extractProtobufFields",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/redacted_reasoning_decoder.go#decodeRedactedReasoning",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_parse.go#messageUnknownContentText",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session message content formatting stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_parse.go#parseComposerFromData",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session composer parsing stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_parse.go#parseTextMessageFormat",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session text bubble parsing stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_query.go#QueryBlobsTable",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/provider_sessions/cursor/store_query.go#QueryMetaTable",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/events/event_history_dispatch_lifecycle.go#FactoryEventHistory.RecordDispatchQueued",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/events/event_history_lineage_test.go#assertEventHistoryResponseLineage",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/dispatch_lifecycle_event_replay_test.go#assertJavaScriptDispatchLifecycleReplay",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/simple_dashboard_projection_test.go#TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/simple_dashboard_projection_test.go#assertTerminalProjection",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionPayload",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionSessionLifecyclePayload",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go#TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/world_state.go#factoryWorldReducer.apply",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/projections/world_state_dispatch.go#mergeJavaScriptDispatchState",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/workstation_requests_test.go#TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/workstation_requests_test.go#assertCompletedProjectionRequest",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/workstation_requests_test.go#assertCompletedScriptProjection",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/agent_inference_test.go#TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/script_test.go#assertScriptRequestEvent",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/script_test.go#assertScriptResponsePayload",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/script_test.go#assertSharedRunnerRequest",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/provider/inference_provider_error_normalization_test.go#assertNormalizedProviderFailure",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/provider/recording_provider_test.go#TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#TestProductionParserParity_RepresentativeCommands",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: table-driven parser parity keeps inventory lookup, parse, and per-case verify hooks in one harness."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#productionParserParityRunFlagCases",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#productionParserParitySubmitCases",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: submit parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/synthetic_args_relationships_test.go#assertSyntheticArgumentRecord",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic argument assertions keep the full plan §4.3 field contract visible in one helper."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/synthetic_flags_test.go#assertSyntheticFlagRecord",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic flag assertions keep the full plan §4.3 field contract visible in one helper."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/mcp/serve_smoke_test.go#TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/submit/submit_test.go#TestSubmit_JSONPayloadPostsWorkTypeName",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/work/list_test.go#TestList_JSONOutputPreservesGeneratedResponseShape",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/http/server_submit_work_test.go#TestSubmitWork_AcceptsCanonicalContent",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factoryconfig/openapitests/openapi_factory_test.go#TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract test keeps internal, public, and canonical layout mapping assertions together on the same seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_execution_test.go#TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract test keeps sync start terminal and timeout fixture assertions together on one seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_fake_consumer_test.go#TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this consumer test keeps fake-service projection assertions together across apisurface mappers."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_lifecycle.go#lifecycleTimestampsToAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this mapper keeps optional durable lifecycle timestamp fields together on one API projection seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#DispatchDetailFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps dispatch detail fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#DurableSessionListSummaryFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable list summary fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#SessionReadResultFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable session read fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper_test.go#assertListSummaryFieldsPreserved",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this assertion keeps durable list summary fixture field checks together on one contract test seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_projection_test.go#TestProjectionResponses_TrimAndOmitOptionalFields",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this boundary regression intentionally covers optional-field trimming in one table-like scenario."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mcp/factorysession/inspection.go#invokeLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this MCP control router keeps lifecycle kind dispatch on one seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go#TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "tests/functional/cli/mcp_resume/serve_runtime_smoke_test.go#TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_definitions/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/fake_service_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/resume.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/recordings/projections/world_state.go",
+      "owner": "backend-maintainers",
+      "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/executor/workstation_executor_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/cli/root_run_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/cli/run/run_invocation_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/http/server_factory_sessions_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated same-package factory-session and provider-session transport tests remain together until HTTP transport package-count pressure is relieved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
+    }
+  ]
+}

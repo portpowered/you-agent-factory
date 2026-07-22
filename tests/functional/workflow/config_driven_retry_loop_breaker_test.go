@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,28 +25,24 @@ func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Not good enough"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:failed").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:in-review").
-		HasNoTokenInPlace("task:complete")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"task:failed": 1, "task:init": 0, "task:in-review": 0, "task:complete": 0,
+	})
 
 	if provider.CallCount() != 6 {
 		t.Errorf("expected provider called 6 times, got %d", provider.CallCount())
 	}
 
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, "review-exhaustion", "task:failed")
+	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "task:failed")
+	server.Stop(t)
 }
 
 func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
@@ -59,15 +57,24 @@ func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+}
 
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, transitionID, toPlaceID string) {
+	t.Helper()
+	var sawDispatch bool
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		sawDispatch = sawDispatch || payload.TransitionId == transitionID
+	}
+	if !sawDispatch {
+		t.Fatalf("public events missing transition %s before terminal place %s", transitionID, toPlaceID)
+	}
 }

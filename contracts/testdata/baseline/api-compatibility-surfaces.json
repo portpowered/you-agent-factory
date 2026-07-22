@@ -2,81 +2,9 @@
   "formatVersion": "api-compatibility-surfaces/v1",
   "surfaces": [
     {
-      "itemId": "api.route.post.workflow-previews",
-      "publicName": "POST /workflow-previews",
-      "canonicalSuccessorItemId": "api.route.post.factories.preview",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.schema.workflow-preview-request",
-      "publicName": "WorkflowPreviewRequest",
-      "canonicalSuccessorItemId": "api.schema.factory-preview-request",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.schema.workflow-preview-result",
-      "publicName": "WorkflowPreviewResult",
-      "canonicalSuccessorItemId": "api.schema.factory-preview-result",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.generated.go.preview-workflow-json-request-body",
-      "publicName": "PreviewWorkflowJSONRequestBody",
-      "canonicalSuccessorItemId": "api.generated.go.preview-factory-json-request-body",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.operation.preview-workflow",
-      "publicName": "previewWorkflow",
-      "canonicalSuccessorItemId": "api.operation.preview-factory",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.generated.ts.operation.preview-workflow",
-      "publicName": "operations[\"previewWorkflow\"]",
-      "canonicalSuccessorItemId": "api.generated.ts.operation.preview-factory",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.route.get.events",
-      "publicName": "GET /events",
-      "canonicalSuccessorItemId": "api.route.get.factory-sessions.session-id.events",
-      "compatibilityOnly": true
-    },
-    {
       "itemId": "api.selector.default-session",
       "publicName": "~default",
       "canonicalSuccessorItemId": "api.identity.resolved-factory-session-uuid",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.ui.export.workflow-preview-request",
-      "publicName": "WorkflowPreviewRequest",
-      "canonicalSuccessorItemId": "api.ui.export.factory-preview-request",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.ui.export.workflow-preview-result",
-      "publicName": "WorkflowPreviewResult",
-      "canonicalSuccessorItemId": "api.ui.export.factory-preview-result",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.ui.export.workflow-preview-api-error",
-      "publicName": "WorkflowPreviewAPIError",
-      "canonicalSuccessorItemId": "api.ui.export.factory-preview-api-error",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.ui.export.workflow-preview-api-error-messages",
-      "publicName": "workflowPreviewAPIErrorMessages",
-      "canonicalSuccessorItemId": "api.ui.export.factory-preview-api-error-messages",
-      "compatibilityOnly": true
-    },
-    {
-      "itemId": "api.ui.export.preview-workflow",
-      "publicName": "previewWorkflow",
-      "canonicalSuccessorItemId": "api.ui.export.preview-factory",
       "compatibilityOnly": true
     }
   ]

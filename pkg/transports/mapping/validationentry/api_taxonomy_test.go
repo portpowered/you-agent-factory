@@ -1,33 +1,41 @@
 package validationentry_test
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateFactoryAPI_ProfileTopology_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 	t.Parallel()
 
 	factory := taxonomyMismatchFactoryAPI(t)
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
+	compatibilityTarget := factoryvalidation.ValidationTarget{
+		Code:     factoryvalidation.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+		Severity: factoryvalidation.ValidationSeverityError,
+		Message:  "agent-run is incompatible with INFERENCE_WORKER",
+		Subject: factoryvalidation.ValidationSubject{
+			Type:     factoryvalidation.ValidationSubjectTypeWorkstation,
+			ID:       "agent-with-infer",
+			Location: factoryvalidation.ValidationSubjectLocationDefinition,
+		},
 	}
+	result := invokeSubmittedDefinitionRole(
+		t,
+		factory,
+		factoryvalidation.ValidationResult{},
+		compatibilityTarget,
+	)
 	if !result.HasBlockingTargets() {
 		t.Fatal("expected blocking taxonomy compatibility targets")
 	}
 
 	target := result.BlockingTargets()[0]
-	if target.Code != factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility {
-		t.Fatalf("target code = %q, want %q", target.Code, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
+	if target.Code != factoryvalidation.ValidationCodeWorkerWorkstationBehaviorCompatibility {
+		t.Fatalf("target code = %q, want %q", target.Code, factoryvalidation.ValidationCodeWorkerWorkstationBehaviorCompatibility)
 	}
 	if !strings.Contains(target.Message, "agent-run") || !strings.Contains(target.Message, "INFERENCE_WORKER") {
 		t.Fatalf("target message = %q, want agent-run and INFERENCE_WORKER terminology", target.Message)

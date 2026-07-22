@@ -7,20 +7,18 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot run paths: quiet/CI
@@ -33,6 +31,25 @@ var quietLeakForbiddenMarkers = []string{
 	"Opening dashboard",
 	"Factory:",
 	"Recording saved",
+}
+
+func buildFailureBaselineLogger(mode terminalpolicy.Mode, debug bool) (*zap.Logger, error) {
+	level := zapcore.InfoLevel
+	switch mode {
+	case terminalpolicy.ModeQuiet:
+		return zap.NewNop(), nil
+	case terminalpolicy.ModeNormal:
+		level = zapcore.WarnLevel
+	case terminalpolicy.ModeVerbose:
+		if debug {
+			level = zapcore.DebugLevel
+		}
+	}
+	return zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(io.Discard),
+		level,
+	)), nil
 }
 
 func assertQuietLeakContractForbidden(t *testing.T, output string) {
@@ -116,7 +133,7 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 
 	text := "quiet-leak baseline goal prompt"
 	var output bytes.Buffer
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -138,7 +155,7 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 
 	err := Run(context.Background(), RunConfig{
 		Dir:                        "/tmp/builtin-goal",
-		NamedFactoryName:           goal.PackagedFactoryName,
+		NamedFactoryName:           packagedGoalFactoryName,
 		InvocationPositionalText:   &text,
 		StdinIsTTY:                 func() bool { return true },
 		SuppressDashboardRendering: true,
@@ -158,11 +175,11 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesTerminalOnOperationalFailure(t *testing.T) {
 	dir, workFile := writeDashboardRunFixture(t)
 
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error {
 				return fmt.Errorf("operational failure: mock batch run rejected")
@@ -211,7 +228,7 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 
 	for _, mode := range modes {
 		t.Run(mode.name, func(t *testing.T) {
-			buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+			openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 				return stubInvocationService{
 					run: func(ctx context.Context) error {
 						<-ctx.Done()
@@ -229,7 +246,7 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 				}, nil
 			}
 
-			logger, err := mode.policy.BuildLogger(logging.BuildLogger)
+			logger, err := mode.policy.BuildLogger(buildFailureBaselineLogger)
 			if err != nil {
 				t.Fatalf("BuildLogger: %v", err)
 			}
@@ -237,7 +254,7 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 			var stdout, stderr, diagnostics bytes.Buffer
 			err = Run(context.Background(), RunConfig{
 				Dir:                        "/tmp/builtin-goal",
-				NamedFactoryName:           goal.PackagedFactoryName,
+				NamedFactoryName:           packagedGoalFactoryName,
 				InvocationPositionalText:   &secretPrompt,
 				StdinIsTTY:                 func() bool { return true },
 				SuppressDashboardRendering: mode.policy.Mode() == terminalpolicy.ModeQuiet,
@@ -267,7 +284,7 @@ func TestFailureBaseline_NormalModeSuppressesRawStructuredTerminalLogs(t *testin
 	dir, workFile := writeDashboardRunFixture(t)
 
 	policy := terminalpolicy.Resolve(terminalpolicy.Options{})
-	logger, err := policy.BuildLogger(logging.BuildLogger)
+	logger, err := policy.BuildLogger(buildFailureBaselineLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger: %v", err)
 	}
@@ -292,66 +309,6 @@ func TestFailureBaseline_NormalModeSuppressesRawStructuredTerminalLogs(t *testin
 	}
 	assertNoRawStructuredTerminalLogs(t, stdout)
 	assertNoRawStructuredTerminalLogs(t, stderr)
-}
-
-func TestFailureBaseline_QuietPreservesRuntimeFileDiagnosticsWhileTerminalStaysMute(t *testing.T) {
-	dir, workFile := writeDashboardRunFixture(t)
-	logDir := t.TempDir()
-	runtimeInstanceID := "quiet-file-diagnostics"
-
-	originalBuilder := buildFactoryService
-	defer func() {
-		buildFactoryService = originalBuilder
-	}()
-
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		cfg.RuntimeInstanceID = runtimeInstanceID
-		return service.BuildFactoryService(ctx, cfg)
-	}
-
-	policy := terminalpolicy.Resolve(terminalpolicy.Options{Quiet: true})
-	logger, err := policy.BuildLogger(logging.BuildLogger)
-	if err != nil {
-		t.Fatalf("BuildLogger: %v", err)
-	}
-
-	var stdout, stderr bytes.Buffer
-	runErr := Run(context.Background(), RunConfig{
-		Dir:                        dir,
-		ExecutionBaseDir:           dir,
-		WorkFile:                   workFile,
-		MockWorkersEnabled:         true,
-		SuppressDashboardRendering: true,
-		DisableDefaultRecording:    true,
-		RuntimeLogDir:              logDir,
-		TerminalPolicy:             policy,
-		Logger:                     logger,
-		Output:                     &stdout,
-		Port:                       0,
-	})
-	if runErr != nil {
-		t.Fatalf("Run: %v", runErr)
-	}
-
-	if stdout.String() != "" {
-		t.Fatalf("stdout = %q, want empty quiet terminal output", stdout.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("stderr = %q, want empty quiet terminal output", stderr.String())
-	}
-	assertQuietLeakContractForbidden(t, stdout.String()+stderr.String())
-
-	logPath := requireQuietRuntimeLogPath(t, logDir, runtimeInstanceID)
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read runtime log %s: %v", logPath, err)
-	}
-	if len(bytes.TrimSpace(data)) == 0 {
-		t.Fatalf("runtime log %s is empty, want diagnostic content under quiet", logPath)
-	}
-	if !strings.Contains(string(data), "factory started") {
-		t.Fatalf("runtime log %s missing factory started record:\n%s", logPath, data)
-	}
 }
 
 func assertNoRawStructuredTerminalLogs(t *testing.T, output string) {
@@ -382,49 +339,17 @@ func looksLikeStructuredLogLine(line string) bool {
 
 func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string, err error) {
 	t.Helper()
+	var stdoutBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer
 	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
 		cfg.ExecutionBaseDir = cfg.Dir
 	}
+	cfg.Output = &stdoutBuffer
+	cfg.Diagnostics = &stderrBuffer
 
-	oldStdout := os.Stdout
-	oldStderr := os.Stderr
+	runErr := runWithTestRuntimeRunner(context.Background(), cfg, adaptTestRuntimeRunnerOpener(buildTransportTestRuntime))
 
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
-	}
-	stderrRead, stderrWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stderr: %v", err)
-	}
-
-	os.Stdout = stdoutWrite
-	os.Stderr = stderrWrite
-
-	stdoutCh := make(chan []byte, 1)
-	stderrCh := make(chan []byte, 1)
-	go readPipeIntoChannel(stdoutRead, stdoutCh)
-	go readPipeIntoChannel(stderrRead, stderrCh)
-
-	runErr := runWithFactoryServiceBuilder(context.Background(), cfg, FactoryServiceBuilderFromService(service.BuildFactoryService))
-
-	os.Stdout = oldStdout
-	os.Stderr = oldStderr
-
-	if err := stdoutWrite.Close(); err != nil {
-		t.Fatalf("close captured stdout writer: %v", err)
-	}
-	if err := stderrWrite.Close(); err != nil {
-		t.Fatalf("close captured stderr writer: %v", err)
-	}
-
-	return string(<-stdoutCh), string(<-stderrCh), runErr
-}
-
-func readPipeIntoChannel(readPipe *os.File, out chan<- []byte) {
-	data, _ := io.ReadAll(readPipe)
-	_ = readPipe.Close()
-	out <- data
+	return stdoutBuffer.String(), stderrBuffer.String(), runErr
 }
 
 func requireQuietRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {

@@ -28,7 +28,7 @@ func TestScanEncodedPathProductionSourceViolations_FailsOnDeliberateReintroducti
 	}
 	content := []byte(`package config
 
-import "github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
+import namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 func deliberateEncodedReintroduction(name string) (string, error) {
 	return namedfactorypath.LegacyLayoutSegment(name)

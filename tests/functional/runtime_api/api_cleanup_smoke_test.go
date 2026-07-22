@@ -8,18 +8,13 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task",
@@ -56,21 +51,12 @@ func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *functionalAP
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeWorkRequest)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchRequest)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchResponse)
-
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, cleanupSmokeMaxTick(events))
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if support.DispatchObservationIncludesWork(dispatch, workID) && dispatch.Response != nil {
+			return
+		}
 	}
-	worldView := projections.BuildFactoryWorldView(worldState)
-	if worldView.Runtime.Session.CompletedCount != 1 {
-		t.Fatalf("canonical world view completed count = %d, want 1", worldView.Runtime.Session.CompletedCount)
-	}
-	if got := worldView.Runtime.PlaceTokenCounts["task:complete"]; got != 1 {
-		t.Fatalf("canonical world view task:complete count = %d, want 1", got)
-	}
-	if !cleanupSmokePlaceContainsWork(worldView.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:complete"], workID) {
-		t.Fatalf("canonical world view task:complete occupancy = %#v, want work %q", worldView.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:complete"], workID)
-	}
+	t.Fatalf("public Factory Events contain no completed dispatch for work %q", workID)
 }
 
 func assertCleanupSmokeHasEventType(t *testing.T, events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) {
@@ -82,25 +68,6 @@ func assertCleanupSmokeHasEventType(t *testing.T, events []factoryapi.FactoryEve
 		}
 	}
 	t.Fatalf("GetFactoryEvents missing %s in canonical history", eventType)
-}
-
-func cleanupSmokeMaxTick(events []factoryapi.FactoryEvent) int {
-	maxTick := 0
-	for _, event := range events {
-		if event.Context.Tick > maxTick {
-			maxTick = event.Context.Tick
-		}
-	}
-	return maxTick
-}
-
-func cleanupSmokePlaceContainsWork(items []interfaces.FactoryWorldWorkItemRef, workID string) bool {
-	for _, item := range items {
-		if item.WorkID == workID {
-			return true
-		}
-	}
-	return false
 }
 
 func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {

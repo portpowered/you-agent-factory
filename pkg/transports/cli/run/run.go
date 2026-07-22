@@ -7,143 +7,37 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
-	"github.com/google/uuid"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/service"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	"github.com/portpowered/infinite-you/pkg/initializer"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-// RunConfig holds parameters for the run command.
-type RunConfig struct {
-	Workflow     string
-	Continuously bool
-	WorkFile     string
-	Dir          string
-	HomeDir      string // Normalized home for implicit paths; empty preserves legacy direct callers.
-	// NamedFactoryName is the canonical --named factory resolved into Dir before startup.
-	NamedFactoryName       string
-	NamedFactoryResolution *factoryconfig.NamedFactoryResolution // Source and precedence metadata.
-	// FactoryConfigPath is the --factory file; Dir is its resolved factory root.
-	FactoryConfigPath string
-	// InvocationPositionalText is optional --factory text resolved by the shared input contract.
-	InvocationPositionalText *string
-	// InvocationStdinText is stdin consumed before a one-shot factory invocation.
-	InvocationStdinText           *string
-	InvocationNormalizedArguments *invocations.NormalizedArguments // Normalized signature-backed inputs.
-	RunnerID                      string
-	// OperatorDefaults carries resolved operator-level default worker model
-	// settings loaded at the CLI boundary.
-	OperatorDefaults operatorconfig.ResolvedDefaults
-	// ExecutionBaseDir overrides the base directory used to resolve relative
-	// runtime execution paths. Empty defaults to the caller's current working
-	// directory for CLI-style runs.
-	ExecutionBaseDir string
-	Bootstrap        bool
-	// BindHost is the hostname from --server used in dashboard URLs (for example localhost or 127.0.0.1).
-	BindHost string
-	Port     int
-	// AutoPort resolves Port to the next available local TCP port when the
-	// preferred port is unavailable. Explicit port selections should leave this
-	// false so operator intent is preserved.
-	AutoPort   bool
-	RecordPath string
-	ReplayPath string
-	// DisableDefaultRecording disables the default live-run replay artifact
-	// generation for a single invocation.
-	DisableDefaultRecording bool
-	// RuntimeLogDir overrides the service-owned structured runtime log root.
-	// Empty uses the service default under the user's home directory.
-	RuntimeLogDir string
-	// RuntimeLogConfig controls service-owned structured runtime log rotation.
-	RuntimeLogConfig logging.RuntimeLogConfig
-	// RuntimeMetricsDir overrides the service-owned structured runtime metrics
-	// root. Empty uses the service default under the user's home directory.
-	RuntimeMetricsDir string
-	// RuntimeMetricsConfig controls service-owned structured runtime metrics
-	// rolling behavior.
-	RuntimeMetricsConfig platformmetrics.RuntimeMetricsConfig
-	// MockWorkersEnabled enables deterministic mock-worker execution. When
-	// true and MockWorkersConfigPath is empty, the runtime uses the default
-	// accept behavior for all worker dispatches.
-	MockWorkersEnabled    bool
-	MockWorkersConfigPath string
-	Verbose               bool
-	// TerminalPolicy carries the CLI-resolved quiet/normal/verbose contract for
-	// this invocation. When resolved, diagnostics and logger sinks consult it.
-	TerminalPolicy terminalpolicy.Policy
-	// SuppressDashboardRendering disables the simple stdout dashboard while
-	// preserving the normal service-layer run path.
-	SuppressDashboardRendering bool
-	// CleanInvocation suppresses operator-facing stdout chatter for one-shot
-	// result-oriented invocations. It does not disable replay recording.
-	CleanInvocation bool
-	// JSON emits the clean invocation success result as a single JSON object.
-	JSON bool
-	// CleanInvocationInputSource describes how a one-shot clean invocation
-	// received its primary input payload.
-	CleanInvocationInputSource InvocationInputSource
-	// Output receives clean invocation and shared factory-invocation success
-	// payloads. Nil defaults to stdout.
-	Output io.Writer
-	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
-	OpenDashboard bool
-	// StartupOutput receives human-facing startup messages. Nil suppresses
-	// startup output for programmatic callers and tests.
-	StartupOutput io.Writer
-	// Diagnostics receives metadata-only verbose command diagnostics. Nil
-	// suppresses diagnostics for programmatic callers and tests.
-	Diagnostics io.Writer
-	// Stdin provides the CLI stdin stream for shared invocation input
-	// resolution. Nil defaults to os.Stdin.
-	Stdin io.Reader
-	// StdinIsTTY reports whether stdin is an interactive TTY. Nil inspects
-	// os.Stdin directly.
-	StdinIsTTY func() bool
-	// JSONOutput emits the API-shaped InvocationResponse for factory invocation
-	// results, including non-success outcomes that return recovery context.
-	JSONOutput bool
-	// InvocationOutputMode selects stdout behavior for one-shot factory
-	// invocations. Empty uses the primary-result-only contract; response-stream
-	// attaches to internal SessionResponseStream progress when available.
-	InvocationOutputMode string
-	// InvocationMetricsRecorder receives invocation counter emissions from the
-	// CLI boundary, including pre-runtime source conflicts.
-	InvocationMetricsRecorder service.InvocationMetricsRecorder
-	// InvocationSkipPermissionsOverride requests an invocation-scoped unsafe
-	// permission bypass for agent workers when non-nil. Set from you run
-	// --skip-permissions and never written back to persisted factory config.
-	InvocationSkipPermissionsOverride *bool
-	Logger                            *zap.Logger
-}
+type RunConfig = runconfig.Config
+
+// ModelCacheDirEnvironment selects the managed local-model cache root at the
+// customer process boundary.
+const ModelCacheDirEnvironment = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
 
 type factoryServiceRunner interface {
 	Run(ctx context.Context) error
@@ -153,7 +47,7 @@ type factoryServiceRunner interface {
 type RuntimeRunner = factoryServiceRunner
 
 type engineStateSnapshotProvider interface {
-	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
 }
 
 type cleanInvocationSuccess struct {
@@ -169,82 +63,64 @@ type cleanInvocationWorkTarget struct {
 	WorkTypeName string
 }
 
-// FactoryServiceBuilder constructs the factory service used by Run.
-type FactoryServiceBuilder func(
+// RuntimeRunnerBuilder is the CLI edge adapter for one owner-bounded Factory
+// Sessions request. Wire converts the request and presentation sink into an
+// initializer.ApplicationOpeningOperation before invoking the neutral
+// Initializer builder.
+type RuntimeRunnerBuilder func(
 	context.Context,
-	*service.FactoryServiceConfig,
-) (RuntimeRunner, error)
+	factorysessions.ApplicationOpeningRequest,
+	*zap.Logger,
+	factoryvisualization.Sink,
+) (initializer.LocalRuntimeRunner, error)
 
-// FactoryServiceBuildFunc constructs *service.FactoryService for registration
-// from cmd/ when the builder is defined outside pkg/transports/cli/run.
-type FactoryServiceBuildFunc func(
+// RuntimeOpeningRequestFactory is the Wire-selected mapping from CLI values
+// to one immutable Factory Sessions operation request.
+type RuntimeOpeningRequestFactory func(
+	RunConfig,
+	*workers.MockWorkersConfig,
+	factorysessions.RuntimeHostObserver,
+) factorysessions.ApplicationOpeningRequest
+
+type Opener func(
 	context.Context,
-	*service.FactoryServiceConfig,
-) (*service.FactoryService, error)
-
-// FactoryServiceBuilderFromService adapts a concrete service constructor for
-// SetBuildFactoryService when the builder is defined outside pkg/transports/cli/run.
-func FactoryServiceBuilderFromService(build FactoryServiceBuildFunc) FactoryServiceBuilder {
-	return func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		return build(ctx, cfg)
-	}
-}
-
-func defaultBuildFactoryService(
-	context.Context,
-	*service.FactoryServiceConfig,
-) (factoryServiceRunner, error) {
-	return nil, errors.New("construct local runtime: dependency-injected builder is required")
-}
-
-var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
-
-// SetBuildFactoryService registers the factory service builder used by Run.
-// This compatibility hook does not select a construction path by default;
-// process-root executions use BuildApplication with a Wire-owned builder.
-func SetBuildFactoryService(builder FactoryServiceBuilder) {
-	if builder == nil {
-		buildFactoryService = defaultBuildFactoryService
-		return
-	}
-	buildFactoryService = builder
-}
+	RunConfig,
+	RuntimeRunnerBuilder,
+	factorysessions.InvocationOperation,
+	factoryvisualization.ResponsePresentation,
+) (*Operation, error)
 
 const (
-	completedPlaceIDSuffix        = "completed"
-	failedPlaceIDSuffix           = "failed"
-	defaultFactorySessionID       = "~default"
-	defaultRecordPathSessionToken = "__factory_session_id__"
+	completedPlaceIDSuffix  = "completed"
+	failedPlaceIDSuffix     = "failed"
+	defaultFactorySessionID = "~default"
 )
 
-var bootstrapFactory = func(dir string) error {
-	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(dir)
+func bootstrapFactoryWithInitializer(
+	dir string,
+	initialize interfaces.ScaffoldInitializer,
+	resolve interfaces.CurrentFactoryDirectoryResolver,
+	directories platformfilesystem.DirectoryCreator,
+) error {
+	if resolve == nil {
+		return fmt.Errorf("bootstrap Factory Definition at %q: current Factory resolver is required", dir)
+	}
+	resolvedDir, err := resolve(dir)
 	if err != nil {
-		if errors.Is(err, factoryconfig.ErrFactoryLayoutNotFound) {
-			return initcmd.Init(initcmd.InitConfig{Dir: dir})
+		if errors.Is(err, interfaces.ErrFactoryLayoutNotFound) {
+			if initialize == nil {
+				return fmt.Errorf("bootstrap Factory Definition at %q: scaffold initializer is required", dir)
+			}
+			return initialize(interfaces.ScaffoldConfig{Dir: dir})
 		}
 		return err
 	}
 
-	defaultInputDir := filepath.Join(resolvedDir, interfaces.InputsDir, initcmd.DefaultFactoryInputType, interfaces.DefaultChannelName)
-	return os.MkdirAll(defaultInputDir, 0o755)
-}
-
-var dashboardOpener = openURLInBrowser
-
-var interactiveOutput = isInteractiveOutput
-var defaultLiveRunRecordPath = generateDefaultLiveRunRecordPath
-var defaultLiveRunRecordTime = time.Now
-var defaultLiveRunRecordUUID = uuid.NewString
-
-const dashboardReadyTimeout = 5 * time.Second
-const maxAutoPortAttempts = 100
-
-type reservedAPIServerListener struct {
-	listener net.Listener
-	port     int
-	taken    bool
-	mu       sync.Mutex
+	defaultInputDir := filepath.Join(resolvedDir, interfaces.InputsDir, interfaces.DefaultFactoryInputType, interfaces.DefaultChannelName)
+	if directories == nil {
+		return fmt.Errorf("bootstrap Factory Definition at %q: directory creator is required", dir)
+	}
+	return directories.MkdirAll(defaultInputDir, 0o755)
 }
 
 type resolvedRunRecordPath struct {
@@ -253,141 +129,35 @@ type resolvedRunRecordPath struct {
 	autoGenerated bool
 }
 
-func defaultServeFactoryAPIServer(
-	ctx context.Context,
-	runtime apisurface.APISurface,
-	port int,
-	logger *zap.Logger,
-	listener net.Listener,
-) error {
-	srv := api.NewServer(runtime, port, logger)
-	return srv.Serve(ctx, listener)
-}
-
-var serveFactoryAPIServer = defaultServeFactoryAPIServer
-
-var startAPIServer = func(
-	ctx context.Context,
-	runtime apisurface.APISurface,
-	port int,
-	logger *zap.Logger,
-	markReady func(),
-) error {
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	return serveAPIServer(ctx, runtime, port, logger, markReady, listener)
-}
-
-func serveAPIServer(
-	ctx context.Context,
-	runtime apisurface.APISurface,
-	port int,
-	logger *zap.Logger,
-	markReady func(),
-	listener net.Listener,
-) error {
-	markReady()
-	return serveFactoryAPIServer(ctx, runtime, port, logger, listener)
-}
-
-func reserveAPIServerListener(port int, autoPort bool) (*reservedAPIServerListener, error) {
-	if port <= 0 || !autoPort {
-		return nil, nil
-	}
-
-	var firstErr error
-	for candidate := port; candidate <= 65535 && candidate < port+maxAutoPortAttempts; candidate++ {
-		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", candidate))
-		if err == nil {
-			return &reservedAPIServerListener{
-				listener: listener,
-				port:     candidate,
-			}, nil
-		}
-		if firstErr == nil {
-			firstErr = err
-		}
-	}
-
-	if firstErr == nil {
-		firstErr = fmt.Errorf("invalid preferred port %d", port)
-	}
-	return nil, fmt.Errorf("resolve open API server port from %d: %w", port, firstErr)
-}
-
-func (r *reservedAPIServerListener) Port() int {
-	if r == nil {
-		return 0
-	}
-	return r.port
-}
-
-func (r *reservedAPIServerListener) Take() net.Listener {
-	if r == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.taken {
-		return nil
-	}
-	r.taken = true
-	return r.listener
-}
-
-func (r *reservedAPIServerListener) CloseIfUnused() error {
-	if r == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.taken {
-		return nil
-	}
-	r.taken = true
-	return r.listener.Close()
-}
-
-// Run loads a workflow from factory.json and starts the factory via
-// FactoryService. The CLI is a thin wrapper — all orchestration logic
-// (file watcher, dashboard, API server, engine) lives in the service layer.
-func Run(ctx context.Context, cfg RunConfig) error {
-	return runWithFactoryServiceBuilder(ctx, cfg, nil)
-}
-
-func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
-	application, err := BuildApplication(ctx, cfg, builder, buildInvocationBootstrap)
-	if err != nil {
-		return err
-	}
-	return application.Run(ctx)
-}
-
-// Application is the already-constructed local-run graph consumed by the
-// initializer lifecycle boundary.
-type Application struct {
+// Operation is one invocation-local run selected by the customer command.
+// Its runtime state is opened through injected service operations.
+type Operation struct {
 	cfg               RunConfig
 	logger            *zap.Logger
 	runner            RuntimeRunner
 	invocationRequest *factoryapi.InvocationRequest
-	invocationRunner  sessionInvocationRunner
+	invocationTarget  factorysessions.InvocationTarget
+	invocation        factorysessions.InvocationOperation
+	presentation      factoryvisualization.ResponsePresentation
+	responseEvents    factorysessions.ResponseEventValidator
+	prepareWorkTarget work.SingleWorkTargetPreparation
 	invocationMode    bool
 	recordPath        resolvedRunRecordPath
-	reservedAPIServer *reservedAPIServerListener
-	dashboardReady    <-chan struct{}
 }
 
-// BuildApplication resolves run inputs and constructs the runtime graph without
+// Open resolves run inputs and opens invocation-local runtime state without
 // starting its transport, sidecars, or runtime loop.
-func BuildApplication(
+func Open(
 	ctx context.Context,
 	cfg RunConfig,
-	builder FactoryServiceBuilder,
-	invocationBuilder InvocationBootstrapBuilder,
-) (*Application, error) {
+	buildRunner RuntimeRunnerBuilder,
+	invocation factorysessions.InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	responseEvents factorysessions.ResponseEventValidator,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	buildRuntimeRequest RuntimeOpeningRequestFactory,
+) (*Operation, error) {
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
@@ -398,90 +168,92 @@ func BuildApplication(
 		return nil, err
 	}
 
-	mockWorkersConfig, err := loadMockWorkersConfig(cfg)
+	mockWorkersConfig, err := loadSelectedMockWorkersConfig(cfg, loadMockWorkers)
 	if err != nil {
 		return nil, err
 	}
 
-	var reservedAPIServer *reservedAPIServerListener
-	if !invocationMode {
-		reservedAPIServer, err = reserveAPIServerListener(cfg.Port, cfg.AutoPort)
-		if err != nil {
-			return nil, err
-		}
-	}
 	requestedPort := cfg.Port
-	closeReserved := func() {
-		if reservedAPIServer != nil {
-			if closeErr := reservedAPIServer.CloseIfUnused(); closeErr != nil {
-				logger.Warn("release reserved API server listener failed", zap.Error(closeErr))
-			}
-		}
-	}
-	if reservedAPIServer != nil {
-		cfg.Port = reservedAPIServer.Port()
-	}
 	emitNamedFactoryResolutionDiagnostics(cfg, logger)
-	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
-		return buildInvocationApplication(ctx, cfg, logger, invocationRequest, recordPath, invocationBuilder, mockWorkersConfig)
+		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
+		return openInvocation(
+			ctx,
+			cfg,
+			logger,
+			invocationRequest,
+			recordPath,
+			invocation,
+			presentation,
+			responseEvents,
+			mockWorkersConfig,
+		)
 	}
 
-	dashboardReady := make(chan struct{})
-	var dashboardReadyOnce sync.Once
-	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, reservedAPIServer, dashboardReady, &dashboardReadyOnce)
-
-	if builder == nil {
-		builder = buildFactoryService
+	if buildRunner == nil {
+		return nil, errors.New("construct local runtime: injected runtime runner builder is required")
 	}
-	factorySvc, err := builder(ctx, svcCfg)
+	if buildRuntimeRequest == nil {
+		return nil, errors.New("construct local runtime: runtime opening request factory is required")
+	}
+	var factorySvc initializer.LocalRuntimeRunner
+	onBound := func(binding factorysessions.RuntimeHostBinding) {
+		resolved := cfg
+		resolved.Port = binding.Port
+		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
+		if emitStartupMessages(resolved, runtimeLogDiagnosticsForRunner(factorySvc)) {
+			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
+		}
+	}
+	openingRequest := buildRuntimeRequest(cfg, mockWorkersConfig, onBound)
+	if cfg.Port <= 0 {
+		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
+	}
+	var visualizationSink factoryvisualization.Sink
+	if !cfg.SuppressDashboardRendering && cfg.Output != nil {
+		visualizationSink = factoryvisualization.SinkFunc(func(input factoryvisualization.View) {
+			renderSimpleDashboard(cfg.Output, input)
+		})
+	}
+	factorySvc, err = buildRunner(ctx, openingRequest, logger, visualizationSink)
 	if err != nil {
-		closeReserved()
 		return nil, err
 	}
 	if factorySvc == nil {
-		closeReserved()
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
 
-	return &Application{
+	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		reservedAPIServer: reservedAPIServer, dashboardReady: dashboardReady,
+		prepareWorkTarget: prepareWorkTarget,
 	}, nil
 }
 
-// Run starts the lifecycle for an application graph that has already been
-// built successfully.
-func (application *Application) Run(ctx context.Context) error {
-	if application == nil {
-		return fmt.Errorf("run local application: graph is required")
+// Run activates an operation that was opened successfully.
+func (operation *Operation) Run(ctx context.Context) error {
+	if operation == nil {
+		return fmt.Errorf("run local operation: operation is required")
 	}
-	if application.reservedAPIServer != nil {
-		defer func() {
-			if err := application.reservedAPIServer.CloseIfUnused(); err != nil {
-				application.logger.Warn("release reserved API server listener failed", zap.Error(err))
-			}
-		}()
-	}
-	if application.invocationMode {
+	if operation.invocationMode {
 		return runFactoryInvocation(
-			ctx, application.cfg, *application.invocationRequest, application.invocationRunner,
+			ctx, operation.cfg, operation.invocationTarget, *operation.invocationRequest,
+			operation.invocation, operation.presentation,
+			operation.responseEvents,
 		)
 	}
 
-	shouldOpenDashboard := emitStartupMessages(
-		application.cfg, runtimeLogDiagnosticsForRunner(application.runner), interactiveOutput,
+	if operation.cfg.Port <= 0 {
+		emitStartupMessages(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
+	}
+
+	return runFactoryServiceAndEmitResult(
+		ctx,
+		operation.cfg,
+		operation.runner,
+		operation.prepareWorkTarget,
+		operation.recordPath,
 	)
-	waitForDashboardOpen := func() {}
-	if shouldOpenDashboard {
-		waitForDashboardOpen = openDashboardWhenServerReady(
-			ctx, application.cfg, application.dashboardReady, dashboardOpener,
-		)
-	}
-	defer waitForDashboardOpen()
-
-	return runFactoryServiceAndEmitResult(ctx, application.cfg, application.runner, application.recordPath)
 }
 
 func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
@@ -495,14 +267,8 @@ func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
 }
 
 func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
-	if cfg.ExecutionBaseDir == "" {
-		if workingDirectory, err := os.Getwd(); err == nil && workingDirectory != "" {
-			cfg.ExecutionBaseDir = workingDirectory
-		}
-	}
-
 	if cfg.Bootstrap {
-		if err := bootstrapFactory(cfg.Dir); err != nil {
+		if err := bootstrapFactoryWithInitializer(cfg.Dir, cfg.FactoryScaffoldInitializer, cfg.ResolveCurrentFactoryDir, cfg.DirectoryCreator); err != nil {
 			return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 		}
 	}
@@ -523,11 +289,17 @@ func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, 
 	return cfg, invocationRequest, invocationMode, recordPath, nil
 }
 
-func loadMockWorkersConfig(cfg RunConfig) (*factoryconfig.MockWorkersConfig, error) {
+func loadSelectedMockWorkersConfig(
+	cfg RunConfig,
+	load workers.MockWorkersConfigLoader,
+) (*workers.MockWorkersConfig, error) {
 	if !cfg.MockWorkersEnabled {
 		return nil, nil
 	}
-	return factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
+	if load == nil {
+		return nil, fmt.Errorf("load mock workers config: Workers config loader is required")
+	}
+	return load(cfg.MockWorkersConfigPath)
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
@@ -540,52 +312,21 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 	if cfg.DisableDefaultRecording || strings.TrimSpace(cfg.ReplayPath) != "" {
 		return resolvedRunRecordPath{}, nil
 	}
-	recordPath, err := defaultLiveRunRecordPathForHome(cfg.HomeDir)
+	if cfg.RecordingTargetPlanner == nil {
+		return resolvedRunRecordPath{}, fmt.Errorf("Recordings live recording target planner is required")
+	}
+	target, err := cfg.RecordingTargetPlanner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir:           cfg.HomeDir,
+		ReportedSessionID: defaultFactorySessionID,
+	})
 	if err != nil {
 		return resolvedRunRecordPath{}, fmt.Errorf("resolve default replay record path: %w", err)
 	}
 	return resolvedRunRecordPath{
-		servicePath:   recordPath,
-		reportedPath:  resolveDefaultSessionRecordPath(recordPath),
+		servicePath:   target.ServicePath,
+		reportedPath:  target.ReportedPath,
 		autoGenerated: true,
 	}, nil
-}
-
-func generateDefaultLiveRunRecordPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home: %w", err)
-	}
-	return generateDefaultLiveRunRecordPathForHome(homeDir)
-}
-
-func defaultLiveRunRecordPathForHome(homeDir string) (string, error) {
-	if strings.TrimSpace(homeDir) == "" {
-		return defaultLiveRunRecordPath()
-	}
-	return generateDefaultLiveRunRecordPathForHome(homeDir)
-}
-
-func generateDefaultLiveRunRecordPathForHome(homeDir string) (string, error) {
-	if strings.TrimSpace(homeDir) == "" {
-		return "", fmt.Errorf("resolve user home: home directory is required")
-	}
-	now := defaultLiveRunRecordTime()
-	recordingID := fmt.Sprintf(
-		"factory-session-%s-%s-%s.json",
-		defaultRecordPathSessionToken,
-		now.Format("150405"),
-		defaultLiveRunRecordUUID(),
-	)
-	recordingsDir := defaultpaths.RecordingsDatedDir(defaultpaths.RecordingsRoot(homeDir), now)
-	return filepath.Join(recordingsDir, recordingID), nil
-}
-
-func resolveDefaultSessionRecordPath(path string) string {
-	if strings.TrimSpace(path) == "" {
-		return ""
-	}
-	return strings.ReplaceAll(path, defaultRecordPathSessionToken, defaultFactorySessionID)
 }
 
 func runtimeModeForRun(cfg RunConfig) interfaces.RuntimeMode {
@@ -595,70 +336,25 @@ func runtimeModeForRun(cfg RunConfig) interfaces.RuntimeMode {
 	return interfaces.RuntimeModeBatch
 }
 
-func buildRunServiceConfig(
-	cfg RunConfig,
-	logger *zap.Logger,
-	mockWorkersConfig *factoryconfig.MockWorkersConfig,
-	reservedAPIServer *reservedAPIServerListener,
-	dashboardReady chan struct{},
-	dashboardReadyOnce *sync.Once,
-) *service.FactoryServiceConfig {
-	var apiServerReady chan struct{}
-	if cfg.Port > 0 {
-		apiServerReady = dashboardReady
-	}
-	runtimeLogDir := cfg.RuntimeLogDir
-	if strings.TrimSpace(runtimeLogDir) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-		runtimeLogDir = defaultpaths.RuntimeLogsRoot(cfg.HomeDir)
-	}
-	runtimeMetricsDir := cfg.RuntimeMetricsDir
-	if strings.TrimSpace(runtimeMetricsDir) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-		runtimeMetricsDir = defaultpaths.RuntimeMetricsRoot(cfg.HomeDir)
-	}
-	svcCfg := &service.FactoryServiceConfig{
-		Dir:                               cfg.Dir,
-		RunnerID:                          cfg.RunnerID,
-		OperatorDefaults:                  cfg.OperatorDefaults,
-		ExecutionBaseDir:                  cfg.ExecutionBaseDir,
-		RuntimeMode:                       runtimeModeForRun(cfg),
-		SystemConfigHomeDir:               cfg.HomeDir,
-		Port:                              cfg.Port,
-		Logger:                            logger,
-		Verbose:                           cfg.Verbose,
-		WorkFile:                          cfg.WorkFile,
-		RecordPath:                        cfg.RecordPath,
-		ReplayPath:                        cfg.ReplayPath,
-		RuntimeLogDir:                     runtimeLogDir,
-		RuntimeLogConfig:                  cfg.RuntimeLogConfig,
-		RuntimeMetricsDir:                 runtimeMetricsDir,
-		RuntimeMetricsConfig:              cfg.RuntimeMetricsConfig,
-		WorkflowID:                        cfg.Workflow,
-		MockWorkersConfig:                 mockWorkersConfig,
-		APIServerStarter:                  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
-		InvocationMetricsRecorder:         cfg.InvocationMetricsRecorder,
-		InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-		APIServerReady:                    apiServerReady,
-	}
-	if !cfg.SuppressDashboardRendering {
-		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
-	}
-	return svcCfg
-}
-
 func runFactoryServiceAndEmitResult(
 	ctx context.Context,
 	cfg RunConfig,
 	factorySvc factoryServiceRunner,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
 	recordPath resolvedRunRecordPath,
 ) error {
-	startedAt := time.Now().UTC()
+	var startedAt time.Time
 	if cfg.CleanInvocation {
+		if cfg.Clock == nil {
+			return fmt.Errorf("run clock is required")
+		}
+		startedAt = cfg.Clock.Now().UTC()
 		recordCleanInvocationAttempt()
 	}
 	err := factorySvc.Run(ctx)
 	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
 	if cfg.CleanInvocation {
-		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err, startedAt)
+		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, prepareWorkTarget, err, cfg.Clock.Now().Sub(startedAt))
 	}
 	if err != nil {
 		return err
@@ -667,7 +363,7 @@ func runFactoryServiceAndEmitResult(
 }
 
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
-	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir)
+	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir, cfg.ResolveCurrentFactoryDir)
 	diagnosticsEnabled := terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose)
 	clidiag.Printf(
 		cfg.Diagnostics,
@@ -717,7 +413,7 @@ func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
 		zap.String("named_factory_global_root", resolution.GlobalRoot),
 		zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
 	)
-	if resolution.PrecedenceDecision == factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+	if resolution.PrecedenceDecision == interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
 		logger.Info(
 			"named factory precedence selected",
 			zap.String("named_factory_name", resolution.Name),
@@ -727,8 +423,14 @@ func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
 	}
 }
 
-func resolveFactoryDirForDiagnostics(dir string) string {
-	resolved, err := factoryconfig.ResolveCurrentFactoryDir(dir)
+func resolveFactoryDirForDiagnostics(
+	dir string,
+	resolve interfaces.CurrentFactoryDirectoryResolver,
+) string {
+	if resolve == nil {
+		return "unresolved"
+	}
+	resolved, err := resolve(dir)
 	if err != nil {
 		return "unresolved"
 	}
@@ -786,33 +488,11 @@ func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string 
 	}
 }
 
-func runAPIServerStarter(
-	reservedAPIServer *reservedAPIServerListener,
-	dashboardReady chan struct{},
-	dashboardReadyOnce *sync.Once,
-) service.APIServerStarter {
-	markReady := func() {
-		dashboardReadyOnce.Do(func() {
-			close(dashboardReady)
-		})
-	}
-	return func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
-		if reservedAPIServer != nil {
-			listener := reservedAPIServer.Take()
-			if listener == nil {
-				return fmt.Errorf("reserved API server listener for port %d was already used", port)
-			}
-			return serveAPIServer(ctx, runtime, port, l, markReady, listener)
-		}
-		return startAPIServer(ctx, runtime, port, l, markReady)
-	}
-}
-
-func renderSimpleDashboard(input service.SimpleDashboardRenderInput) {
-	fmt.Print(dashboard.FormatSimpleDashboardWithRenderData(
+func renderSimpleDashboard(output io.Writer, input factoryvisualization.View) {
+	fmt.Fprint(output, dashboard.FormatSimpleDashboardWithRenderData(
 		input.EngineState,
 		input.RenderData,
-		input.Now,
+		input.ObservedAt,
 	))
 }
 
@@ -838,8 +518,7 @@ func DashboardURL(host string, port int) string {
 
 func emitStartupMessages(
 	cfg RunConfig,
-	runtimeLog service.RuntimeLogDiagnostics,
-	isInteractive func(io.Writer) bool,
+	runtimeLog runtimeartifact.Diagnostics,
 ) bool {
 	if cfg.StartupOutput == nil {
 		return false
@@ -867,7 +546,7 @@ func emitStartupMessages(
 
 	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
-	if !cfg.OpenDashboard || !isInteractive(cfg.StartupOutput) {
+	if !cfg.OpenDashboard || !cfg.OutputIsTTY {
 		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
 		return false
 	}
@@ -881,87 +560,27 @@ func reportRecordingPathOnShutdown(output io.Writer, recordPath resolvedRunRecor
 	fmt.Fprintf(output, "Recording saved: %s\n", recordPath.reportedPath)
 }
 
-func openDashboardWhenServerReady(
+func openDashboardAtBoundEndpoint(
 	ctx context.Context,
 	cfg RunConfig,
-	dashboardReady <-chan struct{},
 	openDashboard func(context.Context, string) error,
-) func() {
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		timer := time.NewTimer(dashboardReadyTimeout)
-		defer timer.Stop()
-
-		url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
-		ready := false
-		select {
-		case <-dashboardReady:
-			ready = true
-		default:
-		}
-		if !ready {
-			select {
-			case <-dashboardReady:
-			case <-timer.C:
-				fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-
-		if err := openDashboard(ctx, url); err != nil {
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
-			return
-		}
-		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
-	}()
-
-	return func() {
-		cancel()
-		<-done
+) {
+	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
+	if openDashboard == nil {
+		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+		return
 	}
-}
-
-func openURLInBrowser(ctx context.Context, url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.CommandContext(ctx, "rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		cmd = exec.CommandContext(ctx, "open", url)
-	default:
-		cmd = exec.CommandContext(ctx, "xdg-open", url)
+	if err := openDashboard(ctx, url); err != nil {
+		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		return
 	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
-}
-
-func isInteractiveOutput(output io.Writer) bool {
-	file, ok := output.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := file.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
-}
-
-// LoadWorkFile reads a canonical FACTORY_REQUEST_BATCH from a JSON file.
-func LoadWorkFile(path string) (work.WorkRequest, error) {
-	return batchload.LoadFromFile(path)
+	fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
 }
 
 // CountTokenStates counts tokens by their state category based on place ID conventions.
 // Place IDs follow the pattern '{work_type_id}:{state_value}'.
 // Terminal states contain "completed", failed states contain "failed".
-func CountTokenStates(snap *petri.MarkingSnapshot) (wip, completed, failed int) {
+func CountTokenStates(snap *state.PetriMarkingSnapshot) (wip, completed, failed int) {
 	for _, t := range snap.Tokens {
 		placeID := t.PlaceID
 		// Extract state from place ID (after the last ':').

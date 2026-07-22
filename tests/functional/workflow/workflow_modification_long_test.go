@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,18 +30,10 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	h1 := testutil.NewServiceTestHarness(t, v1Dir,
-		testutil.WithProvider(providerV1),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h1.RunUntilComplete(t, 10*time.Second)
-
-	h1.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		TokenCount(1)
+	sessionV1 := support.RunFactoryToCompletion(t, v1Dir, providerV1, 10*time.Second)
+	assertWorkflowSessionPlaces(t, sessionV1, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:processing": 0,
+	})
 
 	if providerV1.CallCount("processor") != 1 {
 		t.Errorf("v1: expected processor called 1 time, got %d", providerV1.CallCount("processor"))
@@ -59,19 +51,10 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	h2 := testutil.NewServiceTestHarness(t, v2Dir,
-		testutil.WithProvider(providerV2),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h2.RunUntilComplete(t, 10*time.Second)
-
-	h2.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:in-review").
-		TokenCount(1)
+	sessionV2 := support.RunFactoryToCompletion(t, v2Dir, providerV2, 10*time.Second)
+	assertWorkflowSessionPlaces(t, sessionV2, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:in-review": 0,
+	})
 
 	if providerV2.CallCount("processor") != 1 {
 		t.Errorf("v2: expected processor called 1 time, got %d", providerV2.CallCount("processor"))
@@ -95,30 +78,20 @@ func TestWorkflowModificationRejectionLoop(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_rejection_dir"))
 	testutil.WriteSeedFile(t, dir, "doc", []byte("needs-revision draft"))
-	h := testutil.NewServiceTestHarness(t, dir)
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"drafter":  {{Content: "draft COMPLETE"}, {Content: "revised draft COMPLETE"}},
+		"approver": {{Content: "needs revision"}, {Content: "approved COMPLETE"}},
+	})
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"doc:complete": 1, "doc:init": 0, "doc:processing": 0,
+	})
 
-	drafterMock := h.MockWorker("drafter",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	approverMock := h.MockWorker("approver",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "needs revision"},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("doc:complete").
-		HasNoTokenInPlace("doc:init").
-		HasNoTokenInPlace("doc:processing").
-		TokenCount(1)
-
-	if drafterMock.CallCount() != 2 {
-		t.Errorf("expected drafter called 2 times, got %d", drafterMock.CallCount())
+	if got := provider.CallCount("drafter"); got != 2 {
+		t.Errorf("expected drafter called 2 times, got %d", got)
 	}
-	if approverMock.CallCount() != 2 {
-		t.Errorf("expected approver called 2 times, got %d", approverMock.CallCount())
+	if got := provider.CallCount("approver"); got != 2 {
+		t.Errorf("expected approver called 2 times, got %d", got)
 	}
 }
 
@@ -140,13 +113,8 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 		"processor": {{Content: "Done. COMPLETE"}},
 	})
 
-	hA := testutil.NewServiceTestHarness(t, dirA,
-		testutil.WithProvider(providerA),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	hA.RunUntilComplete(t, 10*time.Second)
-
-	hA.Assert().HasTokenInPlace("task:complete").TokenCount(1)
+	sessionA := support.RunFactoryToCompletion(t, dirA, providerA, 10*time.Second)
+	assertWorkflowSessionPlaces(t, sessionA, map[string]int{"task:complete": 1})
 
 	dirB := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, dirB, "task", []byte("task for B"))
@@ -156,16 +124,7 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	hB := testutil.NewServiceTestHarness(t, dirB,
-		testutil.WithProvider(providerB),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	hB.RunUntilComplete(t, 10*time.Second)
-
-	hB.Assert().HasTokenInPlace("task:complete").TokenCount(1)
-
-	hA.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		TokenCount(1)
+	sessionB := support.RunFactoryToCompletion(t, dirB, providerB, 10*time.Second)
+	assertWorkflowSessionPlaces(t, sessionB, map[string]int{"task:complete": 1})
+	assertWorkflowSessionPlaces(t, sessionA, map[string]int{"task:complete": 1, "task:init": 0})
 }

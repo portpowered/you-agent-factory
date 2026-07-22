@@ -5,13 +5,20 @@ import (
 	"io"
 	"strings"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	return newSubmitCommandWithHandlers(globals, diagnostics, submitWork, submitBatch)
+func newSubmitCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operations CommandFactory,
+) *cobra.Command {
+	return newSubmitCommandWithHandlers(
+		globals, diagnostics, operations.SubmitWork, operations.SubmitBatch,
+	)
 }
 
 func newSubmitCommandWithHandlers(
@@ -54,6 +61,7 @@ func executeSubmitCommand(
 	diagnostics *cliDiagnosticsOptions,
 	submitHandler func(submitcli.SubmitConfig) error,
 ) error {
+	cfg.Context = cmd.Context()
 	cfg.Server = globals.server
 	cfg.JSON = globals.json
 	cfg.Output = cmd.OutOrStdout()
@@ -125,10 +133,12 @@ func executeSubmitBatchCommand(
 	diagnostics *cliDiagnosticsOptions,
 	batchHandler func(submitcli.BatchConfig) error,
 ) error {
+	cfg.Context = cmd.Context()
 	cfg.Server = globals.server
 	cfg.JSON = globals.json
 	cfg.Args = args
 	cfg.Stdin = cmd.InOrStdin()
+	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.Output = cmd.OutOrStdout()
 	cfg.Verbose = diagnostics.verboseEnabled()
 	cfg.Debug = diagnostics.debug
@@ -223,11 +233,14 @@ func resolveRunFlagValue(flag *pflag.Flag, args []string, index int, hasInlineVa
 	return args[index+1], true, nil
 }
 
-// ParseArgvForCLIInputsInventory parses argv on a fresh production root through
-// the target command's flag and positional validators without invoking RunE.
+// ParseArgvForCLIInputsInventory parses argv on the caller-supplied canonical
+// process command through the target command's flag and positional validators
+// without invoking RunE.
 // Run uses its custom tokenizer because the command sets DisableFlagParsing.
-func ParseArgvForCLIInputsInventory(argv []string) (*cobra.Command, []string, error) {
-	root := NewRootCommand()
+func ParseArgvForCLIInputsInventory(root *cobra.Command, argv []string) (*cobra.Command, []string, error) {
+	if root == nil {
+		return nil, nil, fmt.Errorf("parse CLI inputs inventory: root command is required")
+	}
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetOut(io.Discard)

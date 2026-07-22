@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,21 +15,18 @@ func TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t 
 
 	smoke := runThinEventDualDispatchSmoke(t)
 
-	replayHarness := testutil.AssertReplaySucceeds(t, smoke.artifactPath, 10*time.Second)
-	replayHarness.Service.Assert().
-		PlaceTokenCount("task:complete", 1).
-		PlaceTokenCount(dualDispatchSmokeScriptWorkType+":done", 1).
-		HasNoTokenInPlace("task:failed").
-		HasNoTokenInPlace(dualDispatchSmokeScriptWorkType + ":failed")
-
-	recordedEvents := testutil.GeneratedFactoryEvents(t, smoke.artifact.Events)
-	finalTick := support.LastFactoryEventTick(recordedEvents)
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(recordedEvents, finalTick)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	replay := observeReplayThroughRoot(t, smoke.artifactPath, 10*time.Second)
+	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+		"task:complete": 1,
+		dualDispatchSmokeScriptWorkType + ":done": 1,
+		"task:failed": 0,
+		dualDispatchSmokeScriptWorkType + ":failed": 0,
+	})
+	if !replayWorkIncludesID(replay.Work, smoke.modelWorkID) || !replayWorkIncludesID(replay.Work, smoke.scriptWorkID) {
+		t.Fatalf("replay Work listing = %#v, want model work %q and script work %q", replay.Work.Results, smoke.modelWorkID, smoke.scriptWorkID)
 	}
-
-	assertThinEventReconstructedModelReader(t, smoke, worldState)
-	assertThinEventReconstructedScriptReader(t, smoke, worldState)
-	assertThinEventWorkstationRequestProjection(t, smoke, worldState)
+	assertThinEventDispatchLifecycleForWork(t, replay.Events, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
+	assertThinEventDispatchLifecycleForWork(t, replay.Events, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
+	assertThinEventModelAttemptCorrelation(t, replay.Events, smoke.modelWorkID)
+	assertThinEventScriptBoundaryFacts(t, replay.Events, smoke.scriptWorkID)
 }

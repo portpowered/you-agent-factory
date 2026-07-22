@@ -6,10 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -38,12 +37,26 @@ func TestValidateFactory_RoutelessCronAndLogicalMove_ReturnMissingOutputRoutesAt
 		},
 	}
 
-	srv := newAPITestServer(&testutil.MockFactory{})
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			srv := api.NewServer(
+				nil, nil, nil, nil, nil, nil, nil, nil,
+				programmableFactoryValidator{
+					result: factorydefinitions.ValidationResult{Targets: []factorydefinitions.ValidationTarget{
+						validationTarget(
+							testValidationCodeWorkstationMissingOutputRoutes,
+							"workstation requires an output route",
+							factorydefinitions.ValidationSubjectTypeWorkstation,
+							tc.workstation,
+							factorydefinitions.ValidationSubjectLocationOutputs,
+						),
+					}},
+				},
+				nil,
+				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			)
 			req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(tc.body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -54,17 +67,17 @@ func TestValidateFactory_RoutelessCronAndLogicalMove_ReturnMissingOutputRoutesAt
 			}
 
 			result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
-			validationassert.HasTarget(
+			assertHasValidationTarget(
 				t,
 				result.Targets,
-				factoryvalidation.CodeWorkstationMissingOutputRoutes,
+				testValidationCodeWorkstationMissingOutputRoutes,
 				factoryapi.FactoryValidationSubjectTypeWorkstation,
 				tc.workstation,
 				factoryapi.FactoryValidationSubjectLocationOutputs,
 				tc.workstation+" OUTPUTS missingOutputRoutes target",
 			)
 			for _, target := range result.Targets {
-				if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute &&
+				if target.Code == testValidationCodeWorkstationMissingFailureRoute &&
 					target.Subject.Type == factoryapi.FactoryValidationSubjectTypeWorkstation &&
 					target.Subject.Id == tc.workstation &&
 					target.Subject.Location == factoryapi.FactoryValidationSubjectLocationOnFailure {

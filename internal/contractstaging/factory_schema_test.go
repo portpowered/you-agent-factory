@@ -17,6 +17,8 @@ import (
 )
 
 func TestFactorySchemaGenerationUsesConverterPath(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 
@@ -28,10 +30,7 @@ func TestFactorySchemaGenerationUsesConverterPath(t *testing.T) {
 		t.Fatal("ConvertFailClosedSchema() = nil, want converted schema")
 	}
 
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 	payload := artifacts[contractstaging.FactorySchemaAuthoredPath]
 	var document map[string]any
 	if err := json.Unmarshal(payload, &document); err != nil {
@@ -112,6 +111,8 @@ func containsTypeNullUnion(value any) bool {
 }
 
 func TestFactorySchemaConverterHasNoUnsupportedReferenceDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 
@@ -124,6 +125,8 @@ func TestFactorySchemaConverterHasNoUnsupportedReferenceDiagnostics(t *testing.T
 }
 
 func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 
@@ -156,15 +159,11 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 }
 
 func TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	first, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("first Artifacts() error = %v", err)
-	}
-	second, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("second Artifacts() error = %v", err)
-	}
+	first := testArtifactsForRepository(t, repositoryRoot)
+	second := testArtifactsForRepository(t, repositoryRoot)
 	for _, path := range []string{
 		contractstaging.FactorySchemaAuthoredPath,
 		"packages/api/generated/schemas/factory.schema.json",
@@ -176,6 +175,7 @@ func TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
 }
 
 func TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun(t *testing.T) {
+	t.Parallel()
 	defer contractstaging.LockRepositoryStagingForTest()()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
@@ -235,6 +235,8 @@ func factorySchemaDigests(t *testing.T, root string, paths []string) map[string]
 }
 
 func TestFactorySchemaGenerationFailsClosedOnUndocumentedDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 	factoryCopy := contractstaging.DeepCopyValueForTest(factory).(map[string]any)

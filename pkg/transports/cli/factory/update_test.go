@@ -3,30 +3,27 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestUpdateFromFile_WritesHumanReadableConfirmation(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-updated", saveTestNamedFactoryPayload(t, "alpha-v2"))
 
 	var out strings.Builder
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: &out,
-	}); err != nil {
+	}, interfaces.NamedFactoryPersistenceResult{Name: "alpha", FactoryDir: filepath.Join(rootDir, "alpha")}, nil, nil); err != nil {
 		t.Fatalf("UpdateFromFile: %v", err)
 	}
 
@@ -39,19 +36,16 @@ func TestUpdateFromFile_WritesHumanReadableConfirmation(t *testing.T) {
 
 func TestUpdateFromFile_JSONEmitsStructuredConfirmation(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-updated", saveTestNamedFactoryPayload(t, "alpha-v2"))
 
 	var out bytes.Buffer
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		JSON:   true,
 		Output: &out,
-	}); err != nil {
+	}, interfaces.NamedFactoryPersistenceResult{Name: "alpha", FactoryDir: filepath.Join(rootDir, "alpha")}, nil, nil); err != nil {
 		t.Fatalf("UpdateFromFile: %v", err)
 	}
 
@@ -68,12 +62,13 @@ func TestUpdateFromFile_RejectsMissingName(t *testing.T) {
 	rootDir := t.TempDir()
 	from := writeFactoryConfigFile(t, rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha"))
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, fs.ErrNotExist, nil)
+
 	if err == nil {
 		t.Fatal("expected missing factory name to fail")
 	}
@@ -84,17 +79,15 @@ func TestUpdateFromFile_RejectsMissingName(t *testing.T) {
 
 func TestUpdateFromFile_RejectsInvalidName(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha"))
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "../alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, fmt.Errorf("%w: path separators are not allowed", interfaces.ErrInvalidNamedFactoryName), nil)
+
 	if err == nil {
 		t.Fatal("expected invalid factory name to fail")
 	}
@@ -105,20 +98,18 @@ func TestUpdateFromFile_RejectsInvalidName(t *testing.T) {
 
 func TestUpdateFromFile_RejectsInvalidPayload(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := filepath.Join(rootDir, "broken.json")
 	if err := os.WriteFile(from, []byte(`{"id":"broken"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, interfaces.ErrInvalidNamedFactory, nil)
+
 	if err == nil {
 		t.Fatal("expected invalid factory payload to fail")
 	}
@@ -129,17 +120,18 @@ func TestUpdateFromFile_RejectsInvalidPayload(t *testing.T) {
 
 func TestUpdateFromFile_RejectsInvalidTopologyBeforePersist(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
+	from := writeFactoryConfigFile(t, rootDir, "invalid", saveTestNamedFactoryPayload(t, "invalid"))
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, &interfaces.BlockingFactoryLoadError{Targets: []interfaces.ValidationTarget{{
+		Code:    interfaces.ValidationCodeFactoryPayloadInvalid,
+		Message: "Factory topology contains invalid graph references.",
+	}}}, nil)
+
 	if err == nil {
 		t.Fatal("expected invalid factory topology to fail")
 	}
@@ -147,71 +139,54 @@ func TestUpdateFromFile_RejectsInvalidTopologyBeforePersist(t *testing.T) {
 		t.Fatalf("error = %v, want invalid-config message", err)
 	}
 
-	configPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", configPath, err)
-	}
-	if !strings.Contains(string(data), "execute-alpha") {
-		t.Fatalf("factory config = %q, want original alpha workstation body preserved", string(data))
-	}
 }
 
 func TestUpdateFromFile_ReplacesExistingLayout(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-updated", saveTestNamedFactoryPayload(t, "alpha-v2"))
 
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "alpha", FactoryDir: filepath.Join(rootDir, "alpha")}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.Mode != interfaces.NamedFactoryPersistenceModeReplace || !strings.Contains(string(request.Payload), "execute-alpha-v2") {
+			t.Fatalf("request = %#v, want replace payload", request)
+		}
 	}); err != nil {
 		t.Fatalf("UpdateFromFile: %v", err)
-	}
-
-	configPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", configPath, err)
-	}
-	if !strings.Contains(string(data), "execute-alpha-v2") {
-		t.Fatalf("factory config = %q, want updated workstation body", string(data))
 	}
 }
 
 func TestUpdateFromFile_CurrentPointerUnchangedWhenReplacingCurrent(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-updated", saveTestNamedFactoryPayload(t, "alpha-v2"))
 
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "alpha", FactoryDir: filepath.Join(rootDir, "alpha")}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.SetCurrent {
+			t.Fatal("replace request SetCurrent = true, want false")
+		}
 	}); err != nil {
 		t.Fatalf("UpdateFromFile: %v", err)
 	}
 
-	current, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
-	if err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
-	}
-	if current != "alpha" {
-		t.Fatalf("current = %q, want alpha", current)
-	}
-
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		list: func(string) ([]interfaces.NamedFactoryListEntry, error) {
+			return []interfaces.NamedFactoryListEntry{{
+				Name:       "alpha",
+				FactoryDir: filepath.Join(rootDir, "alpha"),
+				Current:    true,
+			}}, nil
+		},
+	})
 	var out strings.Builder
-	if err := List(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	alphaDir := filepath.Join(rootDir, "alpha")
@@ -223,45 +198,19 @@ func TestUpdateFromFile_CurrentPointerUnchangedWhenReplacingCurrent(t *testing.T
 
 func TestUpdateFromFile_ScopedCurrentPointerStillResolvesUpdatedFactoryInExplicitDir(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "@you/tts", saveTestNamedFactoryPayload(t, "tts")); err != nil {
-		t.Fatalf("PersistNamedFactory(scoped): %v", err)
-	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "@you/tts"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(scoped): %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "tts-updated", saveTestNamedFactoryPayload(t, "tts-v2"))
+	wantDir := filepath.Join(rootDir, "@you", "tts")
 
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "@you/tts",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "@you/tts", FactoryDir: wantDir}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.RootDir != rootDir || request.Name != "@you/tts" || request.SetCurrent {
+			t.Fatalf("request = %#v, want explicit scoped replace", request)
+		}
 	}); err != nil {
 		t.Fatalf("UpdateFromFile(scoped): %v", err)
-	}
-
-	current, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
-	if err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
-	}
-	if current != "@you/tts" {
-		t.Fatalf("current = %q, want @you/tts", current)
-	}
-
-	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(rootDir)
-	if err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
-	}
-	wantDir := filepath.Join(rootDir, "@you", "tts")
-	if resolvedDir != wantDir {
-		t.Fatalf("resolved dir = %q, want %q", resolvedDir, wantDir)
-	}
-
-	data, err := os.ReadFile(filepath.Join(resolvedDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(updated scoped factory config): %v", err)
-	}
-	if !strings.Contains(string(data), "execute-tts-v2") {
-		t.Fatalf("factory config = %q, want updated scoped workstation body", string(data))
 	}
 }

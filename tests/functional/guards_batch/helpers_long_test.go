@@ -9,17 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
-	t.Helper()
-	return support.ProviderErrorCorpusEntry(t, name)
-}
 
 type panickingExecutor struct{}
 
@@ -51,14 +44,6 @@ func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch work.WorkDis
 		TransitionID: dispatch.TransitionID,
 		Outcome:      outcome,
 	}, nil
-}
-
-func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
-	places := make(map[string]int)
-	for _, tok := range snap.Tokens {
-		places[tok.PlaceID]++
-	}
-	return places
 }
 
 func writeAgentConfig(t *testing.T, dir, workerName, content string) {

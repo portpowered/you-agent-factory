@@ -29,6 +29,7 @@ func runtimeManifestSchema(t *testing.T) *jsonschema.Schema {
 }
 
 func TestRuntimeManifestSchemaValidFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -40,7 +41,9 @@ func TestRuntimeManifestSchemaValidFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
@@ -54,6 +57,7 @@ func TestRuntimeManifestSchemaValidFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaCallableFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -77,7 +81,9 @@ func TestRuntimeManifestSchemaCallableFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -101,6 +107,7 @@ func TestRuntimeManifestSchemaCallableFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -114,7 +121,9 @@ func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
@@ -128,6 +137,7 @@ func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaSymbolIntegrityFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -153,7 +163,9 @@ func TestRuntimeManifestSchemaSymbolIntegrityFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			fixturePath := filepath.Join("testdata", "javascript", test.fixture)
 			instance := readJSON(t, fixturePath)
 			if err := schema.Validate(instance); err != nil {
@@ -172,6 +184,7 @@ func TestRuntimeManifestSchemaSymbolIntegrityFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaSignatureAndSerializableFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -205,7 +218,9 @@ func TestRuntimeManifestSchemaSignatureAndSerializableFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -234,6 +249,7 @@ func TestRuntimeManifestSchemaSignatureAndSerializableFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -251,7 +267,9 @@ func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -275,6 +293,7 @@ func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
 }
 
 func TestRuntimeManifestSchemaSupportedSurfaceFixtures(t *testing.T) {
+	t.Parallel()
 	schema := runtimeManifestSchema(t)
 
 	tests := []struct {
@@ -304,7 +323,9 @@ func TestRuntimeManifestSchemaSupportedSurfaceFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("schema validation should pass before semantics: %v", err)

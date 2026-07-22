@@ -7,30 +7,24 @@ import (
 	"io"
 	"strings"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 const (
-	ErrorCodeUnsupportedMode         = "SESSION_EXECUTION_UNSUPPORTED_MODE"
-	ErrorCodeSourceConflict          = "SESSION_EXECUTION_SOURCE_CONFLICT"
-	ErrorCodeMissingSource           = "SESSION_EXECUTION_MISSING_SOURCE"
-	ErrorCodeInvalidArgs             = "SESSION_EXECUTION_INVALID_ARGS"
-	ErrorCodeInvalidPolicy           = "SESSION_EXECUTION_INVALID_POLICY"
-	ErrorCodeValidation              = "SESSION_EXECUTION_VALIDATION_FAILED"
-	ErrorCodeRequestIDConflict       = "EXECUTION_REQUEST_ID_CONFLICT"
-	ErrorCodeSessionNotFound         = "SESSION_NOT_FOUND"
-	ErrorCodeReconnectCursorNotFound = "RECONNECT_CURSOR_NOT_FOUND"
+	errorCodeValidation              = "SESSION_EXECUTION_VALIDATION_FAILED"
+	errorCodeRequestIDConflict       = "EXECUTION_REQUEST_ID_CONFLICT"
+	errorCodeSessionNotFound         = "SESSION_NOT_FOUND"
+	errorCodeReconnectCursorNotFound = "RECONNECT_CURSOR_NOT_FOUND"
 )
 
-// ExecutionError is the stable CLI durable session execution failure contract.
-type ExecutionError struct {
+type executionError struct {
 	Code    string
 	Message string
 	Field   string
 }
 
-func (e *ExecutionError) Error() string {
+func (e *executionError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -46,9 +40,7 @@ type executionErrorPayload struct {
 	Field   string `json:"field,omitempty"`
 }
 
-// WriteExecutionError renders the stable durable session execution failure
-// contract. It returns true when err matched a known execution contract error.
-func WriteExecutionError(w io.Writer, err error, jsonOutput bool) bool {
+func writeExecutionError(w io.Writer, err error, jsonOutput bool) bool {
 	executionErr := asExecutionError(err)
 	if executionErr == nil {
 		return false
@@ -71,57 +63,49 @@ func WriteExecutionError(w io.Writer, err error, jsonOutput bool) bool {
 	return true
 }
 
-func asExecutionError(err error) *ExecutionError {
+func asExecutionError(err error) *executionError {
 	if err == nil {
 		return nil
 	}
-	var executionErr *ExecutionError
+	var executionErr *executionError
 	if errors.As(err, &executionErr) {
 		return executionErr
 	}
-	var inputErr *invocations.InputError
+	var inputErr *work.InputError
 	if errors.As(err, &inputErr) {
-		return &ExecutionError{
+		return &executionError{
 			Code:    string(inputErr.Code),
 			Message: inputErr.Message,
 		}
 	}
-	var validationErr *factorysessionexecution.ValidationError
+	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
-		return &ExecutionError{
-			Code:    ErrorCodeValidation,
+		return &executionError{
+			Code:    errorCodeValidation,
 			Message: validationErr.Message,
 			Field:   validationErr.Field,
 		}
 	}
 	if errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
-		return &ExecutionError{
-			Code:    ErrorCodeRequestIDConflict,
+		return &executionError{
+			Code:    errorCodeRequestIDConflict,
 			Message: "execution request id was reused with a different normalized request",
 			Field:   "requestId",
 		}
 	}
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
-		return &ExecutionError{
-			Code:    ErrorCodeSessionNotFound,
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
+		return &executionError{
+			Code:    errorCodeSessionNotFound,
 			Message: "factory session not found",
 			Field:   "sessionId",
 		}
 	}
 	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
-		return &ExecutionError{
-			Code:    ErrorCodeReconnectCursorNotFound,
+		return &executionError{
+			Code:    errorCodeReconnectCursorNotFound,
 			Message: "event reconnect cursor not found in session history",
 			Field:   "afterEventId",
 		}
 	}
 	return nil
-}
-
-func newExecutionError(code, message, field string) *ExecutionError {
-	return &ExecutionError{
-		Code:    code,
-		Message: message,
-		Field:   field,
-	}
 }

@@ -7,12 +7,9 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/quorum"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -74,21 +71,15 @@ func TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments(t *testing.T) {
 	runner.assertProviderModel(t, "merge-quorum", "CODEX", "gpt-5.2")
 }
 
-func startPackagedQuorumInvocationServer(t *testing.T, runner workers.CommandRunner) *functionalAPIServer {
+func startPackagedQuorumInvocationServer(t *testing.T, runner platformprocess.CommandRunner) *functionalAPIServer {
 	t.Helper()
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), quorum.PackagedFactoryName, quorum.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(@you/quorum): %v", err)
-	}
-	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
-	})
+	dir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedQuorumFactoryName)
+	return startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(runner, nil))
 }
 
 type quorumGatedCommandRunner struct {
 	mu             sync.Mutex
-	requests       map[string]workers.CommandRequest
+	requests       map[string]platformprocess.CommandRequest
 	callCounts     map[string]int
 	mergePrompt    string
 	startedA       chan struct{}
@@ -100,7 +91,7 @@ type quorumGatedCommandRunner struct {
 
 func newQuorumGatedCommandRunner() *quorumGatedCommandRunner {
 	return &quorumGatedCommandRunner{
-		requests:       make(map[string]workers.CommandRequest),
+		requests:       make(map[string]platformprocess.CommandRequest),
 		callCounts:     make(map[string]int),
 		startedA:       make(chan struct{}),
 		startedB:       make(chan struct{}),
@@ -108,12 +99,13 @@ func newQuorumGatedCommandRunner() *quorumGatedCommandRunner {
 	}
 }
 
-func (r *quorumGatedCommandRunner) Run(ctx context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
+func (r *quorumGatedCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	lane := quorumRequestLane(request)
 	r.mu.Lock()
-	r.requests[request.WorkstationName] = request
-	r.callCounts[request.WorkstationName]++
+	r.requests[lane] = request
+	r.callCounts[lane]++
 	r.mu.Unlock()
-	switch request.WorkstationName {
+	switch lane {
 	case "run-quorum-branch-a":
 		r.startedAOnce.Do(func() { close(r.startedA) })
 		return quorumCommandResult(request, "branch A COMPLETE"), nil
@@ -123,7 +115,7 @@ func (r *quorumGatedCommandRunner) Run(ctx context.Context, request workers.Comm
 		case <-r.releaseBranchB:
 			return quorumCommandResult(request, "branch B COMPLETE"), nil
 		case <-ctx.Done():
-			return workers.CommandResult{}, ctx.Err()
+			return platformprocess.CommandResult{}, ctx.Err()
 		}
 	case "merge-quorum":
 		prompt := commandPrompt(request)
@@ -132,12 +124,12 @@ func (r *quorumGatedCommandRunner) Run(ctx context.Context, request workers.Comm
 		r.mu.Unlock()
 		return quorumCommandResult(request, "merged quorum response:\n"+prompt+"\nCOMPLETE"), nil
 	default:
-		return workers.CommandResult{}, nil
+		return platformprocess.CommandResult{}, nil
 	}
 }
 
-func quorumCommandResult(_ workers.CommandRequest, result string) workers.CommandResult {
-	return workers.CommandResult{Stdout: []byte(result)}
+func quorumCommandResult(_ platformprocess.CommandRequest, result string) platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: []byte(result)}
 }
 
 func (r *quorumGatedCommandRunner) assertMergePrompt(t *testing.T, originalRequest string) {
@@ -148,7 +140,7 @@ func (r *quorumGatedCommandRunner) assertMergePrompt(t *testing.T, originalReque
 	assertPromptIncludes(t, prompt, "Original request:\n", originalRequest, "Branch A output:\n", "branch A", "Branch B output:\n", "branch B")
 }
 
-func commandPrompt(request workers.CommandRequest) string {
+func commandPrompt(request platformprocess.CommandRequest) string {
 	if len(request.Stdin) > 0 {
 		return string(request.Stdin)
 	}
@@ -156,6 +148,20 @@ func commandPrompt(request workers.CommandRequest) string {
 		return request.Args[len(request.Args)-1]
 	}
 	return ""
+}
+
+func quorumRequestLane(request platformprocess.CommandRequest) string {
+	prompt := commandPrompt(request)
+	switch {
+	case strings.Contains(prompt, "Produce branch A's independent assessment"):
+		return "run-quorum-branch-a"
+	case strings.Contains(prompt, "Produce branch B's independent assessment"):
+		return "run-quorum-branch-b"
+	case strings.Contains(prompt, "Synthesize the two quorum assessments"):
+		return "merge-quorum"
+	default:
+		return "unknown"
+	}
 }
 
 func (r *quorumGatedCommandRunner) assertProviderModel(t *testing.T, workstation, provider, model string) {

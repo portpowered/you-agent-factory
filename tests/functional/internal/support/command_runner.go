@@ -5,22 +5,21 @@ import (
 	"fmt"
 	"sync"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 type RecordingCommandRunner struct {
 	mu       sync.Mutex
 	stdout   []byte
-	requests []workers.CommandRequest
+	requests []platformprocess.CommandRequest
 }
 
 type staticSuccessCommandRunner struct {
 	stdout []byte
 }
 
-func NewStaticSuccessCommandRunner(stdout string) workers.CommandRunner {
+func NewStaticSuccessCommandRunner(stdout string) platformprocess.CommandRunner {
 	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
 }
 
@@ -28,16 +27,16 @@ func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
 	return &RecordingCommandRunner{stdout: []byte(stdout)}
 }
 
-func (r *staticSuccessCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+func (r *staticSuccessCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
 }
 
-func (r *RecordingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
-	return workers.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+	r.requests = append(r.requests, cloneProcessCommandRequest(req))
+	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
 }
 
 func (r *RecordingCommandRunner) CallCount() int {
@@ -46,16 +45,16 @@ func (r *RecordingCommandRunner) CallCount() int {
 	return len(r.requests)
 }
 
-func (r *RecordingCommandRunner) LastRequest() workers.CommandRequest {
+func (r *RecordingCommandRunner) LastRequest() platformprocess.CommandRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.requests) == 0 {
 		panic("support.RecordingCommandRunner: LastRequest() called with no requests")
 	}
-	return workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(r.requests[len(r.requests)-1]))
+	return cloneProcessCommandRequest(r.requests[len(r.requests)-1])
 }
 
-func BuildModelWorkerConfig(provider modelprovider.ID, model string) string {
+func BuildModelWorkerConfig(provider modelprovider.Provider, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s
@@ -66,5 +65,12 @@ Process the input task.
 `, model, provider)
 }
 
-var _ workers.CommandRunner = (*RecordingCommandRunner)(nil)
-var _ workers.CommandRunner = (*staticSuccessCommandRunner)(nil)
+func cloneProcessCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
+	request.Args = append([]string(nil), request.Args...)
+	request.Stdin = append([]byte(nil), request.Stdin...)
+	request.Env = append([]string(nil), request.Env...)
+	return request
+}
+
+var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*staticSuccessCommandRunner)(nil)

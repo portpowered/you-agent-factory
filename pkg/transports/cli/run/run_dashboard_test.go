@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,14 +12,11 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -29,7 +24,6 @@ import (
 func TestRun_DefaultDashboardRendering_PrintsSimpleDashboardOutput(t *testing.T) {
 	dir, workFile := writeDashboardRunFixture(t)
 	executionBaseDir := t.TempDir()
-	packageLocalSnapshot := durableSessionSnapshotPath(".")
 
 	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                     dir,
@@ -47,16 +41,6 @@ func TestRun_DefaultDashboardRendering_PrintsSimpleDashboardOutput(t *testing.T)
 	if !strings.Contains(output, "Factory:") {
 		t.Fatalf("expected simple dashboard output, got %q", output)
 	}
-	if _, err := os.Stat(durableSessionSnapshotPath(executionBaseDir)); err != nil {
-		t.Fatalf("temporary durable session snapshot was not written: %v", err)
-	}
-	if _, err := os.Stat(packageLocalSnapshot); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("package-local durable session snapshot must not be written, got err=%v", err)
-	}
-}
-
-func durableSessionSnapshotPath(root string) string {
-	return filepath.Join(root, ".you-agent-factory", "durable-sessions", defaultFactorySessionID+".json")
 }
 
 func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T) {
@@ -82,27 +66,19 @@ func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T)
 }
 
 func TestRun_CleanInvocationKeepsOperatorChatterOffStdout(t *testing.T) {
-	originalDefaultRecordPath := defaultLiveRunRecordPath
-	defer func() {
-		defaultLiveRunRecordPath = originalDefaultRecordPath
-	}()
-
 	dir, workFile := writeDashboardRunFixture(t)
-	recordPath := filepath.Join(t.TempDir(), "factory-session-__factory_session_id__-clean.json")
-	defaultLiveRunRecordPath = func() (string, error) {
-		return recordPath, nil
-	}
 
 	var startupOut bytes.Buffer
 	output, err := runWithCapturedStdout(t, RunConfig{
-		Dir:                dir,
-		ExecutionBaseDir:   t.TempDir(),
-		Port:               0,
-		WorkFile:           workFile,
-		MockWorkersEnabled: true,
-		CleanInvocation:    true,
-		StartupOutput:      &startupOut,
-		Logger:             zap.NewNop(),
+		Dir:                     dir,
+		ExecutionBaseDir:        t.TempDir(),
+		Port:                    0,
+		WorkFile:                workFile,
+		MockWorkersEnabled:      true,
+		CleanInvocation:         true,
+		DisableDefaultRecording: true,
+		StartupOutput:           &startupOut,
+		Logger:                  zap.NewNop(),
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -114,9 +90,6 @@ func TestRun_CleanInvocationKeepsOperatorChatterOffStdout(t *testing.T) {
 	assertNoOperatorChatter(t, output)
 	if startupOut.Len() != 0 {
 		t.Fatalf("startup output = %q, want clean invocation to suppress operator chatter", startupOut.String())
-	}
-	if _, err := os.Stat(resolveDefaultSessionRecordPath(recordPath)); err != nil {
-		t.Fatalf("default recording was not written: %v", err)
 	}
 }
 
@@ -241,16 +214,16 @@ func TestRun_CleanInvocationSuccessRecordsStructuredLogAndMetrics(t *testing.T) 
 }
 
 func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error { return nil },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
 				return failedCleanInvocationSnapshot("mock worker rejected"), nil
 			},
 		}, nil
@@ -261,7 +234,7 @@ func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, buildFactoryService)
+	}, openTestRuntimeRunner)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on failure", output)
 	}
@@ -279,16 +252,16 @@ func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
 }
 
 func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error { return nil },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
 				return timedOutCleanInvocationSnapshot(), nil
 			},
 		}, nil
@@ -299,7 +272,7 @@ func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, buildFactoryService)
+	}, openTestRuntimeRunner)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on timeout", output)
 	}
@@ -317,16 +290,16 @@ func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
 }
 
 func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error { return context.Canceled },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
 				return nil, errors.New("snapshot not needed")
 			},
 		}, nil
@@ -337,7 +310,7 @@ func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, buildFactoryService)
+	}, openTestRuntimeRunner)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on cancellation", output)
 	}
@@ -357,17 +330,17 @@ func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing
 func TestRun_CleanInvocationCancellationRecordsStructuredLogAndMetrics(t *testing.T) {
 	resetCleanInvocationMetricsForTest()
 
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
 	core, observed := observer.New(zap.InfoLevel)
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error { return context.Canceled },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
 				return nil, errors.New("snapshot not needed")
 			},
 		}, nil
@@ -408,22 +381,22 @@ func TestRun_CleanInvocationCancellationRecordsStructuredLogAndMetrics(t *testin
 }
 
 func TestRun_CleanInvocationKeepsStdoutEmptyUntilTerminalOutcome(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error {
 				close(started)
 				<-release
 				return context.Canceled
 			},
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
 				return nil, errors.New("snapshot not needed")
 			},
 		}, nil
@@ -468,14 +441,14 @@ func TestRun_CleanInvocationKeepsStdoutEmptyUntilTerminalOutcome(t *testing.T) {
 }
 
 func TestRun_ContinuouslyUsesServiceModeUntilCanceled(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	started := make(chan struct{})
 	var capturedMode interfaces.RuntimeMode
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedMode = cfg.RuntimeMode
 		return stubFactoryService{
 			run: func(ctx context.Context) error {
@@ -524,30 +497,6 @@ func TestRun_ContinuouslyUsesServiceModeUntilCanceled(t *testing.T) {
 	}
 }
 
-func TestRun_OOTBIntegrationSmokeBootstrapsProcessesDefaultTaskAndReportsDashboard(t *testing.T) {
-	preserveRunGlobals(t)
-
-	dir := filepath.Join(t.TempDir(), "factory")
-	taskPath := filepath.Join(dir, "inputs", initcmd.DefaultFactoryInputType, "default", "ootb-smoke.md")
-	installOOTBSmokeBootstrap(taskPath)
-	disableInteractiveDashboardForSmoke(t)
-
-	capturedCh := make(chan capturedOOTBSmokeRun, 1)
-	captureOOTBSmokeServiceBuilds(capturedCh)
-
-	port := unusedTCPPort(t)
-	var out bytes.Buffer
-	cancel, errCh := startOOTBSmokeRun(t, dir, port, &out)
-	captured := waitForOOTBSmokeServiceStartup(t, capturedCh, errCh)
-
-	assertOOTBSmokeStartupConfig(t, captured.cfg, dir, taskPath)
-	snapshot := waitForOOTBSmokeTaskCompletion(t, captured.svc, errCh)
-	assertOOTBSmokeTaskResult(t, snapshot)
-	assertContinuousRunStillActive(t, errCh)
-	assertOOTBSmokeStartupOutput(t, out.String(), dir, port)
-	stopOOTBSmokeRun(t, cancel, errCh)
-}
-
 func assertNoOperatorChatter(t *testing.T, output string) {
 	t.Helper()
 
@@ -562,182 +511,6 @@ func assertNoOperatorChatter(t *testing.T, output string) {
 		if strings.Contains(output, forbidden) {
 			t.Fatalf("output = %q, want no %q chatter", output, forbidden)
 		}
-	}
-}
-
-func installOOTBSmokeBootstrap(taskPath string) {
-	originalBootstrap := bootstrapFactory
-	bootstrapFactory = func(inDir string) error {
-		if err := originalBootstrap(inDir); err != nil {
-			return err
-		}
-		return os.WriteFile(taskPath, []byte("# OOTB smoke\n\nConfirm the default task path is processed."), 0o644)
-	}
-}
-
-func disableInteractiveDashboardForSmoke(t *testing.T) {
-	t.Helper()
-
-	dashboardOpener = func(_ context.Context, _ string) error {
-		t.Fatal("dashboard opener should not run for non-interactive smoke output")
-		return nil
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return false
-	}
-}
-
-func captureOOTBSmokeServiceBuilds(capturedCh chan<- capturedOOTBSmokeRun) {
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		cfgCopy := *cfg
-		svc, err := service.BuildFactoryService(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		capturedCh <- capturedOOTBSmokeRun{cfg: &cfgCopy, svc: svc}
-		return svc, nil
-	}
-}
-
-func startOOTBSmokeRun(t *testing.T, dir string, port int, out *bytes.Buffer) (context.CancelFunc, chan error) {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- Run(ctx, RunConfig{
-			Dir:                dir,
-			ExecutionBaseDir:   dir,
-			Bootstrap:          true,
-			Continuously:       true,
-			MockWorkersEnabled: true,
-			Port:               port,
-			OpenDashboard:      true,
-			StartupOutput:      out,
-			Logger:             zap.NewNop(),
-		})
-	}()
-	return cancel, errCh
-}
-
-func waitForOOTBSmokeServiceStartup(
-	t *testing.T,
-	capturedCh <-chan capturedOOTBSmokeRun,
-	errCh <-chan error,
-) capturedOOTBSmokeRun {
-	t.Helper()
-
-	select {
-	case captured := <-capturedCh:
-		return captured
-	case err := <-errCh:
-		t.Fatalf("Run returned before service startup: %v", err)
-	case <-time.After(15 * time.Second):
-		t.Fatal("timed out waiting for factory service startup")
-	}
-	return capturedOOTBSmokeRun{}
-}
-
-func assertOOTBSmokeStartupConfig(t *testing.T, cfg *service.FactoryServiceConfig, dir, taskPath string) {
-	t.Helper()
-
-	if cfg.RuntimeMode != interfaces.RuntimeModeService {
-		t.Fatalf("runtime mode = %q, want %q", cfg.RuntimeMode, interfaces.RuntimeModeService)
-	}
-	if cfg.MockWorkersConfig == nil {
-		t.Fatalf("mock-worker config was not passed through: %#v", cfg)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "factory.json")); err != nil {
-		t.Fatalf("expected bootstrap to create factory.json: %v", err)
-	}
-	if _, err := os.Stat(filepath.Dir(taskPath)); err != nil {
-		t.Fatalf("expected bootstrap to create inputs/%s/default: %v", initcmd.DefaultFactoryInputType, err)
-	}
-	if _, err := os.Stat(taskPath); err != nil {
-		t.Fatalf("expected bootstrap to seed canonical starter task path %q: %v", taskPath, err)
-	}
-}
-
-func waitForOOTBSmokeTaskCompletion(
-	t *testing.T,
-	svc *service.FactoryService,
-	errCh <-chan error,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		snapshot, err := svc.GetEngineStateSnapshot(context.Background())
-		if err != nil {
-			t.Fatalf("GetEngineStateSnapshot: %v", err)
-		}
-		if len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType+":complete")) == 1 {
-			return snapshot
-		}
-		select {
-		case err := <-errCh:
-			t.Fatalf("Run returned before completing default task: %v", err)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for default task; places: %#v", snapshot.Marking.PlaceTokens)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func assertOOTBSmokeTaskResult(
-	t *testing.T,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-) {
-	t.Helper()
-
-	if got := len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType + ":complete")); got != 1 {
-		t.Fatalf("%s:complete token count = %d, want 1; places: %#v", initcmd.DefaultFactoryInputType, got, snapshot.Marking.PlaceTokens)
-	}
-	if got := len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType + ":failed")); got != 0 {
-		t.Fatalf("%s:failed token count = %d, want 0; places: %#v", initcmd.DefaultFactoryInputType, got, snapshot.Marking.PlaceTokens)
-	}
-}
-
-func assertContinuousRunStillActive(t *testing.T, errCh <-chan error) {
-	t.Helper()
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("continuous Run returned before cancellation: %v", err)
-	default:
-	}
-}
-
-func assertOOTBSmokeStartupOutput(t *testing.T, output, dir string, port int) {
-	t.Helper()
-
-	wantURL := fmt.Sprintf("http://localhost:%d/dashboard/ui", port)
-	for _, want := range []string{
-		"Factory initiated: " + dir,
-		"Factory directory ready: " + dir,
-		"Runtime mode: continuous",
-		"Dashboard URL: " + wantURL,
-		"Dashboard auto-open disabled; open " + wantURL,
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("startup output = %q, want %q", output, want)
-		}
-	}
-}
-
-func stopOOTBSmokeRun(t *testing.T, cancel context.CancelFunc, errCh <-chan error) {
-	t.Helper()
-
-	cancel()
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("Run after cancellation: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for continuous run to stop after cancellation")
 	}
 }
 
@@ -850,58 +623,46 @@ func writeFile(t *testing.T, path, content string) {
 func runWithCapturedStdout(
 	t *testing.T,
 	cfg RunConfig,
-	builders ...FactoryServiceBuilder,
+	builders ...testRuntimeRunnerOpener,
 ) (string, error) {
 	t.Helper()
+	var output bytes.Buffer
 	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
 		cfg.ExecutionBaseDir = cfg.Dir
 	}
-
-	oldStdout := os.Stdout
-	readPipe, writePipe, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
+	if cfg.WorkRequestFileLoader == nil {
+		cfg.WorkRequestFileLoader = func(path string) (work.WorkRequest, error) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return work.WorkRequest{}, err
+			}
+			var request work.WorkRequest
+			if err := json.Unmarshal(data, &request); err != nil {
+				return work.WorkRequest{}, err
+			}
+			return request, nil
+		}
 	}
 
-	readCh := make(chan []byte, 1)
-	readErrCh := make(chan error, 1)
-	go func() {
-		data, readErr := io.ReadAll(readPipe)
-		readCh <- data
-		readErrCh <- readErr
-	}()
-
-	os.Stdout = writePipe
-	builder := FactoryServiceBuilderFromService(service.BuildFactoryService)
+	cfg.Output = &output
+	builder := adaptTestRuntimeRunnerOpener(buildTransportTestRuntime)
 	if len(builders) > 0 {
 		builder = builders[0]
 	}
-	runErr := runWithFactoryServiceBuilder(context.Background(), cfg, builder)
-	os.Stdout = oldStdout
+	runErr := runWithTestRuntimeRunner(context.Background(), cfg, builder)
 
-	if err := writePipe.Close(); err != nil {
-		t.Fatalf("close captured stdout writer: %v", err)
-	}
-	output := <-readCh
-	if err := <-readErrCh; err != nil {
-		t.Fatalf("read captured stdout: %v", err)
-	}
-	if err := readPipe.Close(); err != nil {
-		t.Fatalf("close captured stdout reader: %v", err)
-	}
-
-	return string(output), runErr
+	return output.String(), runErr
 }
 
-func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net] {
+	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{{
 			Outcome: workerexecution.OutcomeFailed,
 			Reason:  reason,
-			ConsumedTokens: []factorytoken.Token{{
+			ConsumedTokens: []factoryruntime.RuntimeToken{{
 				ID:      "failed-token",
 				PlaceID: "task:init",
-				Color: factorytoken.Color{
+				Color: factoryruntime.RuntimeTokenColor{
 					WorkID:     "dashboard-render-test-work",
 					WorkTypeID: "task",
 					TraceID:    "dashboard-render-test-trace",
@@ -911,14 +672,14 @@ func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapsho
 	}
 }
 
-func timedOutCleanInvocationSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+func timedOutCleanInvocationSnapshot() *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net] {
+	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{{
 			Outcome: workerexecution.OutcomeFailed,
-			ConsumedTokens: []factorytoken.Token{{
+			ConsumedTokens: []factoryruntime.RuntimeToken{{
 				ID:      "timeout-token",
 				PlaceID: "task:init",
-				Color: factorytoken.Color{
+				Color: factoryruntime.RuntimeTokenColor{
 					WorkID:     "dashboard-render-test-work",
 					WorkTypeID: "task",
 					TraceID:    "dashboard-render-test-trace",

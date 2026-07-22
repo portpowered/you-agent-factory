@@ -2,13 +2,14 @@ package taxonomyvalidationtests_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -17,7 +18,7 @@ import (
 func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 	t.Parallel()
 
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(taxonomyCompatibilityValidator{})
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/factory-validations",
@@ -47,9 +48,81 @@ func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 	}
 }
 
-func newAPITestServer(f *testutil.MockFactory) *api.Server {
-	logger, _ := zap.NewDevelopment()
-	return api.NewServer(f, 8080, logger)
+func newAPITestServer(validator factorydefinitions.SubmittedDefinitionValidationOperation) *api.Server {
+	return api.NewServer(
+		nil, nil, nil, nil, nil, nil, nil, nil,
+		validator, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zap.NewNop(),
+	)
+}
+
+// taxonomyCompatibilityValidator scripts the service-root finding whose HTTP
+// representation is under test. Factory Definitions owner tests retain the
+// worker/workstation taxonomy policy.
+type taxonomyCompatibilityValidator struct{}
+
+func (validator taxonomyCompatibilityValidator) ValidateSubmittedDefinition(
+	ctx context.Context,
+	request factorydefinitions.SubmittedDefinitionValidationRequest,
+) (factorydefinitions.ValidationResult, error) {
+	result := validator.Validate(ctx, request.Config, request.WorkflowSourceReader)
+	return result, nil
+}
+
+func (taxonomyCompatibilityValidator) Validate(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.WorkflowSourceReader,
+) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{
+		Targets: []factorydefinitions.ValidationTarget{{
+			Code:     "workstation-worker-behavior-compatibility",
+			Severity: factorydefinitions.ValidationSeverityError,
+			Message:  "agent-run requires a compatible worker; INFERENCE_WORKER is not supported",
+			Subject: factorydefinitions.ValidationSubject{
+				Type: factorydefinitions.ValidationSubjectTypeWorkstation,
+				ID:   "agent-with-infer",
+			},
+		}},
+	}
+}
+
+func (taxonomyCompatibilityValidator) ValidateBlockingLoad(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+) factorydefinitions.ValidationResult {
+	panic("unexpected Factory Definition ValidateBlockingLoad call")
+}
+
+func (taxonomyCompatibilityValidator) ValidateTopology(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.RequiredToolChecker,
+) factorydefinitions.TopologyValidationResult {
+	panic("unexpected Factory Definition ValidateTopology call")
+}
+
+func (taxonomyCompatibilityValidator) WorkerWorkstationBehaviorCompatibility(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+) []factorydefinitions.ValidationTarget {
+	return nil
+}
+
+func (taxonomyCompatibilityValidator) WorkTypeHandlingBehavior(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+	bool,
+) []factorydefinitions.ValidationTarget {
+	panic("unexpected Factory Definition WorkTypeHandlingBehavior call")
+}
+
+func (taxonomyCompatibilityValidator) PruneLayout(
+	context.Context,
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.PendingFactoryGraphTopology,
+) factorydefinitions.ValidationResult {
+	panic("unexpected Factory Definition PruneLayout call")
 }
 
 const taxonomyMismatchFactoryValidationBody = `{

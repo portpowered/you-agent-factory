@@ -14,9 +14,10 @@ and historical world state from that event stream.
 - The backend core is an event-first factory runtime. Workers and agents do not
   mutate canonical state directly; they emit outputs that re-enter the runtime
   as events.
-- `FactoryService` coordinates APIs, CLI calls, session registries, persistence,
-  runtime construction, and model/runtime dependencies. Per-session runtime
-  state belongs to the session runtime, not the service coordinator.
+- Product behavior is split across definition, Factory Session, runtime, Work,
+  worker execution, Provider Session, model runtime, automation, and
+  ledger/projection services. `pkg/wire` composes these services and
+  `pkg/initializer` exclusively owns their lifecycle.
 - Public terminology is defined in
   `docs/architecture/data-model.md`: `Factory`, `Factory Session`, `Current
   Factory`, `Work`, `Work Request`, and `Provider Session`.
@@ -73,9 +74,11 @@ the standards.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
 - `pkg/transports/` for various API entrypoints such as CLI, MCP, REST
-- `pkg/config/` contains factory config loading, persistence, mapping,
-  validation entrypoints, built-in factory layout, and runtime config
-  projections.
+- `pkg/services/factory_definitions/` owns Factory definition loading,
+  persistence, validation, packaged definitions, and effective runtime
+  projections. Representation mapping lives under
+  `pkg/transports/mapping/factoryconfig`; policy-free process configuration
+  mechanics live in focused `pkg/platform` packages.
 - `pkg/factory/` contains the core runtime engine, event history, projections,
   requests, validation, scheduling, subsystems, runtime support, and workstation
   config plumbing.
@@ -91,18 +94,25 @@ the standards.
   time-work, and pure invocation input/return-policy behavior.
 - `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
-- `pkg/orchestrators/petri/` contains internal Petri-net primitives.
-- `pkg/service/` coordinates backend service behavior across sessions,
-  runtime construction, model catalog, replay, ingestion, and factory save or
-  validation flows.
+- `pkg/services/factory_runtime/internal/orchestrators/petri/` contains internal
+  Petri-net primitives. External packages consume Factory Runtime root
+  contracts instead.
+- `pkg/services/` contains the cross-domain Automation and Provider Session
+  services. Dashboard rendering is an initializer-owned presentation
+  lifecycle under `pkg/initializer/dashboard`. Other domain implementations
+  remain under their defining `pkg/factory`, `pkg/work`, `pkg/workers`, and
+  `pkg/models` families.
+- `pkg/wire/` provides the sole application injector and canonical inert
+  process graph. `pkg/root.BuildProcess` is the caller-facing construction
+  boundary; tests replace only external effects through `edges.Edges`.
 - `pkg/workers/` contains worker execution, inference binding/output shaping,
   provider integration, invocation-time worker capability policy, mock workers,
   worktrees, and hosted workers; `pkg/factory/packages/` contains packaged
   factory support.
-- `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,
-  `pkg/orchestrators/javascript/result`, `pkg/orchestrators/javascript/source`,
-  and `pkg/orchestrators/javascript/validation` contain JavaScript workflow
-  preview, policy, result, source lookup, and validation logic.
+- `pkg/services/factory_runtime/internal/orchestrators/javascript/` contains
+  JavaScript workflow runtime, preview, source lookup, storage, and validation
+  implementations. Public orchestration contracts are exposed at
+  `pkg/services/factory_runtime`.
 - `tests/` contains broader functional, release, smoke, and integration tests.
 - `ui/` contains the React dashboard, generated TypeScript OpenAPI types,
   feature modules, shared components, theme/styles, Storybook, and frontend

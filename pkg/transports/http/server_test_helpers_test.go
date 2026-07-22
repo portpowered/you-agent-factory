@@ -3,33 +3,24 @@ package http
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/portpowered/infinite-you/internal/testutil"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	"go.uber.org/zap"
-	_ "modernc.org/sqlite"
 )
 
 const defaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID
@@ -44,80 +35,262 @@ func scopeDefaultSessionWorkPath(path string) string {
 	return path
 }
 
-func newTestServer(f *testutil.MockFactory) *Server {
-	if f != nil {
-		ensureMockFactoryCurrentFactory(f)
+type httpPromptTemplatesFake struct{}
+
+func (httpPromptTemplatesFake) BuildPromptTemplateContract(
+	inputCount int,
+	docPaths []string,
+) workerexecution.PromptTemplateContract {
+	references := []workerexecution.PromptTemplateVariableReference{{
+		Category: workerexecution.PromptTemplateVariableCategoryContext,
+		Path:     ".Context.SessionID",
+	}}
+	for _, path := range docPaths {
+		references = append(references, workerexecution.PromptTemplateVariableReference{
+			Category: workerexecution.PromptTemplateVariableCategoryDoc,
+			Path:     fmt.Sprintf(`.Docs[%q]`, path),
+		})
 	}
-	logger, _ := zap.NewDevelopment()
-	return NewServer(f, 8080, logger)
+	return workerexecution.PromptTemplateContract{
+		AvailableVariables: references,
+		InputCount:         inputCount,
+	}
 }
 
-func ensureMockFactoryCurrentFactory(f *testutil.MockFactory) {
-	if f.CurrentFactoryErr != nil || f.CurrentFactory != nil {
-		return
+func (httpPromptTemplatesFake) ValidatePromptTemplate(
+	template string,
+	inputCount int,
+	_ []string,
+) workerexecution.PromptTemplateValidationResult {
+	if inputCount < 2 && strings.Contains(template, "(index .Inputs 1)") {
+		return workerexecution.PromptTemplateValidationResult{
+			Diagnostics: []workerexecution.PromptTemplateDiagnostic{{
+				Kind: workerexecution.PromptTemplateDiagnosticKindUnavailableVariable,
+				Path: ".Inputs[1]",
+			}},
+		}
 	}
-	f.CurrentFactory = &factoryapi.Factory{Name: "test-factory"}
+	return workerexecution.PromptTemplateValidationResult{Valid: true}
 }
 
-func newTestServerWithCodexRoot(root string) *Server {
-	logger, _ := zap.NewDevelopment()
-	return NewServerWithOptions(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*factorytoken.Token),
+type workRequestPreparationFake struct {
+	prepare func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error)
+}
+
+func (f *workRequestPreparationFake) PrepareWorkRequest(
+	ctx context.Context,
+	input work.WorkRequestPreparation,
+) (work.WorkRequest, error) {
+	return f.prepare(ctx, input)
+}
+
+func setWorkRequestPreparationError(srv *Server, message string) {
+	srv.requestPreparation = &workRequestPreparationFake{
+		prepare: func(
+			context.Context,
+			work.WorkRequestPreparation,
+		) (work.WorkRequest, error) {
+			return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
 		},
-	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
+	}
 }
 
-func newTestServerWithUnavailableCursorRoot(t *testing.T) *Server {
+func setWorkRequestPreparationResult(
+	srv *Server,
+	prepare func(work.WorkRequestPreparation) work.WorkRequest,
+) {
+	srv.requestPreparation = &workRequestPreparationFake{
+		prepare: func(
+			_ context.Context,
+			input work.WorkRequestPreparation,
+		) (work.WorkRequest, error) {
+			return prepare(input), nil
+		},
+	}
+}
+
+type contentStagingFake struct {
+	stageContent   func(context.Context, work.StageContentRequest) (work.StageContentResult, error)
+	prepareContent func(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error)
+	resolveContent func(context.Context, string) (work.ResolvedStagedContent, error)
+	cleanupContent func(context.Context, string) error
+}
+
+func newContentStagingFake() *contentStagingFake {
+	staged := make(map[string]work.StageContentResult)
+	return &contentStagingFake{
+		stageContent: func(_ context.Context, request work.StageContentRequest) (work.StageContentResult, error) {
+			switch request.ItemType {
+			case "image", "video", "audio", "document":
+			default:
+				return work.StageContentResult{}, &work.ContentStagingError{
+					Message: "itemType must be one of image, video, audio, or document",
+				}
+			}
+			ref := "test-staged:" + request.FileName
+			result := work.StageContentResult{
+				StagedFileRef: ref,
+				FileName:      request.FileName,
+				MediaType:     request.MediaType,
+				URL:           "file://staged/" + request.FileName,
+			}
+			staged[ref] = result
+			return result, nil
+		},
+		prepareContent: func(_ context.Context, items []work.StagedSubmissionItem) ([]work.WorkContentPart, error) {
+			content := make([]work.WorkContentPart, 0, len(items))
+			for index, item := range items {
+				if item.ItemType == "text" {
+					content = append(content, work.WorkContentPart{
+						Type: work.WorkContentPartTypeText,
+						Text: item.Text,
+					})
+					continue
+				}
+				result, ok := staged[item.StagedFileRef]
+				if !ok {
+					return nil, &work.ContentStagingError{
+						Message: fmt.Sprintf("items[%d]: stagedFileRef must be a backend-issued staged file reference", index),
+					}
+				}
+				partType := work.WorkContentPartTypeBinary
+				switch item.ItemType {
+				case "image":
+					partType = work.WorkContentPartTypeImage
+				case "audio":
+					partType = work.WorkContentPartTypeAudio
+				}
+				content = append(content, work.WorkContentPart{
+					Type:        partType,
+					URL:         result.URL,
+					ContentType: item.MediaType,
+					Metadata: map[string]any{
+						submitWorkItemTypeMetadataKey: item.ItemType,
+						submitWorkFileNameMetadataKey: item.FileName,
+					},
+				})
+			}
+			return content, nil
+		},
+		resolveContent: func(context.Context, string) (work.ResolvedStagedContent, error) {
+			return work.ResolvedStagedContent{}, errors.New("unexpected ResolveContent call")
+		},
+		cleanupContent: func(context.Context, string) error {
+			return errors.New("unexpected CleanupContent call")
+		},
+	}
+}
+
+func (f *contentStagingFake) StageContent(
+	ctx context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	return f.stageContent(ctx, request)
+}
+
+func (f *contentStagingFake) PrepareContent(
+	ctx context.Context,
+	items []work.StagedSubmissionItem,
+) ([]work.WorkContentPart, error) {
+	return f.prepareContent(ctx, items)
+}
+
+func (f *contentStagingFake) ResolveContent(
+	ctx context.Context,
+	ref string,
+) (work.ResolvedStagedContent, error) {
+	return f.resolveContent(ctx, ref)
+}
+
+func (f *contentStagingFake) CleanupContent(ctx context.Context, ref string) error {
+	return f.cleanupContent(ctx, ref)
+}
+
+type providerSessionCall struct {
+	provider string
+	kind     string
+	id       string
+	detail   providersessions.Detail
+	err      error
+}
+
+func providerSessionSuccess(provider, id string, detail providersessions.Detail) providerSessionCall {
+	return providerSessionCall{provider: provider, kind: providersessions.SessionIDKind, id: id, detail: detail}
+}
+
+func providerSessionFailure(provider, kind, id string, err error) providerSessionCall {
+	return providerSessionCall{provider: provider, kind: kind, id: id, err: err}
+}
+
+type strictProviderSessionRole struct {
+	t     *testing.T
+	calls []providerSessionCall
+	next  int
+}
+
+func (role *strictProviderSessionRole) Details(provider, kind, id string) (providersessions.Detail, error) {
+	role.t.Helper()
+	if role.next >= len(role.calls) {
+		role.t.Fatalf("unexpected Provider Sessions Details(%q, %q, %q)", provider, kind, id)
+	}
+	want := role.calls[role.next]
+	role.next++
+	if provider != want.provider || kind != want.kind || id != want.id {
+		role.t.Fatalf("Provider Sessions Details = (%q, %q, %q), want (%q, %q, %q)", provider, kind, id, want.provider, want.kind, want.id)
+	}
+	return want.detail, want.err
+}
+
+func newTestServerWithProviderSessionCalls(t *testing.T, calls ...providerSessionCall) *Server {
 	t.Helper()
-	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
-	return newTestServerWithCursorRoot(missingRoot)
+	logger, _ := zap.NewDevelopment()
+	return newTestServerWithProviderSessionCallsAndLogger(t, logger, calls...)
 }
 
-func newTestServerWithCursorRoot(root string) *Server {
-	logger, _ := zap.NewDevelopment()
-	return NewServerWithOptions(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*factorytoken.Token),
-		},
-	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
-}
-
-func newTestServerWithProviderSessionRoots(codexRoot, cursorRoot string) *Server {
-	logger, _ := zap.NewDevelopment()
-	return NewServerWithOptions(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*factorytoken.Token),
-		},
-	}, 8080, logger, ServerOptions{
-		CodexSessionsRoot:  codexRoot,
-		CursorSessionsRoot: cursorRoot,
+func newTestServerWithProviderSessionCallsAndLogger(t *testing.T, logger *zap.Logger, calls ...providerSessionCall) *Server {
+	t.Helper()
+	role := &strictProviderSessionRole{t: t, calls: calls}
+	t.Cleanup(func() {
+		if role.next != len(role.calls) {
+			t.Errorf("Provider Sessions Details calls = %d, want %d", role.next, len(role.calls))
+		}
 	})
+	return NewServer(
+		nil, nil, nil, nil, nil, nil, &modelshttp.Handler{},
+		nil, httpFactoryValidator{}, nil,
+		nil, nil, nil, nil, nil, nil, role, nil, nil, nil, nil, logger,
+	)
 }
 
-func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
-	t.Helper()
+func providerSessionLookupFailure(provider providersessions.Provider, root string, err error) error {
+	return &providersessions.LookupError{Provider: provider, Root: root, Err: err}
+}
 
-	dir := filepath.Join(root, "2026", "05", "18")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	path := filepath.Join(dir, "rollout-"+id+".jsonl")
-	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		t.Fatalf("write provider session fixture: %v", err)
+func cursorProviderSessionDetail(id, relativePath string) providersessions.Detail {
+	inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens := 100, 25, 40, 10, 175
+	text := "Hello from API fixture"
+	return providersessions.Detail{
+		ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCursor, Kind: providersessions.SessionIDKind, ID: id},
+		Source:          providersessions.SourceMetadata{RelativePath: relativePath, SizeBytes: 1},
+		Parse: providersessions.ParseSummary{EventCount: 1, LineCount: 1, TokenUsage: &providersessions.TokenUsage{
+			InputTokens: &inputTokens, OutputTokens: &outputTokens, CachedInputTokens: &cacheReadTokens,
+			CacheWriteTokens: &cacheWriteTokens, TotalTokens: &totalTokens,
+		}},
+		Transcript: []providersessions.TranscriptEntry{{Order: 1, Text: &text, Type: providersessions.TranscriptAssistantMessage}},
 	}
 }
 
-func writeNamedProviderSessionFixture(t *testing.T, root, fileName, contents string) {
-	t.Helper()
-
-	dir := filepath.Join(root, "2026", "05", "18")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	path := filepath.Join(dir, fileName)
-	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		t.Fatalf("write named provider session fixture: %v", err)
+func codexProviderSessionDetail(id, relativePath string, eventCount int) providersessions.Detail {
+	reasoningSource := "reasoning"
+	return providersessions.Detail{
+		ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCodex, Kind: providersessions.SessionIDKind, ID: id},
+		Source:          providersessions.SourceMetadata{RelativePath: relativePath, SizeBytes: 1},
+		Parse: providersessions.ParseSummary{
+			EventCount: eventCount, LineCount: 4, MalformedLineCount: 1, UnknownEventCount: 1,
+			ParseErrors: []providersessions.LineError{{LineNumber: 4}}, UnknownEvents: []providersessions.UnknownEvent{{LineNumber: 3}},
+			Reasoning: []providersessions.ReasoningSummary{{SourceType: reasoningSource}}, Turns: []providersessions.TurnSummary{{ReasoningCount: 1}},
+		},
+		Transcript: []providersessions.TranscriptEntry{{Order: 1, Type: providersessions.TranscriptReasoning}},
 	}
 }
 
@@ -128,76 +301,6 @@ const customerCursorProviderSessionID = "ed332681-38eb-485f-b3d3-d8b6df3a450b"
 // customerCursorWorkspaceHash mirrors the workspace-hash directory layout under ~/.cursor/chats.
 const customerCursorWorkspaceHash = "d2191e81bfe68d31807c1e354ea83571"
 
-func writeCursorProviderSessionFixture(t *testing.T) (root string, sessionID string) {
-	t.Helper()
-
-	root = t.TempDir()
-	sessionID = "cursor-api-readable"
-	return writeCursorProviderSessionFixtureAt(t, root, "workspace-hash", sessionID)
-}
-
-func writeCursorProviderSessionUUIDFixture(t *testing.T) (root string, sessionID string) {
-	t.Helper()
-
-	root = t.TempDir()
-	sessionID = customerCursorProviderSessionID
-	return writeCursorProviderSessionFixtureAt(t, root, customerCursorWorkspaceHash, sessionID)
-}
-
-func writeCursorProviderSessionFixtureAt(t *testing.T, root, workspaceHash, sessionID string) (string, string) {
-	t.Helper()
-
-	dbPath := filepath.Join(root, workspaceHash, sessionID, "store.db")
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		t.Fatalf("mkdir cursor provider fixture: %v", err)
-	}
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open cursor provider fixture sqlite: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	schema := `
-CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
-	if _, err := db.Exec(schema); err != nil {
-		t.Fatalf("create cursor provider fixture tables: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
-		"bubble1",
-		`{"bubbleId":"bubble1","chatId":"chat1","text":"Hello from API fixture","timestamp":1000,"type":1}`,
-	); err != nil {
-		t.Fatalf("insert cursor provider bubble: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?)`,
-		"0",
-		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"API fixture session"}`,
-	); err != nil {
-		t.Fatalf("insert cursor provider session meta: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?)`,
-		"1",
-		`{"usage":{"inputTokens":100,"outputTokens":25,"cacheReadTokens":40,"cacheWriteTokens":10}}`,
-	); err != nil {
-		t.Fatalf("insert cursor provider usage meta: %v", err)
-	}
-
-	normalizedRoot, err := cursorstorage.NormalizeAgentStorageRoot(root)
-	if err != nil {
-		t.Fatalf("normalize cursor provider fixture root: %v", err)
-	}
-	if resolved, err := cursorstorage.ResolveStoreDB(normalizedRoot, sessionID); err != nil {
-		t.Fatalf("resolve cursor provider fixture: %v", err)
-	} else if resolved.RelativePath != filepath.ToSlash(filepath.Join(workspaceHash, sessionID, "store.db")) {
-		t.Fatalf("resolved relative path = %q, want %s/%s/store.db", resolved.RelativePath, workspaceHash, sessionID)
-	}
-
-	return root, sessionID
-}
-
 // providerSessionDetailURLFromEventRef builds the GET path the dashboard uses to
 // load a provider session from an event-emitted LoadableProviderSessionRef.
 func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSessionRef) string {
@@ -206,16 +309,6 @@ func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSession
 	query.Set("kind", string(ref.Kind))
 	query.Set("id", ref.Id)
 	return "/provider-sessions/detail?" + query.Encode()
-}
-
-// loadableProviderSessionRefFromEventMetadata mirrors dispatch/event projection of
-// canonical provider-session metadata onto the loadable detail contract.
-func loadableProviderSessionRefFromEventMetadata(session workerexecution.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
-	return factoryapi.LoadableProviderSessionRef{
-		Provider: factoryapi.LoadableProviderSessionProvider(workerexecution.CanonicalProviderSessionProvider(session.Provider)),
-		Kind:     factoryapi.LoadableProviderSessionKind(session.Kind),
-		Id:       session.ID,
-	}
 }
 
 func assertProviderSessionDetailLoadsFromEventRef(
@@ -300,76 +393,6 @@ func assertJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	}
 }
 
-func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*factorytoken.Token {
-	tokens := make(map[string]*factorytoken.Token, count)
-	for i := 1; i <= count; i++ {
-		suffix := string(rune('0' + i))
-		id := "tok-" + prefix + "-" + suffix
-		tokens[id] = listWorkToken(id, "work-"+prefix+"-"+suffix, prefix+":init", prefix, now)
-	}
-	return tokens
-}
-
-func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *factorytoken.Token {
-	return listWorkTokenWithTraces(id, workID, "", placeID, workTypeID, "", "", now)
-}
-
-func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *factorytoken.Token {
-	color := factorytoken.Color{
-		WorkID:                 workID,
-		WorkTypeID:             workTypeID,
-		TraceID:                traceID,
-		CurrentChainingTraceID: currentChainingTraceID,
-	}
-	if name != "" {
-		color.Name = name
-	}
-	return listWorkTokenWithColor(id, workID, placeID, workTypeID, now, color)
-}
-
-func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color factorytoken.Color) *factorytoken.Token {
-	if color.WorkID == "" {
-		color.WorkID = workID
-	}
-	if color.WorkTypeID == "" {
-		color.WorkTypeID = workTypeID
-	}
-	return &factorytoken.Token{
-		ID:        id,
-		PlaceID:   placeID,
-		Color:     color,
-		CreatedAt: now,
-		EnteredAt: now,
-		History: factorytoken.History{
-			TotalVisits:         make(map[string]int),
-			ConsecutiveFailures: make(map[string]int),
-			PlaceVisits:         make(map[string]int),
-		},
-	}
-}
-
-func listWorkFilterTopology() *state.Net {
-	return &state.Net{
-		Places: map[string]*petri.Place{
-			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
-			"task:review":   {ID: "task:review", TypeID: "task", State: "review"},
-			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
-			"task:complete": {ID: "task:complete", TypeID: "task", State: "complete"},
-		},
-		WorkTypes: map[string]*state.WorkType{
-			"task": {
-				ID: "task",
-				States: []state.StateDefinition{
-					{Value: "init", Category: state.StateCategoryInitial},
-					{Value: "review", Category: state.StateCategoryProcessing},
-					{Value: "failed", Category: state.StateCategoryFailed},
-					{Value: "complete", Category: state.StateCategoryTerminal},
-				},
-			},
-		},
-	}
-}
-
 func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []work.WorkContentPart) {
 	t.Helper()
 	if content == nil {
@@ -400,39 +423,6 @@ func extractInvocationRequestText(t *testing.T, request *factoryapi.InvocationRe
 		t.Fatalf("AsWorkTextContentPart: %v", err)
 	}
 	return part.Text
-}
-
-func assertFactorySessionInvocation(
-	t *testing.T,
-	mock *testutil.MockFactory,
-	body string,
-	wantResult apisurface.FactoryInvocationResult,
-	wantSubmitText string,
-) {
-	t.Helper()
-
-	srv := newTestServer(mock)
-	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
-	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != factoryapi.InvocationTerminalStatus(wantResult.Status) {
-		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
-	}
-	assertGeneratedWorkContentParts(t, response.PrimaryResult, wantResult.PrimaryResult)
-	if wantSubmitText != "" {
-		if len(mock.InvokedFactorySessions) != 1 {
-			t.Fatalf("invoked factory sessions = %d, want 1", len(mock.InvokedFactorySessions))
-		}
-		if got := extractInvocationRequestText(t, &mock.InvokedFactorySessions[0]); got != wantSubmitText {
-			t.Fatalf("invocation text = %q, want %q", got, wantSubmitText)
-		}
-	}
 }
 
 func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
@@ -618,17 +608,6 @@ func namedFactoryPayloadJSON(project, workType string) string {
 	}`, project, project, workType, workType, workType)
 }
 
-func submittedRequestNamed(t *testing.T, requests []work.SubmitRequest, name string) work.SubmitRequest {
-	t.Helper()
-	for _, request := range requests {
-		if request.Name == name {
-			return request
-		}
-	}
-	t.Fatalf("submit request %q not found in %#v", name, requests)
-	return work.SubmitRequest{}
-}
-
 func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factoryapi.Work {
 	t.Helper()
 	for _, work := range works {
@@ -638,38 +617,6 @@ func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factor
 	}
 	t.Fatalf("listed work %q not found in %#v", workID, works)
 	return factoryapi.Work{}
-}
-
-func assertSubmittedChildRelations(t *testing.T, relations []work.Relation) {
-	t.Helper()
-
-	var foundParentChild bool
-	var foundDependsOn bool
-	for _, relation := range relations {
-		switch relation.Type {
-		case work.RelationParentChild:
-			foundParentChild = true
-			if relation.TargetWorkID != "batch-request-api-parent-child-parent" {
-				t.Fatalf("parent-child target = %q, want batch-request-api-parent-child-parent", relation.TargetWorkID)
-			}
-		case work.RelationDependsOn:
-			foundDependsOn = true
-			if relation.TargetWorkID != "batch-request-api-parent-child-prerequisite" {
-				t.Fatalf("depends_on target = %q, want batch-request-api-parent-child-prerequisite", relation.TargetWorkID)
-			}
-			if relation.RequiredState != "complete" {
-				t.Fatalf("depends_on required_state = %q, want complete", relation.RequiredState)
-			}
-		default:
-			t.Fatalf("unexpected normalized relation = %#v", relation)
-		}
-	}
-	if !foundParentChild {
-		t.Fatal("missing normalized parent-child relation")
-	}
-	if !foundDependsOn {
-		t.Fatal("missing normalized depends_on relation")
-	}
 }
 
 func submitWorkRequest(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
@@ -746,11 +693,12 @@ func assertListedWorkIDs(t *testing.T, works []factoryapi.Work, want []string) {
 }
 
 type upsertValidationFailureCase struct {
-	name    string
-	path    string
-	body    string
-	factory *testutil.MockFactory
-	wantMsg string
+	name                 string
+	path                 string
+	body                 string
+	submitError          string
+	workPreparationError string
+	wantMsg              string
 }
 
 func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailureCase) {
@@ -758,17 +706,24 @@ func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailu
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf := tc.factory
-			if mf == nil {
-				mf = &testutil.MockFactory{}
+			observed, workRole := newRecordingWorkRole()
+			if tc.submitError != "" {
+				workRole.submit = func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+					return work.WorkRequestSubmitResult{}, errors.New(tc.submitError)
+				}
 			}
-			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}
-			srv := newTestServer(mf)
+			sessions := strictLiveSessionAPIFake{get: func(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
+				return factoryapi.FactorySession{Id: sessionID}, nil
+			}}
+			srv := newFactorySessionRolesTestServer(sessions, workRole, factoryReadFake(factoryapi.Factory{Name: "test-factory"}, nil), nil)
+			if tc.workPreparationError != "" {
+				setWorkRequestPreparationError(srv, tc.workPreparationError)
+			}
 
 			rec := upsertWorkRequest(t, srv, tc.path, tc.body)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", tc.wantMsg)
-			if len(mf.Submitted) != 0 {
-				t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+			if len(observed.WorkRequests) != 0 {
+				t.Fatalf("Work request count = %d, want 0", len(observed.WorkRequests))
 			}
 		})
 	}
@@ -826,83 +781,11 @@ func TestDecodeStrictJSON_MultiObjectPayload(t *testing.T) {
 	}
 }
 
-func TestGetProviderSessionDetails_FailsForAmbiguousTimestampPrefixedMatches(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-	sessionDir := filepath.Join(root, "2026", "05", "19")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl"), []byte(`{"type":"session_meta","id":"sess_123"}`), 0o600); err != nil {
-		t.Fatalf("write second timestamp-prefixed provider session fixture: %v", err)
-	}
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "multiple provider session files match session identifier")
-}
-
-func TestParseCodexSessionDetails_ReconcilesMirroredCodexMessages(t *testing.T) {
-	session := strings.Join([]string{
-		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the factory state first.","phase":"commentary"}}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the factory state first."}],"phase":"commentary"}}`,
-		`{"timestamp":"2026-06-04T10:00:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Plan the next phase."}]}}`,
-		`{"timestamp":"2026-06-04T10:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"Plan the next phase."}}`,
-		`{"timestamp":"2026-06-04T10:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}`,
-		`{"timestamp":"2026-06-04T10:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Factory state looks ready."}]}}`,
-	}, "\n")
-
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-
-	assertMirroredCodexMessageSummary(t, parsed.Summary)
-	assertMirroredCodexMessageTranscript(t, parsed)
-}
-
-func assertMirroredCodexMessageSummary(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if summary.LineCount != 7 || summary.EventCount != 7 {
-		t.Fatalf("summary = %#v, want all source records counted", summary)
-	}
-	if summary.TokenUsage == nil || intValue(summary.TokenUsage.TotalTokens) != 120 {
-		t.Fatalf("token usage = %#v, want line-level token accounting retained", summary.TokenUsage)
-	}
-}
-
-func assertMirroredCodexMessageTranscript(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	if len(parsed.Transcript) != 3 {
-		t.Fatalf("transcript = %#v, want mirrored messages emitted once", parsed.Transcript)
-	}
-	assertMirroredCodexMessageTranscriptEntry(t, parsed, 0, factoryapi.AssistantMessage, 2, "I will inspect the factory state first.", "first mirrored assistant message retained")
-	assertMirroredCodexMessageTranscriptEntry(t, parsed, 1, factoryapi.UserMessage, 4, "Plan the next phase.", "first mirrored user message retained")
-	assertMirroredCodexMessageTranscriptEntry(t, parsed, 2, factoryapi.AssistantMessage, 7, "Factory state looks ready.", "following distinct assistant message retained")
-}
-
-func assertMirroredCodexMessageTranscriptEntry(t *testing.T, parsed parsedCodexSessionDetails, index int, wantType factoryapi.ProviderSessionTranscriptEntryType, wantLine int, wantText string, wantDescription string) {
-	t.Helper()
-
-	entry := parsed.Transcript[index]
-	if entry.Order != index+1 || entry.Type != wantType || intValue(entry.LineNumber) != wantLine || stringValue(entry.Text) != wantText {
-		t.Fatalf("transcript[%d] = %#v, want %s", index, entry, wantDescription)
-	}
-}
-
 func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl", strings.Join([]string{
-		`{"type":"session_meta","id":"019e44f4-580e-7f32-981e-1e54ec6907d6"}`,
-		`{"type":"response_item","payload":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	srv := newTestServerWithCodexRoot(root)
+	id := "019e44f4-580e-7f32-981e-1e54ec6907d6"
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"codex", id, codexProviderSessionDetail(id, "2026/05/18/rollout-2026-05-20T17-35-24-"+id+".jsonl", 2),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=019e44f4-580e-7f32-981e-1e54ec6907d6", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -917,11 +800,9 @@ func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfigu
 }
 
 func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayoutsBothExist(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", `{"type":"session_meta","id":"sess_123"}`)
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	srv := newTestServerWithCodexRoot(root)
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"codex", "sess_123", codexProviderSessionDetail("sess_123", "2026/05/18/rollout-sess_123.jsonl", 3),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

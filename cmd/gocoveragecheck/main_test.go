@@ -26,8 +26,11 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 		importPath string
 		want       bool
 	}{
-		{name: "factory command", importPath: modulePath + "/cmd/factory", want: true},
+		{name: "factory command", importPath: modulePath + "/cmd/factory", want: false},
 		{name: "backend package", importPath: modulePath + "/pkg/config", want: true},
+		{name: "contract package", importPath: modulePath + "/pkg/transports/http/contracttests", want: false},
+		{name: "integration package", importPath: modulePath + "/pkg/transports/http/servertests/factorysessionsse", want: false},
+		{name: "maintenance package", importPath: modulePath + "/pkg/services/factory_runtime/exhaustiontests", want: false},
 		{name: "generated api package", importPath: modulePath + "/pkg/transports/http/generated", want: false},
 		{name: "generated client package", importPath: modulePath + "/pkg/transports/http/client", want: false},
 		{name: "generated mcp package", importPath: modulePath + "/pkg/transports/mcp/generated", want: false},
@@ -80,7 +83,7 @@ func TestResolveCoverageLaneDefaultsToUnitPackages(t *testing.T) {
 		t.Fatalf("resolveCoverageLane() error = %v", err)
 	}
 
-	if !slices.Contains(coverPackages, modulePath+"/pkg/config") {
+	if !slices.Contains(coverPackages, modulePath+"/pkg/root") {
 		t.Fatalf("cover packages missing backend package: %v", coverPackages)
 	}
 	if slices.Contains(coverPackages, modulePath+"/pkg/transports/http/client") {
@@ -89,7 +92,7 @@ func TestResolveCoverageLaneDefaultsToUnitPackages(t *testing.T) {
 	if slices.Contains(coverPackages, modulePath+"/internal/testutil") {
 		t.Fatalf("cover packages unexpectedly include test helper package: %v", coverPackages)
 	}
-	if !slices.Contains(testPackages, modulePath+"/pkg/config") {
+	if !slices.Contains(testPackages, modulePath+"/pkg/root") {
 		t.Fatalf("test packages missing backend unit package: %v", testPackages)
 	}
 	if slices.Contains(testPackages, modulePath+"/tests/functional/runtime_api") {
@@ -255,7 +258,7 @@ func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 func TestSummarizePackageCoverageFromTotalsUsesOnlySelectedSuiteProfile(t *testing.T) {
 	t.Parallel()
 
-	coveredPackage := modulePath + "/pkg/workers/service"
+	coveredPackage := modulePath + "/pkg/services/automation/service"
 	unitCoveredButFunctionallyUntouched := modulePath + "/pkg/workers/worktree"
 	got := summarizePackageCoverageFromTotals(
 		map[string]packageCoverageTotals{

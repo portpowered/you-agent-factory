@@ -12,14 +12,13 @@ import (
 )
 
 func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t *testing.T) {
+	t.Parallel()
+
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("resolve repository root: %v", err)
 	}
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 
 	manifestPayload := artifacts["packages/api/generated/manifest.json"]
 	var manifest map[string]any

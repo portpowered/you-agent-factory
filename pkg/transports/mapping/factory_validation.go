@@ -5,8 +5,7 @@ import (
 	"io"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -102,13 +101,13 @@ func RenderFactoryValidationHuman(
 
 // FactoryValidationResultToAPI maps a canonical Factory validation result at
 // the public transport boundary.
-func FactoryValidationResultToAPI(result factoryvalidation.Result) factoryapi.FactoryValidationResult {
+func FactoryValidationResultToAPI(result interfaces.ValidationResult) factoryapi.FactoryValidationResult {
 	return factoryapi.FactoryValidationResult{Targets: FactoryValidationTargetsToAPI(result.Targets)}
 }
 
 // FactoryValidationTargetsToAPI maps canonical Factory validation targets at
 // the public transport boundary.
-func FactoryValidationTargetsToAPI(targets []factoryvalidation.Target) []factoryapi.FactoryValidationTarget {
+func FactoryValidationTargetsToAPI(targets []interfaces.ValidationTarget) []factoryapi.FactoryValidationTarget {
 	if len(targets) == 0 {
 		return []factoryapi.FactoryValidationTarget{}
 	}
@@ -121,12 +120,11 @@ func FactoryValidationTargetsToAPI(targets []factoryvalidation.Target) []factory
 
 // FactoryValidationTargetToAPI maps one canonical Factory validation target at
 // the public transport boundary.
-func FactoryValidationTargetToAPI(target factoryvalidation.Target) factoryapi.FactoryValidationTarget {
+func FactoryValidationTargetToAPI(target interfaces.ValidationTarget) factoryapi.FactoryValidationTarget {
 	return factoryapi.FactoryValidationTarget{
 		Code:     target.Code,
 		Severity: factoryValidationSeverityToAPI(target.Severity),
 		Message:  target.Message,
-		Path:     factoryValidationPathToAPI(target.Path),
 		Subject: factoryapi.FactoryValidationSubject{
 			Type:     factoryValidationSubjectTypeToAPI(target.Subject.Type),
 			Id:       target.Subject.ID,
@@ -135,59 +133,51 @@ func FactoryValidationTargetToAPI(target factoryvalidation.Target) factoryapi.Fa
 	}
 }
 
-func factoryValidationPathToAPI(path string) *string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	return &path
-}
-
-func factoryValidationSeverityToAPI(severity factoryvalidation.Severity) factoryapi.FactoryValidationSeverity {
+func factoryValidationSeverityToAPI(severity interfaces.ValidationSeverity) factoryapi.FactoryValidationSeverity {
 	switch severity {
-	case factoryvalidation.SeverityWarning:
+	case interfaces.ValidationSeverityWarning:
 		return factoryapi.FactoryValidationSeverityWarning
-	case factoryvalidation.SeverityHint:
+	case interfaces.ValidationSeverityHint:
 		return factoryapi.FactoryValidationSeverityHint
 	default:
 		return factoryapi.FactoryValidationSeverityError
 	}
 }
 
-func factoryValidationSubjectTypeToAPI(subjectType factoryvalidation.SubjectType) factoryapi.FactoryValidationSubjectType {
+func factoryValidationSubjectTypeToAPI(subjectType interfaces.ValidationSubjectType) factoryapi.FactoryValidationSubjectType {
 	switch subjectType {
-	case factoryvalidation.SubjectTypeWorkstation:
+	case interfaces.ValidationSubjectTypeWorkstation:
 		return factoryapi.FactoryValidationSubjectTypeWorkstation
-	case factoryvalidation.SubjectTypeWorkType:
+	case interfaces.ValidationSubjectTypeWorkType:
 		return factoryapi.FactoryValidationSubjectTypeWorkType
-	case factoryvalidation.SubjectTypeWorkState:
+	case interfaces.ValidationSubjectTypeWorkState:
 		return factoryapi.FactoryValidationSubjectTypeWorkState
-	case factoryvalidation.SubjectTypeWorker:
+	case interfaces.ValidationSubjectTypeWorker:
 		return factoryapi.FactoryValidationSubjectTypeWorker
-	case factoryvalidation.SubjectTypeResource:
+	case interfaces.ValidationSubjectTypeResource:
 		return factoryapi.FactoryValidationSubjectTypeResource
-	case factoryvalidation.SubjectTypeRoute:
+	case interfaces.ValidationSubjectTypeRoute:
 		return factoryapi.FactoryValidationSubjectTypeRoute
 	default:
 		return factoryapi.FactoryValidationSubjectTypeFactory
 	}
 }
 
-func factoryValidationSubjectLocationToAPI(location factoryvalidation.SubjectLocation) factoryapi.FactoryValidationSubjectLocation {
+func factoryValidationSubjectLocationToAPI(location interfaces.ValidationSubjectLocation) factoryapi.FactoryValidationSubjectLocation {
 	switch location {
-	case factoryvalidation.SubjectLocationOnRejection:
+	case interfaces.ValidationSubjectLocationOnRejection:
 		return factoryapi.FactoryValidationSubjectLocationOnRejection
-	case factoryvalidation.SubjectLocationOnFailure:
+	case interfaces.ValidationSubjectLocationOnFailure:
 		return factoryapi.FactoryValidationSubjectLocationOnFailure
-	case factoryvalidation.SubjectLocationOutputs:
+	case interfaces.ValidationSubjectLocationOutputs:
 		return factoryapi.FactoryValidationSubjectLocationOutputs
-	case factoryvalidation.SubjectLocationInputs:
+	case interfaces.ValidationSubjectLocationInputs:
 		return factoryapi.FactoryValidationSubjectLocationInputs
-	case factoryvalidation.SubjectLocationStates:
+	case interfaces.ValidationSubjectLocationStates:
 		return factoryapi.FactoryValidationSubjectLocationStates
-	case factoryvalidation.SubjectLocationTerminal:
+	case interfaces.ValidationSubjectLocationTerminal:
 		return factoryapi.FactoryValidationSubjectLocationTerminal
-	case factoryvalidation.SubjectLocationReference:
+	case interfaces.ValidationSubjectLocationReference:
 		return factoryapi.FactoryValidationSubjectLocationReference
 	default:
 		return factoryapi.FactoryValidationSubjectLocationDefinition
@@ -197,11 +187,11 @@ func factoryValidationSubjectLocationToAPI(location factoryvalidation.SubjectLoc
 // FactoryTopologyValidationErrorInput maps a canonical validation result into
 // the transport-owned topology error input.
 func FactoryTopologyValidationErrorInput(
-	result factoryvalidation.Result,
+	result interfaces.ValidationResult,
 	message string,
 ) (string, []factoryapi.FactoryValidationTarget) {
 	if message == "" {
-		message = factoryvalidation.DefaultTopologyValidationMessage
+		message = interfaces.DefaultTopologyValidationMessage
 	}
 	return message, FactoryValidationTargetsToAPI(result.Targets)
 }

@@ -7,26 +7,21 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"go.uber.org/zap"
 )
 
 func TestLifecycleControlPause_CLIJSONMatchesAPIResponse(t *testing.T) {
-	service := newLifecycleEquivalenceFakeService(t)
+	service := acceptedPauseEquivalenceScript()
 	serverURL := serverURLForLifecycleEquivalence(t, service)
 
 	apiResponse, status := postLifecycleControl(
 		t,
 		serverURL,
-		startFixtureSessionByRequestID(t, service, "req-js-run-n-001"),
+		"dur-sess-api-pause-001",
 		"pause",
 	)
 	if status != 200 {
@@ -34,9 +29,9 @@ func TestLifecycleControlPause_CLIJSONMatchesAPIResponse(t *testing.T) {
 	}
 
 	var cliOut bytes.Buffer
-	if err := Pause(LifecycleControlConfig{
+	if err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    serverURL,
-		SessionID: startFixtureSessionByRequestID(t, service, "req-petri-run-001"),
+		SessionID: "dur-sess-cli-pause-001",
 		JSON:      true,
 		Output:    &cliOut,
 	}); err != nil {
@@ -51,14 +46,15 @@ func TestLifecycleControlPause_CLIJSONMatchesAPIResponse(t *testing.T) {
 }
 
 func TestLifecycleControlPause_CLIJSONMatchesAPINoOpResponse(t *testing.T) {
-	service := newLifecycleEquivalenceFakeService(t)
-	row := startRunningSessionForLifecycleEquivalence(t, service)
+	const sessionID = "dur-sess-pause-noop-001"
+	service := lifecycleEquivalenceScript{
+		pause: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return lifecycleEquivalenceResult(sessionID, "PAUSE", factorysessionexecution.LifecycleControlOutcomeNoOp, factorysessionexecution.LifecycleStatusPaused), nil
+		},
+	}
 	serverURL := serverURLForLifecycleEquivalence(t, service)
 
-	if _, status := postLifecycleControl(t, serverURL, row.SessionID, "pause"); status != 200 {
-		t.Fatalf("initial API pause status = %d, want 200", status)
-	}
-	apiResponse, status := postLifecycleControl(t, serverURL, row.SessionID, "pause")
+	apiResponse, status := postLifecycleControl(t, serverURL, sessionID, "pause")
 	if status != 200 {
 		t.Fatalf("API no-op pause status = %d, want 200", status)
 	}
@@ -67,9 +63,9 @@ func TestLifecycleControlPause_CLIJSONMatchesAPINoOpResponse(t *testing.T) {
 	}
 
 	var cliOut bytes.Buffer
-	if err := Pause(LifecycleControlConfig{
+	if err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    serverURL,
-		SessionID: row.SessionID,
+		SessionID: sessionID,
 		JSON:      true,
 		Output:    &cliOut,
 	}); err != nil {
@@ -84,9 +80,14 @@ func TestLifecycleControlPause_CLIJSONMatchesAPINoOpResponse(t *testing.T) {
 }
 
 func TestLifecycleControlResume_CLIJSONMatchesAPIResponse(t *testing.T) {
-	service := newLifecycleEquivalenceFakeService(t)
+	service := lifecycleEquivalenceScript{
+		pause: acceptedPauseEquivalenceScript().pause,
+		resume: func(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return lifecycleEquivalenceResult(sessionID, "RESUME", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatusRunning), nil
+		},
+	}
 	serverURL := serverURLForLifecycleEquivalence(t, service)
-	sessionID := startFixtureSessionByRequestID(t, service, "req-js-run-n-001")
+	sessionID := "dur-sess-api-resume-001"
 
 	if _, status := postLifecycleControl(t, serverURL, sessionID, "pause"); status != 200 {
 		t.Fatalf("API pause status = %d, want 200", status)
@@ -97,13 +98,13 @@ func TestLifecycleControlResume_CLIJSONMatchesAPIResponse(t *testing.T) {
 		t.Fatalf("API resume status = %d, want 200", status)
 	}
 
-	cliSessionID := startFixtureSessionByRequestID(t, service, "req-petri-run-001")
+	cliSessionID := "dur-sess-cli-resume-001"
 	if _, status := postLifecycleControl(t, serverURL, cliSessionID, "pause"); status != 200 {
 		t.Fatalf("API pause cli session status = %d, want 200", status)
 	}
 
 	var cliOut bytes.Buffer
-	if err := Resume(LifecycleControlConfig{
+	if err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    serverURL,
 		SessionID: cliSessionID,
 		JSON:      true,
@@ -120,13 +121,15 @@ func TestLifecycleControlResume_CLIJSONMatchesAPIResponse(t *testing.T) {
 }
 
 func TestLifecycleControlPause_CLIJSONMatchesAPITerminalSessionRejection(t *testing.T) {
-	service := newLifecycleEquivalenceFakeService(t)
-	_, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source:    factorysessionexecution.Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync terminal session: %v", err)
+	service := lifecycleEquivalenceScript{
+		pause: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ControlError{
+				Operation: "PAUSE",
+				Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
+				Status:    factorysessionexecution.LifecycleStatusSucceeded,
+				Message:   "terminal session",
+			}
+		},
 	}
 	serverURL := serverURLForLifecycleEquivalence(t, service)
 	sessionID := "dur-sess-petri-success-001"
@@ -140,7 +143,7 @@ func TestLifecycleControlPause_CLIJSONMatchesAPITerminalSessionRejection(t *test
 	}
 
 	var cliOut bytes.Buffer
-	err = Pause(LifecycleControlConfig{
+	err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    serverURL,
 		SessionID: sessionID,
 		JSON:      true,
@@ -159,23 +162,23 @@ func TestLifecycleControlPause_CLIJSONMatchesAPITerminalSessionRejection(t *test
 }
 
 func TestLifecycleControlPause_DefaultLiveSessionCLIJSONMatchesAPIResponse(t *testing.T) {
-	apiServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
-		State:          interfaces.FactoryStateRunning,
-		FactorySession: factoryapi.FactorySession{Id: "~default"},
-	})
+	apiServerURL := liveLifecycleEquivalenceServerURL(
+		t,
+		scriptedLiveLifecycleMock("~default", factorysessionexecution.LifecycleControlPause),
+	)
 
 	apiResponse, status := postLifecycleControl(t, apiServerURL, "~default", "pause")
 	if status != 200 {
 		t.Fatalf("API pause status = %d, want 200", status)
 	}
 
-	cliServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
-		State:          interfaces.FactoryStateRunning,
-		FactorySession: factoryapi.FactorySession{Id: "~default"},
-	})
+	cliServerURL := liveLifecycleEquivalenceServerURL(
+		t,
+		scriptedLiveLifecycleMock("~default", factorysessionexecution.LifecycleControlPause),
+	)
 
 	var cliOut bytes.Buffer
-	if err := Pause(LifecycleControlConfig{
+	if err := NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server: cliServerURL,
 		JSON:   true,
 		Output: &cliOut,
@@ -191,23 +194,23 @@ func TestLifecycleControlPause_DefaultLiveSessionCLIJSONMatchesAPIResponse(t *te
 }
 
 func TestLifecycleControlResume_NamedLiveSessionCLIJSONMatchesAPIResponse(t *testing.T) {
-	apiServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
-		State:          interfaces.FactoryStatePaused,
-		FactorySession: factoryapi.FactorySession{Id: "session-beta"},
-	})
+	apiServerURL := liveLifecycleEquivalenceServerURL(
+		t,
+		scriptedLiveLifecycleMock("session-beta", factorysessionexecution.LifecycleControlResume),
+	)
 
 	apiResponse, status := postLifecycleControl(t, apiServerURL, "session-beta", "resume")
 	if status != 200 {
 		t.Fatalf("API resume status = %d, want 200", status)
 	}
 
-	cliServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
-		State:          interfaces.FactoryStatePaused,
-		FactorySession: factoryapi.FactorySession{Id: "session-beta"},
-	})
+	cliServerURL := liveLifecycleEquivalenceServerURL(
+		t,
+		scriptedLiveLifecycleMock("session-beta", factorysessionexecution.LifecycleControlResume),
+	)
 
 	var cliOut bytes.Buffer
-	if err := Resume(LifecycleControlConfig{
+	if err := NewResume(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background(),
 		Server:    cliServerURL,
 		SessionID: "session-beta",
 		JSON:      true,
@@ -223,66 +226,136 @@ func TestLifecycleControlResume_NamedLiveSessionCLIJSONMatchesAPIResponse(t *tes
 	assertLifecycleControlEquivalence(t, apiResponse, cliResponse)
 }
 
-func newLifecycleEquivalenceFakeService(t *testing.T) *factorysessionexecution.FakeService {
-	t.Helper()
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
-		filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json"),
-	)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+type lifecycleEquivalenceScript struct {
+	factorysessionexecution.ExecutionService
+	pause  func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	resume func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+}
+
+func scriptedLiveLifecycleMock(
+	sessionID string,
+	operation factorysessionexecution.LifecycleControlKind,
+) lifecycleEquivalenceScript {
+	result := factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: operation,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
 	}
-	return service
+	mock := lifecycleEquivalenceScript{}
+	switch operation {
+	case factorysessionexecution.LifecycleControlPause:
+		result.Status = factorysessionexecution.LifecycleStatusPaused
+		mock.pause = func(
+			context.Context,
+			string,
+			factorysessionexecution.ControlRequest,
+		) (factorysessionexecution.LifecycleControlResult, error) {
+			return result, nil
+		}
+	case factorysessionexecution.LifecycleControlResume:
+		result.Status = factorysessionexecution.LifecycleStatusRunning
+		mock.resume = func(
+			context.Context,
+			string,
+			factorysessionexecution.ControlRequest,
+		) (factorysessionexecution.LifecycleControlResult, error) {
+			return result, nil
+		}
+	}
+	return mock
 }
 
-func serverURLForLifecycleEquivalence(t *testing.T, service factorysessionexecution.Service) string {
-	t.Helper()
-	logger, _ := zap.NewDevelopment()
-	srv := api.NewServer(&testutil.MockFactory{DurableExecutionService: service}, 8080, logger)
-	server := httptest.NewServer(srv.Handler())
-	t.Cleanup(server.Close)
-	return server.URL
+func (script lifecycleEquivalenceScript) Pause(ctx context.Context, sessionID string, request factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return script.pause(ctx, sessionID, request)
 }
 
-func liveLifecycleEquivalenceServerURL(t *testing.T, factory *testutil.MockFactory) string {
-	t.Helper()
-	logger, _ := zap.NewDevelopment()
-	srv := api.NewServer(factory, 8080, logger)
-	server := httptest.NewServer(srv.Handler())
-	t.Cleanup(server.Close)
-	return server.URL
+func (script lifecycleEquivalenceScript) Resume(ctx context.Context, sessionID string, request factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return script.resume(ctx, sessionID, request)
 }
 
-func startRunningSessionForLifecycleEquivalence(t *testing.T, service *factorysessionexecution.FakeService) struct {
-	SessionID string
-} {
-	t.Helper()
-	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-js-run-n-001",
-		Source: factorysessionexecution.Source{
-			Kind:         workflowsource.KindWorkflowFile,
-			WorkflowFile: ".claude/workflows/run-n.yaml",
+func acceptedPauseEquivalenceScript() lifecycleEquivalenceScript {
+	return lifecycleEquivalenceScript{
+		pause: func(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return lifecycleEquivalenceResult(sessionID, "PAUSE", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatusPaused), nil
 		},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync running session: %v", err)
 	}
-	return struct{ SessionID string }{SessionID: started.SessionID}
 }
 
-func startFixtureSessionByRequestID(
-	t *testing.T,
-	service *factorysessionexecution.FakeService,
-	requestID string,
-) string {
-	t.Helper()
-	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: requestID,
-		Source:    factorysessionexecution.Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync fixture session %q: %v", requestID, err)
+func lifecycleEquivalenceResult(
+	sessionID string,
+	operation factorysessionexecution.LifecycleControlKind,
+	outcome factorysessionexecution.LifecycleControlOutcome,
+	status factorysessionexecution.LifecycleStatus,
+) factorysessionexecution.LifecycleControlResult {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    status,
+		Links: factorysessionexecution.LifecycleControlLinks{
+			Session: "/factory-sessions/" + sessionID,
+			Status:  "/factory-sessions/" + sessionID,
+			Results: "/factory-sessions/" + sessionID + "/results",
+		},
 	}
-	return started.SessionID
+}
+
+func serverURLForLifecycleEquivalence(t *testing.T, service factorysessionexecution.ExecutionService) string {
+	t.Helper()
+	server := httptest.NewServer(lifecycleEquivalenceHTTPHandler(service))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func liveLifecycleEquivalenceServerURL(t *testing.T, service factorysessionexecution.ExecutionService) string {
+	t.Helper()
+	return serverURLForLifecycleEquivalence(t, service)
+}
+
+func lifecycleEquivalenceHTTPHandler(service factorysessionexecution.ExecutionService) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if r.Method != http.MethodPost || len(parts) != 3 || parts[0] != "factory-sessions" {
+			http.NotFound(w, r)
+			return
+		}
+		sessionID, operation := parts[1], parts[2]
+		var (
+			result factorysessionexecution.LifecycleControlResult
+			err    error
+		)
+		switch operation {
+		case "pause":
+			result, err = service.Pause(r.Context(), sessionID, factorysessionexecution.ControlRequest{})
+		case "resume":
+			result, err = service.Resume(r.Context(), sessionID, factorysessionexecution.ControlRequest{})
+		default:
+			http.NotFound(w, r)
+			return
+		}
+
+		statusCode := http.StatusOK
+		response := factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: result.SessionID,
+			Operation: factoryapi.FactorySessionLifecycleControlKind(result.Operation),
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(result.Outcome),
+			Status:    factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
+		}
+		var rejected *factorysessionexecution.ControlError
+		if errors.As(err, &rejected) {
+			statusCode = http.StatusConflict
+			response.SessionId = sessionID
+			response.Operation = factoryapi.FactorySessionLifecycleControlKind(rejected.Operation)
+			response.Outcome = factoryapi.FactorySessionLifecycleControlOutcome(rejected.Outcome)
+			response.Status = factoryapi.FactorySessionDurableLifecycleStatus(rejected.Status)
+		} else if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		_ = json.NewEncoder(w).Encode(response)
+	})
 }
 
 func postLifecycleControl(

@@ -10,9 +10,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
-	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
 
 func javascriptManifestFixtureRegistry(fixture string) contractvalidator.Registry {
@@ -41,7 +38,7 @@ func TestJavaScriptRuntimeAPICatalogAgentRunParallelAndPipeline(t *testing.T) {
 	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
 	symbolsByPath := catalogSymbolsByPath(t, catalog)
 
-	identity := symbolidentity.ProjectInstalledBindings()
+	identity := loadJavaScriptSymbolInventory(t)
 	identityByPath := symbolRecordsByPath(identity)
 	wantAgent, ok := identityByPath["agent"]
 	if !ok {
@@ -57,7 +54,7 @@ func TestJavaScriptRuntimeAPICatalogAgentRunParallelAndPipeline(t *testing.T) {
 	}
 	assertCatalogNamespaceMatchesIdentityBaseline(t, "agent", agentSymbol, wantAgent)
 
-	callInventory := callbehavior.ProjectInstalledCallBehavior()
+	callInventory := loadJavaScriptCallBehaviorInventory(t)
 	callByPath := callRecordsByPath(callInventory)
 	wantAgentCallBehavior, ok := callByPath["agent"]
 	if !ok {
@@ -114,7 +111,7 @@ func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
 	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
 	symbolsByPath := catalogSymbolsByPath(t, catalog)
 
-	identity := symbolidentity.ProjectInstalledBindings()
+	identity := loadJavaScriptSymbolInventory(t)
 	identityByPath := symbolRecordsByPath(identity)
 	wantWorkflow, ok := identityByPath["workflow"]
 	if !ok {
@@ -130,7 +127,7 @@ func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
 	}
 	assertCatalogNamespaceMatchesIdentityBaseline(t, "workflow", workflowSymbol, wantWorkflow)
 
-	callInventory := callbehavior.ProjectInstalledCallBehavior()
+	callInventory := loadJavaScriptCallBehaviorInventory(t)
 	callByPath := callRecordsByPath(callInventory)
 	wantWorkflowCallBehavior, ok := callByPath["workflow"]
 	if !ok {
@@ -173,11 +170,20 @@ func TestJavaScriptRuntimeAPICatalogRepresentativeCallBehaviorParity(t *testing.
 	t.Parallel()
 
 	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
-	if err := jscatalog.VerifyCatalogCallBehaviorParity(
-		catalog,
-		callbehavior.ProjectInstalledCallBehavior(),
-	); err != nil {
-		t.Fatalf("VerifyCatalogCallBehaviorParity() error = %v", err)
+	symbolsByPath := catalogSymbolsByPath(t, catalog)
+	for _, want := range loadJavaScriptCallBehaviorInventory(t).Records {
+		symbol, ok := symbolsByPath[want.Path]
+		if !ok {
+			t.Fatalf("catalog missing call-behavior path %q", want.Path)
+		}
+		switch want.Kind {
+		case "namespace":
+			assertCatalogNamespaceMatchesCallBehaviorBaseline(t, want.Path, symbol, want)
+		case "value":
+			assertCatalogValueMatchesCallBehaviorBaseline(t, want.Path, symbol, want)
+		default:
+			assertCatalogCallableMatchesCallBehaviorBaseline(t, want.Path, symbol, want)
+		}
 	}
 }
 
@@ -193,21 +199,13 @@ func TestJavaScriptRuntimeAPICatalogRepresentativeCallBehaviorParityDrift(t *tes
 		t.Fatalf("unmarshal parity drift fixture: %v", err)
 	}
 
-	issues, err := jscatalog.CatalogCallBehaviorParityIssues(catalog, callbehavior.ProjectInstalledCallBehavior())
-	if err != nil {
-		t.Fatalf("CatalogCallBehaviorParityIssues() error = %v", err)
+	symbol := catalogSymbolsByPath(t, catalog)["workflow.final"]
+	want, ok := callRecordsByPath(loadJavaScriptCallBehaviorInventory(t))["workflow.final"]
+	if !ok {
+		t.Fatal("call-behavior inventory missing workflow.final")
 	}
-	found := false
-	for _, issue := range issues {
-		if issue.Code == "javascript.call_behavior.mismatch" &&
-			issue.Path == "workflow.final" &&
-			issue.Field == "determinism" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("issues = %+v, want workflow.final determinism mismatch", issues)
+	if got, _ := symbol["determinism"].(string); got == want.Determinism {
+		t.Fatalf("workflow.final determinism = %q, want drift from committed value %q", got, want.Determinism)
 	}
 }
 
@@ -215,16 +213,25 @@ func TestJavaScriptRuntimeAPICatalogPathCompleteness(t *testing.T) {
 	t.Parallel()
 
 	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
-	paths, err := jscatalog.CatalogSymbolPathsFromDocument(catalog)
-	if err != nil {
-		t.Fatalf("CatalogSymbolPathsFromDocument() error = %v", err)
+	symbolsByPath := catalogSymbolsByPath(t, catalog)
+	catalogPaths := make([]string, 0, len(symbolsByPath))
+	for path := range symbolsByPath {
+		catalogPaths = append(catalogPaths, path)
 	}
-	if err := jscatalog.VerifyCatalogPathCompleteness(
-		paths,
-		symbolidentity.ProjectInstalledBindings(),
-		callbehavior.ProjectInstalledCallBehavior(),
-	); err != nil {
-		t.Fatalf("VerifyCatalogPathCompleteness() error = %v", err)
+	slices.Sort(catalogPaths)
+	identityPaths := make([]string, 0, len(loadJavaScriptSymbolInventory(t).Symbols))
+	for _, record := range loadJavaScriptSymbolInventory(t).Symbols {
+		identityPaths = append(identityPaths, record.Path)
+	}
+	callPaths := make([]string, 0, len(loadJavaScriptCallBehaviorInventory(t).Records))
+	for _, record := range loadJavaScriptCallBehaviorInventory(t).Records {
+		callPaths = append(callPaths, record.Path)
+	}
+	if !slices.Equal(catalogPaths, identityPaths) {
+		t.Fatalf("catalog paths = %q, want symbol inventory paths %q", catalogPaths, identityPaths)
+	}
+	if !slices.Equal(catalogPaths, callPaths) {
+		t.Fatalf("catalog paths = %q, want call-behavior inventory paths %q", catalogPaths, callPaths)
 	}
 }
 
@@ -281,7 +288,7 @@ func TestJavaScriptRuntimeAPICatalogSyncRootHelpersLogAndPhase(t *testing.T) {
 			t.Fatalf("catalog path %q appears %d times, want exactly once", path, got)
 		}
 
-		identity := symbolidentity.ProjectInstalledBindings()
+		identity := loadJavaScriptSymbolInventory(t)
 		identityByPath := symbolRecordsByPath(identity)
 		wantIdentity, ok := identityByPath[path]
 		if !ok {
@@ -289,7 +296,7 @@ func TestJavaScriptRuntimeAPICatalogSyncRootHelpersLogAndPhase(t *testing.T) {
 		}
 		assertCatalogCallableMatchesIdentityBaseline(t, path, symbol, wantIdentity)
 
-		callInventory := callbehavior.ProjectInstalledCallBehavior()
+		callInventory := loadJavaScriptCallBehaviorInventory(t)
 		callByPath := callRecordsByPath(callInventory)
 		wantCallBehavior, ok := callByPath[path]
 		if !ok {
@@ -314,7 +321,7 @@ func TestJavaScriptRuntimeAPICatalogRootValuesArgsAndMeta(t *testing.T) {
 			t.Fatalf("catalog path %q appears %d times, want exactly once", path, got)
 		}
 
-		identity := symbolidentity.ProjectInstalledBindings()
+		identity := loadJavaScriptSymbolInventory(t)
 		identityByPath := symbolRecordsByPath(identity)
 		wantIdentity, ok := identityByPath[path]
 		if !ok {
@@ -322,7 +329,7 @@ func TestJavaScriptRuntimeAPICatalogRootValuesArgsAndMeta(t *testing.T) {
 		}
 		assertCatalogValueMatchesIdentityBaseline(t, path, symbol, wantIdentity)
 
-		callInventory := callbehavior.ProjectInstalledCallBehavior()
+		callInventory := loadJavaScriptCallBehaviorInventory(t)
 		callByPath := callRecordsByPath(callInventory)
 		wantCallBehavior, ok := callByPath[path]
 		if !ok {
@@ -547,16 +554,16 @@ func countCatalogPaths(byPath map[string]map[string]any, path string) int {
 	return count
 }
 
-func symbolRecordsByPath(inventory symbolidentity.Inventory) map[string]symbolidentity.SymbolRecord {
-	byPath := make(map[string]symbolidentity.SymbolRecord, len(inventory.Symbols))
+func symbolRecordsByPath(inventory javascriptSymbolInventory) map[string]javascriptSymbolRecord {
+	byPath := make(map[string]javascriptSymbolRecord, len(inventory.Symbols))
 	for _, record := range inventory.Symbols {
 		byPath[record.Path] = record
 	}
 	return byPath
 }
 
-func callRecordsByPath(inventory callbehavior.Inventory) map[string]callbehavior.CallBehaviorRecord {
-	byPath := make(map[string]callbehavior.CallBehaviorRecord, len(inventory.Records))
+func callRecordsByPath(inventory javascriptCallBehaviorInventory) map[string]javascriptCallBehaviorRecord {
+	byPath := make(map[string]javascriptCallBehaviorRecord, len(inventory.Records))
 	for _, record := range inventory.Records {
 		byPath[record.Path] = record
 	}
@@ -567,7 +574,7 @@ func assertCatalogValueMatchesIdentityBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want symbolidentity.SymbolRecord,
+	want javascriptSymbolRecord,
 ) {
 	t.Helper()
 
@@ -596,7 +603,7 @@ func assertCatalogValueMatchesCallBehaviorBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want callbehavior.CallBehaviorRecord,
+	want javascriptCallBehaviorRecord,
 ) {
 	t.Helper()
 
@@ -615,7 +622,7 @@ func assertCatalogCallableMatchesIdentityBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want symbolidentity.SymbolRecord,
+	want javascriptSymbolRecord,
 ) {
 	t.Helper()
 
@@ -644,7 +651,7 @@ func assertCatalogCallableMatchesCallBehaviorBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want callbehavior.CallBehaviorRecord,
+	want javascriptCallBehaviorRecord,
 ) {
 	t.Helper()
 
@@ -661,7 +668,7 @@ func assertCatalogAsyncCallableMatchesCallBehaviorBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want callbehavior.CallBehaviorRecord,
+	want javascriptCallBehaviorRecord,
 ) {
 	t.Helper()
 
@@ -676,7 +683,7 @@ func assertCatalogCallableParametersMatchBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want []callbehavior.Parameter,
+	want []javascriptParameter,
 ) {
 	t.Helper()
 
@@ -721,7 +728,7 @@ func assertCatalogCallableReturnMatchesBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want *callbehavior.ReturnBehavior,
+	want *javascriptReturnBehavior,
 ) {
 	t.Helper()
 
@@ -786,7 +793,7 @@ func assertCatalogCallableErrorsMatchBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want []callbehavior.ErrorCase,
+	want []javascriptErrorCase,
 ) {
 	t.Helper()
 
@@ -821,7 +828,7 @@ func assertCatalogCallbackMatchesBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want *callbehavior.CallbackShape,
+	want *javascriptCallbackShape,
 ) {
 	t.Helper()
 
@@ -850,7 +857,7 @@ func assertCatalogNamespaceMatchesIdentityBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want symbolidentity.SymbolRecord,
+	want javascriptSymbolRecord,
 ) {
 	t.Helper()
 
@@ -896,7 +903,7 @@ func assertCatalogNamespaceMatchesCallBehaviorBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want callbehavior.CallBehaviorRecord,
+	want javascriptCallBehaviorRecord,
 ) {
 	t.Helper()
 
@@ -922,7 +929,7 @@ func assertCatalogMethodMatchesIdentityBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want symbolidentity.SymbolRecord,
+	want javascriptSymbolRecord,
 ) {
 	t.Helper()
 
@@ -953,7 +960,7 @@ func assertCatalogMethodMatchesCallBehaviorBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want callbehavior.CallBehaviorRecord,
+	want javascriptCallBehaviorRecord,
 ) {
 	t.Helper()
 
@@ -973,7 +980,7 @@ func assertCatalogPolicyChecksMatchBaseline(
 	t *testing.T,
 	path string,
 	symbol map[string]any,
-	want []callbehavior.PolicyCheck,
+	want []javascriptPolicyCheck,
 ) {
 	t.Helper()
 

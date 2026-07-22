@@ -154,7 +154,7 @@ func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 }
 
 func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
-	listCfg := sessioncli.ListConfig{Scope: "persisted"}
+	listCfg := sessioncli.ListConfig{Context: context.Background(), Scope: "persisted"}
 	server := "https://factory.example.test"
 	prepared := false
 	root := &cobra.Command{Use: "you"}
@@ -190,7 +190,7 @@ func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
 func TestSessionDispatchAndLifecycleBindingsMapExecutionConfig(t *testing.T) {
 	server := "https://factory.example.test"
 	jsonOutput := true
-	dispatchCfg := sessioncli.DispatchesConfig{Phase: "completed"}
+	dispatchCfg := sessioncli.DispatchesConfig{Context: context.Background(), Phase: "completed"}
 	dispatchRunE := commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{
 		Config: &dispatchCfg, Server: &server, JSON: &jsonOutput,
 		ListDispatches: func(cfg sessioncli.DispatchesConfig) error {
@@ -204,7 +204,7 @@ func TestSessionDispatchAndLifecycleBindingsMapExecutionConfig(t *testing.T) {
 		t.Fatalf("dispatches RunE() error = %v", err)
 	}
 
-	lifecycleCfg := sessioncli.LifecycleControlConfig{}
+	lifecycleCfg := sessioncli.LifecycleControlConfig{Context: context.Background()}
 	lifecycleRunE := commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{
 		Config: &lifecycleCfg, Server: &server, JSON: &jsonOutput,
 		Control: func(cfg sessioncli.LifecycleControlConfig) error {
@@ -233,7 +233,7 @@ func TestSessionHandlerBindingsRejectMissingRequirements(t *testing.T) {
 	if err := lifecycle(&cobra.Command{Use: "pause"}, nil); err == nil {
 		t.Fatal("SessionLifecycleRunE() missing config = nil, want error")
 	}
-	lifecycle = commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{Config: &sessioncli.LifecycleControlConfig{}})
+	lifecycle = commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{Config: &sessioncli.LifecycleControlConfig{Context: context.Background()}})
 	if err := lifecycle(&cobra.Command{Use: "pause"}, nil); err == nil {
 		t.Fatal("SessionLifecycleRunE() missing control = nil, want error")
 	}
@@ -255,7 +255,7 @@ func TestSessionShowRunEUsesHandwrittenServicePath(t *testing.T) {
 		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
 			Server:      stringPtr(srv.URL),
 			JSON:        boolPtr(true),
-			ShowSession: sessioncli.Show,
+			ShowSession: sessioncli.NewShow(testHTTPProtocol(t)),
 		}),
 	})
 	if err != nil {

@@ -1,0 +1,998 @@
+package validation
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+)
+
+func containsAll(value string, substrings ...string) bool {
+	for _, substring := range substrings {
+		if !strings.Contains(value, substring) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestRuleFactoryGuards_InferenceThrottleRequiresModelProvider(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		RefreshWindow: "15m",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-model-provider", "guards[0](inference_throttle_guard).modelProvider", "modelProvider")
+}
+
+func TestRuleFactoryGuards_InferenceThrottleRejectsInvalidRefreshWindow(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		RefreshWindow: "tomorrow",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-refresh-window", "guards[0](inference_throttle_guard).refreshWindow", "positive duration")
+}
+
+func TestRuleFactoryGuards_InferenceThrottleRejectsNonPositiveRefreshWindow(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		RefreshWindow: "0s",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-refresh-window", "guards[0](inference_throttle_guard).refreshWindow", "positive duration")
+}
+
+func TestRuleFactoryGuards_RejectsUnsupportedType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{Type: interfaces.GuardTypeVisitCount}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-unknown-type", "guards[0](visit_count)", "factory guards support: inference_throttle_guard")
+}
+
+func TestRuleFactoryGuards_ValidInferenceThrottleGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		Model:         "claude-sonnet-4-20250514",
+		RefreshWindow: "15m",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleGuards_VisitCountMissingWorkstation(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "ws",
+		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, MaxVisits: 3}},
+	}}
+	findings := ruleGuards(cfg)
+	assertFindingExists(t, findings, "guard-visit-count-workstation")
+}
+
+func TestRuleGuards_VisitCountInvalidWorkstation(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "ws",
+		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, Workstation: "nonexistent", MaxVisits: 3}},
+	}}
+	findings := ruleGuards(cfg)
+	assertFindingExists(t, findings, "guard-visit-count-workstation")
+}
+
+func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+		{Name: "ws", Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 0}}},
+	}
+	findings := ruleGuards(cfg)
+	assertFindingExists(t, findings, "guard-visit-count-max-visits")
+}
+
+func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "ws",
+		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeMatchesFields}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 1 || findings[0].Rule != "guard-matches-fields-input-key" {
+		t.Fatalf("expected match_config.input_key finding, got %#v", findings)
+	}
+}
+
+func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Guards: []interfaces.GuardConfig{{
+			Type:        interfaces.GuardTypeMatchesFields,
+			MatchConfig: &interfaces.GuardMatchConfig{InputKey: "   "},
+		}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 1 || findings[0].Rule != "guard-matches-fields-input-key" {
+		t.Fatalf("expected match_config.input_key finding, got %#v", findings)
+	}
+}
+
+func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{},
+		Linear:   &interfaces.HostedLinearWorkerConfig{},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-auth-secret-ref", "workers[0](linear-poller).auth.secretRef", "auth.secretRef")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-work-type", "workers[0](linear-poller).linear.mapping.workType", "mapping.workType")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-state", "workers[0](linear-poller).linear.mapping.state", "mapping.state")
+}
+
+func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name:     "executor",
+		Type:     interfaces.WorkerTypeModel,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-provider-unsupported", "workers[0](executor).provider", "cannot declare hosted provider")
+	assertFindingMatch(t, findings, "hosted-worker-auth-unsupported", "workers[0](executor).auth", "cannot declare hosted auth")
+	assertFindingMatch(t, findings, "hosted-worker-linear-unsupported", "workers[0](executor).linear", "cannot declare hosted LINEAR")
+}
+
+func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Guards: []interfaces.GuardConfig{{
+			Type:        interfaces.GuardTypeMatchesFields,
+			MatchConfig: &interfaces.GuardMatchConfig{InputKey: `.Tags["_last_output"]`},
+		}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleGuards_UnknownType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "ws",
+		Guards: []interfaces.GuardConfig{{Type: "bogus"}},
+	}}
+	findings := ruleGuards(cfg)
+	assertFindingExists(t, findings, "guard-unknown-type")
+}
+
+func TestRuleGuards_RejectsWorkstationLevelChildFanInTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		guardType interfaces.GuardType
+	}{
+		{name: "all children complete", guardType: interfaces.GuardTypeAllChildrenComplete},
+		{name: "any child failed", guardType: interfaces.GuardTypeAnyChildFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+				Name:   "ws",
+				Guards: []interfaces.GuardConfig{{Type: tt.guardType}},
+			}}
+			findings := ruleGuards(cfg)
+			assertFindingExists(t, findings, "guard-unknown-type")
+			if !strings.Contains(findings[0].Message, "use per-input guards for child fan-in") {
+				t.Fatalf("expected per-input guard guidance, got %q", findings[0].Message)
+			}
+		})
+	}
+}
+
+func TestRuleGuards_ValidGuards(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Guards: []interfaces.GuardConfig{
+			{Type: interfaces.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 3},
+		},
+	}}
+	findings := ruleGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleWorkstationKind_UnknownKind(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{Name: "ws", Kind: "bogus"}}
+	findings := ruleWorkstationKind(cfg)
+	assertFindingExists(t, findings, "workstation-kind")
+}
+
+func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-outputs")
+}
+
+func TestRuleClassifierWorkstations_AllowsNonClassifierWithoutOnFailureWhenOutputsPresent(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-classification-routes")
+}
+
+func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		OnContinue:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		OnRejection:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "classifier-workstation-routes")
+	assertFindingExists(t, findings, "classifier-workstation-outputs")
+	assertFindingExists(t, findings, "classifier-workstation-on-continue")
+	assertFindingExists(t, findings, "classifier-workstation-on-rejection")
+}
+
+func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutputs(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "approved"},
+			{Label: " needs_review ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "123", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "   ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "classifier-workstation-route-label")
+	assertFindingExists(t, findings, "classifier-workstation-route-outputs")
+}
+
+func TestRuleClassifierWorkstations_AllowsValidClassifierTopology(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleClassifierWorkstations_AllowsClassifierWithoutOnFailureWhenRoutesPresent(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleCronWorkstations_ValidScheduleCron(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "daily-refresh",
+		Kind:           interfaces.WorkstationKindCron,
+		WorkerTypeName: "w1",
+		Cron: &interfaces.CronConfig{
+			Schedule:       "0 * * * *",
+			TriggerAtStart: true,
+			Jitter:         "30s",
+			ExpiryWindow:   "10m",
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleCronWorkstations_ValidRequiredInputCron(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "refresh-ready-task",
+		Kind:           interfaces.WorkstationKindCron,
+		WorkerTypeName: "w1",
+		Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "done",
+		}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleCronWorkstations_MissingCronConfig(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-config")
+}
+
+func TestRuleCronWorkstations_MissingSchedule(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Cron:    &interfaces.CronConfig{},
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-schedule")
+}
+
+func TestRuleCronWorkstations_InvalidScheduleNamesWorkstationAndValue(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Cron:    &interfaces.CronConfig{Schedule: "not a cron"},
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-schedule")
+	if findings[0].Path != "workstations[0](daily-refresh).cron.schedule" {
+		t.Fatalf("expected path to name cron workstation and schedule field, got %q", findings[0].Path)
+	}
+	if !strings.Contains(findings[0].Message, `"not a cron"`) {
+		t.Fatalf("expected message to include bad schedule value, got %q", findings[0].Message)
+	}
+}
+
+func TestRuleCronWorkstations_UnsupportedIntervalNamesWorkstationAndField(t *testing.T) {
+	var cron interfaces.CronConfig
+	if err := json.Unmarshal([]byte(`{"interval":"5m"}`), &cron); err != nil {
+		t.Fatalf("unmarshal cron config: %v", err)
+	}
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Cron:    &cron,
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-interval")
+	if findings[0].Path != "workstations[0](daily-refresh).cron.interval" {
+		t.Fatalf("expected path to name cron workstation and field, got %q", findings[0].Path)
+	}
+}
+
+func TestRuleCronWorkstations_InvalidJitterNamesWorkstationAndField(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Cron:    &interfaces.CronConfig{Schedule: "0 * * * *", Jitter: "-1s"},
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-jitter")
+	if findings[0].Path != "workstations[0](daily-refresh).cron.jitter" {
+		t.Fatalf("expected path to name cron workstation and field, got %q", findings[0].Path)
+	}
+}
+
+func TestRuleCronWorkstations_InvalidExpiryWindowNamesWorkstationAndField(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:    "daily-refresh",
+		Kind:    interfaces.WorkstationKindCron,
+		Cron:    &interfaces.CronConfig{Schedule: "0 * * * *", ExpiryWindow: "0s"},
+		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-expiry-window")
+	if findings[0].Path != "workstations[0](daily-refresh).cron.expiry_window" {
+		t.Fatalf("expected path to name cron workstation and field, got %q", findings[0].Path)
+	}
+}
+
+func TestRuleCronWorkstations_MissingOutput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "daily-refresh",
+		Kind:           interfaces.WorkstationKindCron,
+		WorkerTypeName: "w1",
+		Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-output")
+}
+
+func TestRuleCronWorkstations_ValidLogicalMoveCronWithoutWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "scheduled-route",
+		Type: interfaces.WorkstationTypeLogical,
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleCronWorkstations_MissingWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "daily-refresh",
+		Type: interfaces.WorkstationTypeModel,
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-worker")
+	if findings[0].Path != "workstations[0](daily-refresh).worker" {
+		t.Fatalf("expected path to name cron workstation and worker field, got %q", findings[0].Path)
+	}
+}
+
+func TestRuleCronWorkstations_NonCronWithCronConfig(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "processor",
+		Kind: interfaces.WorkstationKindStandard,
+		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	assertFindingExists(t, findings, "cron-type")
+}
+
+func TestRuleWorkerReferences_NonexistentWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{Name: "ws", WorkerTypeName: "nonexistent"}}
+	findings := ruleWorkerReferences(cfg)
+	assertFindingExists(t, findings, "workstation-worker-ref")
+}
+
+func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws", Kind: interfaces.WorkstationKindRepeater, WorkerTypeName: "w1",
+	}}
+	f1 := ruleWorkstationKind(cfg)
+	f2 := ruleWorkerReferences(cfg)
+	if len(f1)+len(f2) != 0 {
+		t.Fatalf("expected no findings, got kind=%v worker=%v", f1, f2)
+	}
+}
+
+func TestRuleWorkstationKind_AcceptsPoller(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "poller",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "w1",
+	}}
+
+	if findings := ruleWorkstationKind(cfg); len(findings) != 0 {
+		t.Fatalf("expected no kind findings for poller, got %v", findings)
+	}
+}
+
+func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name: "planner",
+		Type: interfaces.WorkerTypeModel,
+	}}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "linear-poller",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "planner",
+	}}
+
+	findings := rulePollerWorkstations(cfg)
+	assertFindingExists(t, findings, "poller-worker-type")
+	if findings[0].Path != "workstations[0](linear-poller).worker" {
+		t.Fatalf("expected path to name poller workstation and worker field, got %q", findings[0].Path)
+	}
+	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`) {
+		t.Fatalf("expected explicit poller/worker relationship in message, got %q", got)
+	}
+}
+
+func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{
+		{Name: "script-poller", Type: interfaces.WorkerTypeScript},
+		{Name: "hosted-poller", Type: interfaces.WorkerTypeHosted},
+	}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+		{Name: "script", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "script-poller"},
+		{Name: "hosted", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "hosted-poller"},
+	}
+
+	if findings := rulePollerWorkstations(cfg); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRulePerInputGuards_MissingParentInput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task", StateName: "init",
+			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete},
+		}},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-parent-input")
+}
+
+func TestRulePerInputGuards_ParentInputNotMatching(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task", StateName: "init",
+			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "other"},
+		}},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-parent-input")
+}
+
+func TestRulePerInputGuards_SelfReference(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task", StateName: "init",
+			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "task"},
+		}},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-self-ref")
+}
+
+func TestRulePerInputGuards_InvalidSpawnedBy(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
+		Name: "parent", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}},
+	})
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "parent", StateName: "init"},
+			{
+				WorkTypeName: "task", StateName: "init",
+				Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "nonexistent"},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-spawned-by")
+}
+
+func TestRulePerInputGuards_UnsupportedType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task", StateName: "init",
+			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeVisitCount},
+		}},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-type")
+}
+
+func TestRulePerInputGuards_SameNameMissingMatchInput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeSameName},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-match-input")
+}
+
+func TestRulePerInputGuards_SameNameMatchInputNotMatching(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameName,
+					MatchInput: "other",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-match-input")
+}
+
+func TestRulePerInputGuards_SameNameSelfReference(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameName,
+					MatchInput: "task",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-self-ref")
+}
+
+func TestRulePerInputGuards_ValidSameNameGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameName,
+					MatchInput: "plan",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRulePerInputGuards_SameTraceIDMissingMatchInput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeSameTraceID},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-match-input")
+}
+
+func TestRulePerInputGuards_SameTraceIDMatchInputNotMatching(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "other",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-match-input")
+}
+
+func TestRulePerInputGuards_SameTraceIDSelfReference(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "task",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-self-ref")
+}
+
+func TestRulePerInputGuards_ValidSameTraceIDGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "plan",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRulePerInputGuards_ValidGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
+		Name: "parent", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}},
+	})
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+		{Name: "spawner"},
+		{
+			Name: "ws",
+			Inputs: []interfaces.IOConfig{
+				{WorkTypeName: "parent", StateName: "init"},
+				{
+					WorkTypeName: "task", StateName: "init",
+					Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "spawner"},
+				},
+			},
+		},
+	}
+	findings := rulePerInputGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestConfigValidator_WorkTypeHandlingBehavior_RejectsMultipleDefaultWorkTypes(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.WorkTypes = []interfaces.WorkTypeConfig{
+		{Name: "story", States: testStoryStates(), HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
+		{Name: "task", States: testStoryStates(), HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
+	}
+
+	findings := ruleWorkTypeHandlingBehavior(cfg, false)
+	assertFindingMatch(t, findings, "work-type-handling-behavior-unique-default", "factory.workTypes", "expected at most one work type with handlingBehavior DEFAULT")
+}
+
+func TestConfigValidator_WorkTypeHandlingBehavior_RequiresDefaultWhenConfigured(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.WorkTypes = []interfaces.WorkTypeConfig{{Name: "story", States: testStoryStates()}}
+
+	findings := ruleWorkTypeHandlingBehavior(cfg, true)
+	assertFindingMatch(t, findings, "work-type-handling-behavior-required-default", "factory.workTypes", "expected exactly one work type with handlingBehavior DEFAULT")
+}
+
+func TestConfigValidator_WorkTypeHandlingBehavior_RejectsUnsupportedValues(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.WorkTypes = []interfaces.WorkTypeConfig{{
+		Name:             "story",
+		States:           testStoryStates(),
+		HandlingBehavior: []string{"PROMPT"},
+	}}
+
+	findings := ruleWorkTypeHandlingBehavior(cfg, false)
+	assertFindingMatch(t, findings, "work-type-handling-behavior-value", `factory.workTypes[0].handlingBehavior[0]`, `unsupported handlingBehavior value "PROMPT"`)
+}
+
+func testStoryStates() []interfaces.StateConfig {
+	return []interfaces.StateConfig{
+		{Name: "init", Type: interfaces.StateTypeInitial},
+		{Name: "complete", Type: interfaces.StateTypeTerminal},
+	}
+}
+
+func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name:       "executor",
+		Type:       interfaces.WorkerTypeAgent,
+		AgentTools: &interfaces.AgentToolsConfig{},
+	}}
+
+	findings := ruleAgentWorkerTools(cfg)
+
+	assertFindingMatch(t, findings, "agent-worker-tools-policy-required", "workers[0](executor).agentTools.policy", "requires an explicit policy")
+}
+
+func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name: "executor",
+		Type: interfaces.WorkerTypeAgent,
+		AgentTools: &interfaces.AgentToolsConfig{
+			Policy: "FULL_SHELL",
+		},
+	}}
+
+	findings := ruleAgentWorkerTools(cfg)
+
+	assertFindingMatch(t, findings, "agent-worker-tools-policy-supported", "workers[0](executor).agentTools.policy", `unsupported agent tool policy "FULL_SHELL"`)
+}
+
+func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name: "infer",
+		Type: interfaces.WorkerTypeInference,
+		AgentTools: &interfaces.AgentToolsConfig{
+			Policy: interfaces.AgentToolPolicyReadOnly,
+		},
+	}}
+
+	findings := ruleAgentWorkerTools(cfg)
+
+	assertFindingMatch(t, findings, "agent-worker-tools-worker-type", "workers[0](infer).agentTools", "only supported on AGENT_WORKER")
+}
+
+func TestRuleAgentWorkerTools_AllowsAgentWorkerPolicy(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+		Name: "executor",
+		Type: interfaces.WorkerTypeAgent,
+		AgentTools: &interfaces.AgentToolsConfig{
+			Policy: interfaces.AgentToolPolicyEnabled,
+		},
+	}}
+
+	findings := ruleAgentWorkerTools(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("findings = %#v, want none", findings)
+	}
+}

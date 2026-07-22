@@ -1,20 +1,51 @@
 package factorysession_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
+
+var mcpWorkflowDefinitions = testutil.ScriptedJavaScriptWorkflowDefinitions{
+	DefaultSourceContextFunc: func(root string) (factory.WorkflowSourceContext, error) {
+		return factory.WorkflowSourceContext{ProjectRoot: root}, nil
+	},
+	BuildPreviewFunc: func(request factory.WorkflowPreviewRequest) factory.WorkflowPreview {
+		sourceRef := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/" + request.Source.Value + ".js"
+		preview := factory.WorkflowPreview{
+			Valid: true,
+			SourceResolution: factory.WorkflowSourceResolution{
+				RequestKind:  request.Source.Kind,
+				RequestValue: request.Source.Value,
+				ResolvedKind: request.Source.Kind,
+				SourceRef:    sourceRef,
+				SourceHash:   "sha256:mcp-workflow-source",
+				Found:        true,
+				ArtifactRoot: factory.WorkflowSourceArtifactRootDecision{Allowed: true},
+			},
+			PolicyPreview: factory.JavaScriptPolicyPreview{PolicyHash: "sha256:mcp-workflow-policy"},
+		}
+		if request.Source.Value == "broken" {
+			preview.Valid = false
+			preview.SourceValidationIssues = []factory.WorkflowPreviewSourceValidationIssue{{
+				Code:    factory.WorkflowValidationCodeForbiddenHostAccess,
+				Message: "host filesystem access is unavailable",
+				Path:    sourceRef,
+			}}
+		}
+		return preview
+	},
+}
 
 func TestStableIDHandlerRegistryCoversGeneratedCanonicalDiscovery(t *testing.T) {
 	t.Parallel()
@@ -67,32 +98,18 @@ func TestStableIDHandlerRegistryMatchesAuthoredHandlerBindings(t *testing.T) {
 	}
 }
 
-func TestStableIDHandlerRegistryCompatibilityAliasesResolveToCanonicalBindings(t *testing.T) {
-	t.Parallel()
-
-	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		aliasBinding, ok := mcpfactorysession.ResolveToolHandlerBinding(alias.Name)
-		if !ok {
-			t.Fatalf("compatibility alias %q has no handler binding", alias.Name)
-		}
-		canonicalBinding, ok := mcpfactorysession.ResolveToolHandlerBinding(alias.CanonicalName)
-		if !ok {
-			t.Fatalf("canonical tool %q has no handler binding", alias.CanonicalName)
-		}
-		if aliasBinding != canonicalBinding {
-			t.Fatalf("alias %q binding = %#v, want canonical %#v", alias.Name, aliasBinding, canonicalBinding)
-		}
-		if mcpfactorysession.IsCanonicalToolHandlerRegistered(alias.Name) {
-			t.Fatalf("compatibility alias %q must not be registered as canonical", alias.Name)
-		}
-	}
-}
-
 func TestStableIDHandlerRegistryPreservesSuccessAndDomainErrorOutcomes(t *testing.T) {
 	t.Parallel()
 
-	client := newFixtureMCPClient(t)
-	successRaw, err := client.CallTool(mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
+	client := clientWithScript(scriptedExecutionService{
+		listSessions: func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			return persistedSessionList(), nil
+		},
+		getSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
+		},
+	})
+	successRaw, err := client.CallTool(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
 	if err != nil {
 		t.Fatalf("CallTool(success) error = %v", err)
 	}
@@ -100,7 +117,7 @@ func TestStableIDHandlerRegistryPreservesSuccessAndDomainErrorOutcomes(t *testin
 		t.Fatalf("CallTool(success) = %s, want durable session result", successRaw)
 	}
 
-	domainErrorRaw, err := client.CallTool(mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":"missing-session"}`))
+	domainErrorRaw, err := client.CallTool(context.Background(), mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":"missing-session"}`))
 	if err != nil {
 		t.Fatalf("CallTool(domain error) transport error = %v", err)
 	}
@@ -109,18 +126,11 @@ func TestStableIDHandlerRegistryPreservesSuccessAndDomainErrorOutcomes(t *testin
 	}
 }
 
-const simpleValidWorkflowSource = `
-meta({ name: "review", version: 1 });
-phase("setup");
-log("starting");
-`
-
 func TestValidateSource_ValidSimpleWorkflowFixtureReturnsDeterministicSuccess(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", simpleValidWorkflowSource)
 
 	request := workflowNamePreviewRequest(projectRoot, "review")
-	response := mcpfactorysession.ValidateSource(request)
+	response := mcpfactorysession.ValidateSource(context.Background(), mcpWorkflowDefinitions, request)
 
 	if response.Error != nil {
 		t.Fatalf("response error = %#v, want success result", response.Error)
@@ -138,13 +148,13 @@ func TestValidateSource_ValidSimpleWorkflowFixtureReturnsDeterministicSuccess(t 
 		t.Fatal("expected policyHash in success response")
 	}
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mcpWorkflowDefinitions.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	expected := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	expected := apisurface.FactoryPreviewResultFromPreview(mcpWorkflowDefinitions.BuildPreview(factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
@@ -156,10 +166,9 @@ func TestValidateSource_ValidSimpleWorkflowFixtureReturnsDeterministicSuccess(t 
 
 func TestValidateSource_InvalidWorkflowFixtureReturnsTypedValidationFailure(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 
 	request := workflowNamePreviewRequest(projectRoot, "broken")
-	response := mcpfactorysession.ValidateSource(request)
+	response := mcpfactorysession.ValidateSource(context.Background(), mcpWorkflowDefinitions, request)
 
 	if response.Result != nil {
 		t.Fatalf("response result = %#v, want typed validation error envelope", response.Result)
@@ -167,8 +176,8 @@ func TestValidateSource_InvalidWorkflowFixtureReturnsTypedValidationFailure(t *t
 	if response.Error == nil {
 		t.Fatal("expected typed validation error envelope")
 	}
-	if response.Error.Code != workflowvalidation.CodeForbiddenHostAccess {
-		t.Fatalf("error code = %q, want %q", response.Error.Code, workflowvalidation.CodeForbiddenHostAccess)
+	if response.Error.Code != factory.WorkflowValidationCodeForbiddenHostAccess {
+		t.Fatalf("error code = %q, want %q", response.Error.Code, factory.WorkflowValidationCodeForbiddenHostAccess)
 	}
 	if strings.TrimSpace(response.Error.Message) == "" {
 		t.Fatal("expected stable validation error message")
@@ -184,7 +193,7 @@ func TestValidateSource_InvalidWorkflowFixtureReturnsTypedValidationFailure(t *t
 	if !ok || len(issuesRaw) == 0 {
 		t.Fatalf("error details issues = %#v, want source validation issues", response.Error.Details["sourceValidationIssues"])
 	}
-	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
+	wantPath := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/broken.js"
 	if issuesRaw[0].Path == nil || strings.TrimSpace(*issuesRaw[0].Path) != wantPath {
 		t.Fatalf("issue path = %v, want %q", issuesRaw[0].Path, wantPath)
 	}
@@ -192,7 +201,6 @@ func TestValidateSource_InvalidWorkflowFixtureReturnsTypedValidationFailure(t *t
 
 func TestMockClient_ValidateSourceRoundTripDoesNotSurfaceTransportFailureForExpectedValidationErrors(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 
 	request := workflowNamePreviewRequest(projectRoot, "broken")
 	encoded, err := json.Marshal(request)
@@ -200,8 +208,8 @@ func TestMockClient_ValidateSourceRoundTripDoesNotSurfaceTransportFailureForExpe
 		t.Fatalf("marshal request: %v", err)
 	}
 
-	client := mcpfactorysession.NewClient()
-	raw, err := client.CallTool(mcpfactorysession.ToolValidateSource, encoded)
+	client := newTestClientWithWorkflows(mcpWorkflowDefinitions)
+	raw, err := client.CallTool(context.Background(), mcpfactorysession.ToolValidateSource, encoded)
 	if err != nil {
 		t.Fatalf("CallTool returned transport error for expected validation failure: %v", err)
 	}
@@ -212,38 +220,6 @@ func TestMockClient_ValidateSourceRoundTripDoesNotSurfaceTransportFailureForExpe
 	}
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("response = %#v, want typed validation error envelope", response)
-	}
-}
-
-func TestMockClient_WorkflowValidateCompatibilityOnlyAliasMatchesCanonicalSuccess(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", simpleValidWorkflowSource)
-
-	request := workflowNamePreviewRequest(projectRoot, "review")
-	encoded, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-
-	client := mcpfactorysession.NewClient()
-	canonicalRaw, err := client.CallTool(mcpfactorysession.ToolValidateSource, encoded)
-	if err != nil {
-		t.Fatalf("canonical validate: %v", err)
-	}
-	aliasRaw, err := client.CallTool(mcpfactorysession.ToolWorkflowValidate, encoded)
-	if err != nil {
-		t.Fatalf("alias validate: %v", err)
-	}
-	if string(canonicalRaw) != string(aliasRaw) {
-		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)
-	}
-
-	var response mcpfactorysession.ToolResponse[factoryapi.FactoryPreviewResult]
-	if err := json.Unmarshal(aliasRaw, &response); err != nil {
-		t.Fatalf("unmarshal alias response: %v", err)
-	}
-	if response.Error != nil || response.Result == nil || !response.Result.Valid {
-		t.Fatalf("response = %#v, want valid success result", response)
 	}
 }
 

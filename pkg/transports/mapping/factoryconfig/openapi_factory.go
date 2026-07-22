@@ -1,0 +1,781 @@
+package factoryconfig
+
+import (
+	"encoding/json"
+	"fmt"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
+	"regexp"
+	"sort"
+	"strings"
+	"unicode"
+)
+
+var defaultFactoryConfigMapper = NewFactoryConfigMapper()
+var invocationInterpolationPlaceholderPattern = regexp.MustCompile(`^\$\{[A-Za-z0-9_.-]+\}$`)
+
+// GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
+// payload into the generated Factory boundary model.
+func GeneratedFactoryFromOpenAPIJSON(data []byte) (factoryapi.Factory, error) {
+	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return boundary.generated, nil
+}
+
+// FactoryConfigFromOpenAPIJSON converts an OpenAPI-compatible factory JSON payload
+// into the internal config representation used by runtime mappers and tests.
+func FactoryConfigFromOpenAPIJSON(data []byte) (*interfaces.FactoryConfig, error) {
+	generated, err := GeneratedFactoryFromOpenAPIJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// MarshalCanonicalFactoryConfig serializes factory config using camelCase keys across
+// factory/workstation/work structures for deterministic canonical output.
+func MarshalCanonicalFactoryConfig(cfg *interfaces.FactoryConfig) ([]byte, error) {
+	return defaultFactoryConfigMapper.Flatten(cfg)
+}
+
+func expandFactoryConfigForRuntimeLoad(data []byte) (*interfaces.FactoryConfig, error) {
+	mapper := NewFactoryConfigMapper()
+	cfg, err := mapper.Expand(data)
+	if err == nil {
+		return cfg, nil
+	}
+
+	stripped, removed, stripErr := stripTopLevelLayoutJSON(data)
+	if stripErr != nil || !removed {
+		return nil, err
+	}
+
+	fallbackCfg, fallbackErr := mapper.Expand(stripped)
+	if fallbackErr != nil {
+		return nil, err
+	}
+	return fallbackCfg, nil
+}
+
+// ExpandFactoryConfigForRuntimeLoad accepts canonical authored JSON and
+// tolerates the persisted layout projection used by filesystem adapters.
+func ExpandFactoryConfigForRuntimeLoad(data []byte) (*interfaces.FactoryConfig, error) {
+	return expandFactoryConfigForRuntimeLoad(data)
+}
+
+func stripTopLevelLayoutJSON(data []byte) ([]byte, bool, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, false, err
+	}
+	if _, ok := root["layout"]; !ok {
+		return data, false, nil
+	}
+	delete(root, "layout")
+	stripped, err := json.Marshal(root)
+	if err != nil {
+		return nil, false, err
+	}
+	return stripped, true, nil
+}
+
+func normalizeFactoryInputJSON(data []byte) ([]byte, error) {
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return nil, fmt.Errorf("decode factory input payload: %w", err)
+	}
+	normalized, err := normalizeCanonicalFactoryInputFields(decoded)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, fmt.Errorf("normalize factory input payload: %w", err)
+	}
+	return raw, nil
+}
+
+func normalizeFactoryOutputJSONKeys(v any) any {
+	return normalizeFactoryOutputJSONKeysForField(v, "")
+}
+
+func normalizeFactoryOutputJSONKeysForField(v any, fieldName string) any {
+	switch typed := v.(type) {
+	case map[string]any:
+		if preservesObjectKeys(fieldName) {
+			return normalizeFactoryJSONValuesPreservingKeys(typed)
+		}
+		return normalizeFactoryConfigObjectKeys(typed, normalizeFactoryOutputJSONKeysForField)
+	case []any:
+		values := make([]any, len(typed))
+		for i, value := range typed {
+			values[i] = normalizeFactoryOutputJSONKeysForField(value, fieldName)
+		}
+		return values
+	default:
+		return v
+	}
+}
+
+func normalizeFactoryConfigObjectKeys(values map[string]any, normalizeValue func(any, string) any) map[string]any {
+	keys := sortedFactoryConfigKeys(values)
+	normalized := make(map[string]any, len(values))
+
+	for _, key := range keys {
+		normalizedKey := canonicalFactoryConfigKey(key)
+		if key != normalizedKey {
+			continue
+		}
+		normalized[normalizedKey] = normalizeValue(values[key], normalizedKey)
+	}
+	for _, key := range keys {
+		normalizedKey := canonicalFactoryConfigKey(key)
+		if key == normalizedKey {
+			continue
+		}
+		if _, exists := normalized[normalizedKey]; exists {
+			continue
+		}
+		normalized[normalizedKey] = normalizeValue(values[key], normalizedKey)
+	}
+
+	return normalized
+}
+
+func sortedFactoryConfigKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func normalizeFactoryJSONValuesPreservingKeys(values map[string]any) map[string]any {
+	normalized := make(map[string]any, len(values))
+	for key, value := range values {
+		normalized[key] = normalizeFactoryJSONValuePreservingKeys(value)
+	}
+	return normalized
+}
+
+func normalizeFactoryJSONValuePreservingKeys(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return normalizeFactoryJSONValuesPreservingKeys(typed)
+	case []any:
+		values := make([]any, len(typed))
+		for i, item := range typed {
+			values[i] = normalizeFactoryJSONValuePreservingKeys(item)
+		}
+		return values
+	default:
+		return value
+	}
+}
+
+func preservesObjectKeys(fieldName string) bool {
+	return fieldName == "env" || fieldName == "metadata"
+}
+
+func normalizeCanonicalFactoryInputFields(v any) (any, error) {
+	root, ok := v.(map[string]any)
+	if !ok {
+		return v, nil
+	}
+	if err := normalizeFactoryEnumObjectFieldWithNormalizer(root, "runner", "runner", interfaces.StrictPublicFactoryRunnerID); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryGuardEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryInputTypeEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryWorkTypeEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryResourceEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryWorkerEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryWorkstationEntries(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryWorkerTypesForFactoryUsage(root); err != nil {
+		return nil, err
+	}
+	if err := normalizeFactoryOrchestratorEntry(root); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func normalizeFactoryOrchestratorEntry(root map[string]any) error {
+	orchestrator, ok := root["orchestrator"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return normalizeFactoryEnumObjectFieldWithNormalizer(orchestrator, "kind", "orchestrator.kind", interfaces.StrictPublicFactoryOrchestratorKind)
+}
+
+func normalizeFactoryResourceEntries(root map[string]any) error {
+	resources, ok := root["resources"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range resources {
+		resource, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(resource, "type", fmt.Sprintf("resources[%d].type", i), interfaces.StrictPublicFactoryResourceType); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryGuardEntries(root map[string]any) error {
+	guards, ok := root["guards"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range guards {
+		guard, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("guards[%d].type", i), publicFactoryRootGuardTypeAliases); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(guard, "modelProvider", fmt.Sprintf("guards[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
+			return err
+		}
+		if err := rejectUnsupportedFactoryGuardBoundaryFields(guard, fmt.Sprintf("guards[%d]", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectUnsupportedFactoryGuardBoundaryFields(guard map[string]any, path string) error {
+	return retiredboundary.RejectFields(guard, path, []retiredboundary.Field{
+		{Key: "workstation", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "maxVisits", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchConfig", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "parentInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "spawnedBy", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+	})
+}
+
+func normalizeFactoryWorkTypeEntries(root map[string]any) error {
+	workTypes, ok := root["workTypes"].([]any)
+	if !ok {
+		return nil
+	}
+	for workTypeIndex, item := range workTypes {
+		workType, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		behaviors, ok := workType["handlingBehavior"].([]any)
+		if !ok {
+			continue
+		}
+		for behaviorIndex, behaviorAny := range behaviors {
+			behavior, ok := behaviorAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(behavior)
+			if canonical == "" {
+				return fmt.Errorf("workTypes[%d].handlingBehavior[%d]: unsupported value %q", workTypeIndex, behaviorIndex, behavior)
+			}
+			behaviors[behaviorIndex] = canonical
+		}
+		workType["handlingBehavior"] = behaviors
+	}
+	return nil
+}
+
+func normalizeFactoryInputTypeEntries(root map[string]any) error {
+	inputTypes, ok := root["inputTypes"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range inputTypes {
+		inputType, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectField(inputType, "type", fmt.Sprintf("inputTypes[%d].type", i), publicFactoryInputKindAliases); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryWorkerEntries(root map[string]any) error {
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		mergeInlineDefinitionFields(worker)
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "type", fmt.Sprintf("workers[%d].type", i), interfaces.StrictPublicFactoryWorkerType); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizerAllowingInvocationInterpolation(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "provider", fmt.Sprintf("workers[%d].provider", i), interfaces.StrictPublicFactoryHostedWorkerProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelLocality", fmt.Sprintf("workers[%d].modelLocality", i), interfaces.StrictPublicFactoryWorkerModelLocality); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), interfaces.StrictPublicFactoryWorkerProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkerOperationEntries(worker, i); err != nil {
+			return err
+		}
+		if err := rejectUnsupportedHostedWorkerBoundaryFields(worker, fmt.Sprintf("workers[%d]", i)); err != nil {
+			return err
+		}
+		normalizeRuntimeResourceRequirements(worker, "resources")
+	}
+	return nil
+}
+
+func rejectUnsupportedHostedWorkerBoundaryFields(worker map[string]any, path string) error {
+	auth, _ := worker["auth"].(map[string]any)
+	if len(auth) == 0 {
+		return nil
+	}
+	return retiredboundary.RejectFields(auth, path+".auth", []retiredboundary.Field{
+		{Key: "apiKey", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "api_key", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "accessToken", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "access_token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "clientId", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_id", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "clientSecret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_secret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refreshToken", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refresh_token", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "tokenUrl", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "token_url", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+	})
+}
+
+func normalizeFactoryWorkerOperationEntries(worker map[string]any, workerIndex int) error {
+	operations, ok := worker["operations"].([]any)
+	if !ok {
+		return nil
+	}
+	for operationIndex, operationAny := range operations {
+		operation, ok := operationAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryModelOperationName(operation, "name", fmt.Sprintf("workers[%d].operations[%d].name", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "inputs", fmt.Sprintf("workers[%d].operations[%d].inputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "outputs", fmt.Sprintf("workers[%d].operations[%d].outputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationSlots(operation map[string]any, key string, fieldPath string) error {
+	slots, ok := operation[key].([]any)
+	if !ok {
+		return nil
+	}
+	for slotIndex, slotAny := range slots {
+		slot, ok := slotAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		contentTypes, ok := slot["contentTypes"].([]any)
+		if !ok {
+			continue
+		}
+		for contentTypeIndex, contentTypeAny := range contentTypes {
+			contentType, ok := contentTypeAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(contentType)
+			if canonical == "" {
+				return fmt.Errorf("%s[%d].contentTypes[%d]: unsupported value %q", fieldPath, slotIndex, contentTypeIndex, contentType)
+			}
+			contentTypes[contentTypeIndex] = canonical
+		}
+		slot["contentTypes"] = contentTypes
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationName(container map[string]any, key string, fieldPath string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		container[key] = ""
+		return nil
+	}
+	if !isUppercaseOperationIdentifier(trimmed) {
+		return fmt.Errorf("%s: unsupported value %q", fieldPath, value)
+	}
+	container[key] = trimmed
+	return nil
+}
+
+func isUppercaseOperationIdentifier(value string) bool {
+	for i, r := range value {
+		if r >= 'A' && r <= 'Z' {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		if i > 0 && r == '_' {
+			continue
+		}
+		return false
+	}
+	return value != ""
+}
+
+func normalizeFactoryWorkerTypesForFactoryUsage(root map[string]any) error {
+	workstations := factoryWorkstationsFromInputMaps(root)
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workerName, _ := worker["name"].(string)
+		workerType, _ := worker["type"].(string)
+		if strings.TrimSpace(workerName) == "" || strings.TrimSpace(workerType) == "" {
+			continue
+		}
+		if interfaces.InternalRuntimeWorkerTypeFromPublic(workerType) != interfaces.WorkerTypeModel {
+			continue
+		}
+		publicType := workercompatibility.PublicWorkerTypeForFactoryUsage(interfaces.FactoryWorkerConfig{
+			Name: workerName,
+			Type: interfaces.WorkerTypeModel,
+		}, compatibilityWorkstations(workstations))
+		worker["type"] = publicType
+	}
+	return nil
+}
+
+func factoryWorkstationsFromInputMaps(root map[string]any) []interfaces.FactoryWorkstationConfig {
+	workstationsValue, ok := root["workstations"].([]any)
+	if !ok {
+		return nil
+	}
+	workstations := make([]interfaces.FactoryWorkstationConfig, 0, len(workstationsValue))
+	for _, item := range workstationsValue {
+		workstationMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workstation := interfaces.FactoryWorkstationConfig{
+			Name:           stringValueFromFactoryInputMap(workstationMap, "name"),
+			WorkerTypeName: stringValueFromFactoryInputMap(workstationMap, "worker"),
+		}
+		if workstationType := stringValueFromFactoryInputMap(workstationMap, "type"); workstationType != "" {
+			workstation.Type = workstationType
+		}
+		if behavior := stringValueFromFactoryInputMap(workstationMap, "behavior"); behavior != "" {
+			workstation.Kind = interfaces.WorkstationKind(behavior)
+		}
+		workstations = append(workstations, workstation)
+	}
+	return workstations
+}
+
+func stringValueFromFactoryInputMap(values map[string]any, key string) string {
+	raw, ok := values[key]
+	if !ok {
+		return ""
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func normalizeFactoryWorkstationEntries(root map[string]any) error {
+	workstations, ok := root["workstations"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range workstations {
+		workstation, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		mergeInlineDefinitionFields(workstation)
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "behavior", fmt.Sprintf("workstations[%d].behavior", i), func(value string) string {
+			return interfaces.StrictPublicWorkstationKind(value)
+		}); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "runner", fmt.Sprintf("workstations[%d].runner", i), interfaces.StrictPublicFactoryRunnerID); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "outcomeFormat", fmt.Sprintf("workstations[%d].outcomeFormat", i), interfaces.StrictPublicFactoryWorkstationOutcomeFormat); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationName(workstation, "operation", fmt.Sprintf("workstations[%d].operation", i)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkstationOperationBindings(workstation, i); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkstationGuardEntries(workstation, i); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkstationInputGuardEntries(workstation, i); err != nil {
+			return err
+		}
+		normalizeRuntimeResourceRequirements(workstation, "resources")
+	}
+	return nil
+}
+
+func normalizeFactoryWorkstationOperationBindings(workstation map[string]any, workstationIndex int) error {
+	bindings, ok := workstation["operationBindings"].([]any)
+	if !ok {
+		return nil
+	}
+	for bindingIndex, bindingAny := range bindings {
+		binding, ok := bindingAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		selector, ok := binding["selector"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(
+			selector,
+			"type",
+			fmt.Sprintf("workstations[%d].operationBindings[%d].selector.type", workstationIndex, bindingIndex),
+			interfaces.StrictPublicFactoryWorkerModelOperationContentType,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryWorkstationGuardEntries(workstation map[string]any, workstationIndex int) error {
+	guards, ok := workstation["guards"].([]any)
+	if !ok {
+		return nil
+	}
+	for guardIndex, guardAny := range guards {
+		guard, ok := guardAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].guards[%d].type", workstationIndex, guardIndex), publicFactoryWorkstationGuardTypeAliases); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryWorkstationInputGuardEntries(workstation map[string]any, workstationIndex int) error {
+	inputs, ok := workstation["inputs"].([]any)
+	if !ok {
+		return nil
+	}
+	for inputIndex, inputAny := range inputs {
+		input, ok := inputAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		guards, ok := input["guards"].([]any)
+		if !ok {
+			continue
+		}
+		for guardIndex, guardAny := range guards {
+			guard, ok := guardAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].inputs[%d].guards[%d].type", workstationIndex, inputIndex, guardIndex), publicFactoryInputGuardTypeAliases); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryEnumObjectField(container map[string]any, key string, fieldPath string, aliases map[string]string) error {
+	if err := normalizePublicFactoryEnumValueInObject(container, key, aliases); err != nil {
+		return fmt.Errorf("%s: %w", fieldPath, err)
+	}
+	return nil
+}
+
+func normalizeFactoryEnumObjectFieldWithNormalizer(container map[string]any, key string, fieldPath string, normalize func(string) string) error {
+	if err := normalizePublicFactoryEnumValueInObjectWith(container, key, normalize); err != nil {
+		return fmt.Errorf("%s: %w", fieldPath, err)
+	}
+	return nil
+}
+
+func normalizeFactoryEnumObjectFieldWithNormalizerAllowingInvocationInterpolation(container map[string]any, key string, fieldPath string, normalize func(string) string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	if isInvocationInterpolationPlaceholder(value) {
+		return nil
+	}
+	return normalizeFactoryEnumObjectFieldWithNormalizer(container, key, fieldPath, normalize)
+}
+
+func isInvocationInterpolationPlaceholder(value string) bool {
+	return invocationInterpolationPlaceholderPattern.MatchString(strings.TrimSpace(value))
+}
+
+func normalizeRuntimeResourceRequirements(container map[string]any, key string) {
+	value, ok := container[key]
+	if !ok {
+		return
+	}
+	container[key] = runtimeResourceRequirementsFromBoundaryValue(value)
+}
+
+func runtimeResourceRequirementsFromBoundaryValue(value any) any {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case []any:
+		resources := make([]any, 0, len(typed))
+		for _, item := range typed {
+			resource, ok := runtimeResourceRequirementFromBoundaryItem(item)
+			if !ok {
+				continue
+			}
+			resources = append(resources, resource)
+		}
+		return resources
+	default:
+		if resource, ok := runtimeResourceRequirementFromBoundaryItem(value); ok {
+			return []any{resource}
+		}
+		return value
+	}
+}
+
+func runtimeResourceRequirementFromBoundaryItem(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"name":     typed,
+			"capacity": 1,
+		}, true
+	case map[string]any:
+		return typed, true
+	default:
+		return nil, false
+	}
+}
+
+func mergeInlineDefinitionFields(container map[string]any) {
+	definition, ok := container["definition"].(map[string]any)
+	if !ok {
+		return
+	}
+	for key, value := range definition {
+		if _, exists := container[key]; exists {
+			continue
+		}
+		container[key] = value
+	}
+	delete(container, "definition")
+}
+
+func canonicalFactoryConfigKey(key string) string {
+	if strings.ContainsAny(key, "_-") {
+		return toCamelCase(key)
+	}
+	return key
+}
+
+func toCamelCase(key string) string {
+	parts := strings.FieldsFunc(key, func(r rune) bool {
+		return r == '_' || r == '-'
+	})
+	if len(parts) == 0 {
+		return key
+	}
+
+	var builder strings.Builder
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		lower := strings.ToLower(part)
+		if i == 0 {
+			builder.WriteString(lower)
+			continue
+		}
+		runes := []rune(lower)
+		runes[0] = unicode.ToUpper(runes[0])
+		builder.WriteString(string(runes))
+	}
+	return builder.String()
+}

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -12,16 +11,150 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
-func newAPITestServer(f *testutil.MockFactory) *api.Server {
+func newAPITestServer(roles any) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	return api.NewServer(f, 8080, logger)
+	modelsHandler := &modelshttp.Handler{}
+	modelsService := apiTestRole[modelcontract.Service](roles)
+	if modelsService != nil {
+		invoker := apiTestRole[workers.ModelInvoker](roles)
+		if invoker == nil {
+			invoker = unavailableModelInvoker{}
+		}
+		modelsHandler = modelshttp.NewHandler(
+			modelshttp.NewAdapter(modelsService, invoker, apiModelContentPreparation{}),
+			logger,
+		)
+	}
+	return api.NewServer(
+		apiTestRole[apisurface.RuntimeAPI](roles),
+		nil,
+		apiTestRole[apisurface.LiveSessionAPI](roles),
+		apiTestRole[apisurface.WorkAPI](roles),
+		apiTestRole[apisurface.WorkReadAPI](roles),
+		apiTestRole[apisurface.InvocationAPI](roles),
+		modelsHandler,
+		apiTestRole[apisurface.FactorySaveAPI](roles),
+		programmableFactoryValidator{}, apiWorkflowDefinitionsFake(),
+		apiTestRole[apisurface.DurableSessionExecutionAPI](roles),
+		apiTestRole[apisurface.DurableSessionLifecycleAPI](roles),
+		apiTestRole[apisurface.DurableSessionListingAPI](roles),
+		apiTestRole[apisurface.DurableSessionProjectionAPI](roles),
+		apiTestRole[api.DurableExecutionSessionLister](roles),
+		nil, nil,
+		apiPromptTemplatesFake{},
+		nil, nil, nil,
+		logger,
+	)
+}
+
+type apiModelContentPreparation struct{}
+
+func (apiModelContentPreparation) PrepareWorkContent(_ context.Context, content []work.WorkContentPart) ([]work.WorkContentPart, error) {
+	return content, nil
+}
+
+type unavailableModelInvoker struct{}
+
+func (unavailableModelInvoker) InvokeModel(context.Context, string, modelcontract.Request) (modelcontract.Result, error) {
+	return modelcontract.Result{}, modelcontract.ErrNotAvailable
+}
+
+func apiTestRole[T any](candidate any) T {
+	var zero T
+	if candidate == nil {
+		return zero
+	}
+	role, ok := candidate.(T)
+	if !ok {
+		return zero
+	}
+	return role
+}
+
+type apiWorkflowDefinitionsScript struct {
+	previewWorkflow func(factoryruntime.WorkflowPreviewInput) (factoryruntime.WorkflowPreview, error)
+}
+
+func (script apiWorkflowDefinitionsScript) PreviewWorkflow(_ context.Context, input factoryruntime.WorkflowPreviewInput) (factoryruntime.WorkflowPreview, error) {
+	return script.previewWorkflow(input)
+}
+
+func apiWorkflowDefinitionsFake() factoryruntime.WorkflowPreviewOperation {
+	return apiWorkflowDefinitionsScript{
+		previewWorkflow: func(input factoryruntime.WorkflowPreviewInput) (factoryruntime.WorkflowPreview, error) {
+			sourceRef := factoryruntime.WorkflowSourceProjectClaudeWorkflowsDir + "/" + input.Source.Value + ".js"
+			preview := factoryruntime.WorkflowPreview{
+				Valid: true,
+				SourceResolution: factoryruntime.WorkflowSourceResolution{
+					RequestKind:  input.Source.Kind,
+					RequestValue: input.Source.Value,
+					ResolvedKind: input.Source.Kind,
+					SourceRef:    sourceRef,
+					SourceHash:   "sha256:http-preview",
+					Found:        true,
+					ArtifactRoot: factoryruntime.WorkflowSourceArtifactRootDecision{Allowed: true},
+				},
+				PolicyPreview: factoryruntime.JavaScriptPolicyPreview{PolicyHash: "sha256:http-preview-policy"},
+				ResultConstraints: factoryruntime.WorkflowResultConstraints{
+					RequiresStructuredCloneableJSON: true,
+					ArtifactURIScheme:               "you-artifact",
+				},
+			}
+			if input.Source.Value == "unsafe" {
+				preview.Valid = false
+				preview.SourceValidationIssues = []factoryruntime.WorkflowPreviewSourceValidationIssue{{
+					Code:    factoryruntime.WorkflowValidationCodeForbiddenHostAccess,
+					Message: "host filesystem access is unavailable",
+					Path:    sourceRef,
+				}}
+			}
+			return preview, nil
+		},
+	}
+}
+
+type apiPromptTemplatesFake struct{}
+
+type dashboardEventWorkAPI struct {
+	apisurface.WorkAPI
+	subscribe func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	probe     func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
+}
+
+func (role dashboardEventWorkAPI) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+	return role.subscribe(ctx, sessionID, reconnect)
+}
+
+func (role dashboardEventWorkAPI) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) error {
+	return role.probe(ctx, sessionID, reconnect)
+}
+
+func (apiPromptTemplatesFake) BuildPromptTemplateContract(
+	inputCount int,
+	_ []string,
+) workers.PromptTemplateContract {
+	return workers.PromptTemplateContract{InputCount: inputCount}
+}
+
+func (apiPromptTemplatesFake) ValidatePromptTemplate(
+	string,
+	int,
+	[]string,
+) workers.PromptTemplateValidationResult {
+	return workers.PromptTemplateValidationResult{Valid: true}
 }
 
 func readAPISSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
@@ -100,8 +233,8 @@ func stringPointerForAPIServerTest(value string) *string {
 }
 
 func TestDeprecatedFactoryApiRoutesAreNotRegistered(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
-	for _, path := range []string{"/dashboard", "/dashboard/stream", "/state", "/traces/trace-id", "/work/token-1/trace", "/workflows", "/workflows/wf-1"} {
+	srv := newAPITestServer(nil)
+	for _, path := range []string{"/dashboard", "/dashboard/stream", "/events", "/state", "/traces/trace-id", "/work/token-1/trace", "/workflows", "/workflows/wf-1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
@@ -112,7 +245,7 @@ func TestDeprecatedFactoryApiRoutesAreNotRegistered(t *testing.T) {
 }
 
 func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -132,7 +265,7 @@ func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
 }
 
 func TestGetDashboardUI_ServesEmbeddedAsset(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(nil)
 	shellReq := httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil)
 	shellRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(shellRec, shellReq)
@@ -146,7 +279,7 @@ func TestGetDashboardUI_ServesEmbeddedAsset(t *testing.T) {
 }
 
 func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ui/workstations/live", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -155,37 +288,18 @@ func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
 	}
 }
 
-// TestCompatibilityGetEvents_* exercises compatibility-only process-global GET /events behavior.
-// Dashboard, Factory Session, and replay smokes should use session-scoped routes instead.
-func TestCompatibilityGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
-	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
-	historical := testHistoricalFactoryEvents(t, eventTime)
-	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
-
-	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
-	defer server.Close()
-
-	reader, closeStream := openCompatibilityEventStreamReader(t, server.URL)
-	defer closeStream()
-	assertHistoricalEventsReplay(t, reader, historical)
-	assertLiveEventReplay(t, reader, liveEvents, eventTime)
-}
-
 func TestSessionScopedLiveGetEvents_JSONRecoveryProbeReturnsCursorStaleForLiveSession(t *testing.T) {
-	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	sessionID := "session-alpha"
-	historical := testHistoricalFactoryEvents(t, eventTime)
-	mf := &testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			sessionID: {
-				FactoryEvents: historical,
-			},
+	workAPI := dashboardEventWorkAPI{
+		probe: func(_ context.Context, gotSessionID string, cursor *factorydefinitions.FactoryEventReconnectCursor) error {
+			if gotSessionID != sessionID || cursor == nil || cursor.AfterEventID != "missing-event-id" {
+				t.Fatalf("reconnect request = (%q, %#v), want (%q, missing-event-id)", gotSessionID, cursor, sessionID)
+			}
+			return factorysessions.ErrReconnectCursorNotFound
 		},
 	}
 
-	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	server := httptest.NewServer(newAPITestServer(workAPI).Handler())
 	defer server.Close()
 
 	eventPath := "/factory-sessions/" + sessionID + "/events?after_event_id=missing-event-id"
@@ -235,7 +349,11 @@ func assertSessionScopedFactoryEventsPath(t *testing.T, path, sessionID string) 
 }
 
 func TestSessionScopedLiveGetEvents_JSONRecoveryProbeReturnsUnknownSessionForMissingLiveSession(t *testing.T) {
-	server := httptest.NewServer(newAPITestServer(&testutil.MockFactory{}).Handler())
+	server := httptest.NewServer(newAPITestServer(dashboardEventWorkAPI{
+		probe: func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error {
+			return apisurface.ErrFactorySessionNotFound
+		},
+	}).Handler())
 	defer server.Close()
 
 	req, err := http.NewRequest(
@@ -275,15 +393,21 @@ func TestSessionScopedLiveGetEvents_ValidReconnectCursorStillStreamsSSEForLiveSe
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	sessionID := "session-alpha"
 	historical := testHistoricalFactoryEvents(t, eventTime)
-	mf := &testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			sessionID: {
-				FactoryEvents: historical,
-			},
+	domainHistory := apiFactoryEvents(t, historical)
+	workAPI := dashboardEventWorkAPI{
+		subscribe: func(_ context.Context, gotSessionID string, cursor *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+			if gotSessionID != sessionID || cursor == nil || cursor.AfterEventID != historical[1].Id {
+				t.Fatalf("reconnect request = (%q, %#v), want (%q, %q)", gotSessionID, cursor, sessionID, historical[1].Id)
+			}
+			return &factorydefinitions.FactoryEventStream{
+				FactorySessionID: sessionID,
+				History:          append([]factorydefinitions.FactoryEvent(nil), domainHistory[2:]...),
+				Events:           make(chan factorydefinitions.FactoryEvent),
+			}, nil
 		},
 	}
 
-	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	server := httptest.NewServer(newAPITestServer(workAPI).Handler())
 	defer server.Close()
 
 	req, err := http.NewRequest(
@@ -326,219 +450,21 @@ func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi
 	}
 }
 
-// openCompatibilityEventStreamReader opens process-global GET /events for retained compatibility coverage.
-func openCompatibilityEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func()) {
+func apiFactoryEvents(t *testing.T, events []factoryapi.FactoryEvent) []factorydefinitions.FactoryEvent {
 	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/events", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
+	converted := make([]factorydefinitions.FactoryEvent, 0, len(events))
+	for index, event := range events {
+		domainEvent, err := factorydefinitions.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert FactoryEvent[%d]: %v", index, err)
+		}
+		converted = append(converted, domainEvent)
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("stream request: %v", err)
-	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("compatibility GET /events status = %d, body = %s", resp.StatusCode, string(body))
-	}
-	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
-		t.Fatalf("Content-Type = %q, want text/event-stream", got)
-	}
-	return bufio.NewReader(resp.Body), func() {
-		cancel()
-		_ = resp.Body.Close()
-	}
-}
-
-func assertHistoricalEventsReplay(t *testing.T, reader *bufio.Reader, historical []factoryapi.FactoryEvent) {
-	t.Helper()
-
-	first := readAPISSEFactoryEvent(t, reader)
-	second := readAPISSEFactoryEvent(t, reader)
-	third := readAPISSEFactoryEvent(t, reader)
-	if first.Id != historical[0].Id || second.Id != historical[1].Id || third.Id != historical[2].Id {
-		t.Fatalf("historical event order = [%s %s %s], want [%s %s %s]", first.Id, second.Id, third.Id, historical[0].Id, historical[1].Id, historical[2].Id)
-	}
-	runStartedPayload, err := first.Payload.AsRunRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode run-started factory payload from SSE: %v", err)
-	}
-	if runStartedPayload.Factory.WorkTypes == nil || len(*runStartedPayload.Factory.WorkTypes) != 1 {
-		t.Fatalf("run-started factory payload = %#v, want generated factory work types", runStartedPayload.Factory)
-	}
-	firstJSON, err := json.Marshal(first)
-	if err != nil {
-		t.Fatalf("marshal streamed run-started event: %v", err)
-	}
-	if strings.Contains(string(firstJSON), "effectiveConfig") {
-		t.Fatalf("streamed run-started event contains legacy effectiveConfig: %s", firstJSON)
-	}
-}
-
-func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan interfaces.FactoryEvent, eventTime time.Time) {
-	t.Helper()
-
-	live := testAPIFactoryEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "factory-event/dispatch-created/dispatch-1", factoryapi.FactoryEventContext{
-		Tick:       2,
-		EventTime:  time.Date(2026, 4, 8, 12, 0, 2, 0, time.UTC),
-		DispatchId: stringPointerForAPIServerTest("dispatch-1"),
-	}, factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{}})
-	liveEvents <- testutil.FactoryEvent(t, live)
-
-	fourth := readAPISSEFactoryEvent(t, reader)
-	if fourth.Id != live.Id || fourth.Type != factoryapi.FactoryEventTypeDispatchRequest || fourth.Context.Tick != 2 {
-		t.Fatalf("live event = %#v, want request event at tick 2", fourth)
-	}
-}
-
-func TestCompatibilityGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
-	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
-	historical := testHistoricalFactoryEvents(t, eventTime)
-	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
-
-	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
-	defer server.Close()
-
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_event_id="+historical[1].Id, nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("stream request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, body = %s", resp.StatusCode, string(body))
-	}
-
-	reader := bufio.NewReader(resp.Body)
-	replayed := readAPISSEFactoryEvent(t, reader)
-	if replayed.Id != historical[2].Id {
-		t.Fatalf("reconnect replay = %q, want only events after %q", replayed.Id, historical[1].Id)
-	}
-}
-
-func TestCompatibilityGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
-	liveEvents := make(chan interfaces.FactoryEvent)
-	mf := &testutil.MockFactory{
-		FactoryEventStream: &interfaces.FactoryEventStream{
-			History: []interfaces.FactoryEvent{
-				testutil.FactoryEvent(t, testAPIFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}})),
-			},
-			Events: liveEvents,
-		},
-	}
-
-	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
-	defer server.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/events", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("stream request: %v", err)
-	}
-
-	_ = readAPISSEFactoryEvent(t, bufio.NewReader(resp.Body))
-	cancel()
-	_ = resp.Body.Close()
-
-	streamCtx := mf.FactoryEventStreamCtx
-	if streamCtx == nil {
-		t.Fatal("expected subscription context")
-	}
-	select {
-	case <-streamCtx.Done():
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected subscription context cancellation after client disconnect")
-	}
-}
-
-func TestCompatibilityGetEvents_ReconnectAfterSequenceSkipsAcknowledgedHistory(t *testing.T) {
-	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
-	historical := testHistoricalFactoryEventsWithSequence(t, eventTime)
-	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
-
-	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
-	defer server.Close()
-
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_sequence=0", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("compatibility GET /events: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("compatibility GET /events status = %d, body = %s", resp.StatusCode, string(body))
-	}
-
-	reader := bufio.NewReader(resp.Body)
-	replayed := readAPISSEFactoryEvent(t, reader)
-	if replayed.Id != historical[1].Id {
-		t.Fatalf("compatibility reconnect replay = %q, want only events after sequence 0 (%q)", replayed.Id, historical[1].Id)
-	}
-}
-
-func TestCompatibilityGetEvents_InvalidReconnectCursorReturnsBadRequest(t *testing.T) {
-	historical := testHistoricalFactoryEvents(t, time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC))
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical)}}
-
-	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
-	defer server.Close()
-
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_event_id=missing-event-id", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("compatibility GET /events: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("compatibility GET /events status = %d, want 400: %s", resp.StatusCode, readBody(t, resp))
-	}
-
-	var errResp factoryapi.ErrorResponse
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-		t.Fatalf("decode compatibility error response: %v", err)
-	}
-	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
-		t.Fatalf("compatibility error code = %q, want BAD_REQUEST", errResp.Code)
-	}
-}
-
-func testHistoricalFactoryEventsWithSequence(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	historical := testHistoricalFactoryEvents(t, eventTime)
-	for index := range historical {
-		sequence := index
-		historical[index].Context.Sequence = sequence
-	}
-	return historical
+	return converted
 }
 
 func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(nil)
 	for _, path := range []string{"/dashboard", "/dashboard/stream"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()

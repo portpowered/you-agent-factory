@@ -5,13 +5,13 @@ import (
 	"io"
 	"sort"
 
+	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/spf13/cobra"
 )
 
@@ -131,12 +131,12 @@ type FactoryQueryBinding struct {
 
 // FactoryQueryRunE returns the handwritten factory query RunE used by production wiring.
 func FactoryQueryRunE(binding FactoryQueryBinding) RunE {
-	query := binding.Query
-	if query == nil {
-		query = factorycli.Query
-	}
 	return func(cmd *cobra.Command, _ []string) error {
+		if binding.Query == nil {
+			return fmt.Errorf("factory query service is required")
+		}
 		cfg := factorycli.QueryConfig{}
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -153,7 +153,7 @@ func FactoryQueryRunE(binding FactoryQueryBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return query(cfg)
+		return binding.Query(cfg)
 	}
 }
 
@@ -166,11 +166,10 @@ type FactoryListBinding struct {
 
 // FactoryListRunE returns the handwritten factory list RunE used by production wiring.
 func FactoryListRunE(binding FactoryListBinding) RunE {
-	list := binding.List
-	if list == nil {
-		list = factorycli.List
-	}
 	return func(cmd *cobra.Command, _ []string) error {
+		if binding.List == nil {
+			return fmt.Errorf("factory list service is required")
+		}
 		cfg := factorycli.ListConfig{}
 		if binding.Dir != nil {
 			cfg.Dir = *binding.Dir
@@ -179,7 +178,7 @@ func FactoryListRunE(binding FactoryListBinding) RunE {
 			cfg.JSON = *binding.JSON
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return list(cfg)
+		return binding.List(cfg)
 	}
 }
 
@@ -194,12 +193,12 @@ type FactoryCreateBinding struct {
 
 // FactoryCreateRunE returns the handwritten factory create RunE used by production wiring.
 func FactoryCreateRunE(binding FactoryCreateBinding) RunE {
-	create := binding.Create
-	if create == nil {
-		create = factorycli.CreateFromFile
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Create == nil {
+			return fmt.Errorf("factory create service is required")
+		}
 		cfg := factorycli.CreateFromFileConfig{}
+		cfg.Context = cmd.Context()
 		if len(args) == 1 {
 			cfg.Name = args[0]
 		}
@@ -216,7 +215,7 @@ func FactoryCreateRunE(binding FactoryCreateBinding) RunE {
 			cfg.JSON = *binding.JSON
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return create(cfg)
+		return binding.Create(cfg)
 	}
 }
 
@@ -230,12 +229,12 @@ type FactoryUpdateBinding struct {
 
 // FactoryUpdateRunE returns the handwritten factory update RunE used by production wiring.
 func FactoryUpdateRunE(binding FactoryUpdateBinding) RunE {
-	update := binding.Update
-	if update == nil {
-		update = factorycli.UpdateFromFile
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Update == nil {
+			return fmt.Errorf("factory update service is required")
+		}
 		cfg := factorycli.UpdateFromFileConfig{}
+		cfg.Context = cmd.Context()
 		if len(args) == 1 {
 			cfg.Name = args[0]
 		}
@@ -249,7 +248,7 @@ func FactoryUpdateRunE(binding FactoryUpdateBinding) RunE {
 			cfg.JSON = *binding.JSON
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return update(cfg)
+		return binding.Update(cfg)
 	}
 }
 
@@ -262,11 +261,10 @@ type FactoryDeleteBinding struct {
 
 // FactoryDeleteRunE returns the handwritten factory delete RunE used by production wiring.
 func FactoryDeleteRunE(binding FactoryDeleteBinding) RunE {
-	deleteFactory := binding.Delete
-	if deleteFactory == nil {
-		deleteFactory = factorycli.Delete
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Delete == nil {
+			return fmt.Errorf("factory delete service is required")
+		}
 		cfg := factorycli.DeleteConfig{}
 		if len(args) == 1 {
 			cfg.Name = args[0]
@@ -278,7 +276,7 @@ func FactoryDeleteRunE(binding FactoryDeleteBinding) RunE {
 			cfg.JSON = *binding.JSON
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return deleteFactory(cfg)
+		return binding.Delete(cfg)
 	}
 }
 
@@ -294,12 +292,12 @@ type FactoryReplaceCurrentBinding struct {
 
 // FactoryReplaceCurrentRunE returns the handwritten replace-current RunE used by production wiring.
 func FactoryReplaceCurrentRunE(binding FactoryReplaceCurrentBinding) RunE {
-	replaceCurrent := binding.ReplaceCurrent
-	if replaceCurrent == nil {
-		replaceCurrent = factorycli.ReplaceCurrent
-	}
 	return func(cmd *cobra.Command, _ []string) error {
+		if binding.ReplaceCurrent == nil {
+			return fmt.Errorf("factory replace-current service is required")
+		}
 		cfg := factorycli.ReplaceCurrentConfig{}
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -316,7 +314,7 @@ func FactoryReplaceCurrentRunE(binding FactoryReplaceCurrentBinding) RunE {
 		if binding.Verbose != nil {
 			cfg.Verbose = binding.Verbose()
 		}
-		return replaceCurrent(cfg)
+		return binding.ReplaceCurrent(cfg)
 	}
 }
 
@@ -328,12 +326,12 @@ type FactoryConfigValidateBinding struct {
 
 // FactoryConfigValidateRunE returns the handwritten factory config validate RunE.
 func FactoryConfigValidateRunE(binding FactoryConfigValidateBinding) RunE {
-	validate := binding.Validate
-	if validate == nil {
-		validate = factorycli.Validate
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Validate == nil {
+			return fmt.Errorf("factory validate service is required")
+		}
 		cfg := factorycli.ValidateConfig{}
+		cfg.Context = cmd.Context()
 		if len(args) == 1 {
 			cfg.Path = args[0]
 		}
@@ -341,7 +339,7 @@ func FactoryConfigValidateRunE(binding FactoryConfigValidateBinding) RunE {
 			cfg.JSON = *binding.JSON
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return validate(cfg)
+		return binding.Validate(cfg)
 	}
 }
 
@@ -355,11 +353,10 @@ type FactoryConfigFlattenBinding struct {
 
 // FactoryConfigFlattenRunE returns the handwritten factory config flatten RunE.
 func FactoryConfigFlattenRunE(binding FactoryConfigFlattenBinding) RunE {
-	flatten := binding.Flatten
-	if flatten == nil {
-		flatten = configcli.FlattenFactoryConfig
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Flatten == nil {
+			return fmt.Errorf("factory flatten service is required")
+		}
 		cfg := configcli.FactoryConfigFlattenConfig{}
 		if len(args) == 1 {
 			cfg.Path = args[0]
@@ -374,7 +371,7 @@ func FactoryConfigFlattenRunE(binding FactoryConfigFlattenBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return flatten(cfg)
+		return binding.Flatten(cfg)
 	}
 }
 
@@ -388,11 +385,10 @@ type FactoryConfigExpandBinding struct {
 
 // FactoryConfigExpandRunE returns the handwritten factory config expand RunE.
 func FactoryConfigExpandRunE(binding FactoryConfigExpandBinding) RunE {
-	expand := binding.Expand
-	if expand == nil {
-		expand = configcli.ExpandFactoryConfig
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Expand == nil {
+			return fmt.Errorf("factory expand service is required")
+		}
 		cfg := configcli.FactoryConfigExpandConfig{}
 		if len(args) == 1 {
 			cfg.Path = args[0]
@@ -407,7 +403,7 @@ func FactoryConfigExpandRunE(binding FactoryConfigExpandBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return expand(cfg)
+		return binding.Expand(cfg)
 	}
 }
 
@@ -423,18 +419,19 @@ type ConfigInitBinding struct {
 // ConfigInitRunE returns the handwritten you config init RunE used by production wiring.
 func ConfigInitRunE(binding ConfigInitBinding) RunE {
 	init := binding.Init
-	if init == nil {
-		init = configinitcmd.RunInit
-	}
 	return func(cmd *cobra.Command, _ []string) error {
-		cfg := configinitcmd.InitConfig{}
-		if binding.HomeDir != nil {
-			homeDir, err := binding.HomeDir()
-			if err != nil {
-				return fmt.Errorf("resolve config init home directory: %w", err)
-			}
-			cfg.HomeDir = homeDir
+		if init == nil {
+			return fmt.Errorf("system initialization service is required")
 		}
+		if binding.HomeDir == nil {
+			return fmt.Errorf("config init home directory resolver is required")
+		}
+		cfg := configinitcmd.InitConfig{Context: cmd.Context()}
+		homeDir, err := binding.HomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve config init home directory: %w", err)
+		}
+		cfg.HomeDir = homeDir
 		if binding.JSON != nil {
 			cfg.JSON = binding.JSON()
 		}
@@ -458,17 +455,16 @@ type InitBinding struct {
 	Verbose           func() bool
 	Debug             *bool
 	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Init              func(initcmd.InitConfig) error
+	Init              func(initcmd.ScaffoldConfig) error
 }
 
 // InitRunE returns the handwritten you init RunE used by production wiring.
 func InitRunE(binding InitBinding) RunE {
-	init := binding.Init
-	if init == nil {
-		init = initcmd.Init
-	}
 	return func(cmd *cobra.Command, _ []string) error {
-		cfg := initcmd.InitConfig{}
+		if binding.Init == nil {
+			return fmt.Errorf("init service is required")
+		}
+		cfg := initcmd.ScaffoldConfig{}
 		if binding.Dir != nil {
 			cfg.Dir = *binding.Dir
 		}
@@ -491,6 +487,6 @@ func InitRunE(binding InitBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return init(cfg)
+		return binding.Init(cfg)
 	}
 }

@@ -5,9 +5,9 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -55,20 +55,20 @@ type RecordingMetricsEmitter struct {
 type recordedCounter struct {
 	name   string
 	delta  float64
-	fields metrics.Fields
+	fields factoryruntime.Fields
 }
 
 type recordedGauge struct {
 	name   string
 	value  float64
-	fields metrics.Fields
+	fields factoryruntime.Fields
 }
 
 type recordedSample struct {
 	name   string
 	value  float64
 	unit   string
-	fields metrics.Fields
+	fields factoryruntime.Fields
 }
 
 // NewRecordingMetricsEmitter returns an in-memory metrics emitter for tests
@@ -78,7 +78,7 @@ func NewRecordingMetricsEmitter() *RecordingMetricsEmitter {
 }
 
 // Counter implements metrics.MetricsEmitter.
-func (r *RecordingMetricsEmitter) Counter(_ context.Context, name string, delta float64, fields metrics.Fields) error {
+func (r *RecordingMetricsEmitter) Counter(_ context.Context, name string, delta float64, fields factoryruntime.Fields) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.counters = append(r.counters, recordedCounter{name: name, delta: delta, fields: fields})
@@ -86,7 +86,7 @@ func (r *RecordingMetricsEmitter) Counter(_ context.Context, name string, delta 
 }
 
 // Gauge implements metrics.MetricsEmitter.
-func (r *RecordingMetricsEmitter) Gauge(_ context.Context, name string, value float64, fields metrics.Fields) error {
+func (r *RecordingMetricsEmitter) Gauge(_ context.Context, name string, value float64, fields factoryruntime.Fields) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gauges = append(r.gauges, recordedGauge{name: name, value: value, fields: fields})
@@ -94,7 +94,7 @@ func (r *RecordingMetricsEmitter) Gauge(_ context.Context, name string, value fl
 }
 
 // Sample implements metrics.MetricsEmitter.
-func (r *RecordingMetricsEmitter) Sample(_ context.Context, name string, value float64, unit string, fields metrics.Fields) error {
+func (r *RecordingMetricsEmitter) Sample(_ context.Context, name string, value float64, unit string, fields factoryruntime.Fields) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.samples = append(r.samples, recordedSample{name: name, value: value, unit: unit, fields: fields})
@@ -103,7 +103,7 @@ func (r *RecordingMetricsEmitter) Sample(_ context.Context, name string, value f
 
 // ContainsCounter reports whether a counter emission with the given name,
 // delta, and fields was recorded.
-func (r *RecordingMetricsEmitter) ContainsCounter(name string, delta float64, fields metrics.Fields) bool {
+func (r *RecordingMetricsEmitter) ContainsCounter(name string, delta float64, fields factoryruntime.Fields) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, counter := range r.counters {
@@ -116,7 +116,7 @@ func (r *RecordingMetricsEmitter) ContainsCounter(name string, delta float64, fi
 
 // ContainsSample reports whether a sample emission with the given name, value,
 // unit, and fields was recorded.
-func (r *RecordingMetricsEmitter) ContainsSample(name string, value float64, unit string, fields metrics.Fields) bool {
+func (r *RecordingMetricsEmitter) ContainsSample(name string, value float64, unit string, fields factoryruntime.Fields) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, sample := range r.samples {
@@ -127,11 +127,10 @@ func (r *RecordingMetricsEmitter) ContainsSample(name string, value float64, uni
 	return false
 }
 
-// RecordingInvocationMetrics records service.InvocationMetricsRecorder emissions
-// for FactoryService observability tests.
+// RecordingInvocationMetrics records Factory Session invocation metrics.
 type RecordingInvocationMetrics struct {
 	mu      sync.Mutex
-	metrics []service.InvocationMetric
+	metrics []factorysessions.InvocationMetric
 }
 
 // NewRecordingInvocationMetrics returns a recorder for
@@ -140,13 +139,13 @@ func NewRecordingInvocationMetrics() *RecordingInvocationMetrics {
 	return &RecordingInvocationMetrics{}
 }
 
-// RecordInvocationMetric implements service.InvocationMetricsRecorder.
-func (r *RecordingInvocationMetrics) RecordInvocationMetric(metric service.InvocationMetric) {
+// RecordInvocationMetric implements coordinator.InvocationMetricsRecorder.
+func (r *RecordingInvocationMetrics) RecordInvocationMetric(metric factorysessions.InvocationMetric) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	labels := make(map[string]string, len(metric.Labels))
 	maps.Copy(labels, metric.Labels)
-	r.metrics = append(r.metrics, service.InvocationMetric{
+	r.metrics = append(r.metrics, factorysessions.InvocationMetric{
 		Name:   metric.Name,
 		Labels: labels,
 	})
@@ -176,6 +175,6 @@ func (r *RecordingInvocationMetrics) Contains(name string, labels map[string]str
 }
 
 var (
-	_ metrics.MetricsEmitter            = (*RecordingMetricsEmitter)(nil)
-	_ service.InvocationMetricsRecorder = (*RecordingInvocationMetrics)(nil)
+	_ factoryruntime.MetricsEmitter             = (*RecordingMetricsEmitter)(nil)
+	_ factorysessions.InvocationMetricsRecorder = (*RecordingInvocationMetrics)(nil)
 )

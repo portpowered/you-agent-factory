@@ -9,12 +9,12 @@ import (
 type fixtureCategory string
 
 const (
-	categoryRoute              fixtureCategory = "route"
-	categoryParameter          fixtureCategory = "parameter"
-	categoryRequestResponse    fixtureCategory = "request_response_schema"
-	categoryEnum               fixtureCategory = "enum"
-	categoryDocsOnly           fixtureCategory = "docs_only"
-	categoryFailClosed         fixtureCategory = "fail_closed"
+	categoryRoute           fixtureCategory = "route"
+	categoryParameter       fixtureCategory = "parameter"
+	categoryRequestResponse fixtureCategory = "request_response_schema"
+	categoryEnum            fixtureCategory = "enum"
+	categoryDocsOnly        fixtureCategory = "docs_only"
+	categoryFailClosed      fixtureCategory = "fail_closed"
 )
 
 var openAPIDiffFixtureMatrix = []struct {

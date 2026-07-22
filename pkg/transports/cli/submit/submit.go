@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
+	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -19,10 +18,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const submitRequestTimeout = 15 * time.Second
-
 // SubmitConfig holds parameters for the submit command.
 type SubmitConfig struct {
+	Context      context.Context
 	Name         string
 	WorkTypeName string
 	Payload      string
@@ -33,14 +31,18 @@ type SubmitConfig struct {
 	Verbose      bool
 	Debug        bool
 	Diagnostics  io.Writer
+	HTTP         clihttp.Protocol
 }
 
 // Submit posts work to a running factory via HTTP.
-func Submit(cfg SubmitConfig) error {
-	if cfg.Output == nil {
-		cfg.Output = os.Stdout
-	}
+func NewSubmit(read workdomain.PayloadFileReader, transport clihttp.Protocol) func(SubmitConfig) error {
+	return func(cfg SubmitConfig) error { cfg.HTTP = transport; return submit(read, cfg) }
+}
 
+func submit(read workdomain.PayloadFileReader, cfg SubmitConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	name := strings.TrimSpace(cfg.Name)
 	if name == "" {
 		return fmt.Errorf("--name is required")
@@ -51,8 +53,14 @@ func Submit(cfg SubmitConfig) error {
 	if cfg.Payload == "" {
 		return fmt.Errorf("--payload is required")
 	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
+	}
 
-	payload, data, payloadType, err := readSubmitPayload(cfg.Payload)
+	payload, data, payloadType, err := readSubmitPayload(read, cfg.Payload)
 	if err != nil {
 		return err
 	}
@@ -88,28 +96,22 @@ func Submit(cfg SubmitConfig) error {
 		cfg.WorkTypeName,
 		len(body),
 	)
-	started := time.Now()
-	client := &http.Client{Timeout: submitRequestTimeout}
 	var result factoryapi.SubmitWorkResponse
-	resp, err := clihttp.PostJSONCreated(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.PostJSONCreated(
+		cfg.Context,
 		endpointURL,
 		bytes.NewReader(body),
 		&result,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpointPath,
-			LogLabel:     "submit",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, response.Duration.Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d", endpointPath, resp.StatusCode, response.Duration.Milliseconds())
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
@@ -121,7 +123,7 @@ func Submit(cfg SubmitConfig) error {
 	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
 		responseBytes = len(encoded)
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), responseBytes, result.TraceId)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, response.Duration.Milliseconds(), responseBytes, result.TraceId)
 
 	if cfg.JSON {
 		return writeJSONSubmitSuccess(

@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/portpowered/infinite-you/pkg/config/load"
-	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // FamilyID is the stable identifier for one separately loadable configuration root.
@@ -50,7 +50,7 @@ func (d Diagnostic) Error() string {
 var expectedFamilies = []Family{
 	{
 		ID:                   FamilyGlobal,
-		ParserID:             "pkg/config/operatorconfig.ParseFileConfig",
+		ParserID:             "pkg/services/operator_settings.ParseFileConfig",
 		parser:               parseGlobal,
 		CanonicalOwnerPath:   "contracts/config/you-config.schema.json",
 		SchemaProjectionPath: "contracts/config/you-config.schema.json",
@@ -58,15 +58,15 @@ var expectedFamilies = []Family{
 	},
 	{
 		ID:                   FamilyMockWorker,
-		ParserID:             "pkg/config/mockworkers.ParseMockWorkersConfig",
+		ParserID:             "pkg/services/workers/interface.ParseMockWorkersConfig",
 		parser:               parseMockWorkers,
-		CanonicalOwnerPath:   mockworkers.SchemaRelativePath,
-		SchemaProjectionPath: mockworkers.SchemaRelativePath,
+		CanonicalOwnerPath:   "contracts/config/mock-workers.schema.json",
+		SchemaProjectionPath: "contracts/config/mock-workers.schema.json",
 		ExportPath:           "packages/api/generated/schemas/mock-workers.schema.json",
 	},
 	{
 		ID:                   FamilyFactory,
-		ParserID:             "pkg/config/load.LoadFromCanonicalJSON",
+		ParserID:             "pkg/transports/mapping/factoryconfig.FactoryConfigMapper.Expand",
 		parser:               parseFactory,
 		CanonicalOwnerPath:   "api/openapi.yaml#/components/schemas/Factory",
 		SchemaProjectionPath: "contracts/config/factory.schema.json",
@@ -178,11 +178,11 @@ func parseGlobal(payload []byte) error {
 }
 
 func parseMockWorkers(payload []byte) error {
-	_, err := mockworkers.ParseMockWorkersConfig(payload)
+	_, err := workers.ParseMockWorkersConfig(payload)
 	return err
 }
 
 func parseFactory(payload []byte) error {
-	_, err := load.LoadFromCanonicalJSON(payload, load.LoadOptions{})
+	_, err := factorymapping.NewFactoryConfigMapper().Expand(payload)
 	return err
 }

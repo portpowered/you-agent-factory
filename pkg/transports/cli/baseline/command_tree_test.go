@@ -5,17 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/baseline"
 )
 
 const commandTreeFixture = "testdata/command_tree.txt"
 
 func TestCommandTreeBaseline_MatchesFixture(t *testing.T) {
-	root := cli.NewRootCommand()
-	got := baseline.SerializeCommandTree(root)
+	observation, err := productionCLIObservation(t)
+	if err != nil {
+		t.Fatalf("observe production CLI: %v", err)
+	}
+	got := observation.Snapshot.CommandTree
 
-	want, err := baseline.ReadFixtureText(commandTreeFixture)
+	want, err := baseline.ReadFixtureText(fixtureSourceStore(), commandTreeFixture)
 	if err != nil {
 		t.Fatalf("read command tree baseline fixture: %v", err)
 	}
@@ -32,10 +34,16 @@ func TestCommandTreeBaseline_MatchesFixture(t *testing.T) {
 }
 
 func TestCommandTreeBaseline_IsStableAcrossRuns(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	first := baseline.SerializeCommandTree(root)
-	second := baseline.SerializeCommandTree(root)
+	firstObservation, err := productionCLIObservation(t)
+	if err != nil {
+		t.Fatalf("observe first production CLI: %v", err)
+	}
+	secondObservation, err := productionCLIObservation(t)
+	if err != nil {
+		t.Fatalf("observe second production CLI: %v", err)
+	}
+	first := firstObservation.Snapshot.CommandTree
+	second := secondObservation.Snapshot.CommandTree
 	if first != second {
 		t.Fatalf("command tree serialization is not stable across repeated runs\n%s", formatCommandTreeDiff(first, second))
 	}

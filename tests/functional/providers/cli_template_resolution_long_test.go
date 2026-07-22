@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -34,17 +35,17 @@ func TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates(t *test
 	})
 
 	runner := &templateCaptureCommandRunner{}
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertSessionPlaces(t, session, map[string]int{
+		"task:done": 1, "task:init": 0, "task:failed": 0,
+	})
 
 	wantArgs := []string{
 		"name=script-resource-name",
@@ -54,7 +55,8 @@ func TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates(t *test
 		"type=work",
 	}
 	assertCommandArgs(t, runner.LastRequest(), wantArgs)
-	assertTokenPayload(t, h.Marking(), "task:done", strings.Join(wantArgs, "\n"))
+	assertDispatchOutput(t, server.GetFactoryEvents(t), strings.Join(wantArgs, "\n"))
+	server.Stop(t)
 }
 
 func TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates(t *testing.T) {
@@ -78,18 +80,11 @@ func TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates(t *
 		Payload:    []byte("script-wrap-resource-payload"),
 	})
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 
 	req := runner.LastRequest()
 	wantPrompt := strings.Join([]string{
@@ -111,18 +106,15 @@ func TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWith
 	writeTwoInputResourceSeeds(t, dir)
 
 	runner := &templateCaptureCommandRunner{}
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("zeta-resource:done", 1).
-		PlaceTokenCount("alpha-resource:done", 1).
-		HasNoTokenInPlace("zeta-resource:init").
-		HasNoTokenInPlace("alpha-resource:init")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ScriptCommandRunner: runner,
+	}, 10*time.Second)
+	assertSessionPlaces(t, session, map[string]int{
+		"zeta-resource:done":  1,
+		"alpha-resource:done": 1,
+		"zeta-resource:init":  0,
+		"alpha-resource:init": 0,
+	})
 
 	wantArgs := []string{
 		"first_name=zeta-input-name",
@@ -142,19 +134,16 @@ func TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithReso
 
 	writeTwoInputResourceSeeds(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("zeta-resource:done", 1).
-		PlaceTokenCount("alpha-resource:done", 1).
-		HasNoTokenInPlace("zeta-resource:init").
-		HasNoTokenInPlace("alpha-resource:init")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertSessionPlaces(t, session, map[string]int{
+		"zeta-resource:done":  1,
+		"alpha-resource:done": 1,
+		"zeta-resource:init":  0,
+		"alpha-resource:init": 0,
+	})
 
 	wantPrompt := strings.Join([]string{
 		"first_name=zeta-input-name",
@@ -171,24 +160,16 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	support.SkipLongFunctional(t, "slow workstation execution-template provider smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Claude, "test-claude-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.ProviderClaude, "test-claude-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 
 	req := runner.LastRequest()
 	assertCommandArgs(t, req, append([]string{
@@ -205,24 +186,16 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	support.SkipLongFunctional(t, "slow codex execution-template provider smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Codex, "test-codex-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.ProviderCodex, "test-codex-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 
 	req := runner.LastRequest()
 	assertCommandArgs(t, req, []string{"exec", "--model", "test-codex-model", "-"})
@@ -234,28 +207,20 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 	support.SkipLongFunctional(t, "slow cursor execution-template provider smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	support.SetWorkingDirectory(t, dir)
 	configureCursorExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Cursor, "test-cursor-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.ProviderCursor, "test-cursor-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 
 	req := runner.LastRequest()
-	if req.Command != string(modelprovider.Cursor) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
+	if req.Command != string(modelprovider.ProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
 	}
 	wantWorkDir := support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch")
 	assertCommandArgs(t, req, []string{

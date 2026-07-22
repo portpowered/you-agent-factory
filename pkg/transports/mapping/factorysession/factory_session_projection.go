@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,7 +20,7 @@ func ResultRequestFromAPI(params factoryapi.GetFactorySessionResultsParams) (fac
 	if params.IncludeArtifacts != nil {
 		req.IncludeArtifacts = *params.IncludeArtifacts
 	}
-	return factorysessionexecution.NormalizeResultRequest(req)
+	return req, nil
 }
 
 // EventReconnectRequestFromAPI maps one public event reconnect request into the
@@ -34,7 +34,7 @@ func EventReconnectRequestFromAPI(params factoryapi.GetEventsBySessionIdParams) 
 		sequence := int(*params.AfterSequence)
 		req.AfterSequence = &sequence
 	}
-	return factorysessionexecution.NormalizeEventReconnectRequest(req)
+	return req, nil
 }
 
 // ResultResponseToAPI maps one durable result projection to the public response shape.
@@ -236,30 +236,6 @@ func EventReadResponseToAPI(result factorysessionexecution.EventReadResult) []fa
 		events = append(events, event)
 	}
 	return events
-}
-
-// FactoryEventStreamFromReadResult maps one durable event read result into the
-// shared reconnect stream shape used by API, CLI, MCP, and UI transports.
-func FactoryEventStreamFromReadResult(result factorysessionexecution.EventReadResult) *interfaces.FactoryEventStream {
-	closed := make(chan interfaces.FactoryEvent)
-	close(closed)
-	stream := &interfaces.FactoryEventStream{
-		Events: closed,
-	}
-	events := make([]interfaces.FactoryEvent, 0, len(result.Events))
-	for _, raw := range result.Events {
-		var event interfaces.FactoryEvent
-		if err := json.Unmarshal(raw, &event); err != nil {
-			continue
-		}
-		event.Payload = append(json.RawMessage(nil), event.Payload...)
-		events = append(events, event)
-	}
-	if len(events) == 0 {
-		return stream
-	}
-	stream.History = events
-	return stream
 }
 
 func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) factoryapi.FactorySessionDispatchSummary {

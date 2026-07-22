@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/boundedio"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -127,8 +128,9 @@ func TestFactorySessionSSEStream_CanceledContextWinsOverPendingEOF(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	pending := make(chan factorySessionSSEReadResult, 1)
-	pending <- factorySessionSSEReadResult{}
+	pending := boundedio.Start(func() factorySessionSSEReadResult {
+		return factorySessionSSEReadResult{}
+	})
 	stream := &FactorySessionSSEStream{
 		t:         t,
 		timeout:   time.Second,
@@ -263,7 +265,7 @@ func TestFactorySessionSSEStream_TryWaitForKeepalive_FallsBackWhenBodyLacksDeadl
 func TestNewFactorySessionSSEHarness_UsesDefaultTimeoutWhenUnset(t *testing.T) {
 	t.Parallel()
 
-	harness := NewFactorySessionSSEHarness(t, 0)
+	harness := newFactorySessionSSEHarness(t, 0)
 	if harness.timeout != defaultFactorySessionSSEHarnessTimeout {
 		t.Fatalf("timeout = %s, want default %s", harness.timeout, defaultFactorySessionSSEHarnessTimeout)
 	}
@@ -271,10 +273,10 @@ func TestNewFactorySessionSSEHarness_UsesDefaultTimeoutWhenUnset(t *testing.T) {
 
 func TestFactorySessionSSEHarness_OpenAcceptsReconnectQuery(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(
 		server.URL,
 		fixture.SessionID,

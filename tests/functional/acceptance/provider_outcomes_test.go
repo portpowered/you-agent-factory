@@ -13,13 +13,17 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const packagedGoalMockWorkerAcceptedSummary = "mock worker accepted"
+const packagedGoalFactoryName = "@you/goal"
+
+var goal = struct {
+	PackagedFactoryName string
+}{
+	PackagedFactoryName: packagedGoalFactoryName,
+}
 
 func TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance(t *testing.T) {
 	t.Parallel()
@@ -65,10 +69,8 @@ func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPat
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "configured-provider-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	initResult, initOutcome := initializeConfig(t, ctx, session, "configured-provider-config-init")
+	configPath := initOutcome.ConfigPath
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -106,8 +108,8 @@ func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPat
 	if result.Stderr != "" {
 		t.Fatalf("stderr = %q, want empty stderr on successful configured-provider run", result.Stderr)
 	}
-	if !strings.Contains(initResult.Stdout, "Created system config at "+configPath) {
-		t.Fatalf("init stdout = %q, want created system config message for %q", initResult.Stdout, configPath)
+	if initOutcome.SystemConfigOutcome != "created" {
+		t.Fatalf("init stdout = %q, want created system config outcome for %q", initResult.Stdout, configPath)
 	}
 }
 
@@ -122,10 +124,8 @@ func TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "discovered-provider-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	_, initOutcome := initializeConfig(t, ctx, session, "discovered-provider-config-init")
+	configPath := initOutcome.ConfigPath
 	configData, readErr := os.ReadFile(configPath)
 	if readErr != nil {
 		t.Fatalf("ReadFile(%q): %v", configPath, readErr)
@@ -151,8 +151,8 @@ func TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider(t *tes
 	)
 
 	result, err := session.RunWithEnv(ctx, []string{
-		operatorconfig.EnvDefaultWorkerModelProvider + "=codex",
-		operatorconfig.EnvDefaultWorkerModel + "=gpt-5-codex",
+		"YOU_DEFAULT_WORKER_MODEL_PROVIDER=codex",
+		"YOU_DEFAULT_WORKER_MODEL=gpt-5-codex",
 	}, args...)
 	session.RequireSuccess(t, "discovered-provider-named-goal", result, err)
 
@@ -170,23 +170,23 @@ func writePackagedGoalMockWorkersConfig(t *testing.T) string {
 	checkerCmd, checkerArgs := mockWorkerEchoCommand("plain")
 	reviewerCmd, reviewerArgs := mockWorkerEchoCommand("accepted")
 
-	cfg := factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
 				WorkstationName: "plan-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-executor",
 				WorkstationName: "execute-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
 				WorkstationName: "check-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: checkerCmd,
 					Args:    checkerArgs,
 				},
@@ -194,8 +194,8 @@ func writePackagedGoalMockWorkersConfig(t *testing.T) string {
 			{
 				WorkerName:      "goal-reviewer",
 				WorkstationName: "review-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: reviewerCmd,
 					Args:    reviewerArgs,
 				},

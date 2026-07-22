@@ -3,9 +3,9 @@ package livechild
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func executeShared(ctx context.Context, live providerexecution.Executor) {
-	_, _ = live.Execute(ctx, providerexecution.ExecutionInput{})
+func executeShared(ctx context.Context, live workers.InvocationExecutor) {
+	_, _ = live.Execute(ctx, workers.InvocationInput{})
 }

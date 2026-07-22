@@ -84,7 +84,6 @@ func TestScanAllowsNarrowCompositionOwners(t *testing.T) {
 import "github.com/portpowered/infinite-you/pkg/platform/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
 		"pkg/transports/cli/terminalpolicy/policy.go": `package terminalpolicy
-import "github.com/portpowered/infinite-you/pkg/platform/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
 		"pkg/platform/logging/logger.go": `package logging
 import "go.uber.org/zap"

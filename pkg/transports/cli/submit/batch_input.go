@@ -2,9 +2,10 @@ package submit
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"os"
+	"io/fs"
 	"strings"
 )
 
@@ -53,13 +54,16 @@ func resolveBatchInput(cfg BatchConfig) (batchResolvedInput, error) {
 				label:  "inline JSON",
 			}, nil
 		}
-		if _, err := os.Stat(arg); err != nil {
-			if os.IsNotExist(err) {
+		if cfg.FileSystem == nil {
+			return batchResolvedInput{}, fmt.Errorf("batch input file system is required")
+		}
+		if _, err := cfg.FileSystem.Stat(arg); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
 				return batchResolvedInput{}, fmt.Errorf("batch file not found: %s", arg)
 			}
 			return batchResolvedInput{}, fmt.Errorf("batch file %s: %w", arg, err)
 		}
-		data, err := os.ReadFile(arg)
+		data, err := cfg.FileSystem.ReadFile(arg)
 		if err != nil {
 			return batchResolvedInput{}, fmt.Errorf("read %s: %w", arg, err)
 		}
@@ -77,13 +81,16 @@ func resolveBatchFileFlag(cfg BatchConfig, path string) (batchResolvedInput, err
 		}
 		return batchResolvedInput{data: data, source: batchSourceStdin, label: "stdin"}, nil
 	}
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
+	if cfg.FileSystem == nil {
+		return batchResolvedInput{}, fmt.Errorf("batch input file system is required")
+	}
+	if _, err := cfg.FileSystem.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			return batchResolvedInput{}, fmt.Errorf("batch file not found: %s", path)
 		}
 		return batchResolvedInput{}, fmt.Errorf("batch file %s: %w", path, err)
 	}
-	data, err := os.ReadFile(path)
+	data, err := cfg.FileSystem.ReadFile(path)
 	if err != nil {
 		return batchResolvedInput{}, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -93,7 +100,7 @@ func resolveBatchFileFlag(cfg BatchConfig, path string) (batchResolvedInput, err
 func readBatchStdin(cfg BatchConfig) ([]byte, error) {
 	stdin := cfg.Stdin
 	if stdin == nil {
-		stdin = os.Stdin
+		return nil, fmt.Errorf("read batch stdin: process stdin reader is required")
 	}
 	data, err := io.ReadAll(stdin)
 	if err != nil {
@@ -113,11 +120,7 @@ func stdinIsTTY(cfg BatchConfig) bool {
 	if cfg.StdinIsTTY != nil {
 		return cfg.StdinIsTTY()
 	}
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return false
 }
 
 func looksLikeInlineJSON(arg string) bool {

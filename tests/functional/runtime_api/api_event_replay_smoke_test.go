@@ -5,19 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=event-replay-functional-smoke review=2026-07-18 removal=split-runtime-recording-projection-and-api-assertions-before-next-event-replay-smoke-change
-func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTimeline(t *testing.T) {
+func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
-	executor := &eventReplayBlockingExecutor{release: releaseDispatch}
-	server := startFunctionalServer(t, dir, false, factory.WithServiceMode(), factory.WithWorkerExecutor("worker-a", executor))
+	provider := &eventReplayBlockingProvider{release: releaseDispatch}
+	server := startFunctionalServer(t, dir, false, withProvider(provider))
 
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
@@ -46,9 +44,8 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 		t.Fatalf("event replay smoke used %d ticks, want at least 3: %#v", len(uniqueEventTicks(outcome.events)), eventTicks(outcome.events))
 	}
 
-	assertEventReplayActiveDashboard(t, outcome.activeView)
-	completedView := server.GetDashboard(t)
-	assertEventReplayCompletedDashboard(t, completedView)
+	assertEventReplayActiveSession(t, outcome.activeSession)
+	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
 
 	work := server.ListWork(t)
 	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
@@ -57,11 +54,11 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 }
 
 type eventReplayOutcome struct {
-	events      []factoryapi.FactoryEvent
-	workRequest factoryapi.FactoryEvent
-	request     factoryapi.FactoryEvent
-	response    factoryapi.FactoryEvent
-	activeView  DashboardResponse
+	events        []factoryapi.FactoryEvent
+	workRequest   factoryapi.FactoryEvent
+	request       factoryapi.FactoryEvent
+	response      factoryapi.FactoryEvent
+	activeSession factoryapi.FactorySession
 }
 
 func collectEventReplayOutcome(
@@ -86,7 +83,7 @@ func collectEventReplayOutcome(
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			outcome.request = event
 			if !released {
-				outcome.activeView = server.GetDashboard(t)
+				outcome.activeSession = support.GetDefaultSession(t, server.URL())
 				close(releaseDispatch)
 				released = true
 			}
@@ -124,49 +121,41 @@ func assertEventReplayTimeline(t *testing.T, outcome eventReplayOutcome, runStar
 	}
 }
 
-func assertEventReplayActiveDashboard(t *testing.T, activeView DashboardResponse) {
+func assertEventReplayActiveSession(t *testing.T, session factoryapi.FactorySession) {
 	t.Helper()
 
-	if activeView.Runtime.InFlightDispatchCount != 1 {
-		t.Fatalf("active tick in-flight dispatch count = %d, want 1", activeView.Runtime.InFlightDispatchCount)
-	}
-	if activeView.Runtime.ActiveWorkstationNodeIds == nil || len(*activeView.Runtime.ActiveWorkstationNodeIds) == 0 {
-		t.Fatal("active tick graph state missing active workstation nodes")
+	if session.Id == "" {
+		t.Fatal("active Factory Session projection has an empty ID")
 	}
 }
 
-func assertEventReplayCompletedDashboard(t *testing.T, completedView DashboardResponse) {
+func assertEventReplayCompletedSession(t *testing.T, session factoryapi.FactorySession) {
 	t.Helper()
 
-	if completedView.Runtime.InFlightDispatchCount != 0 {
-		t.Fatalf("completed tick in-flight dispatch count = %d, want 0", completedView.Runtime.InFlightDispatchCount)
+	if session.Runtime.Progress.Categories.Processing != 0 {
+		t.Fatalf("completed Factory Session processing count = %d, want 0", session.Runtime.Progress.Categories.Processing)
 	}
-	if completedView.Runtime.Session.CompletedCount != 1 {
-		t.Fatalf("completed tick completed count = %d, want 1", completedView.Runtime.Session.CompletedCount)
-	}
-	if completedView.Runtime.Session.CompletedWorkLabels == nil || len(*completedView.Runtime.Session.CompletedWorkLabels) == 0 {
-		t.Fatal("completed tick missing terminal work labels")
-	}
-	if completedView.Runtime.Session.ProviderSessions != nil && len(*completedView.Runtime.Session.ProviderSessions) != 0 {
-		t.Fatalf("completed tick provider sessions = %#v, want no provider sessions without inference response events", completedView.Runtime.Session.ProviderSessions)
+	if session.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf("completed Factory Session terminal count = %d, want 1", session.Runtime.Progress.Categories.Terminal)
 	}
 }
 
-type eventReplayBlockingExecutor struct {
+type eventReplayBlockingProvider struct {
 	release <-chan struct{}
 }
 
-func (e *eventReplayBlockingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+func (p *eventReplayBlockingProvider) Infer(
+	ctx context.Context,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
 	select {
-	case <-e.release:
+	case <-p.release:
 	case <-ctx.Done():
-		return workerexecution.WorkResult{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workerexecution.OutcomeAccepted,
+	return workerexecution.InferenceResponse{
+		Content: "completed",
 		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",

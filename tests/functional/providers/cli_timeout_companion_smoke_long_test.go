@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -41,71 +42,28 @@ Execute the script.
 	})
 
 	runner := newTimeoutThenReleaseCommandRunner()
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRunAsync(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	runCtx, cancel := context.WithTimeout(context.Background(), timeoutCompanionRunTimeout)
-	defer cancel()
-	errCh := harness.RunInBackground(runCtx)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
 
 	waitForTimeoutCompanionRetryStarted(t, runner)
 
-	engineState, err := harness.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	workDispatches := dispatchesForWorkID(engineState.DispatchHistory, workID)
-	if len(workDispatches) == 0 {
-		t.Fatal("missing first timeout dispatch after retry signal")
-	}
-	first := workDispatches[0]
-	if first.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("first timeout dispatch outcome = %s, want %s", first.Outcome, workerexecution.OutcomeFailed)
-	}
-	if first.Reason != "execution timeout" {
-		t.Fatalf("first timeout dispatch reason = %q, want %q", first.Reason, "execution timeout")
-	}
-	if first.FailureMetadata == nil {
-		t.Fatal("first timeout dispatch FailureMetadata is nil, want timeout metadata")
-	}
-	if first.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
-		t.Fatalf("first timeout dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
-	}
-	if first.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
-		t.Fatalf("first timeout dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
-	}
-	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
-		t.Fatalf("first timeout dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
-	}
-	if first.OutputMutations[0].Token == nil || first.OutputMutations[0].Token.Color.WorkID != workID {
-		t.Fatalf("first timeout dispatch requeued token = %#v, want work %q", first.OutputMutations[0].Token, workID)
-	}
-
 	close(runner.releaseCh)
-	waitForTimeoutCompanionCompletion(t, harness, errCh, cancel)
-
-	finalState, err := harness.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	if !support.HasWorkTokenInPlace(finalState.Marking, "task:done", workID) {
-		t.Fatalf("missing completed token for %q in task:done; marking=%#v", workID, finalState.Marking.PlaceTokens)
-	}
-
-	finalDispatches := dispatchesForWorkID(finalState.DispatchHistory, workID)
-	if len(finalDispatches) < 2 {
-		t.Fatalf("final timeout companion dispatch count = %d, want at least 2", len(finalDispatches))
-	}
-	last := finalDispatches[len(finalDispatches)-1]
-	if last.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("last timeout companion dispatch outcome = %s, want %s", last.Outcome, workerexecution.OutcomeAccepted)
-	}
+	support.WaitForTerminalStatus(t, server.URL(), timeoutCompanionRunTimeout)
+	session := support.GetDefaultSession(t, server.URL())
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", workID, "task", traceID, nil)
+	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+		factoryapi.WorkOutcomeAccepted,
+	}, "execution timeout")
 	if runner.CallCount() < 2 {
 		t.Fatalf("timeout companion runner call count = %d, want at least 2", runner.CallCount())
 	}
+	server.Stop(t)
 }
 
 type timeoutThenReleaseCommandRunner struct {
@@ -126,7 +84,7 @@ func newTimeoutThenReleaseCommandRunner() *timeoutThenReleaseCommandRunner {
 	}
 }
 
-func (r *timeoutThenReleaseCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (r *timeoutThenReleaseCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.callCount++
 	call := r.callCount
@@ -135,7 +93,7 @@ func (r *timeoutThenReleaseCommandRunner) Run(ctx context.Context, _ workers.Com
 	if call == 1 {
 		<-ctx.Done()
 		r.firstTimeout.Do(func() { close(r.firstTimeoutCh) })
-		return workers.CommandResult{}, ctx.Err()
+		return platformprocess.CommandResult{}, ctx.Err()
 	}
 	if call == 2 {
 		r.retryStart.Do(func() { close(r.retryStartCh) })
@@ -143,9 +101,9 @@ func (r *timeoutThenReleaseCommandRunner) Run(ctx context.Context, _ workers.Com
 
 	select {
 	case <-r.releaseCh:
-		return workers.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
+		return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
 	case <-ctx.Done():
-		return workers.CommandResult{}, ctx.Err()
+		return platformprocess.CommandResult{}, ctx.Err()
 	}
 }
 
@@ -173,32 +131,5 @@ func waitForTimeoutCompanionRetryStarted(t *testing.T, runner *timeoutThenReleas
 	case <-runner.retryStartCh:
 	case <-time.After(remaining):
 		t.Fatalf("missing retry dispatch signal within %s", timeoutCompanionSignalTimeout)
-	}
-}
-
-func waitForTimeoutCompanionCompletion(
-	t *testing.T,
-	harness *testutil.ServiceTestHarness,
-	errCh <-chan error,
-	cancel context.CancelFunc,
-) {
-	t.Helper()
-
-	select {
-	case <-harness.WaitToComplete():
-	case err := <-errCh:
-		t.Fatalf("factory exited before timeout companion completion: %v", err)
-	case <-time.After(timeoutCompanionRunTimeout):
-		t.Fatalf("timed out waiting %s for timeout companion completion", timeoutCompanionRunTimeout)
-	}
-
-	cancel()
-	select {
-	case err := <-errCh:
-		if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-			t.Fatalf("timeout companion background run error = %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for timeout companion background run to exit")
 	}
 }

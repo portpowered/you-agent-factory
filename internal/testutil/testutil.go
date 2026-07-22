@@ -13,12 +13,10 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -133,34 +131,7 @@ func CopyFixtureDir(t *testing.T, srcDir string) string {
 	if err != nil {
 		t.Fatalf("CopyFixtureDir: failed to copy %s: %v", srcDir, err)
 	}
-	normalizeFactoryJSONInDir(t, dst)
-
 	return dst
-}
-
-func normalizeFactoryJSONInDir(t *testing.T, dir string) {
-	t.Helper()
-
-	path := filepath.Join(dir, interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return
-		}
-		t.Fatalf("normalizeFactoryJSONInDir: read %s: %v", path, err)
-	}
-	expanded, err := factoryconfig.NewFactoryConfigMapper().Expand(data)
-	if err != nil {
-		t.Fatalf("normalizeFactoryJSONInDir: expand factory config: %v", err)
-	}
-	factoryvalidation.NormalizeFixtureConfig(expanded)
-	marshaled, err := factoryconfig.MarshalCanonicalFactoryConfig(expanded)
-	if err != nil {
-		t.Fatalf("normalizeFactoryJSONInDir: marshal factory config: %v", err)
-	}
-	if err := os.WriteFile(path, marshaled, 0o644); err != nil {
-		t.Fatalf("normalizeFactoryJSONInDir: write %s: %v", path, err)
-	}
 }
 
 // WriteDynamicExecutionFile creates inputs/<workType>/<executionID>/ while the file
@@ -185,7 +156,7 @@ func WriteDynamicExecutionFile(t *testing.T, dir, workType, executionID string, 
 
 // WriteSeedExecutionFile writes a seed file under inputs/<workType>/<executionID>/
 // so functional tests exercise watcher execution-channel submission without
-// reaching into FileWatcher adapter internals. Call before NewServiceTestHarness.
+// reaching into FileWatcher adapter internals. Call before starting the process.
 func WriteSeedExecutionFile(t *testing.T, dir, workType, executionID string, payload []byte) {
 	t.Helper()
 	if strings.TrimSpace(executionID) == "" {
@@ -329,12 +300,11 @@ func seedPayload(payload []byte) any {
 // ScaffoldFactoryDir writes a FactoryConfig as factory.json to a new temporary
 // directory and returns the directory path. The temp directory is cleaned up
 // via t.Cleanup. This allows tests to construct configs programmatically while
-// still exercising the full service path (config loading → ConfigMapper.Map()).
+// still exercising the full service path (config loading → Factory Runtime mapping).
 func ScaffoldFactoryDir(t *testing.T, cfg *interfaces.FactoryConfig) string {
 	t.Helper()
 	dir := t.TempDir()
 	clone := *cfg
-	factoryvalidation.NormalizeFixtureConfig(&clone)
 	if strings.TrimSpace(clone.Name) == "" {
 		if strings.TrimSpace(clone.Project) != "" {
 			clone.Name = clone.Project
@@ -342,7 +312,7 @@ func ScaffoldFactoryDir(t *testing.T, cfg *interfaces.FactoryConfig) string {
 			clone.Name = filepath.Base(dir)
 		}
 	}
-	data, err := factoryconfig.MarshalCanonicalFactoryConfig(&clone)
+	data, err := factorymapping.MarshalCanonicalFactoryConfig(&clone)
 	if err != nil {
 		t.Fatalf("ScaffoldFactoryDir: marshal config: %v", err)
 	}
@@ -386,7 +356,7 @@ func UpdateFactoryJSON(t *testing.T, dir string, mutate func(map[string]any)) {
 func AppendFactoryInferenceThrottleGuard(
 	t *testing.T,
 	dir string,
-	provider modelprovider.ID,
+	provider modelprovider.Provider,
 	model string,
 	refreshWindow time.Duration,
 ) {
@@ -445,7 +415,7 @@ func PipelineConfig(stages int, workerName string) *interfaces.FactoryConfig {
 
 	return &interfaces.FactoryConfig{
 		WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task", States: states}},
-		Workers:      []workerconfig.Config{{Name: workerName}},
+		Workers:      []interfaces.FactoryWorkerConfig{{Name: workerName}},
 		Workstations: workstations,
 	}
 }

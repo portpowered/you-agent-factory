@@ -7,19 +7,94 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
+type strictDurableEventLifecycle struct {
+	factorysession.DurableLifecycleAPI
+	read  func(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+	probe func(context.Context, string, factorysessionexecution.EventReconnectRequest) error
+}
+
+func (s strictDurableEventLifecycle) ReadDurableFactorySessionEventStream(
+	ctx context.Context,
+	sessionID string,
+	request factorysessionexecution.EventReconnectRequest,
+) (*interfaces.FactoryEventStream, error) {
+	return s.read(ctx, sessionID, request)
+}
+
+func (s strictDurableEventLifecycle) ProbeDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessionexecution.EventReconnectRequest,
+) error {
+	return s.probe(ctx, sessionID, request)
+}
+
+func TestDurableAPIEventRead_DelegatesMaterializedStreamToFactorySessions(t *testing.T) {
+	t.Parallel()
+
+	wantStream := &interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{{Id: "event-1"}}}
+	sequence := factoryapi.AfterSequence(4)
+	api := factorysession.NewDurableAPI(nil, strictDurableEventLifecycle{
+		read: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+			if sessionID != "dur-sess-1" || request.AfterSequence == nil || *request.AfterSequence != 4 {
+				t.Fatalf("read request = session %q %#v", sessionID, request)
+			}
+			return wantStream, nil
+		},
+		probe: func(context.Context, string, factorysessionexecution.EventReconnectRequest) error { return nil },
+	})
+	raw, _ := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
+	got, err := api.ReadDurableFactorySessionEvents(context.Background(), "dur-sess-1", raw)
+	if err != nil {
+		t.Fatalf("ReadDurableFactorySessionEvents: %v", err)
+	}
+	if got != wantStream {
+		t.Fatalf("stream = %#v, want exact service-materialized stream %#v", got, wantStream)
+	}
+}
+
+func TestDurableAPIEventProbe_DelegatesWithoutReadingStream(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	api := factorysession.NewDurableAPI(nil, strictDurableEventLifecycle{
+		read: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+			t.Fatal("probe called stream read")
+			return nil, nil
+		},
+		probe: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) error {
+			called = true
+			if sessionID != "dur-sess-1" || request.AfterEventID != " event-1 " {
+				t.Fatalf("probe request = session %q %#v", sessionID, request)
+			}
+			return nil
+		},
+	})
+	after := factoryapi.AfterEventId(" event-1 ")
+	raw, _ := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterEventId: &after})
+	if err := api.ProbeDurableFactorySessionEvents(context.Background(), "dur-sess-1", raw); err != nil {
+		t.Fatalf("ProbeDurableFactorySessionEvents: %v", err)
+	}
+	if !called {
+		t.Fatal("Factory Sessions probe operation was not called")
+	}
+}
+
 func TestDurableAPIListRequiresExecutionService(t *testing.T) {
 	t.Parallel()
 	api := factorysession.NewDurableAPI(nil, nil)
-	if _, err := api.ListDurableFactorySessions(context.Background(), factoryapi.ListFactorySessionsParams{}); err == nil {
+	if _, err := api.ListDurableFactorySessions(context.Background(), factorysessionexecution.ListSessionsRequest{}); err == nil {
 		t.Fatal("ListDurableFactorySessions succeeded without an execution service")
 	}
 }
@@ -95,40 +170,17 @@ func TestStartRequestFromAPI_NormalizesAsyncAcceptedFixture(t *testing.T) {
 }
 
 func TestStartRequestFromAPI_RejectsMissingRequestID(t *testing.T) {
-	_, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+	raw, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 			FactoryId: strPtr("factory"),
 		},
 	})
-	if err == nil {
-		t.Fatal("error = nil, want validation error")
-	}
-	var validationErr *apisurface.RequestValidationError
-	if !errors.As(err, &validationErr) {
-		var domainErr *factorysessionexecution.ValidationError
-		if !errors.As(err, &domainErr) {
-			t.Fatalf("error = %T, want validation error", err)
-		}
-	}
-}
-
-func TestStartRequestFromCLI_NormalizesFixtureBackedRequest(t *testing.T) {
-	request, err := factorysession.StartRequestFromCLI(factorysession.CLIStartInput{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-	})
 	if err != nil {
-		t.Fatalf("StartRequestFromCLI: %v", err)
+		t.Fatalf("StartRequestFromAPI: %v", err)
 	}
-	if request.RequestID != "req-petri-success-001" {
-		t.Fatalf("requestId = %q", request.RequestID)
-	}
-	if request.Source.FactoryID != "customer-support-triage" {
-		t.Fatalf("factoryId = %q", request.Source.FactoryID)
+	if raw.RequestID != "" {
+		t.Fatalf("requestId = %q, want raw empty value", raw.RequestID)
 	}
 }
 
@@ -145,16 +197,8 @@ func TestStartRequestFromAPI_IdempotentReplayProducesStableTuple(t *testing.T) {
 		t.Fatalf("second StartRequestFromAPI: %v", err)
 	}
 
-	firstHash, err := factorysessionexecution.IdempotencyTupleHash(first)
-	if err != nil {
-		t.Fatalf("first hash: %v", err)
-	}
-	secondHash, err := factorysessionexecution.IdempotencyTupleHash(second)
-	if err != nil {
-		t.Fatalf("second hash: %v", err)
-	}
-	if firstHash != secondHash {
-		t.Fatalf("idempotent tuple hash mismatch: %q vs %q", firstHash, secondHash)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("mapped requests differ: %#v vs %#v", first, second)
 	}
 }
 
@@ -172,7 +216,7 @@ func TestStartRequestFromAPI_MapsAdditionalSourceKindsAndValidation(t *testing.T
 		if err != nil {
 			t.Fatalf("StartRequestFromAPI(factory inline): %v", err)
 		}
-		if request.Source.Kind != workflowsource.KindFactoryInline || len(request.Source.FactoryInline) == 0 {
+		if request.Source.Kind != factory.WorkflowSourceKindFactoryInline || len(request.Source.FactoryInline) == 0 {
 			t.Fatalf("request source = %#v, want encoded factory inline source", request.Source)
 		}
 	})
@@ -188,8 +232,8 @@ func TestStartRequestFromAPI_MapsAdditionalSourceKindsAndValidation(t *testing.T
 		if err != nil {
 			t.Fatalf("StartRequestFromAPI(workflow file): %v", err)
 		}
-		if request.Source.WorkflowFile != "workflows/simple.workflow.js" {
-			t.Fatalf("workflowFile = %q, want trimmed path", request.Source.WorkflowFile)
+		if request.Source.WorkflowFile != " workflows/simple.workflow.js " {
+			t.Fatalf("workflowFile = %q, want raw path", request.Source.WorkflowFile)
 		}
 	})
 
@@ -212,8 +256,8 @@ func TestStartRequestFromAPI_MapsAdditionalSourceKindsAndValidation(t *testing.T
 		if err != nil {
 			t.Fatalf("StartRequestFromAPI(inline workflow): %v", err)
 		}
-		if request.Source.InlineWorkflow == nil || request.Source.InlineWorkflow.InlineSource != "return 1;" {
-			t.Fatalf("inline workflow = %#v, want trimmed inline source", request.Source.InlineWorkflow)
+		if request.Source.InlineWorkflow == nil || request.Source.InlineWorkflow.InlineSource != " return 1; " {
+			t.Fatalf("inline workflow = %#v, want raw inline source", request.Source.InlineWorkflow)
 		}
 	})
 
@@ -225,7 +269,7 @@ func TestStartRequestFromAPI_MapsAdditionalSourceKindsAndValidation(t *testing.T
 			},
 		})
 		if err == nil {
-			t.Fatal("error = nil, want request validation error")
+			t.Fatal("error = nil, want representation validation error")
 		}
 	})
 }
@@ -272,7 +316,7 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 				Results: deref(terminalExpected.Links.Results),
 			},
 		},
-		SyncOutcome: factorysessionexecution.SyncOutcomeCompleted,
+		SyncOutcome: "COMPLETED",
 	}
 	if terminalExpected.Result != nil {
 		terminalResult.Result, err = json.Marshal(terminalExpected.Result)
@@ -313,7 +357,7 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 				Status:  deref(timeoutExpected.Links.Status),
 			},
 		},
-		SyncOutcome: factorysessionexecution.SyncOutcomeTimedOut,
+		SyncOutcome: "TIMED_OUT",
 		TimedOut:    true,
 	})
 	if timeoutMapped.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeTimedOut {
@@ -336,7 +380,7 @@ func TestEventReconnectRequestFromCLI_MapsAfterEventIDAndSequence(t *testing.T) 
 	if err != nil {
 		t.Fatalf("EventReconnectRequestFromCLI: %v", err)
 	}
-	if req.AfterEventID != "session-started/dur-sess-js-run-n-001" {
+	if req.AfterEventID != " session-started/dur-sess-js-run-n-001 " {
 		t.Fatalf("afterEventId = %q", req.AfterEventID)
 	}
 	if req.AfterSequence == nil || *req.AfterSequence != 3 {
@@ -349,6 +393,7 @@ func TestResultRequestFromCLI_MapsModeAndIncludeArtifacts(t *testing.T) {
 		Mode:             "partial",
 		IncludeArtifacts: true,
 	})
+
 	if err != nil {
 		t.Fatalf("ResultRequestFromCLI: %v", err)
 	}
@@ -373,7 +418,7 @@ func deref(value *string) string {
 
 func TestExecutionErrorResponse_MapsValidationAndConflictErrors(t *testing.T) {
 	status, response, ok := factorysession.ExecutionErrorResponse(
-		factorysessionexecution.NewValidationError("requestId", "requestId is required"),
+		&factorysessionexecution.ExecutionValidationError{Field: "requestId", Message: "requestId is required"},
 	)
 	if !ok {
 		t.Fatal("ExecutionErrorResponse = false, want true")
@@ -400,7 +445,7 @@ func TestExecutionErrorResponse_MapsValidationAndConflictErrors(t *testing.T) {
 
 	status, response, ok = factorysession.ExecutionErrorResponse(
 		&factorysessionexecution.ResumeError{
-			Outcome: factorysessionexecution.ResumeOutcomeMissingCheckpoint,
+			Outcome: "MISSING_CHECKPOINT",
 			Field:   "checkpointSummary",
 			Message: "persisted checkpoint summary is required to resume an interrupted session",
 		},

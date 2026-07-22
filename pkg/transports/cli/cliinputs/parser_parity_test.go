@@ -4,10 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
+	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 )
 
 type productionParserParityCase struct {
@@ -19,16 +18,16 @@ type productionParserParityCase struct {
 	argumentPosition int
 	wantParseErr     bool
 	errContains      string
-	verify           func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, positionals []string)
+	verify           func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult)
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity table-driven parser parity keeps inventory lookup, parse, and per-case verify hooks in one harness.
 func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
-	root := cli.NewRootCommand()
-	inv, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
+	inv := observation.Snapshot.Inputs
 
 	cases := productionParserParityCases()
 	for _, tc := range cases {
@@ -43,7 +42,8 @@ func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
 				t.Fatalf("missing inventory argument position %d on %s", tc.argumentPosition, tc.commandPath)
 			}
 
-			leaf, positionals, parseErr := cli.ParseArgvForCLIInputsInventory(tc.argv)
+			parsedObservation, parseErr := productionCLIObservation(t, tc.argv...)
+			parsed := parsedObservation.Parse
 			if tc.wantParseErr {
 				if parseErr == nil {
 					t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = nil, want parse failure", tc.argv)
@@ -52,21 +52,18 @@ func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
 					t.Fatalf("parse error = %q, want substring %q", parseErr.Error(), tc.errContains)
 				}
 				if tc.verify != nil {
-					tc.verify(t, inv, leaf, positionals)
+					tc.verify(t, inv, parsed)
 				}
 				return
 			}
 			if parseErr != nil {
 				t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = %v", tc.argv, parseErr)
 			}
-			if leaf == nil {
-				t.Fatal("expected leaf command")
-			}
-			if leaf.CommandPath() != tc.commandPath {
-				t.Fatalf("leaf command path = %q, want %q", leaf.CommandPath(), tc.commandPath)
+			if parsed.CommandPath != tc.commandPath {
+				t.Fatalf("leaf command path = %q, want %q", parsed.CommandPath, tc.commandPath)
 			}
 			if tc.verify != nil {
-				tc.verify(t, inv, leaf, positionals)
+				tc.verify(t, inv, parsed)
 			}
 		})
 	}
@@ -95,14 +92,14 @@ func productionParserParityRunVariadicCases() []productionParserParityCase {
 			commandPath:      "you run",
 			argv:             []string{"run", "--no-record"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you run", 0)
 				if !arg.Variadic || arg.MinCardinality != 0 {
 					t.Fatalf("inventory arg = %+v, want optional variadic tail", arg)
 				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty when only flags are provided", positionals)
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty when only flags are provided", parsed.Positionals)
 				}
 			},
 		},
@@ -111,14 +108,14 @@ func productionParserParityRunVariadicCases() []productionParserParityCase {
 			commandPath:      "you run",
 			argv:             []string{"run", "--no-record", "prompt-one", "prompt-two"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you run", 0)
 				if !arg.Variadic {
 					t.Fatalf("inventory arg = %+v, want variadic", arg)
 				}
-				if len(positionals) != 2 || positionals[0] != "prompt-one" || positionals[1] != "prompt-two" {
-					t.Fatalf("positionals = %v, want [prompt-one prompt-two]", positionals)
+				if len(parsed.Positionals) != 2 || parsed.Positionals[0] != "prompt-one" || parsed.Positionals[1] != "prompt-two" {
+					t.Fatalf("positionals = %v, want [prompt-one prompt-two]", parsed.Positionals)
 				}
 			},
 		},
@@ -133,14 +130,14 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 			commandPath: "you run",
 			argv:        []string{"--verbose", "run", "--no-record"},
 			flagLong:    "verbose",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you run", "verbose")
 				if record.Scope != "inherited" {
 					t.Fatalf("inventory verbose scope = %q, want inherited", record.Scope)
 				}
-				flag := leaf.Flag("verbose")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "verbose")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed verbose = changed %v value %q, want changed true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -150,21 +147,21 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 			commandPath: "you run",
 			argv:        []string{"run", "--with-mock-workers"},
 			flagLong:    "with-mock-workers",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you run", "with-mock-workers")
 				if record.NoOptionDefault == "" {
 					t.Fatal("inventory with-mock-workers missing noOptionDefault")
 				}
-				flag := leaf.Flag("with-mock-workers")
+				flag := parsedFlag(parsed, "with-mock-workers")
 				if flag == nil || !flag.Changed {
 					t.Fatal("expected --with-mock-workers to parse without a value")
 				}
-				if flag.Value.String() != record.NoOptionDefault {
-					t.Fatalf("parsed value = %q, want inventory noOptionDefault %q", flag.Value.String(), record.NoOptionDefault)
+				if flag.Value != record.NoOptionDefault {
+					t.Fatalf("parsed value = %q, want inventory noOptionDefault %q", flag.Value, record.NoOptionDefault)
 				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty after no-option flag", positionals)
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty after no-option flag", parsed.Positionals)
 				}
 			},
 		},
@@ -173,14 +170,14 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 			commandPath: "you run",
 			argv:        []string{"run", "--no-record"},
 			flagLong:    "no-record",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you run", "no-record")
 				if record.NoOptionDefault != "true" {
 					t.Fatalf("inventory no-record noOptionDefault = %q, want true", record.NoOptionDefault)
 				}
-				flag := leaf.Flag("no-record")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "no-record")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed no-record = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -190,14 +187,14 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 			commandPath:      "you run",
 			argv:             []string{"run", "--no-record", "--", "--dir", "prompt"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you run", 0)
 				if arg.DoubleDashHandling != "terminates-flags" {
 					t.Fatalf("inventory doubleDashHandling = %q, want terminates-flags", arg.DoubleDashHandling)
 				}
-				if len(positionals) != 2 || positionals[0] != "--dir" || positionals[1] != "prompt" {
-					t.Fatalf("positionals = %v, want [--dir prompt]", positionals)
+				if len(parsed.Positionals) != 2 || parsed.Positionals[0] != "--dir" || parsed.Positionals[1] != "prompt" {
+					t.Fatalf("positionals = %v, want [--dir prompt]", parsed.Positionals)
 				}
 			},
 		},
@@ -212,14 +209,14 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			commandPath: "you submit",
 			argv:        []string{"--json", "submit", "--name", "work-a", "--work-type-name", "task", "--payload", "payload.md"},
 			flagLong:    "json",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you submit", "json")
 				if record.Scope != "inherited" {
 					t.Fatalf("inventory json scope = %q, want inherited", record.Scope)
 				}
-				flag := leaf.Flag("json")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "json")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed json = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -229,14 +226,14 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			commandPath:      "you submit",
 			argv:             []string{"submit", "--name", "work-a", "--work-type-name", "task", "--payload", "payload.md"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you submit", 0)
 				if !arg.Variadic || arg.MinCardinality != 0 {
 					t.Fatalf("inventory arg = %+v, want optional variadic slot with min 0", arg)
 				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty", positionals)
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty", parsed.Positionals)
 				}
 			},
 		},
@@ -245,18 +242,18 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			commandPath: "you submit batch",
 			argv:        []string{"submit", "batch", "--dry-run", "batch.json"},
 			flagLong:    "dry-run",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you submit batch", "dry-run")
 				if record.NoOptionDefault != "true" {
 					t.Fatalf("inventory dry-run noOptionDefault = %q, want true", record.NoOptionDefault)
 				}
-				flag := leaf.Flag("dry-run")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "dry-run")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed dry-run = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
-				if len(positionals) != 1 || positionals[0] != "batch.json" {
-					t.Fatalf("positionals = %v, want [batch.json]", positionals)
+				if len(parsed.Positionals) != 1 || parsed.Positionals[0] != "batch.json" {
+					t.Fatalf("positionals = %v, want [batch.json]", parsed.Positionals)
 				}
 			},
 		},
@@ -265,14 +262,14 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			commandPath:      "you submit batch",
 			argv:             []string{"submit", "batch", "--dry-run"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you submit batch", 0)
 				if !arg.Variadic || arg.MinCardinality != 0 {
 					t.Fatalf("inventory arg = %+v, want optional variadic slot", arg)
 				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty", positionals)
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty", parsed.Positionals)
 				}
 			},
 		},
@@ -281,14 +278,14 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			commandPath: "you submit batch",
 			argv:        []string{"--verbose", "submit", "batch", "--dry-run"},
 			flagLong:    "verbose",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you submit batch", "verbose")
 				if record.Scope != "inherited" {
 					t.Fatalf("inventory verbose scope = %q, want inherited", record.Scope)
 				}
-				flag := leaf.Flag("verbose")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "verbose")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed verbose = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -303,14 +300,14 @@ func productionParserParitySessionShowCases() []productionParserParityCase {
 			commandPath:      "you session show",
 			argv:             []string{"session", "show"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you session show", 0)
 				if arg.Required || arg.MaxCardinality != 1 || arg.Variadic {
 					t.Fatalf("inventory arg = %+v, want optional single positional", arg)
 				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty", positionals)
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty", parsed.Positionals)
 				}
 			},
 		},
@@ -319,14 +316,14 @@ func productionParserParitySessionShowCases() []productionParserParityCase {
 			commandPath:      "you session show",
 			argv:             []string{"session", "show", "session-beta"},
 			argumentPosition: 0,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, positionals []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you session show", 0)
 				if arg.Name != "session-id" {
 					t.Fatalf("inventory arg name = %q, want session-id", arg.Name)
 				}
-				if len(positionals) != 1 || positionals[0] != "session-beta" {
-					t.Fatalf("positionals = %v, want [session-beta]", positionals)
+				if len(parsed.Positionals) != 1 || parsed.Positionals[0] != "session-beta" {
+					t.Fatalf("positionals = %v, want [session-beta]", parsed.Positionals)
 				}
 			},
 		},
@@ -343,14 +340,14 @@ func productionParserParitySessionShowCases() []productionParserParityCase {
 			commandPath: "you session show",
 			argv:        []string{"--json", "session", "show", "session-beta"},
 			flagLong:    "json",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session show", "json")
 				if record.Scope != "inherited" {
 					t.Fatalf("inventory json scope = %q, want inherited", record.Scope)
 				}
-				flag := leaf.Flag("json")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "json")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed json = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -365,7 +362,7 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			commandPath: "you session create",
 			argv:        []string{"session", "create", "--dir", "/tmp/factory", "--json"},
 			flagLong:    "json",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "json")
 				if record.Scope != "local" {
@@ -375,8 +372,8 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 				if showRecord.Scope != "inherited" {
 					t.Fatalf("session show json scope = %q, want inherited for contrast", showRecord.Scope)
 				}
-				flag := leaf.Flag("json")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "json")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed json = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -388,7 +385,7 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			flagLong:     "dir",
 			wantParseErr: true,
 			errContains:  `required flag(s) "dir" not set`,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, _ platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "dir")
 				if !record.Required {
@@ -403,7 +400,7 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			relationshipID: "you.session.create.rel.mutex.init-new-factory-validate-only",
 			wantParseErr:   true,
 			errContains:    `if any flags in the group [init-new-factory validate-only] are set none of the others can be`,
-			verify: func(t *testing.T, inv cliinputs.Inventory, _ *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, _ platformprocess.CLIParseResult) {
 				t.Helper()
 				rel := findRelationshipRecord(t, inv, "you session create", "you.session.create.rel.mutex.init-new-factory-validate-only")
 				if rel.Kind != "mutually-exclusive" {
@@ -416,14 +413,14 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			commandPath: "you session create",
 			argv:        []string{"--verbose", "session", "create", "--dir", "/tmp/factory"},
 			flagLong:    "verbose",
-			verify: func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, _ []string) {
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "verbose")
 				if record.Scope != "inherited" {
 					t.Fatalf("inventory verbose scope = %q, want inherited", record.Scope)
 				}
-				flag := leaf.Flag("verbose")
-				if flag == nil || !flag.Changed || flag.Value.String() != "true" {
+				flag := parsedFlag(parsed, "verbose")
+				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed verbose = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
 				}
 			},
@@ -464,9 +461,17 @@ func findRelationshipRecord(t *testing.T, inv cliinputs.Inventory, commandPath, 
 	return nil
 }
 
-func flagValue(flag *pflag.Flag) string {
-	if flag == nil || flag.Value == nil {
+func parsedFlag(result platformprocess.CLIParseResult, name string) *platformprocess.CLIParsedFlag {
+	flag, ok := cliobservation.Flag(result, name)
+	if !ok {
+		return nil
+	}
+	return &flag
+}
+
+func flagValue(flag *platformprocess.CLIParsedFlag) string {
+	if flag == nil {
 		return ""
 	}
-	return flag.Value.String()
+	return flag.Value
 }

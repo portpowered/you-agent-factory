@@ -1,30 +1,36 @@
 package factorysession
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
-// Client is a deterministic mock MCP client for Factory Session tool calls.
-type Client struct {
-	service factorysessionexecution.Service
-}
+var errMissingRequestContext = errors.New("MCP request context is required")
 
-// NewClient constructs one mock MCP client backed by in-process tool handlers.
-func NewClient() *Client {
-	return &Client{}
-}
+// ToolOperation is the single injected execution role used by every MCP
+// protocol server. Production binds its Factory Sessions dependencies once;
+// protocol tests replace this exact function role.
+type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
-// NewClientWithService constructs one mock MCP client backed by the supplied
-// durable Factory Session execution service.
-func NewClientWithService(service factorysessionexecution.Service) *Client {
-	return &Client{service: service}
+// BindToolOperation binds the canonical tool registry to explicit Factory
+// Sessions and workflow roles without constructing an alternate MCP client.
+func BindToolOperation(
+	service factorysessionexecution.ExecutionService,
+	prepare factorysessionexecution.RequestPreparation,
+	workflows factoryruntime.WorkflowPreviewOperation,
+) ToolOperation {
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return CallTool(ctx, service, prepare, workflows, name, input)
+	}
 }
 
 func callToolJSON[Input any, Response any](
@@ -39,7 +45,13 @@ func callToolJSON[Input any, Response any](
 	return json.Marshal(handler(request))
 }
 
-type canonicalToolHandler func(*Client, json.RawMessage) (json.RawMessage, error)
+type canonicalToolHandler func(
+	context.Context,
+	factorysessionexecution.ExecutionService,
+	factorysessionexecution.RequestPreparation,
+	factoryruntime.WorkflowPreviewOperation,
+	json.RawMessage,
+) (json.RawMessage, error)
 
 type canonicalToolBinding struct {
 	handlerID string
@@ -82,52 +94,54 @@ const (
 // recorded alongside them so catalog identity never moves business logic into
 // generated discovery code.
 var canonicalToolHandlersByID = map[string]canonicalToolBinding{
-	stableToolID(ToolListSessions): handwrittenToolBinding(ToolListSessions, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListSessions): handwrittenToolBinding(ToolListSessions, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list sessions input", func(request ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
-			return ListSessions(c.service, request)
+			return ListSessions(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolValidateSource): handwrittenToolBinding(ToolValidateSource, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
-		return callToolJSON(input, "decode validate source input", ValidateSource)
+	stableToolID(ToolValidateSource): handwrittenToolBinding(ToolValidateSource, func(ctx context.Context, _ factorysessionexecution.ExecutionService, _ factorysessionexecution.RequestPreparation, workflows factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode validate source input", func(request factoryapi.FactoryPreviewRequest) ToolResponse[factoryapi.FactoryPreviewResult] {
+			return ValidateSource(ctx, workflows, request)
+		})
 	}),
-	stableToolID(ToolStartSync): handwrittenToolBinding(ToolStartSync, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolStartSync): handwrittenToolBinding(ToolStartSync, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start sync input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
-			return StartSync(c.service, request)
+			return StartSync(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolStartAsync): handwrittenToolBinding(ToolStartAsync, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolStartAsync): handwrittenToolBinding(ToolStartAsync, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start async input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
-			return StartAsync(c.service, request)
+			return StartAsync(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolGetSession): handwrittenToolBinding(ToolGetSession, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolGetSession): handwrittenToolBinding(ToolGetSession, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get session input", func(request GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
-			return GetSession(c.service, request)
+			return GetSession(ctx, service, request)
 		})
 	}),
-	stableToolID(ToolGetResult): handwrittenToolBinding(ToolGetResult, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolGetResult): handwrittenToolBinding(ToolGetResult, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get result input", func(request GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
-			return GetResult(c.service, request)
+			return GetResult(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolListDispatches): handwrittenToolBinding(ToolListDispatches, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListDispatches): handwrittenToolBinding(ToolListDispatches, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list dispatches input", func(request ListDispatchesInput) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
-			return ListDispatches(c.service, request)
+			return ListDispatches(ctx, service, request)
 		})
 	}),
-	stableToolID(ToolListArtifacts): handwrittenToolBinding(ToolListArtifacts, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListArtifacts): handwrittenToolBinding(ToolListArtifacts, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list artifacts input", func(request ListArtifactsInput) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
-			return ListArtifacts(c.service, request)
+			return ListArtifacts(ctx, service, request)
 		})
 	}),
-	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode read events input", func(request ReadEventsInput) ToolResponse[ReadEventsResult] {
-			return ReadEvents(c.service, request)
+			return ReadEvents(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode control input", func(request ControlInput) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
-			return Control(c.service, request)
+			return Control(ctx, service, prepare, request)
 		})
 	}),
 }
@@ -135,18 +149,14 @@ var canonicalToolHandlersByID = map[string]canonicalToolBinding{
 // IsCanonicalToolHandlerRegistered reports whether the live CallTool path
 // registers a handler for one canonical Factory Session tool name.
 func IsCanonicalToolHandlerRegistered(name string) bool {
-	if ResolveToolName(name) != name {
-		return false
-	}
 	_, ok := ResolveToolHandlerBinding(name)
 	return ok
 }
 
-// ResolveToolHandlerBinding resolves a canonical name or compatibility alias
-// through generated catalog identity into the handwritten stable-ID registry.
+// ResolveToolHandlerBinding resolves a canonical name through generated catalog
+// identity into the handwritten stable-ID registry.
 func ResolveToolHandlerBinding(name string) (ToolHandlerBinding, bool) {
-	canonicalName := ResolveToolName(name)
-	toolID, ok := generatedToolIDByName(canonicalName)
+	toolID, ok := generatedToolIDByName(name)
 	if !ok {
 		return ToolHandlerBinding{}, false
 	}
@@ -157,15 +167,26 @@ func ResolveToolHandlerBinding(name string) (ToolHandlerBinding, bool) {
 	return ToolHandlerBinding{ToolID: toolID, HandlerID: binding.handlerID}, true
 }
 
-// CallTool invokes one discovered Factory Session MCP tool by stable name.
-// Workflow-named compatibility aliases resolve to the same canonical handlers.
-func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
+// CallTool invokes one Factory Session tool against explicitly supplied
+// durable execution and workflow roles. Protocol servers receive the bound
+// ToolOperation rather than choosing between construction paths.
+func CallTool(
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
+	prepare factorysessionexecution.RequestPreparation,
+	workflows factoryruntime.WorkflowPreviewOperation,
+	name string,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("call MCP tool: %w", errMissingRequestContext)
+	}
 	bindingIdentity, ok := ResolveToolHandlerBinding(name)
 	if !ok {
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
 	binding := canonicalToolHandlersByID[bindingIdentity.ToolID]
-	return binding.handler(c, input)
+	return binding.handler(ctx, service, prepare, workflows, input)
 }
 
 func generatedToolIDByName(name string) (string, bool) {
@@ -187,157 +208,4 @@ func stableHandlerID(name string) string {
 
 func handwrittenToolBinding(name string, handler canonicalToolHandler) canonicalToolBinding {
 	return canonicalToolBinding{handlerID: stableHandlerID(name), handler: handler}
-}
-
-// ListSessions calls you.factory_session.list through the mock client.
-func (c *Client) ListSessions(input ListSessionsInput) (ToolResponse[factoryapi.ListFactorySessionsResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolListSessions, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.ListFactorySessionsResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
-	}
-	return response, nil
-}
-
-// StartSync calls you.factory_session.start_sync through the mock client.
-func (c *Client) StartSync(input factoryapi.FactorySessionExecutionRequest) (ToolResponse[factoryapi.FactorySessionSyncExecutionResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolStartSync, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{}, err
-	}
-	return response, nil
-}
-
-// StartAsync calls you.factory_session.start_async through the mock client.
-func (c *Client) StartAsync(input factoryapi.FactorySessionExecutionRequest) (ToolResponse[factoryapi.FactorySessionExecutionResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolStartAsync, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.FactorySessionExecutionResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
-	}
-	return response, nil
-}
-
-// GetSession calls you.factory_session.get through the mock client.
-func (c *Client) GetSession(input GetSessionInput) (ToolResponse[factoryapi.FactorySessionDurableReadModel], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
-	}
-	raw, err := c.CallTool(ToolGetSession, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
-	}
-	var response ToolResponse[factoryapi.FactorySessionDurableReadModel]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
-	}
-	return response, nil
-}
-
-// ListDispatches calls you.factory_session.list_dispatches through the mock client.
-func (c *Client) ListDispatches(input ListDispatchesInput) (ToolResponse[factoryapi.ListFactorySessionDispatchesResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolListDispatches, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{}, err
-	}
-	return response, nil
-}
-
-// ListArtifacts calls you.factory_session.list_artifacts through the mock client.
-func (c *Client) ListArtifacts(input ListArtifactsInput) (ToolResponse[factoryapi.ListFactorySessionArtifactsResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolListArtifacts, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{}, err
-	}
-	return response, nil
-}
-
-// ReadEvents calls you.factory_session.read_events through the mock client.
-func (c *Client) ReadEvents(input ReadEventsInput) (ToolResponse[ReadEventsResult], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[ReadEventsResult]{}, err
-	}
-	raw, err := c.CallTool(ToolReadEvents, encoded)
-	if err != nil {
-		return ToolResponse[ReadEventsResult]{}, err
-	}
-	var response ToolResponse[ReadEventsResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[ReadEventsResult]{}, err
-	}
-	return response, nil
-}
-
-// Control calls you.factory_session.control through the mock client.
-func (c *Client) Control(input ControlInput) (ToolResponse[factoryapi.FactorySessionLifecycleControlResponse], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{}, err
-	}
-	raw, err := c.CallTool(ToolControl, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{}, err
-	}
-	var response ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{}, err
-	}
-	return response, nil
-}
-
-// GetResult calls you.factory_session.get_result through the mock client.
-func (c *Client) GetResult(input GetResultInput) (ToolResponse[factoryapi.FactorySessionResult], error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionResult]{}, err
-	}
-	raw, err := c.CallTool(ToolGetResult, encoded)
-	if err != nil {
-		return ToolResponse[factoryapi.FactorySessionResult]{}, err
-	}
-	var response ToolResponse[factoryapi.FactorySessionResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return ToolResponse[factoryapi.FactorySessionResult]{}, err
-	}
-	return response, nil
 }

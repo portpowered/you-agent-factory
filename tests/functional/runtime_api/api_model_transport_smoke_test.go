@@ -11,21 +11,18 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	"github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t *testing.T) {
 	dir := support.ScaffoldFactory(t, providerBackedModelTransportSmokeConfig())
-	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.Codex, "OMNIVOICE_Q4_K_M"))
+	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	if err := os.WriteFile(audioPath, []byte("RIFF....WAVEpayload"), 0o644); err != nil {
@@ -37,10 +34,7 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 			Content: mustMarshalFunctionalAudioContentResponse(t, audioPath),
 		},
 	}
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ProviderOverride = providerStub
-		cfg.SkipBuiltInRunnerPrerequisiteValidation = true
-	}, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, false, withProvider(providerStub))
 
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
@@ -155,17 +149,17 @@ func providerBackedModelTransportSmokeConfig() map[string]any {
 			"type":          interfaces.WorkerTypeModel,
 			"model":         "OMNIVOICE_Q4_K_M",
 			"modelProvider": "CODEX",
-			"modelLocality": workerconfig.ModelLocalityCloud,
+			"modelLocality": interfaces.ModelLocalityCloud,
 			"operations": []map[string]any{{
 				"name": "TTS",
 				"inputs": []map[string]any{{
 					"name":         "text",
-					"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
+					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
 					"required":     true,
 				}},
 				"outputs": []map[string]any{{
 					"name":         "audio",
-					"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
+					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
@@ -222,4 +216,4 @@ func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenc
 	return calls
 }
 
-var _ provider.Provider = (*modelTransportSmokeProvider)(nil)
+var _ providercontract.Provider = (*modelTransportSmokeProvider)(nil)

@@ -1,0 +1,348 @@
+{
+  "Session": {
+    "SessionID": "~default",
+    "Status": "RUNNING",
+    "OrchestratorKind": "PETRI",
+    "Dialect": "",
+    "ResolvedSource": {
+      "Kind": "",
+      "SourceRef": "",
+      "SourceHash": "",
+      "Dialect": "",
+      "ResolutionOrder": null,
+      "Metadata": null,
+      "Agents": null
+    },
+    "SourceHash": "",
+    "Policy": {
+      "Requested": null,
+      "Effective": null,
+      "EffectiveHash": ""
+    },
+    "Phase": "",
+    "PhaseSummaries": null,
+    "LatestCheckpoint": null,
+    "Progress": null,
+    "Budgets": null,
+    "Usage": {
+      "Resources": []
+    },
+    "ResultSummary": {
+      "ResultStatus": "NOT_READY",
+      "Summary": ""
+    },
+    "ArtifactRefs": null,
+    "ArtifactCount": 0,
+    "Failure": null,
+    "Lifecycle": {
+      "QueuedAt": null,
+      "AwaitingApprovalAt": null,
+      "StartedAt": "2026-07-19T01:34:39.7559356Z",
+      "PausedAt": null,
+      "ResumedAt": null,
+      "FinishedAt": null,
+      "InterruptedAt": null,
+      "TerminatedAt": null,
+      "UpdatedAt": null
+    },
+    "StaleLease": false,
+    "Links": {
+      "Session": "/factory-sessions/~default",
+      "Status": "/factory-sessions/~default",
+      "Events": "/factory-sessions/~default/events",
+      "Results": "/factory-sessions/~default/results",
+      "Dispatches": "/factory-sessions/~default/dispatches",
+      "Artifacts": "/factory-sessions/~default/artifacts"
+    }
+  },
+  "Result": {
+    "SessionID": "~default",
+    "ResultStatus": "NOT_READY",
+    "SessionStatus": "RUNNING",
+    "Mode": "final",
+    "IncludeArtifacts": false,
+    "PrimaryResult": null,
+    "ArtifactIDs": null,
+    "ArtifactRefs": null,
+    "Failure": null,
+    "Availability": {
+      "Reason": "RESULT_NOT_READY",
+      "Message": "Session is still running.",
+      "Retryable": true
+    }
+  },
+  "Dispatches": null,
+  "DispatchJavaScript": null,
+  "DispatchStatusTransitions": null,
+  "Artifacts": null,
+  "Events": [
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "session-started/~default",
+      "type": "SESSION_STARTED",
+      "context": {
+        "sequence": 1,
+        "tick": 1,
+        "eventTime": "2026-07-19T01:34:39.7559356Z",
+        "sessionId": "~default",
+        "sessionSequence": 0,
+        "orchestratorKind": "PETRI",
+        "source": "runtime-service"
+      },
+      "payload": {
+        "policyHash": null,
+        "sourceHash": null,
+        "sourceRef": null,
+        "startedAt": "2026-07-19T01:34:39Z"
+      }
+    },
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "session-result-updated/~default",
+      "type": "SESSION_RESULT_UPDATED",
+      "context": {
+        "sequence": 2,
+        "tick": 2,
+        "eventTime": "2026-07-19T01:34:40.7559356Z",
+        "sessionId": "~default",
+        "sessionSequence": 1,
+        "orchestratorKind": "PETRI",
+        "source": "runtime-service"
+      },
+      "payload": {
+        "availability": {
+          "message": "Session is still running.",
+          "reason": "RESULT_NOT_READY",
+          "retryable": true
+        },
+        "resultStatus": "NOT_READY"
+      }
+    }
+  ],
+  "RuntimeRecords": null,
+  "Records": [
+    {
+      "kind": "canonical_factory_event",
+      "canonicalEvent": {
+        "schemaVersion": "agent-factory.event.v1",
+        "id": "session-started/~default",
+        "type": "SESSION_STARTED",
+        "context": {
+          "sequence": 1,
+          "tick": 1,
+          "eventTime": "2026-07-19T01:34:39.7559356Z",
+          "sessionId": "~default",
+          "sessionSequence": 0,
+          "orchestratorKind": "PETRI",
+          "source": "runtime-service"
+        },
+        "payload": {
+          "policyHash": null,
+          "sourceHash": null,
+          "sourceRef": null,
+          "startedAt": "2026-07-19T01:34:39Z"
+        }
+      }
+    },
+    {
+      "kind": "canonical_factory_event",
+      "canonicalEvent": {
+        "schemaVersion": "agent-factory.event.v1",
+        "id": "session-result-updated/~default",
+        "type": "SESSION_RESULT_UPDATED",
+        "context": {
+          "sequence": 2,
+          "tick": 2,
+          "eventTime": "2026-07-19T01:34:40.7559356Z",
+          "sessionId": "~default",
+          "sessionSequence": 1,
+          "orchestratorKind": "PETRI",
+          "source": "runtime-service"
+        },
+        "payload": {
+          "availability": {
+            "message": "Session is still running.",
+            "reason": "RESULT_NOT_READY",
+            "retryable": true
+          },
+          "resultStatus": "NOT_READY"
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "cbf9d4a4-1aa8-4e8f-9530-95f7cb574123",
+        "transition_id": "accept-process",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "mock-smoke-accept-work",
+        "from_place": "",
+        "to_place": "accept-task:done",
+        "reason": "transitioner: ACCEPTED from transition accept-process",
+        "token": {
+          "id": "mock-smoke-accept-work",
+          "place_id": "accept-task:done",
+          "color": {
+            "name": "mock-smoke-accept-work",
+            "request_id": "request-f4081138badc0bfc56c6f8a4e3852b68",
+            "work_id": "mock-smoke-accept-work",
+            "work_type_id": "accept-task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "mock-smoke-accept-trace",
+            "trace_id": "mock-smoke-accept-trace",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "mock-smoke-accept-work",
+              "_work_type": "accept-task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock worker accepted\nCOMPLETE"
+              }
+            ],
+            "payload": "bW9jayB3b3JrZXIgYWNjZXB0ZWQKQ09NUExFVEU="
+          },
+          "created_at": "2026-07-18T18:34:39.7537727-07:00",
+          "entered_at": "2026-07-18T18:34:39.7559356-07:00",
+          "history": {
+            "total_visits": {
+              "accept-process": 1
+            },
+            "consecutive_failures": {
+              "accept-process": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "c929cc36-090b-47c5-93e5-b3df6043f90b",
+        "transition_id": "reject-process",
+        "outcome": "FAILED",
+        "type": "CREATE",
+        "token_id": "mock-smoke-reject-work",
+        "from_place": "",
+        "to_place": "reject-task:failed",
+        "reason": "transitioner: FAILED from transition reject-process",
+        "token": {
+          "id": "mock-smoke-reject-work",
+          "place_id": "reject-task:failed",
+          "color": {
+            "name": "mock-smoke-reject-work",
+            "request_id": "request-f6bde5830d3dab302905428d094a8292",
+            "work_id": "mock-smoke-reject-work",
+            "work_type_id": "reject-task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "mock-smoke-reject-trace",
+            "trace_id": "mock-smoke-reject-trace",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "mock-smoke-reject-work",
+              "_work_type": "reject-task"
+            },
+            "relations": null,
+            "payload": "eyJ0aXRsZSI6ImNvbmZpZ3VyZWQgcmVqZWN0In0="
+          },
+          "created_at": "2026-07-18T18:34:39.7537727-07:00",
+          "entered_at": "2026-07-18T18:34:39.7570701-07:00",
+          "history": {
+            "total_visits": {
+              "reject-process": 1
+            },
+            "consecutive_failures": {
+              "reject-process": 1
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "provider error: unknown: Codex reported a terminal error.",
+            "failure_log": [
+              {
+                "transition_id": "reject-process",
+                "timestamp": "2026-07-18T18:34:39.7570701-07:00",
+                "error": "provider error: unknown: Codex reported a terminal error.",
+                "attempt": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "f60aceff-9e3b-488c-ad5b-27dd9e5289f1",
+        "transition_id": "script-process",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "mock-smoke-script-work",
+        "from_place": "",
+        "to_place": "script-task:done",
+        "reason": "transitioner: ACCEPTED from transition script-process",
+        "token": {
+          "id": "mock-smoke-script-work",
+          "place_id": "script-task:done",
+          "color": {
+            "name": "mock-smoke-script-work",
+            "request_id": "request-4a676c9b0393a566f4197fc57f5a9ae2",
+            "work_id": "mock-smoke-script-work",
+            "work_type_id": "script-task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "mock-smoke-script-trace",
+            "trace_id": "mock-smoke-script-trace",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "mock-smoke-script-work",
+              "_work_type": "script-task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock script helper wrote file"
+              }
+            ],
+            "payload": "bW9jayBzY3JpcHQgaGVscGVyIHdyb3RlIGZpbGU="
+          },
+          "created_at": "2026-07-18T18:34:39.7537727-07:00",
+          "entered_at": "2026-07-18T18:34:39.772768-07:00",
+          "history": {
+            "total_visits": {
+              "script-process": 1
+            },
+            "consecutive_failures": {
+              "script-process": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    }
+  ],
+  "CheckpointSummary": null,
+  "StartRequest": null,
+  "ResolvedSource": {
+    "Kind": "",
+    "SourceRef": "",
+    "SourceHash": "",
+    "Dialect": "",
+    "ResolutionOrder": null,
+    "Metadata": null,
+    "Agents": null
+  },
+  "SourceContent": ""
+}

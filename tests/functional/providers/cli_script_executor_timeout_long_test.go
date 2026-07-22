@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,30 +25,16 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	runner := newTimeoutThenSuccessCommandRunner()
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() < 2 {
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	engineState, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	if len(engineState.DispatchHistory) < 2 {
-		t.Fatalf("DispatchHistory length = %d, want at least 2", len(engineState.DispatchHistory))
-	}
-	if engineState.DispatchHistory[0].Reason != "execution timeout" {
-		t.Fatalf("first DispatchHistory reason = %q, want %q", engineState.DispatchHistory[0].Reason, "execution timeout")
-	}
+	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+		factoryapi.WorkOutcomeAccepted,
+	}, "execution timeout")
+	server.Stop(t)
 }

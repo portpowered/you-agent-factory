@@ -1,4 +1,4 @@
-// Package clihttp provides shared JSON HTTP transport helpers for CLI commands.
+// Package clihttp owns the injected HTTP protocol used by CLI commands.
 package clihttp
 
 import (
@@ -9,109 +9,122 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// RequestOptions configures diagnostics for JSON HTTP transport helpers.
-type RequestOptions struct {
-	Diagnostics  io.Writer
-	Verbose      bool
-	EndpointPath string
-	LogLabel     string
+// Doer is the external HTTP effect consumed by the CLI protocol.
+type Doer interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
-// GetJSON executes an HTTP GET and decodes JSON into dst when the response status is 200 OK.
-// On transport failure it logs an unreachable response diagnostic and returns a non-nil error.
-// On other HTTP statuses it logs a status response diagnostic and returns the response with a nil
-// error so callers can map command-specific errors (for example work show 404).
-func GetJSON(ctx context.Context, client *http.Client, url string, dst any, opts RequestOptions) (*http.Response, error) {
-	return doJSON(ctx, client, http.MethodGet, url, nil, dst, http.StatusOK, opts)
+// Clock is the wall-clock role used only to observe request duration.
+type Clock interface {
+	Now() time.Time
+}
+
+// Response carries the HTTP response and the protocol-observed duration.
+type Response struct {
+	HTTP     *http.Response
+	Duration time.Duration
+}
+
+// Protocol is the single HTTP adapter consumed by handwritten CLI transports.
+type Protocol interface {
+	Execute(*http.Request) (Response, error)
+	GetJSON(context.Context, string, any) (Response, error)
+	PostJSON(context.Context, string, io.Reader, any) (Response, error)
+	PostJSONCreated(context.Context, string, io.Reader, any) (Response, error)
+	PutJSON(context.Context, string, io.Reader, any) (Response, error)
+	PutJSONCreated(context.Context, string, io.Reader, any) (Response, error)
+}
+
+type protocol struct {
+	doer  Doer
+	clock Clock
+}
+
+// NewProtocol binds one HTTP effect and one clock to the CLI protocol.
+func NewProtocol(doer Doer, clock Clock) (Protocol, error) {
+	if doer == nil {
+		return nil, fmt.Errorf("HTTP doer is required")
+	}
+	if clock == nil {
+		return nil, fmt.Errorf("HTTP clock is required")
+	}
+	return &protocol{doer: doer, clock: clock}, nil
+}
+
+func (p *protocol) Execute(request *http.Request) (Response, error) {
+	started := p.clock.Now()
+	response, err := p.doer.Do(request)
+	result := Response{HTTP: response, Duration: p.clock.Now().Sub(started)}
+	if err == nil && response == nil {
+		return result, fmt.Errorf("HTTP doer returned a nil response")
+	}
+	return result, err
+}
+
+// GetJSON executes an HTTP GET and decodes JSON into dst for 200 OK. Other
+// statuses are returned intact so the owning command can map and diagnose them.
+func (p *protocol) GetJSON(ctx context.Context, url string, dst any) (Response, error) {
+	return p.doJSON(ctx, http.MethodGet, url, nil, dst, http.StatusOK)
 }
 
 // PostJSON executes an HTTP POST with an optional JSON body and decodes JSON into dst when the
 // response status is 200 OK.
-func PostJSON(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
-	return doJSON(ctx, client, http.MethodPost, url, body, dst, http.StatusOK, opts)
+func (p *protocol) PostJSON(ctx context.Context, url string, body io.Reader, dst any) (Response, error) {
+	return p.doJSON(ctx, http.MethodPost, url, body, dst, http.StatusOK)
 }
 
 // PostJSONCreated executes an HTTP POST with an optional JSON body and decodes JSON into dst when
 // the response status is 201 Created.
-func PostJSONCreated(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
-	return doJSON(ctx, client, http.MethodPost, url, body, dst, http.StatusCreated, opts)
+func (p *protocol) PostJSONCreated(ctx context.Context, url string, body io.Reader, dst any) (Response, error) {
+	return p.doJSON(ctx, http.MethodPost, url, body, dst, http.StatusCreated)
 }
 
 // PutJSON executes an HTTP PUT with an optional JSON body and decodes JSON into dst when the
 // response status is 200 OK.
-func PutJSON(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
-	return doJSON(ctx, client, http.MethodPut, url, body, dst, http.StatusOK, opts)
+func (p *protocol) PutJSON(ctx context.Context, url string, body io.Reader, dst any) (Response, error) {
+	return p.doJSON(ctx, http.MethodPut, url, body, dst, http.StatusOK)
 }
 
 // PutJSONCreated executes an HTTP PUT with an optional JSON body and decodes JSON into dst when
 // the response status is 201 Created.
-func PutJSONCreated(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
-	return doJSON(ctx, client, http.MethodPut, url, body, dst, http.StatusCreated, opts)
+func (p *protocol) PutJSONCreated(ctx context.Context, url string, body io.Reader, dst any) (Response, error) {
+	return p.doJSON(ctx, http.MethodPut, url, body, dst, http.StatusCreated)
 }
 
-func doJSON(
+func (p *protocol) doJSON(
 	ctx context.Context,
-	client *http.Client,
 	method string,
 	url string,
 	body io.Reader,
 	dst any,
 	successStatus int,
-	opts RequestOptions,
-) (*http.Response, error) {
-	started := time.Now()
+) (Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return Response{}, fmt.Errorf("build request: %w", err)
 	}
 	if method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := client.Do(req)
-	durationMillis := time.Since(started).Milliseconds()
+	result, err := p.Execute(req)
 	if err != nil {
-		logUnreachableResponse(opts, durationMillis)
-		return nil, err
+		return result, err
 	}
+	resp := result.HTTP
 	if resp.StatusCode != successStatus {
-		logStatusResponse(opts, resp.StatusCode, durationMillis)
-		return resp, nil
+		return result, nil
 	}
 	if dst != nil {
 		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 			_ = resp.Body.Close()
-			return nil, fmt.Errorf("parse response: %w", err)
+			return result, fmt.Errorf("parse response: %w", err)
 		}
 	}
-	return resp, nil
-}
-
-func logUnreachableResponse(opts RequestOptions, durationMillis int64) {
-	clidiag.Printf(
-		opts.Diagnostics,
-		opts.Verbose,
-		"%s response endpointPath=%s error=unreachable durationMillis=%d",
-		opts.LogLabel,
-		opts.EndpointPath,
-		durationMillis,
-	)
-}
-
-func logStatusResponse(opts RequestOptions, status int, durationMillis int64) {
-	clidiag.Printf(
-		opts.Diagnostics,
-		opts.Verbose,
-		"%s response endpointPath=%s status=%d durationMillis=%d",
-		opts.LogLabel,
-		opts.EndpointPath,
-		status,
-		durationMillis,
-	)
+	return result, nil
 }
 
 // DecodeAPIError decodes a factory API error response when the body includes a message.

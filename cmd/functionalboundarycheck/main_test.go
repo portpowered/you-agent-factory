@@ -22,14 +22,14 @@ import (
 
 func TestCheckSourceRejectsDirectRequestBatchProjectionInternal(t *testing.T) {
 	root, path := writeFunctionalSource(t, `package guards_batch
-import "github.com/portpowered/infinite-you/pkg/factory/projections"
+import "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
 `)
 
 	err := checkSource(root, path)
 	if err == nil {
 		t.Fatal("checkSource() error = nil, want direct-internal boundary failure")
 	}
-	if !strings.Contains(err.Error(), diagnosticPrefix+" prohibited direct request-batch internal import: github.com/portpowered/infinite-you/pkg/factory/projections") {
+	if !strings.Contains(err.Error(), diagnosticPrefix+" prohibited direct request-batch internal import: github.com/portpowered/infinite-you/pkg/services/recordings/projections") {
 		t.Fatalf("checkSource() error = %q, want stable actionable diagnostic", err)
 	}
 	if !strings.Contains(err.Error(), "use generated REST/SSE customers or tests/functional/internal/support instead") {
@@ -39,7 +39,7 @@ import "github.com/portpowered/infinite-you/pkg/factory/projections"
 
 func TestCheckSourceRejectsDirectRequestBatchRuntimeInternal(t *testing.T) {
 	for _, importPath := range []string{
-		"github.com/portpowered/infinite-you/pkg/factory/runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
 		"github.com/portpowered/infinite-you/pkg/service",
 		"github.com/portpowered/infinite-you/pkg/orchestrators/petri",
 	} {
@@ -70,6 +70,73 @@ func TestCheckSourceChecksMigratedScenarioWithoutLegacyQuarantine(t *testing.T) 
 	path := filepath.Join("..", "..", filepath.FromSlash(defaultScenarioPath))
 	if err := checkSource(filepath.Join("..", ".."), path); err != nil {
 		t.Fatalf("checkSource(%q) error = %v", defaultScenarioPath, err)
+	}
+}
+
+func TestCheckFunctionalCompositionTreeAcceptsRootProcess(t *testing.T) {
+	root, _ := writeFunctionalSource(t, `package smoke
+import (
+  "github.com/portpowered/infinite-you/pkg/root"
+  "github.com/portpowered/infinite-you/pkg/services/edges"
+)
+func scenario() {
+  process, _ := root.BuildProcess(nil, edges.Edges{})
+  _ = process
+}
+`)
+	if err := checkFunctionalCompositionTree(root); err != nil {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v", err)
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsLegacyHarnessCall(t *testing.T) {
+	for _, call := range []string{"NewServiceTestHarness", "GetEngineStateSnapshot"} {
+		t.Run(call, func(t *testing.T) {
+			root, _ := writeFunctionalSource(t, "package smoke\nfunc scenario() { "+call+"() }\n")
+			err := checkFunctionalCompositionTree(root)
+			if err == nil || !strings.Contains(err.Error(), "prohibited functional composition or configuration seam: "+call) {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want %s failure", err, call)
+			}
+		})
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsSecondaryCompositionImport(t *testing.T) {
+	for _, importPath := range []string{
+		"github.com/portpowered/infinite-you/pkg/wire",
+		"github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
+		"github.com/portpowered/infinite-you/pkg/wire/runtimebundle",
+		"github.com/portpowered/infinite-you/pkg/platform/runtimeinput",
+		"github.com/portpowered/infinite-you/pkg/initializer/application",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/projections",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
+		"github.com/portpowered/infinite-you/pkg/services/workers/executor",
+		"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection",
+	} {
+		t.Run(importPath, func(t *testing.T) {
+			root, _ := writeFunctionalSource(t, "package smoke\nimport _ \""+importPath+"\"\n")
+			err := checkFunctionalCompositionTree(root)
+			if err == nil || !strings.Contains(err.Error(), "prohibited secondary composition import") {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want secondary composition failure", err)
+			}
+		})
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsRuntimeConfigurationCallback(t *testing.T) {
+	root, _ := writeFunctionalSource(t, `package smoke
+type config struct {
+  ConfigureRuntime func()
+}
+var fixture = config{ConfigureRuntime: func() {}}
+`)
+	err := checkFunctionalCompositionTree(root)
+	if err == nil || !strings.Contains(err.Error(), "prohibited functional composition or configuration seam: ConfigureRuntime") {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v, want runtime configuration seam failure", err)
 	}
 }
 

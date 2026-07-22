@@ -1,5 +1,0 @@
-package testharness
-
-func build(store Store) {
-	NewJavaScriptRuntimeService(Config{Persistence: store})
-}

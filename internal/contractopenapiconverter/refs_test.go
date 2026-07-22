@@ -57,7 +57,7 @@ func TestConvertRefsSchemaDefsOrderIndependentOfDiscovery(t *testing.T) {
 	root := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"zulu": map[string]any{"$ref": "#/components/schemas/Zulu"},
+			"zulu":  map[string]any{"$ref": "#/components/schemas/Zulu"},
 			"alpha": map[string]any{"$ref": "#/components/schemas/Alpha"},
 		},
 	}
@@ -101,10 +101,10 @@ func TestConvertRefsSchemaDefsOrderIndependentOfDiscovery(t *testing.T) {
 
 func TestConvertRefsSchemaRejectsUnsupportedReferences(t *testing.T) {
 	cases := []struct {
-		name     string
-		root     map[string]any
+		name       string
+		root       map[string]any
 		components map[string]any
-		wantCode string
+		wantCode   string
 	}{
 		{
 			name: "external url",

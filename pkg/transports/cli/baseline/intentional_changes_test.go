@@ -7,19 +7,18 @@ import (
 )
 
 func TestIntentionalChangesLedger_MatchesProductionBaselines(t *testing.T) {
-	root := baseline.ProductionRootCommand()
-	runCmd, err := baseline.ProductionRunCommand(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("resolve run command: %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
 
-	if err := baseline.ValidateIntentionalChangesLedger(root, runCmd); err != nil {
+	if err := baseline.ValidateIntentionalChangesLedger(fixtureSourceStore(), observation.Snapshot.CommandTree, observation.Snapshot.RunFlags); err != nil {
 		t.Fatalf("intentional changes ledger drift detected; update testdata/intentional_changes.json when intentional\n%v", err)
 	}
 }
 
 func TestIntentionalChangesLedger_IsDistinctFromExecutableSnapshots(t *testing.T) {
-	ledger, err := baseline.LoadIntentionalChangesLedger()
+	ledger, err := baseline.LoadIntentionalChangesLedger(fixtureSourceStore())
 	if err != nil {
 		t.Fatalf("load intentional changes ledger: %v", err)
 	}

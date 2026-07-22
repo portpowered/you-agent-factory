@@ -10,11 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"go.uber.org/zap"
 )
 
 type exportImportSmokeHarness struct {
@@ -64,19 +61,12 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	t.Helper()
 
 	rootDir := t.TempDir()
-	sourceFactoryDir := h.fixture.persistAs(t, rootDir, h.options.sourceFactoryName)
+	sourceFactoryDir := h.fixture.persistAndActivateAs(t, rootDir, h.options.sourceFactoryName)
 	if h.options.beforeExport != nil {
 		h.options.beforeExport(t, sourceFactoryDir)
 	}
-	if err := config.WriteCurrentFactoryPointer(rootDir, h.options.sourceFactoryName); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", h.options.sourceFactoryName, err)
-	}
-
-	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.Logger = zap.NewNop()
-	})
-	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
+	server := startFunctionalServer(t, rootDir, true)
+	waitForCurrentFactoryRuntimeIdle(t, server.URL(), 5*time.Second)
 
 	exported := getCurrentFactory(t, server.URL())
 	importRequest := exported
@@ -86,10 +76,10 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	current := getCurrentFactory(t, server.URL())
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 
-	importedDir, err := config.ResolveCurrentFactoryDir(rootDir)
-	if err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir(%s): %v", h.options.importFactoryName, err)
+	if current.FactoryDirectory == nil || *current.FactoryDirectory == "" {
+		t.Fatalf("current imported factory directory = %#v, want public directory", current.FactoryDirectory)
 	}
+	importedDir := *current.FactoryDirectory
 
 	result := exportImportSmokeHarnessResult{
 		RootDir:          rootDir,
@@ -165,7 +155,10 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 ) {
 	t.Helper()
 
-	fixture.assertCurrentFactorySignals(t, r.RootDir, r.Server.service, string(r.ImportRequest.Name))
+	fixture.assertCurrentFactorySignals(t, HTTPNamedFactoryReadback{
+		t:         t,
+		serverURL: r.Server.URL(),
+	}, string(r.ImportRequest.Name), r.ImportedDir)
 
 	if r.Status.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
 		t.Fatalf("dashboard activation drift: GET /status runtime_status = %q, want %q", r.Status.RuntimeStatus, interfaces.RuntimeStatusIdle)
@@ -265,16 +258,4 @@ func thinPortableBundledFactory(factory factoryapi.Factory) factoryapi.Factory {
 	supportingFiles.BundledFiles = &bundledFiles
 	normalized.SupportingFiles = &supportingFiles
 	return normalized
-}
-
-func assertCurrentFactoryPointer(t *testing.T, rootDir, want string) {
-	t.Helper()
-
-	got, err := config.ReadCurrentFactoryPointer(rootDir)
-	if err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
-	}
-	if got != want {
-		t.Fatalf("current factory pointer = %q, want %q", got, want)
-	}
 }

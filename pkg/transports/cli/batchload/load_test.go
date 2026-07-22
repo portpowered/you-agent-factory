@@ -1,140 +1,34 @@
 package batchload
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
+	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-func TestLoadFromFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "work.json")
-
-	req := work.WorkRequest{
-		RequestID: "request-1",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name:       "source-file",
-			WorkTypeID: "task",
-			TraceID:    "trace-1",
-			Payload:    map[string]any{"file": "test.go"},
-			Tags:       map[string]string{"priority": "high"},
-		}},
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := LoadFromFile(path)
-	if err != nil {
-		t.Fatalf("LoadFromFile: %v", err)
-	}
-	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
-		t.Errorf("Type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
-	}
-	if len(got.Works) != 1 || got.Works[0].WorkTypeID != "task" {
-		t.Fatalf("Works = %#v, want one task work item", got.Works)
-	}
-	if got.Works[0].TraceID != "trace-1" {
-		t.Errorf("TraceID = %q, want trace-1", got.Works[0].TraceID)
+func TestLoadFromFile_ForwardsToInjectedWorkLoader(t *testing.T) {
+	want := work.WorkRequest{RequestID: "request-1", Type: work.WorkRequestTypeFactoryRequestBatch}
+	got, err := LoadFromFile(func(path string) (work.WorkRequest, error) {
+		if path != "work.json" {
+			t.Fatalf("path = %q", path)
+		}
+		return want, nil
+	}, "work.json")
+	if err != nil || got.RequestID != want.RequestID {
+		t.Fatalf("LoadFromFile = %#v, %v", got, err)
 	}
 }
 
-func TestLoadFromFile_DocsExampleStartupWorkFile(t *testing.T) {
-	path := testutil.MustRepoPath(t, "docs/examples/startup-work.json")
-
-	got, err := LoadFromFile(path)
-	if err != nil {
-		t.Fatalf("LoadFromFile(%q): %v", path, err)
+func TestLoadFromFile_RequiresAndPreservesWorkLoader(t *testing.T) {
+	if _, err := LoadFromFile(nil, "work.json"); err == nil {
+		t.Fatal("missing loader error = nil")
 	}
-	if got.RequestID != "docs-example-story-001" {
-		t.Fatalf("request ID = %q, want docs-example-story-001", got.RequestID)
-	}
-	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
-	}
-	if len(got.Works) != 1 {
-		t.Fatalf("work count = %d, want 1", len(got.Works))
-	}
-
-	work := got.Works[0]
-	if work.WorkTypeID != "story" {
-		t.Fatalf("work type = %q, want story", work.WorkTypeID)
-	}
-	if work.State != "init" {
-		t.Fatalf("state = %q, want init", work.State)
-	}
-	if work.Payload == nil {
-		t.Fatal("payload is empty")
-	}
-}
-
-func TestLoadFromFile_NotFound(t *testing.T) {
-	_, err := LoadFromFile("/nonexistent/path.json")
-	if err == nil {
-		t.Fatal("expected error for nonexistent file")
-	}
-}
-
-func TestLoadFromFile_RejectsRetiredTargetStateAlias(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "work.json")
-	writeFile(t, path, `{
-  "request_id": "request-cli-target-state",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "draft", "work_type_name": "task", "target_state": "waiting"}
-  ]
-}`)
-
-	_, err := LoadFromFile(path)
-	if err == nil {
-		t.Fatal("expected retired target_state alias to fail")
-	}
-	want := "works[0].target_state is not supported; use state"
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("error = %q, want %q", err.Error(), want)
-	}
-}
-
-func TestLoadFromFile_RejectsConflictingTraceAliases(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "work.json")
-	writeFile(t, path, `{
-  "requestId": "request-cli-trace-conflict",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {
-      "name": "draft",
-      "workTypeName": "task",
-      "currentChainingTraceId": "chain-a",
-      "traceId": "trace-b"
-    }
-  ]
-}`)
-
-	_, err := LoadFromFile(path)
-	if err == nil {
-		t.Fatal("expected conflicting trace aliases to fail")
-	}
-	if !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
-		t.Fatalf("error = %q, want conflicting trace alias rejection", err.Error())
-	}
-}
-
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
+	want := errors.New("read work.json: denied")
+	_, err := LoadFromFile(func(string) (work.WorkRequest, error) {
+		return work.WorkRequest{}, want
+	}, "work.json")
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
 	}
 }

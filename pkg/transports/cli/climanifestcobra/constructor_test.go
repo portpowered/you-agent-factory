@@ -1,15 +1,11 @@
 package climanifestcobra_test
 
 import (
-	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry/workflowmcp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
@@ -24,7 +20,7 @@ func TestNewRepresentativeFamilyCommandBuildsContractedPaths(t *testing.T) {
 		t.Fatalf("root child count = %d, want 1 representative session command", len(root.Commands()))
 	}
 
-	session, err := climanifestparity.FindCommandByPath(root, "you session")
+	session, err := findCommandByPath(root, "you session")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(you session) error = %v", err)
 	}
@@ -38,7 +34,7 @@ func TestNewRepresentativeFamilyCommandBuildsContractedPaths(t *testing.T) {
 		t.Fatalf("session child count = %d, want only show", len(session.Commands()))
 	}
 
-	show, err := climanifestparity.FindCommandByPath(root, "you session show")
+	show, err := findCommandByPath(root, "you session show")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(you session show) error = %v", err)
 	}
@@ -100,11 +96,11 @@ func TestNewRepresentativeFamilyCommandExposesOnlyRepresentativeFamily(t *testin
 		if id == "you" {
 			continue
 		}
-		if _, err := climanifestparity.FindCommandByPath(root, commandPathForID(id)); err != nil {
+		if _, err := findCommandByPath(root, commandPathForID(id)); err != nil {
 			t.Fatalf("representative path for %q missing: %v", id, err)
 		}
 	}
-	if _, err := climanifestparity.FindCommandByPath(root, "you run"); err == nil {
+	if _, err := findCommandByPath(root, "you run"); err == nil {
 		t.Fatal("generated representative constructor must not expose you run")
 	}
 }
@@ -119,7 +115,7 @@ func TestNewRepresentativeFamilyCommandRegistersContractedFlagsAndArgs(t *testin
 	if err != nil {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
 	}
-	show, err := climanifestparity.FindCommandByPath(root, showRecord.Path)
+	show, err := findCommandByPath(root, showRecord.Path)
 	if err != nil {
 		t.Fatalf("FindCommandByPath(%q) error = %v", showRecord.Path, err)
 	}
@@ -135,70 +131,6 @@ func TestNewRepresentativeFamilyCommandRegistersContractedFlagsAndArgs(t *testin
 		t.Fatal("session show args = nil error, want excess positional rejection")
 	}
 
-	inventory, err := cliinputs.Walk(root)
-	if err != nil {
-		t.Fatalf("cliinputs.Walk() error = %v", err)
-	}
-	liveArgs, liveFlags := climanifestparity.InputsForCommandPath(inventory, showRecord.Path)
-	if len(liveArgs) != 1 {
-		t.Fatalf("inputs inventory args = %d, want 1 positional", len(liveArgs))
-	}
-	if mismatches := climanifestparity.CompareCompletionParity(showRecord, liveArgs, liveFlags); len(mismatches) != 0 {
-		t.Fatalf("completion wiring drift:\n%s", climanifestparity.FormatMismatchReport(mismatches))
-	}
-}
-
-func TestNewWorkflowMCPFamilyComponentsBuildsClassificationIsolatedTrees(t *testing.T) {
-	registries, err := workflowmcp.NewRegistries(workflowmcp.Handlers{
-		MCPServe: noopRunE, WorkflowPreview: noopRunE, WorkflowValidate: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewRegistries() error = %v", err)
-	}
-	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, testWorkflowMCPBindings())
-	if err != nil {
-		t.Fatalf("NewWorkflowMCPFamilyComponents() error = %v", err)
-	}
-	if components.MCP.Name() != "mcp" || len(components.MCP.Commands()) != 1 || components.MCPServe.RunE == nil {
-		t.Fatalf("canonical MCP components = %#v, want generated mcp/serve with handler", components)
-	}
-	for _, command := range []*cobra.Command{components.WorkflowPreview, components.WorkflowValidate} {
-		if command.Parent() != nil {
-			t.Fatalf("compatibility command %q parent = %q, want detached from canonical tree", command.Name(), command.Parent().Name())
-		}
-		if command.RunE == nil {
-			t.Fatalf("compatibility command %q RunE = nil", command.Name())
-		}
-	}
-	if got := components.WorkflowValidate.Flags().Lookup("kind").DefValue; got != "WORKFLOW_NAME" {
-		t.Fatalf("workflow validate --kind default = %q, want WORKFLOW_NAME", got)
-	}
-	if components.MCPServe.Flags().Lookup("runtime") == nil || components.MCPServe.Flags().Lookup("fixture-catalog") == nil {
-		t.Fatal("MCP serve generated local flags are incomplete")
-	}
-}
-
-func TestNewWorkflowMCPFamilyComponentsRejectsClassificationMismatch(t *testing.T) {
-	mcpManifest, err := generated.MCPFamilyManifest()
-	if err != nil {
-		t.Fatalf("MCPFamilyManifest() error = %v", err)
-	}
-	workflowManifest, err := generated.WorkflowCompatibilityFamilyManifest()
-	if err != nil {
-		t.Fatalf("WorkflowCompatibilityFamilyManifest() error = %v", err)
-	}
-	mcpManifest.Commands["you.workflow.validate"] = mcpManifest.Commands["you.mcp.serve"]
-	delete(mcpManifest.Commands, "you.mcp.serve")
-	registries, err := workflowmcp.NewRegistries(workflowmcp.Handlers{
-		MCPServe: noopRunE, WorkflowPreview: noopRunE, WorkflowValidate: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewRegistries() error = %v", err)
-	}
-	_, err = climanifestcobra.NewWorkflowMCPFamilyComponentsFromManifests(mcpManifest, workflowManifest, registries, testWorkflowMCPBindings())
-	if err == nil || !strings.Contains(err.Error(), "you.workflow.validate") {
-		t.Fatalf("classification mismatch error = %v, want stable command ID", err)
-	}
 }
 
 func mustRepresentativeFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry) {
@@ -231,25 +163,6 @@ func testBindings() climanifestcobra.PersistentFlagBindings {
 		JSON:                       &json,
 		DefaultWorkerModelProvider: &defaultWorkerModelProvider,
 		DefaultWorkerModel:         &defaultWorkerModel,
-	}
-}
-
-func testWorkflowMCPBindings() climanifestcobra.WorkflowMCPFlagBindings {
-	fixtureCatalog, projectRoot := "", ""
-	runtimeBacked := false
-	workflowBindings := func() climanifestcobra.WorkflowSourceFlagBindings {
-		dir, kind, value, inline := "factory", "WORKFLOW_NAME", "", ""
-		artifactRoot, argsSchema, requestedPolicy := "", "", ""
-		return climanifestcobra.WorkflowSourceFlagBindings{
-			Dir: &dir, SourceKind: &kind, SourceValue: &value, InlineSource: &inline,
-			ArtifactRoot: &artifactRoot, ArgsSchema: &argsSchema, RequestedPolicyJSON: &requestedPolicy,
-		}
-	}
-	return climanifestcobra.WorkflowMCPFlagBindings{
-		MCPServe: climanifestcobra.MCPServeFlagBindings{
-			FixtureCatalogPath: &fixtureCatalog, RuntimeBacked: &runtimeBacked, ProjectRoot: &projectRoot,
-		},
-		WorkflowPreview: workflowBindings(), WorkflowValidate: workflowBindings(),
 	}
 }
 

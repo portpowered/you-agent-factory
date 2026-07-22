@@ -6,25 +6,27 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const recordReplayLiveScriptEnv = "AGENT_FACTORY_RECORD_REPLAY_LIVE_SCRIPT"
 const recordReplayScriptSecretEnv = "SCRIPT_REPLAY_API_TOKEN"
 const recordReplayScriptSecretValue = "raw-script-replay-secret-value"
+const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
+const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
 
 func setRecordReplayHomeEnv(t *testing.T, homeDir string) {
 	t.Helper()
@@ -48,9 +50,11 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 
 	t.Setenv(recordReplayLiveScriptEnv, "1")
 	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
-	binaryPath := buildReplayCLIBinary(t)
-	recordOutput, err := runRecordReplayCLI(t, binaryPath,
-		"--server", "http://127.0.0.1:0", "run", "--dir", dir, "--work", workFile, "--record", artifactPath, "--quiet",
+	recordOutput, err := runRecordReplayCLIWithCapturedStdout(
+		t,
+		dir,
+		"--work", workFile,
+		"--record", artifactPath,
 	)
 	if err != nil {
 		t.Fatalf("record run failed: %v", err)
@@ -79,8 +83,11 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 		t.Fatalf("remove original fixture dir: %v", err)
 	}
 
-	replayOutput, err := runRecordReplayCLI(t, binaryPath,
-		"--server", "http://127.0.0.1:0", "run", "--replay", artifactPath, "--quiet",
+	replayOutput, err := runRecordReplayCLIWithCapturedStdout(
+		t,
+		t.TempDir(),
+		"--replay", artifactPath,
+		"--no-record",
 	)
 	if err != nil {
 		t.Fatalf("replay run failed: %v", err)
@@ -89,6 +96,10 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
 	}
 
+	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
+	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+		"task:done": 1, "task:init": 0, "task:failed": 0,
+	})
 }
 
 func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow(t *testing.T) {
@@ -106,16 +117,13 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 	t.Setenv(recordReplayLiveScriptEnv, "1")
 	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
 
-	binaryPath := buildReplayCLIBinary(t)
-	startup, err := runRecordReplayCLI(t, binaryPath,
-		"--server", "http://127.0.0.1:0", "run", "--dir", dir, "--work", workFile,
-	)
+	_, err := runRecordReplayCLIWithCapturedStdout(t, dir, "--work", workFile)
 	if err != nil {
 		t.Fatalf("default record run failed: %v", err)
 	}
 
-	artifactPath := recordedPathFromCLIOutput(t, startup)
 	wantRoot := filepath.Join(homeDir, ".you-agent-factory", "recordings")
+	artifactPath := singleRecordedArtifactPath(t, wantRoot)
 	if !strings.HasPrefix(artifactPath, wantRoot+string(os.PathSeparator)) {
 		t.Fatalf("artifact path = %q, want root under %q", artifactPath, wantRoot)
 	}
@@ -138,8 +146,11 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		t.Fatalf("remove original fixture dir: %v", err)
 	}
 
-	replayOutput, err := runRecordReplayCLI(t, binaryPath,
-		"--server", "http://127.0.0.1:0", "run", "--replay", artifactPath, "--quiet",
+	replayOutput, err := runRecordReplayCLIWithCapturedStdout(
+		t,
+		t.TempDir(),
+		"--replay", artifactPath,
+		"--no-record",
 	)
 	if err != nil {
 		t.Fatalf("replay run failed: %v", err)
@@ -148,10 +159,15 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
 	}
 
+	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
+	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+		"task:done": 1, "task:init": 0, "task:failed": 0,
+	})
 }
 
-func TestRecordReplayEndToEnd_PublicRecordingPreservesExternalAndGeneratedWorkRequestLineage(t *testing.T) {
-	support.SkipLongFunctional(t, "slow public record/replay generated-batch smoke")
+// portos:func-length-exception owner=agent-factory reason=record-replay-e2e-fixture review=2026-07-18 removal=split-record-run-replay-run-and-artifact-assertions-before-next-record-replay-change
+func TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically(t *testing.T) {
+	support.SkipLongFunctional(t, "slow record/replay generated-batch determinism smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	artifactPath := filepath.Join(t.TempDir(), "batch-recording.replay.json")
@@ -186,36 +202,30 @@ Finish the input task.
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		RecordPath:                artifactPath,
 		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.ProviderOverride = provider
-			cfg.SkipBuiltInRunnerPrerequisiteValidation = true
+		Args:                      []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
 		},
 	})
-	requestID := "request-replay-external-batch"
-	response := upsertFactoryWorkRequestOverHTTP(t, server.URL(), requestID, []byte(`{
-		"requestId":"request-replay-external-batch",
-		"type":"FACTORY_REQUEST_BATCH",
-		"works":[
-			{"name":"external-first","workId":"work-external-first","workTypeName":"task","traceId":"trace-replay-batch","payload":"external first"},
-			{"name":"external-fanout","workId":"work-external-fanout","workTypeName":"task","traceId":"trace-replay-batch","payload":"external fanout"}
-		],
-		"relations":[{"type":"DEPENDS_ON","sourceWorkName":"external-fanout","targetWorkName":"external-first"}]
-	}`))
-	if response.RequestId != requestID || len(response.Works) != 2 {
-		t.Fatalf("public work-request response = %#v, want request id and two works", response)
-	}
-	waitForCondition(t, 10*time.Second, func() bool {
-		return provider.CallCount("processor") >= 4 && provider.CallCount("finisher") >= 3
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
+		RequestID: "request-replay-external-batch",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
+			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
+			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
+		},
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "external-fanout",
+			TargetWorkName: "external-first",
+		}},
 	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 	server.Stop(t)
-	events := waitForRecordedEvents(t, artifactPath, 5*time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	assertReplayWorkRequestRecorded(t, artifact, requestID, "external-submit", 2, 1)
-	assertGeneratedReplayRequestMetadata(t, events, "")
+	assertReplayWorkRequestRecorded(t, artifact, "request-replay-external-batch", "external-submit", 2, 1)
 	generatedRequest := findReplayWorkRequestBySourcePrefix(t, artifact, "worker-output:")
 	if generatedRequest == nil {
 		t.Fatalf("replay artifact did not record worker-generated work request: %#v", replayWorkRequestEvents(t, artifact))
@@ -229,7 +239,80 @@ Finish the input task.
 	if got := len(factoryRelationsValue(generatedRequest.Payload.Relations)); got != 1 {
 		t.Fatalf("generated relations = %d, want 1", got)
 	}
-	assertGeneratedReplayRequestMetadata(t, testutil.GeneratedFactoryEvents(t, artifact.Events), generatedRequest.RequestID)
+	assertGeneratedReplayRequestMetadata(
+		t,
+		testutil.GeneratedFactoryEvents(t, artifact.Events),
+		generatedRequest.RequestID,
+	)
+
+	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
+	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+		"task:complete": 3, "task:init": 0, "task:failed": 0,
+	})
+	if !replayWorkIncludesID(replay.Work, "work-generated-alpha") ||
+		!replayWorkIncludesID(replay.Work, "work-generated-beta") {
+		t.Fatalf("replay Work listing missing generated alpha/beta: %#v", replay.Work.Results)
+	}
+	assertGeneratedReplayRequestMetadata(t, replay.Events, "")
+}
+
+func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {
+	support.SkipLongFunctional(t, "slow record/replay provider diagnostics smoke")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+	artifactPath := filepath.Join(t.TempDir(), "provider-recording.replay.json")
+	t.Setenv(recordReplayProviderSecretEnv, recordReplayProviderSecretValue)
+
+	support.WriteAgentConfig(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: test-model
+modelProvider: claude
+stopToken: COMPLETE
+---
+Process the input task.
+`)
+	support.WriteAgentConfig(t, dir, "worker-b", `---
+type: MODEL_WORKER
+model: test-model
+modelProvider: claude
+stopToken: COMPLETE
+---
+Finish the input task.
+`)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     "provider-replay-env-work",
+		TraceID:    "provider-replay-env-trace",
+		Payload:    []byte("exercise provider replay env redaction"),
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Step one done. COMPLETE","session_id":"provider-replay-1"}` + "\n")},
+		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Step two done. COMPLETE","session_id":"provider-replay-2"}` + "\n")},
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertReplayPlaceCounts(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+	server.Stop(t)
+
+	if runner.CallCount() == 0 {
+		t.Fatal("expected provider command runner to be called")
+	}
+	if !commandEnvContains(runner.LastRequest().Env, recordReplayProviderSecretEnv+"="+recordReplayProviderSecretValue) {
+		t.Fatalf("provider command env did not receive raw %s", recordReplayProviderSecretEnv)
+	}
+
+	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	assertReplayArtifactDoesNotContainRawValue(t, artifactPath, recordReplayProviderSecretValue)
+	assertReplayArtifactCommandEnvRedacted(t, artifact, recordReplayProviderSecretEnv)
 }
 
 func assertReplayWorkRequestRecorded(t *testing.T, artifact *interfaces.ReplayArtifact, requestID, source string, workItems int, relations int) {
@@ -253,9 +336,12 @@ func assertReplayWorkRequestRecorded(t *testing.T, artifact *interfaces.ReplayAr
 	t.Fatalf("replay artifact missing work request %s: %#v", requestID, replayWorkRequestEvents(t, artifact))
 }
 
-func findReplayWorkRequestBySourcePrefix(t *testing.T, artifact *interfaces.ReplayArtifact, sourcePrefix string) *recordedFactoryWorkRequestEvent {
+func findReplayWorkRequestBySourcePrefix(
+	t *testing.T,
+	artifact *interfaces.ReplayArtifact,
+	sourcePrefix string,
+) *recordedFactoryWorkRequestEvent {
 	t.Helper()
-
 	for _, event := range replayWorkRequestEvents(t, artifact) {
 		if strings.HasPrefix(event.Source, sourcePrefix) {
 			return &event
@@ -281,7 +367,12 @@ func assertGeneratedReplayRequestMetadata(t *testing.T, events []factoryapi.Fact
 		stringPointerValue(relations[0].RequiredState) != "complete" {
 		t.Fatalf("generated relation metadata = %#v, want generated-beta depends on generated-alpha complete", relations)
 	}
-
+	works := factoryWorksValue(record.Payload.Works)
+	if len(works) != 2 ||
+		!factoryWorksIncludeID(works, "work-generated-alpha") ||
+		!factoryWorksIncludeID(works, "work-generated-beta") {
+		t.Fatalf("generated WORK_REQUEST works = %#v, want generated alpha and beta", works)
+	}
 }
 
 func findReplayGeneratedWorkRequest(t *testing.T, events []factoryapi.FactoryEvent, requestID string) recordedFactoryWorkRequestEvent {
@@ -399,30 +490,55 @@ func writeRecordReplayWorkFile(t *testing.T, path string) {
 	support.WriteWorkRequestFile(t, path, req)
 }
 
-func runRecordReplayCLI(t *testing.T, binaryPath string, args ...string) (string, error) {
+func runRecordReplayCLIWithCapturedStdout(
+	t *testing.T,
+	workingDirectory string,
+	flags ...string,
+) (string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: api.Start,
+	})
+	args := []string{"you", "run", "--dir", workingDirectory, "--server", "http://127.0.0.1:1", "--quiet"}
+	args = append(args, flags...)
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.WorkingDirectory = workingDirectory
+	runErr := process.Execute(inputs.Input)
+	return inputs.Stdout(), runErr
+}
 
-	command := exec.CommandContext(ctx, binaryPath, args...)
-	command.Dir = t.TempDir()
-	output, err := command.CombinedOutput()
-	if ctx.Err() != nil {
-		t.Fatalf("record/replay CLI timed out: %v\n%s", ctx.Err(), output)
+func singleRecordedArtifactPath(t *testing.T, root string) string {
+	t.Helper()
+
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk recording root %s: %v", root, err)
 	}
-	return string(output), err
+	if len(paths) != 1 {
+		t.Fatalf("recording artifacts under %s = %#v, want exactly one", root, paths)
+	}
+	return paths[0]
 }
 
 func recordedPathFromCLIOutput(t *testing.T, output string) string {
 	t.Helper()
-
 	for _, line := range strings.Split(output, "\n") {
 		if value, ok := strings.CutPrefix(line, "Recording saved: "); ok && strings.TrimSpace(value) != "" {
 			return strings.TrimSpace(value)
 		}
 	}
-	t.Fatalf("startup output = %q, want auto-generated recording path", output)
+	t.Fatalf("startup output = %q, want recording path", output)
 	return ""
 }
 

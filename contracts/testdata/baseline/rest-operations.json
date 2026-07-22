@@ -2,34 +2,6 @@
   "formatVersion": "rest-operations/v1",
   "operations": [
     {
-      "operationId": "getEvents",
-      "method": "GET",
-      "path": "/events",
-      "hasSummary": true,
-      "hasDescription": true,
-      "requestMediaTypes": [],
-      "responses": [
-        {
-          "status": "200",
-          "mediaTypes": [
-            "text/event-stream"
-          ]
-        },
-        {
-          "status": "400",
-          "mediaTypes": [
-            "application/json"
-          ]
-        },
-        {
-          "status": "500",
-          "mediaTypes": [
-            "application/json"
-          ]
-        }
-      ]
-    },
-    {
       "operationId": "previewFactory",
       "method": "POST",
       "path": "/factories/preview",
@@ -1431,36 +1403,6 @@
       "responses": [
         {
           "status": "200",
-          "mediaTypes": [
-            "application/json"
-          ]
-        },
-        {
-          "status": "500",
-          "mediaTypes": [
-            "application/json"
-          ]
-        }
-      ]
-    },
-    {
-      "operationId": "previewWorkflow",
-      "method": "POST",
-      "path": "/workflow-previews",
-      "hasSummary": true,
-      "hasDescription": true,
-      "requestMediaTypes": [
-        "application/json"
-      ],
-      "responses": [
-        {
-          "status": "200",
-          "mediaTypes": [
-            "application/json"
-          ]
-        },
-        {
-          "status": "400",
           "mediaTypes": [
             "application/json"
           ]

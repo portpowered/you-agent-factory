@@ -2,57 +2,28 @@ package root
 
 import (
 	"context"
-	"os"
+	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
-const (
-	ExitSuccess = 0
-	ExitFailure = 1
-)
-
-// Run executes one process input and translates its terminal outcome without
-// printing an additional diagnostic.
-func Run(input Input, dependencies Dependencies) int {
-	if err := ExecuteWithDependencies(input, dependencies); err != nil {
-		return ExitFailure
+// BuildProcess constructs the reusable application process. Production passes
+// an empty edge set; functional tests replace only their external boundaries.
+func BuildProcess(
+	ctx context.Context,
+	edges serviceedges.Edges,
+) (*initializerapplication.Process, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("build application process: context is required")
 	}
-	return ExitSuccess
-}
-
-// Main is the production process entrypoint used by cmd/factory.
-func Main() int {
-	return Run(Input{
-		Args:    os.Args,
-		Env:     os.Environ(),
-		Stdin:   os.Stdin,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		Context: context.Background(),
-	}, Dependencies{})
-}
-
-type productionGraphBuilder struct {
-	buildGraph   wire.ProcessGraphBuilder
-	dependencies wire.ProcessGraphDependencies
-}
-
-func (builder productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
-	if builder.buildGraph == nil {
-		return wire.BuildProcessGraph(ctx, request.Startup, request.Policy)
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("build application process: %w", err)
 	}
-	return builder.buildGraph(ctx, request.Startup, request.Policy, builder.dependencies)
-}
-
-type productionInitializer struct {
-	initialize wire.ProcessInitializer
-}
-
-func (production productionInitializer) Run(ctx context.Context, initialization Initialization) error {
-	if production.initialize == nil {
-		production.initialize = initializer.RunProcess
+	applicationProcess, err := wire.InjectBundle(ctx, edges)
+	if err != nil {
+		return nil, fmt.Errorf("build application process: %w", err)
 	}
-	return production.initialize(ctx, initialization.Graph)
+	return applicationProcess, nil
 }

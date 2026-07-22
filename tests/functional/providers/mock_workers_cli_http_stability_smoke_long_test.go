@@ -14,13 +14,12 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 const (
@@ -66,17 +65,20 @@ args:
 	defer cancel()
 
 	errCh := make(chan error, 1)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--port", strconv.Itoa(port),
+		"--work", workFile,
+		"--with-mock-workers", mockWorkersPath,
+		"--quiet",
+		"--no-record",
+	})
+	inputs.WorkingDirectory = dir
 	go func() {
-		errCh <- runcli.Run(ctx, runcli.RunConfig{
-			Dir:                        dir,
-			Continuously:               true,
-			Port:                       port,
-			WorkFile:                   workFile,
-			MockWorkersEnabled:         true,
-			MockWorkersConfigPath:      mockWorkersPath,
-			SuppressDashboardRendering: true,
-			Logger:                     zap.NewNop(),
-		})
+		errCh <- process.Execute(inputs.Input)
 	}()
 
 	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 10*time.Second, cliHTTPStabilityStartupPhase, cliHTTPStabilityStartupPolls)
@@ -136,13 +138,13 @@ func cliHTTPStabilitySmokeConfig() map[string]any {
 func writeCLIHTTPStabilityMockWorkersConfig(t *testing.T, sideEffectPath string, sleepMS int) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{{
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
 			ID:              "delayed-cli-http-stability-script-worker",
 			WorkerName:      "script-worker",
 			WorkstationName: "run-script",
-			RunType:         factoryconfig.MockWorkerRunTypeScript,
-			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+			RunType:         workers.MockWorkerRunTypeScript,
+			ScriptConfig: &workers.MockWorkerScriptConfig{
 				Command: os.Args[0],
 				Args: []string{
 					"-test.run=TestMockWorkers_ScriptHelper",

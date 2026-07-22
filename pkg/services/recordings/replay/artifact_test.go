@@ -1,0 +1,872 @@
+package replay
+
+import (
+	"encoding/json"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+)
+
+func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "run.replay.json")
+	recordedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	artifact := replayArtifactFieldsFixture(t, recordedAt)
+
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	assertReplayArtifactFieldPreservation(t, loaded)
+}
+
+func TestNormalizeHistoricalFailureDetails_PrecedenceAndCompleteness(t *testing.T) {
+	tests := []struct{ name, input, reason, message string }{
+		{"reason and message", `{"failureReason":"timeout","failureMessage":"timed out"}`, "timeout", "timed out"},
+		{"reason only", `{"failureReason":"throttled"}`, "throttled", unavailableHistoricalFailureMessage},
+		{"message only", `{"failureMessage":"provider failed"}`, "unknown", "provider failed"},
+		{"error class only", `{"errorClass":"PERMANENT_BAD_REQUEST"}`, "permanent_bad_request", unavailableHistoricalFailureMessage},
+		{"flattened reason wins", `{"failureReason":"timeout","failureMessage":"late","errorClass":"auth_failure"}`, "timeout", "late"},
+		{"canonical wins", `{"failureDetail":{"reason":"permanent_bad_request","message":"requires a newer Codex app or CLI"},"failureReason":"timeout","failureMessage":"stale"}`, "permanent_bad_request", "requires a newer Codex app or CLI"},
+		{"unknown values", `{"failureReason":"something-new","failureMessage":"failed"}`, "unknown", "failed"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			normalized, err := normalizeHistoricalFailureDetails([]byte(`{"payload":` + test.input + `}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result struct {
+				Payload struct {
+					FailureDetail struct{ Reason, Message string } `json:"failureDetail"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal(normalized, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Payload.FailureDetail.Reason != test.reason || result.Payload.FailureDetail.Message != test.message {
+				t.Fatalf("failureDetail = %#v, want reason=%q message=%q", result.Payload.FailureDetail, test.reason, test.message)
+			}
+			for _, legacy := range []string{"failureReason", "failureMessage", "errorClass"} {
+				if strings.Contains(string(normalized), legacy) {
+					t.Fatalf("normalized output retained %q: %s", legacy, normalized)
+				}
+			}
+		})
+	}
+}
+
+func TestNormalizeHistoricalFailureDetails_NormalizesOnlyEventPayloadBoundaries(t *testing.T) {
+	input := []byte(`{"events":[{"payload":{"failureReason":"permanent_bad_request","failureMessage":"requires a newer Codex app or CLI","customerData":{"errorClass":"leave untouched"}}},{"payload":{"errorClass":"TIMEOUT"}}]}`)
+	normalized, err := normalizeHistoricalFailureDetails(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(normalized)
+	if strings.Contains(text, "failureReason") || strings.Contains(text, "failureMessage") {
+		t.Fatalf("normalized output retained legacy fields: %s", text)
+	}
+	if !strings.Contains(text, `"reason":"permanent_bad_request"`) || !strings.Contains(text, `"reason":"timeout"`) || !strings.Contains(text, `"errorClass":"leave untouched"`) {
+		t.Fatalf("normalized output did not preserve mapped reasons: %s", text)
+	}
+}
+
+func TestNormalizeHistoricalFailureDetails_RejectsInvalidJSON(t *testing.T) {
+	if _, err := normalizeHistoricalFailureDetails([]byte("{")); err == nil {
+		t.Fatal("normalizeHistoricalFailureDetails() error = nil, want malformed JSON error")
+	}
+}
+
+func TestSaveLoad_StripsUnsafeCompletionDiagnosticsFromStoredReplayEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "safe-diagnostics.replay.json")
+	artifact := safeDiagnosticsReplayArtifact(t)
+
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	body := string(data)
+	for _, unsafe := range replayUnsafeDiagnosticValues() {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("stored replay artifact leaked unsafe diagnostic value %q: %s", unsafe, body)
+		}
+	}
+
+	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	assertStoredReplayDiagnosticsAreSafe(t, loaded)
+}
+
+func replayArtifactFieldsFixture(t *testing.T, recordedAt time.Time) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	generatedFactory := artifactTestFactory()
+	events := replayArtifactFieldEvents(t, recordedAt, generatedFactory)
+	return &interfaces.ReplayArtifact{
+		SchemaVersion: CurrentSchemaVersion,
+		RecordedAt:    recordedAt,
+		Events:        events,
+		Factory:       mustFactorySnapshot(t, generatedFactory),
+		WallClock:     replayWallClockMetadata(recordedAt),
+	}
+}
+
+func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFactory factoryapi.Factory) []interfaces.FactoryEvent {
+	t.Helper()
+
+	runStarted, err := runStartedEventFromSnapshot(recordedAt, mustFactorySnapshot(t, generatedFactory), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("runStartedEvent: %v", err)
+	}
+	events := []interfaces.FactoryEvent{runStarted}
+	for _, event := range []factoryapi.FactoryEvent{
+		replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
+			Name:         "story-1",
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			RequestId:    stringPtrIfNotEmpty("request-1"),
+			WorkTypeName: stringPtrIfNotEmpty("story"),
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+			Payload:      map[string]any{"title": "first"},
+		}}, nil),
+		replayDispatchCreatedEvent(t, replayArtifactFieldDispatch(), 3),
+		replayInferenceResponseEvent(t, replayArtifactFieldInferenceDispatch(), "dispatch-1/inference-request/1", 1, 4, "done", nil, replayArtifactFieldDiagnostics(), ""),
+		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
+			DispatchID: "dispatch-1", TransitionID: "transition-1", Outcome: workerexecution.OutcomeAccepted, Output: "done",
+		}, 5),
+	} {
+		converted, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert replay field event %q: %v", event.Id, err)
+		}
+		events = append(events, converted)
+	}
+	events = append(events, runFinishedEvent(recordedAt.Add(time.Second), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{}))
+	assignEventSequences(events)
+	return events
+}
+
+func replayArtifactFieldDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
+		DispatchID:   "dispatch-1",
+		TransitionID: "transition-1",
+		WorkerType:   "executor",
+		InputTokens: workers.InputTokens(workers.Token{
+			ID: "token-1",
+			Color: workers.Color{
+				WorkID: "work-1", WorkTypeID: "story", DataType: workers.DataTypeWork, TraceID: "trace-1",
+			},
+		}),
+		Execution: work.ExecutionMetadata{
+			ReplayKey: "transition-1/work-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+}
+
+func replayArtifactFieldInferenceDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
+		DispatchID: "dispatch-1",
+		Execution: work.ExecutionMetadata{
+			RequestID: "request-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+}
+
+func replayArtifactFieldDiagnostics() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			Provider: "mock",
+			Model:    "mock-model",
+			ResponseMetadata: map[string]string{
+				"request_id": "provider-request-1",
+			},
+		},
+	}
+}
+
+func replayWallClockMetadata(recordedAt time.Time) *interfaces.ReplayWallClockMetadata {
+	return &interfaces.ReplayWallClockMetadata{
+		StartedAt:  recordedAt,
+		FinishedAt: recordedAt.Add(time.Second),
+	}
+}
+
+func assertReplayArtifactFieldPreservation(t *testing.T, loaded *interfaces.ReplayArtifact) {
+	t.Helper()
+
+	dispatchPayload := requireReplayDispatchCreated(t, loaded.Events, "dispatch-1")
+	if dispatchPayload.TransitionId != "transition-1" {
+		t.Fatalf("dispatch transition = %q, want transition-1", dispatchPayload.TransitionId)
+	}
+	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-1")
+	if stringValue(completionPayload.CompletionId) != "completion-1" {
+		t.Fatalf("completion ID = %q, want completion-1", stringValue(completionPayload.CompletionId))
+	}
+	if loaded.Events[1].Context.Tick != 2 || loaded.Events[2].Context.Tick != 3 || loaded.Events[3].Context.Tick != 4 || loaded.Events[4].Context.Tick != 5 {
+		t.Fatalf("logical ticks were not preserved: request=%d dispatch=%d inference=%d completion=%d",
+			loaded.Events[1].Context.Tick, loaded.Events[2].Context.Tick, loaded.Events[3].Context.Tick, loaded.Events[4].Context.Tick)
+	}
+	inferencePayload := requireReplayInferenceResponse(t, loaded.Events, "dispatch-1/inference-request/1")
+	if got := (*inferencePayload.Diagnostics.Provider.ResponseMetadata)["request_id"]; got != "provider-request-1" {
+		t.Fatalf("provider diagnostic request_id = %q, want provider-request-1", got)
+	}
+	if inferencePayload.Diagnostics == nil {
+		t.Fatalf("inference diagnostics = nil, want safe diagnostics")
+	}
+}
+
+func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	return testReplayArtifact(
+		t,
+		replayInferenceResponseEvent(
+			t,
+			work.WorkDispatch{DispatchID: "dispatch-safe"},
+			"dispatch-safe/inference-request/1",
+			1,
+			2,
+			"completed",
+			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			unsafeReplayDiagnosticsFixture(),
+			"",
+		),
+		replayDispatchCompletedEvent(t, "completion-safe", workerexecution.WorkResult{
+			DispatchID:   "dispatch-safe",
+			TransitionID: "transition-safe",
+			Outcome:      workerexecution.OutcomeAccepted,
+			Output:       "completed",
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeThrottled,
+			},
+		}, 3),
+	)
+}
+
+func unsafeReplayDiagnosticsFixture() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
+			SystemPromptHash: "system-hash-123",
+			UserMessageHash:  "user-hash-456",
+			Variables: map[string]string{
+				"prompt_source": "factory-renderer", "work_type_name": "story", "system_prompt": "raw rendered system prompt must stay private",
+				"user_message": "raw rendered user message must stay private", "stdin": "raw rendered stdin must stay private", "env": "raw rendered environment must stay private",
+			},
+		},
+		Provider: &workerexecution.ProviderDiagnostic{
+			Provider: "codex",
+			Model:    "gpt-5.4",
+			RequestMetadata: map[string]string{
+				"prompt_source": "provider-renderer", "worker_type": "builder", "system_prompt_body": "raw prompt body must stay private",
+				"stdin_payload": "raw stdin payload must stay private", "env_secret": "raw env secret must stay private",
+			},
+			ResponseMetadata: map[string]string{
+				"retry_count": "1", "provider_session_id": "resp-safe-123", "system_prompt_body": "raw response prompt body must stay private",
+				"stdin_payload": "raw response stdin payload must stay private", "env_secret": "raw response env secret must stay private",
+			},
+		},
+		Command: &workerexecution.CommandDiagnostic{
+			Command: "echo",
+			Stdin:   "raw command stdin must stay private",
+			Env:     map[string]string{"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private"},
+		},
+		Panic: &workerexecution.PanicDiagnostic{Stack: "panic stack should not be stored"},
+	}
+}
+
+func assertStoredReplayDiagnosticsAreSafe(t *testing.T, loaded *interfaces.ReplayArtifact) {
+	t.Helper()
+
+	inferencePayload := requireReplayInferenceResponse(t, loaded.Events, "dispatch-safe/inference-request/1")
+	if inferencePayload.Diagnostics == nil || inferencePayload.Diagnostics.Provider == nil || inferencePayload.Diagnostics.RenderedPrompt == nil {
+		t.Fatalf("inference diagnostics = %#v, want provider and rendered prompt", inferencePayload.Diagnostics)
+	}
+	if got := (*inferencePayload.Diagnostics.Provider.RequestMetadata)["worker_type"]; got != "builder" {
+		t.Fatalf("request metadata worker_type = %q, want builder", got)
+	}
+	if got := (*inferencePayload.Diagnostics.Provider.ResponseMetadata)["provider_session_id"]; got != "resp-safe-123" {
+		t.Fatalf("response metadata provider_session_id = %q, want resp-safe-123", got)
+	}
+	if got := (*inferencePayload.Diagnostics.RenderedPrompt.Variables)["work_type_name"]; got != "story" {
+		t.Fatalf("rendered prompt work_type_name = %q, want story", got)
+	}
+	if got := stringValue(inferencePayload.ProviderSession.Id); got != "resp-safe-123" {
+		t.Fatalf("provider session id = %q, want resp-safe-123", got)
+	}
+	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-safe")
+	if got := stringValue(completionPayload.ProviderFailure.Type); got != string(workerexecution.WorkFailureTypeThrottled) {
+		t.Fatalf("provider failure type = %q, want throttled", got)
+	}
+}
+
+func TestLoad_UnsupportedSchemaVersion_ReturnsClearError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsupported.replay.json")
+	data := `{
+		"schemaVersion": "agent-factory.replay.v99",
+		"recordedAt": "2026-04-10T12:00:00Z",
+		"events": []
+	}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want unsupported schema error")
+	}
+	if !strings.Contains(err.Error(), "unsupported replay artifact schemaVersion") {
+		t.Fatalf("Load() error = %q, want unsupported schema message", err)
+	}
+}
+
+func TestLoad_LegacyReplayArrays_FailsValidationBeforeReplay(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "malformed.replay.json")
+	data := `{
+		"schema_version": "agent-factory.replay.v1",
+		"recorded_at": "2026-04-10T12:00:00Z",
+		"dispatches": [{"dispatch_id": "dispatch-1", "created_tick": 1, "dispatch": {"dispatch_id": "other", "transition_id": "transition-1"}}]
+	}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "schemaVersion is required") {
+		t.Fatalf("Load() error = %q, want missing schemaVersion validation", err)
+	}
+}
+
+func TestLoad_AcceptsInferenceEventsInCanonicalEventsArray(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "inference-events.replay.json")
+	request := replayInferenceDispatch()
+	const inferenceRequestID = "inference-request-dispatch-1-attempt-1"
+	artifact := testReplayArtifact(
+		t,
+		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
+			Name:         "story",
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			RequestId:    stringPtrIfNotEmpty("request-1"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+		}}, nil),
+		replayDispatchCreatedEvent(t, request.Dispatch, 2),
+		replayInferenceRequestEvent(t, request, inferenceRequestID, 1, 2),
+		replayInferenceResponseEvent(t, request.Dispatch, inferenceRequestID, 1, 2, "provider completed", nil, nil, ""),
+		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
+			DispatchID:   request.Dispatch.DispatchID,
+			TransitionID: request.Dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeAccepted,
+			Output:       "provider completed",
+		}, 3),
+	)
+
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	assertReplayInferencePair(t, loaded, inferenceRequestID)
+	if _, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, loaded); err != nil {
+		t.Fatalf("NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, ) with inference events: %v", err)
+	}
+	if _, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, loaded); err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, ) with inference events: %v", err)
+	}
+}
+
+func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	factoryJSON := []byte(`{
+		"name": "customer-facing-name",
+		"id": "customer-project",
+		"workTypes": [
+			{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
+			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
+		],
+		"resources": [{"name":"agent-slot","capacity":2}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"CLAUDE","stopToken":"COMPLETE"}],
+		"workstations": [{
+			"id":"execute-story-id",
+			"name":"execute-story",
+			"behavior":"REPEATER",
+			"worker":"executor",
+			"type":"MODEL_WORKSTATION",
+			"body":"Finish {{ .WorkID }}.",
+			"inputs":[
+				{"workType":"story","state":"init"},
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"story","spawnedBy":"chapter-parser"}]}
+			],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"resources":[{"name":"agent-slot","capacity":2}]
+		}]
+	}`)
+
+	want, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(factoryJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "camel-case.replay.json")
+	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
+
+	artifact, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	got := decodeReplayFactorySnapshot(t, artifact.Factory)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("run-started factory mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestLoad_RunStartedFactoryBoundaryRejectsRetiredFanInField(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	factoryJSON := []byte(`{
+		"name": "retired-fan-in-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"join":{"waitFor":"story","waitState":"complete","require":"all"}
+		}]
+	}`)
+
+	path := filepath.Join(t.TempDir(), "retired-join.replay.json")
+	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want retired join boundary error")
+	}
+	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
+		t.Fatalf("Load() error = %q, want generated boundary context", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].join is not supported") {
+		t.Fatalf("Load() error = %q, want retired join message", err)
+	}
+}
+
+func TestLoad_RunStartedFactoryBoundaryRejectsRetiredExhaustionRulesField(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	factoryJSON := []byte(`{
+		"name": "retired-exhaustion-rules-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"failed"}]
+		}],
+		"exhaustionRules": [{
+			"name":"execute-story-loop-breaker",
+			"watchWorkstation":"execute-story",
+			"maxVisits":3,
+			"source":{"workType":"story","state":"init"},
+			"target":{"workType":"story","state":"failed"}
+		}]
+	}`)
+
+	path := filepath.Join(t.TempDir(), "retired-exhaustion-rules.replay.json")
+	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want retired exhaustion_rules boundary error")
+	}
+	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
+		t.Fatalf("Load() error = %q, want generated boundary context", err)
+	}
+	if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
+		t.Fatalf("Load() error = %q, want retired exhaustion_rules message", err)
+	}
+}
+
+func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	factoryJSON := []byte(`{
+		"name": "retired-cron-interval-factory",
+		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"daily-refresh",
+			"behavior":"CRON",
+			"worker":"executor",
+			"outputs":[{"workType":"task","state":"complete"}],
+			"cron":{"interval":"5m"}
+		}]
+	}`)
+
+	path := filepath.Join(t.TempDir(), "retired-cron-interval.replay.json")
+	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want retired cron interval boundary error")
+	}
+	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
+		t.Fatalf("Load() error = %q, want generated boundary context", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].cron.interval is not supported; use cron.schedule") {
+		t.Fatalf("Load() error = %q, want retired cron interval message", err)
+	}
+}
+
+func TestLoad_RunStartedFactoryBoundaryRejectsUnsupportedGeneratedField(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	factoryJSON := []byte(`{
+		"name": "unsupported-generated-field-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"unsupportedField": true
+		}]
+	}`)
+
+	path := filepath.Join(t.TempDir(), "unsupported-field.replay.json")
+	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
+
+	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want strict run-started factory boundary error")
+	}
+	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
+		t.Fatalf("Load() error = %q, want generated boundary context", err)
+	}
+	if !strings.Contains(err.Error(), `json: unknown field "unsupportedField"`) {
+		t.Fatalf("Load() error = %q, want unknown-field rejection", err)
+	}
+}
+
+func TestLoad_CheckedInInferenceEventFixtureAccepted(t *testing.T) {
+	artifact, err := Load(testReplayStorage(), filepath.FromSlash("testdata/inference-events.replay.json"), testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() checked-in inference fixture: %v", err)
+	}
+	assertReplayInferencePair(t, artifact, "inference-request-fixture-1")
+	if _, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact); err != nil {
+		t.Fatalf("NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, ) checked-in inference fixture: %v", err)
+	}
+}
+
+func TestSave_ReplacesArtifactThroughRecoverableTempFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "run.replay.json")
+	recordedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	artifact := minimalValidArtifact(recordedAt)
+
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("initial Save() error = %v", err)
+	}
+
+	requestEvent, err := interfaces.NewFactoryEvent(replayWorkRequestEvent(t, "submission-1", 1, "api", []factoryapi.Work{{
+		Name:         "story",
+		WorkTypeName: stringPtrIfNotEmpty("story"),
+		TraceId:      stringPtrIfNotEmpty("trace-1"),
+	}}, nil))
+	if err != nil {
+		t.Fatalf("convert work request event: %v", err)
+	}
+	artifact.Events = append(artifact.Events, requestEvent)
+	assignEventSequences(artifact.Events)
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("replacement Save() error = %v", err)
+	}
+
+	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := countReplayEvents(loaded.Events, factoryapi.FactoryEventTypeWorkRequest); got != 1 {
+		t.Fatalf("work request events = %d, want 1", got)
+	}
+	tmpMatches, err := filepath.Glob(path + ".*.tmp")
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(tmpMatches) != 0 {
+		t.Fatalf("unexpected leftover temp artifacts: %v", tmpMatches)
+	}
+}
+
+func TestNewEventLogArtifactRejectsMissingRecordedAt(t *testing.T) {
+	t.Parallel()
+	artifact, err := NewEventLogArtifact(time.Time{}, nil, nil, interfaces.ReplayDiagnostics{})
+	if artifact != nil || err == nil || !strings.Contains(err.Error(), "recorded at is required") {
+		t.Fatalf("NewEventLogArtifact = (%#v, %v), want required recorded-at error", artifact, err)
+	}
+}
+
+func minimalValidArtifact(recordedAt time.Time) *interfaces.ReplayArtifact {
+	factorySnapshot, err := interfaces.NewFactorySnapshot(factoryapi.Factory{
+		Name:         "minimal-artifact-factory",
+		WorkTypes:    &[]factoryapi.WorkType{},
+		Resources:    &[]factoryapi.Resource{},
+		Workers:      &[]factoryapi.Worker{},
+		Workstations: &[]factoryapi.Workstation{},
+	})
+	if err != nil {
+		panic(err)
+	}
+	artifact, err := NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+	if err != nil {
+		panic(err)
+	}
+	return artifact
+}
+
+func artifactTestFactory() factoryapi.Factory {
+	return factoryapi.Factory{
+		Name:             "artifact-test-factory",
+		FactoryDirectory: stringPtrIfNotEmpty("fixtures/customer-run"),
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{{
+				Name: "init",
+				Type: factoryapi.WorkStateType(interfaces.StateTypeInitial),
+			}},
+		}},
+		Resources: &[]factoryapi.Resource{},
+		Workers: &[]factoryapi.Worker{{
+			Name:    "executor",
+			Type:    stringPtrIfNotEmpty(factoryapi.WorkerTypeScriptWorker),
+			Command: stringPtrIfNotEmpty("echo"),
+			Args:    &[]string{"ok"},
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Id:      stringPtrIfNotEmpty("ws-1"),
+			Name:    "execute",
+			Worker:  "executor",
+			Type:    stringPtrIfNotEmpty(factoryapi.WorkstationTypeLogicalMove),
+			Inputs:  []factoryapi.WorkstationIO{},
+			Outputs: &[]factoryapi.WorkstationIO{},
+		}},
+		Metadata: generatedStringMapPtr(map[string]string{"factory_hash": "sha256:abc"}),
+	}
+}
+
+func replayInferenceDispatch() workerexecution.ProviderInferenceRequest {
+	dispatch := work.WorkDispatch{
+		DispatchID:   "dispatch-1",
+		TransitionID: "process",
+		WorkerType:   "worker-a",
+		InputTokens: workers.InputTokens(workers.Token{
+			ID: "token-1",
+			Color: workers.Color{
+				WorkID:     "work-1",
+				WorkTypeID: "task",
+				DataType:   workers.DataTypeWork,
+				TraceID:    "trace-1",
+			},
+		}),
+		Execution: work.ExecutionMetadata{
+			RequestID: "request-1",
+			ReplayKey: "process/work-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+	return workerexecution.ProviderInferenceRequest{
+		Dispatch:         dispatch,
+		WorkerType:       dispatch.WorkerType,
+		WorkingDirectory: "/workspace/project",
+		Worktree:         "/workspace/project/.worktrees/story-1",
+		UserMessage:      "Process work-1.",
+	}
+}
+
+func assertReplayInferencePair(t *testing.T, artifact *interfaces.ReplayArtifact, inferenceRequestID string) {
+	t.Helper()
+
+	var request *factoryapi.InferenceRequestEventPayload
+	var response *factoryapi.InferenceResponseEventPayload
+	for _, event := range artifact.Events {
+		generated := mustGeneratedReplayEvent(t, event)
+		switch generated.Type {
+		case factoryapi.FactoryEventTypeInferenceRequest:
+			payload, err := generated.Payload.AsInferenceRequestEventPayload()
+			if err != nil {
+				t.Fatalf("decode inference request event %q: %v", event.Id, err)
+			}
+			if payload.InferenceRequestId == inferenceRequestID {
+				request = &payload
+			}
+		case factoryapi.FactoryEventTypeInferenceResponse:
+			payload, err := generated.Payload.AsInferenceResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode inference response event %q: %v", event.Id, err)
+			}
+			if payload.InferenceRequestId == inferenceRequestID {
+				response = &payload
+			}
+		}
+	}
+	if request == nil || response == nil {
+		t.Fatalf("inference pair %q missing request=%v response=%v", inferenceRequestID, request != nil, response != nil)
+	}
+	if request.Attempt != response.Attempt {
+		t.Fatalf("inference pair correlation mismatch: request=%#v response=%#v", *request, *response)
+	}
+	if request.Prompt == "" {
+		t.Fatalf("inference request %q prompt is empty", inferenceRequestID)
+	}
+}
+
+func countReplayEvents(events []interfaces.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+	count := 0
+	for _, event := range events {
+		if string(event.Type) == string(eventType) {
+			count++
+		}
+	}
+	return count
+}
+
+func requireReplayDispatchCreated(t *testing.T, events []interfaces.FactoryEvent, dispatchID string) factoryapi.DispatchRequestEventPayload {
+	t.Helper()
+	for _, event := range events {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeDispatchRequest || stringValue(generated.Context.DispatchId) != dispatchID {
+			continue
+		}
+		payload, err := generated.Payload.AsDispatchRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch created event: %v", err)
+		}
+		return payload
+	}
+	t.Fatalf("missing DISPATCH_REQUEST for %s", dispatchID)
+	return factoryapi.DispatchRequestEventPayload{}
+}
+
+func requireReplayDispatchCompleted(t *testing.T, events []interfaces.FactoryEvent, dispatchID string) factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+	for _, event := range events {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeDispatchResponse || stringValue(generated.Context.DispatchId) != dispatchID {
+			continue
+		}
+		payload, err := generated.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch completed event: %v", err)
+		}
+		return payload
+	}
+	t.Fatalf("missing DISPATCH_RESPONSE for %s", dispatchID)
+	return factoryapi.DispatchResponseEventPayload{}
+}
+
+func requireReplayInferenceResponse(t *testing.T, events []interfaces.FactoryEvent, inferenceRequestID string) factoryapi.InferenceResponseEventPayload {
+	t.Helper()
+	for _, event := range events {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		payload, err := generated.Payload.AsInferenceResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode inference response event: %v", err)
+		}
+		if payload.InferenceRequestId == inferenceRequestID {
+			return payload
+		}
+	}
+	t.Fatalf("missing INFERENCE_RESPONSE for %s", inferenceRequestID)
+	return factoryapi.InferenceResponseEventPayload{}
+}
+
+func mustGeneratedReplayEvent(t *testing.T, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var generated factoryapi.FactoryEvent
+	err := event.Decode(&generated)
+	if err != nil {
+		t.Fatalf("decode replay event %q: %v", event.Id, err)
+	}
+	return generated
+}
+
+func writeReplayArtifactWithFactoryJSON(t *testing.T, path string, recordedAt time.Time, factoryJSON []byte) {
+	t.Helper()
+
+	payload := map[string]any{
+		"recordedAt": recordedAt.UTC().Format(time.RFC3339),
+		"factory":    json.RawMessage(factoryJSON),
+	}
+	event := map[string]any{
+		"id":            replayRunStartedEventID,
+		"schemaVersion": string(factoryapi.AgentFactoryEventV1),
+		"type":          string(factoryapi.FactoryEventTypeRunRequest),
+		"context": map[string]any{
+			"eventTime": recordedAt.UTC().Format(time.RFC3339),
+			"sequence":  0,
+			"tick":      0,
+		},
+		"payload": payload,
+	}
+	artifact := map[string]any{
+		"schemaVersion": CurrentSchemaVersion,
+		"recordedAt":    recordedAt.UTC().Format(time.RFC3339),
+		"events":        []any{event},
+	}
+	data, err := json.MarshalIndent(artifact, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+}
+
+func replayUnsafeDiagnosticValues() []string {
+	return []string{
+		"raw prompt body must stay private",
+		"raw response prompt body must stay private",
+		"raw stdin payload must stay private",
+		"raw response stdin payload must stay private",
+		"raw env secret must stay private",
+		"raw response env secret must stay private",
+		"raw rendered system prompt must stay private",
+		"raw rendered user message must stay private",
+		"raw rendered stdin must stay private",
+		"raw rendered environment must stay private",
+		"raw command stdin must stay private",
+		"raw environment value must stay private",
+		"AGENT_FACTORY_AUTH_TOKEN",
+		"panic stack should not be stored",
+	}
+}

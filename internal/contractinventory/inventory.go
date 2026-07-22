@@ -23,6 +23,6 @@ type Operation struct {
 
 // Response records one declared response and its media types.
 type Response struct {
-	Status      string   `json:"status"`
-	MediaTypes  []string `json:"mediaTypes"`
+	Status     string   `json:"status"`
+	MediaTypes []string `json:"mediaTypes"`
 }

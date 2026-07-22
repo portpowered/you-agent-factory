@@ -1,15 +1,16 @@
 package providers
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,26 +18,19 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", false))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	submitCursorProviderSmokeWork(t, h)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
+	writeCursorProviderSmokeWork(t, dir)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(modelprovider.Cursor) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
+	if req.Command != string(modelprovider.ProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
@@ -49,23 +43,19 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", true))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	submitCursorProviderSmokeWork(t, h)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().HasTokenInPlace("task:complete")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
+	writeCursorProviderSmokeWork(t, dir)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(modelprovider.Cursor) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
+	if req.Command != string(modelprovider.ProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-f", "-p"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
@@ -83,39 +73,61 @@ stopToken: COMPLETE
 Process the input task.
 `)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	submitCursorProviderSmokeWork(t, h)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().HasTokenInPlace("task:complete")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
+	writeCursorProviderSmokeWork(t, dir)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 	req := runner.LastRequest()
-	if req.Command != string(modelprovider.Cursor) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
+	if req.Command != string(modelprovider.ProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p", "--model", "test-cursor-model"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
 }
 
-func submitCursorProviderSmokeWork(t *testing.T, h *testutil.ServiceTestHarness) {
+func writeCursorProviderSmokeWork(t *testing.T, dir string) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
-		RequestID: "request-cursor-provider-smoke",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name:       "cursor-provider-smoke",
-			WorkTypeID: "task",
-			TraceID:    "trace-cursor-provider-smoke",
-			Content: []work.WorkContentPart{
-				{Type: work.WorkContentPartTypeText, Text: "cursor provider smoke"},
-			},
-		}},
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		Name: "cursor-provider-smoke", WorkTypeID: "task",
+		TraceID: "trace-cursor-provider-smoke", Payload: []byte("cursor provider smoke"),
 	})
+}
+
+func assertCursorProviderCompleted(t *testing.T, session factoryapi.FactorySession) {
+	t.Helper()
+	assertSessionPlaces(t, session, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+}
+
+func assertSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+}
+
+func assertDispatchOutput(t *testing.T, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output == nil || *payload.Output != want {
+			t.Fatalf("dispatch output = %#v, want %q", payload.Output, want)
+		}
+		return
+	}
+	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
 }
 
 func buildCursorModelWorkerConfig(model string, skipPermissions bool) string {
@@ -123,7 +135,7 @@ func buildCursorModelWorkerConfig(model string, skipPermissions bool) string {
 		"---",
 		"type: MODEL_WORKER",
 		"model: " + model,
-		"modelProvider: " + string(modelprovider.Cursor),
+		"modelProvider: " + string(modelprovider.ProviderCursor),
 		"stopToken: COMPLETE",
 	}
 	if skipPermissions {

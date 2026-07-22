@@ -17,7 +17,7 @@ var RequiredSectionTitles = []string{
 }
 
 var (
-	headingPattern    = regexp.MustCompile(`(?m)^##\s+(.+?)\s*$`)
+	headingPattern     = regexp.MustCompile(`(?m)^##\s+(.+?)\s*$`)
 	markdownRefPattern = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
 	htmlImgSrcPattern  = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
 )

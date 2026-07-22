@@ -2,13 +2,13 @@ package guards_batch
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/work"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -35,49 +35,11 @@ func TestCascadingFailure_DirectChild(t *testing.T) {
 			{Error: errors.New("upstream service down")},
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 2).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:complete")
-
-	snap := h.Marking()
-	foundChild := false
-	for _, tok := range snap.Tokens {
-		if tok.Color.WorkTypeID == "task" && tokenDependsOn(tok, parentWorkID) {
-			foundChild = true
-			if len(tok.History.FailureLog) == 0 {
-				t.Error("child token should have a FailureRecord from cascading failure")
-			} else {
-				record := tok.History.FailureLog[0]
-				if !strings.Contains(record.Error, parentWorkID) {
-					t.Errorf("FailureRecord should reference parent WorkID %q, got: %q", parentWorkID, record.Error)
-				}
-			}
-			if !strings.Contains(tok.History.LastError, parentWorkID) {
-				t.Errorf("LastError should reference parent WorkID %q, got: %q", parentWorkID, tok.History.LastError)
-			}
-		}
-	}
-	if !foundChild {
-		t.Fatal("child token with dependency on parent was not found")
-	}
-}
-
-func tokenDependsOn(tok *factorytoken.Token, workID string) bool {
-	for _, rel := range tok.Color.Relations {
-		if rel.Type == work.RelationDependsOn && rel.TargetWorkID == workID {
-			return true
-		}
-	}
-	return false
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 2, "task:init": 0, "task:processing": 0, "task:complete": 0})
+	assertFailedDependentWork(t, listedWork, parentWorkID)
 }
 
 func TestCascadingFailure_Transitive(t *testing.T) {
@@ -119,27 +81,12 @@ func TestCascadingFailure_Transitive(t *testing.T) {
 			{Error: errors.New("crash")},
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 3).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:complete")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.Color.WorkID != pWorkID && tok.Color.WorkID != c1WorkID {
-			if len(tok.History.FailureLog) == 0 && tok.History.LastError == "" {
-				t.Error("C2 should have a failure record")
-			}
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 3, "task:init": 0, "task:processing": 0, "task:complete": 0})
+	assertFailedDependentWork(t, listedWork, pWorkID)
+	assertFailedDependentWork(t, listedWork, c1WorkID)
 }
 
 func TestCascadingFailure_CompletedNotCascaded(t *testing.T) {
@@ -169,14 +116,21 @@ func TestCascadingFailure_CompletedNotCascaded(t *testing.T) {
 			{Error: errors.New("oops")},
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:failed": 1})
+}
 
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasTokenInPlace("task:failed")
+func assertFailedDependentWork(t *testing.T, response factoryapi.ListWorkResponse, targetWorkID string) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.State == nil || item.State.Name != "failed" || item.Relations == nil {
+			continue
+		}
+		for _, relation := range *item.Relations {
+			if relation.Type == factoryapi.RelationTypeDependsOn && relation.TargetWorkId != nil && *relation.TargetWorkId == targetWorkID {
+				return
+			}
+		}
+	}
+	t.Errorf("listed failed Work missing dependency on %q", targetWorkID)
 }

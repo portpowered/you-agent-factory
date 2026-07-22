@@ -30,11 +30,10 @@ func TestScanRejectsImplicitPersistenceConstruction(t *testing.T) {
 	}
 }
 
-func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
+func TestScanAcceptsApplicationCompositionAndTransportTest(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factory/sessions/execution/service.go":             "testdata/approved_composition.go.txt",
-		"pkg/factory/sessions/execution/testharness/harness.go": "testdata/approved_harness.go.txt",
-		"pkg/transports/http/transport_test.go":                 "testdata/approved_transport_test.go.txt",
+		"pkg/services/factory_sessions/execution/service.go": "testdata/approved_composition.go.txt",
+		"pkg/transports/http/transport_test.go":              "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -69,7 +68,7 @@ func TestScanRejectsTransportApplicationComposition(t *testing.T) {
 
 func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factory/sessions/execution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/services/factory_sessions/execution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -77,7 +76,7 @@ func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 		t.Fatalf("scan fixture: %v", err)
 	}
 
-	for _, prohibited := range []string{providerPackagePath, providerInferenceName, "pkg/workers/providerexecution"} {
+	for _, prohibited := range []string{providerPackagePath, providerInferenceName, "pkg/services/workers"} {
 		if !containsFinding(findings, prohibited) {
 			t.Errorf("findings %#v do not report %s", findings, prohibited)
 		}
@@ -86,8 +85,8 @@ func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 
 func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factory/sessions/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
-		"pkg/factory/sessions/execution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/services/factory_sessions/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
+		"pkg/services/factory_sessions/execution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)

@@ -46,49 +46,18 @@ func TestCanonicalMCPServeContractIsAuthoritative(t *testing.T) {
 	}
 }
 
-func TestWorkflowCompatibilityContractsRemainIsolatedAndClassified(t *testing.T) {
+func TestWorkflowCompatibilityContractsAreRemoved(t *testing.T) {
 	compatibility := readJSON(t, filepath.Join("cli", "deprecated-commands.json"))
 	compatibilityCommands := compatibility.(map[string]any)["commands"].(map[string]any)
-	wantIDs := []string{"you.workflow.preview", "you.workflow.validate"}
-	if len(compatibilityCommands) != len(wantIDs) {
-		t.Fatalf("compatibility command count = %d, want %d", len(compatibilityCommands), len(wantIDs))
+	if len(compatibilityCommands) != 0 {
+		t.Fatalf("workflow compatibility commands = %#v, want none", compatibilityCommands)
 	}
 
 	primary := readJSON(t, filepath.Join("cli", "commands.json"))
 	primaryCommands := primary.(map[string]any)["commands"].(map[string]any)
-	deprecated := readJSON(t, filepath.Join("cli", "deprecated.json"))
-	deprecatedRecords := deprecated.(map[string]any)["records"].(map[string]any)
-
-	for _, commandID := range wantIDs {
-		command := requireCLICommand(t, compatibilityCommands, commandID)
-		if got := command["completeness"]; got != "authoritative" {
-			t.Fatalf("%s completeness = %v, want authoritative", commandID, got)
-		}
-		if _, exists := primaryCommands[commandID]; exists {
-			t.Fatalf("primary manifest must exclude compatibility command %s", commandID)
-		}
-		flags := command["flags"].(map[string]any)
-		kind := flags[commandID+".flag.kind"].(map[string]any)
-		wantKinds := []string{"FACTORY_ID", "FACTORY_INLINE", "WORKFLOW_FILE", "WORKFLOW_NAME", "INLINE_WORKFLOW"}
-		if got := stringSlice(kind["enum"]); !slices.Equal(got, wantKinds) {
-			t.Fatalf("%s --kind enum = %v, want %v", commandID, got, wantKinds)
-		}
-		jsonFlag := flags[commandID+".flag.json"].(map[string]any)
-		if got := jsonFlag["scope"]; got != "inherited" {
-			t.Fatalf("%s --json scope = %v, want inherited", commandID, got)
-		}
-		for _, metadata := range []string{"relationships", "channels", "outputs", "exits", "sideEffects", "constraints", "handler"} {
-			if _, ok := command[metadata]; !ok {
-				t.Fatalf("%s missing authoritative %s metadata", commandID, metadata)
-			}
-		}
-		inventoryID := "cli.command.workflow." + command["name"].(string)
-		record, ok := deprecatedRecords[inventoryID].(map[string]any)
-		if !ok {
-			t.Fatalf("deprecated inventory missing %s", inventoryID)
-		}
-		if got := record["classification"]; got != "retain-temporarily" {
-			t.Fatalf("%s classification = %v, want retain-temporarily", inventoryID, got)
+	for commandID := range primaryCommands {
+		if len(commandID) > len("you.workflow.") && commandID[:len("you.workflow.")] == "you.workflow." {
+			t.Fatalf("primary manifest still contains removed workflow command %s", commandID)
 		}
 	}
 }

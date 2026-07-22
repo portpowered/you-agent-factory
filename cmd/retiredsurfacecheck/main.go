@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -8,10 +9,11 @@ import (
 	"path/filepath"
 
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
-	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
+	rootapp "github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
+	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 )
 
 type config struct {
@@ -58,11 +60,20 @@ func run(cfg config, stdout, stderr io.Writer) error {
 }
 
 func loadProductionCLIInventory() (retiredsurfaceguard.CLIInventory, error) {
-	root := cli.NewRootCommand()
-	inventory, err := commandidentity.Walk(root)
+	var observation cliobservation.Result
+	process, err := rootapp.BuildProcess(context.Background(), serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
 	if err != nil {
-		return retiredsurfaceguard.CLIInventory{}, fmt.Errorf("walk production CLI tree: %w", err)
+		return retiredsurfaceguard.CLIInventory{}, fmt.Errorf("build production process: %w", err)
 	}
+	if err := process.Execute(rootapp.Input{
+		Args: []string{"you"}, Env: os.Environ(), WorkingDirectory: ".",
+		Stdout: io.Discard, Stderr: io.Discard,
+	}); err != nil {
+		return retiredsurfaceguard.CLIInventory{}, fmt.Errorf("observe production CLI tree: %w", err)
+	}
+	inventory := observation.Snapshot.Commands
 	commands := make([]retiredsurfaceguard.CLICommandRecord, 0, len(inventory.Commands))
 	for _, record := range inventory.Commands {
 		commands = append(commands, retiredsurfaceguard.CLICommandRecord{

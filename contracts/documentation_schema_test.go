@@ -1,12 +1,14 @@
 package contracts_test
 
 import (
+	"fmt"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -18,7 +20,25 @@ type schemaResource struct {
 	id   string
 }
 
+var (
+	schemaCache sync.Map // map[string]*schemaCompileCacheEntry
+	jsonCache   sync.Map // map[string]*jsonCacheEntry
+)
+
+type schemaCompileCacheEntry struct {
+	once   sync.Once
+	schema *jsonschema.Schema
+	err    error
+}
+
+type jsonCacheEntry struct {
+	once     sync.Once
+	document any
+	err      error
+}
+
 func TestDocumentationSchemaFixtures(t *testing.T) {
+	t.Parallel()
 	schema := compileSchema(t, filepath.Join("common", "documentation.schema.json"), documentationSchemaID)
 
 	tests := []struct {
@@ -40,7 +60,9 @@ func TestDocumentationSchemaFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "common", "documentation", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -61,36 +83,85 @@ func TestDocumentationSchemaFixtures(t *testing.T) {
 
 func compileSchema(t *testing.T, path, id string, resources ...schemaResource) *jsonschema.Schema {
 	t.Helper()
+	key := schemaCacheKey(path, id, resources)
+	entry := &schemaCompileCacheEntry{}
+	actual, _ := schemaCache.LoadOrStore(key, entry)
+	cached := actual.(*schemaCompileCacheEntry)
+	cached.once.Do(func() {
+		cached.schema, cached.err = compileSchemaNoCache(path, id, resources...)
+	})
+	if cached.err != nil {
+		t.Fatalf("compile schema %s: %v", id, cached.err)
+	}
+	return cached.schema
+}
+
+func compileSchemaNoCache(path, id string, resources ...schemaResource) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	for _, resource := range resources {
-		if err := compiler.AddResource(resource.id, readJSON(t, resource.path)); err != nil {
-			t.Fatalf("add schema resource %s: %v", resource.id, err)
+		resourceDocument, err := readJSONDocument(resource.path)
+		if err != nil {
+			return nil, fmt.Errorf("read schema resource %s: %w", resource.id, err)
+		}
+		if err := compiler.AddResource(resource.id, resourceDocument); err != nil {
+			return nil, fmt.Errorf("add schema resource %s: %w", resource.id, err)
 		}
 	}
-	document := readJSON(t, path)
+	document, err := readJSONDocument(path)
+	if err != nil {
+		return nil, fmt.Errorf("read schema document: %w", err)
+	}
 	if err := compiler.AddResource(id, document); err != nil {
-		t.Fatalf("add schema resource: %v", err)
+		return nil, fmt.Errorf("add schema resource: %w", err)
 	}
 	schema, err := compiler.Compile(id)
 	if err != nil {
-		t.Fatalf("compile schema: %v", err)
+		return nil, err
 	}
-	return schema
+	return schema, nil
+}
+
+func schemaCacheKey(path, id string, resources []schemaResource) string {
+	var b strings.Builder
+	b.WriteString(path)
+	b.WriteRune('|')
+	b.WriteString(id)
+	b.WriteRune('|')
+	for _, resource := range resources {
+		b.WriteString(resource.id)
+		b.WriteRune('|')
+		b.WriteString(resource.path)
+		b.WriteRune(';')
+	}
+	return b.String()
 }
 
 func readJSON(t *testing.T, path string) any {
 	t.Helper()
+	entry := &jsonCacheEntry{}
+	actual, _ := jsonCache.LoadOrStore(path, entry)
+	cached := actual.(*jsonCacheEntry)
+	cached.once.Do(func() {
+		cached.document, cached.err = readJSONDocument(path)
+	})
+	if cached.err != nil {
+		t.Fatalf("read %s: %v", path, cached.err)
+	}
+	return cached.document
+}
+
+func readJSONDocument(path string) (any, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		t.Fatalf("open %s: %v", path, err)
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer file.Close()
 	document, err := jsonschema.UnmarshalJSON(file)
 	if err != nil {
-		t.Fatalf("decode %s: %v", path, err)
+		return nil, fmt.Errorf("decode %s: %w", path, err)
 	}
-	return document
+	return document, nil
 }
 
 func validationPaths(t *testing.T, err error) []string {

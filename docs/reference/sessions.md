@@ -73,32 +73,6 @@ outcome through the session read and its ordered events. Open `fs-js-42` in the
 dashboard Factory Session detail rather than creating a separate workflow-run
 identity for the UI.
 
-### Compatibility-only workflow spellings
-
-The retained `you workflow ...` commands are compatibility spellings for the
-canonical Factory Preview and Factory Session behavior above. They are not the
-primary resource model. Existing scripts may continue using `you workflow
-validate`, `run`, `start`, `status`, `result`, `dispatches`, `artifacts`, and
-`events`; new integrations should follow the exact API, MCP, `you session`, and
-dashboard successors in the canonical surface map. `Dynamic workflow` likewise
-means JavaScript orchestration and never introduces a workflow-run resource.
-
-#### API and CLI compatibility map
-
-This customer map covers every retained public workflow-named API and CLI
-spelling. The accountable ownership and measurable removal gates live in the
-maintainer compatibility register; no entry is approved for removal in this
-batch.
-
-| Public compatibility alias | Exact canonical successor | Observable compatibility expectation |
-|----------------------------|---------------------------|--------------------------------------|
-| `POST /workflow-previews` | `POST /factories/preview` (Factory Preview) | Same status and response body for the same request; the alias additionally returns `Deprecation: true` and `Link: </factories/preview>; rel="successor-version"`. |
-| `WorkflowPreviewRequest` / `WorkflowPreviewResult` | `FactoryPreviewRequest` / `FactoryPreviewResult` | Same fields, validation rules, and preview outcome; alias schemas remain deprecated. |
-| `you workflow validate` / `preview` | `POST /factories/preview` or `you.factory_session.validate_source` (Factory Preview) | Same source validation and preview diagnostics without creating a Factory Session. |
-| `you workflow run` / `start` | `POST /factory-sessions/sync` / `POST /factory-sessions/async` | Same shared execution request and synchronous or asynchronous Factory Session outcome. |
-| `you workflow status` / `result` | `GET /factory-sessions/{session_id}` / `GET /factory-sessions/{session_id}/results` | Same lifecycle, progress, result availability, and result outcome, with CLI formatting only. |
-| `you workflow dispatches` / `artifacts` / `events` | Corresponding `/factory-sessions/{session_id}/{dispatches|artifacts|events}` read; `you session dispatches` is also canonical where available | Same ordered session-owned facts and reconnect behavior, with CLI formatting only. |
-
 ### Supported scope today
 
 - Use `POST /factories/preview` (or
@@ -638,9 +612,8 @@ lifecycle banner is derived from canonical API status and replayed
 `SESSION_LIFECYCLE_CONTROL` events rather than dashboard-owned state. For the
 shipped JavaScript durable-session slice, use the **Factory session** detail
 surface to compare the same `FactorySession` status, JavaScript phase,
-checkpoint refs, dispatch counts, artifacts, and lifecycle banner state that
-you can read through `you workflow status`, `you workflow result`,
-`you workflow dispatches`, `you workflow artifacts`, and `you workflow events`.
+checkpoint refs, dispatch counts, artifacts, and lifecycle banner state exposed
+by the canonical Factory Session API routes.
 
 ## `--server` and `--session` routing
 
@@ -710,9 +683,9 @@ with `Accept: application/json` on the same route when the UI needs structured
 
 | Surface | How lifecycle is observed |
 |---------|---------------------------|
-| Validate-first setup | `you workflow validate` and `POST /factories/preview` confirm source and policy readiness before a durable session exists. |
+| Validate-first setup | `POST /factories/preview` or MCP `you.factory_session.validate_source` confirms source and policy readiness before a durable session exists. |
 | API | `GET /factory-sessions/{session_id}/events` is the normal event stream for dashboard, Factory Session, durable replay, and reconnect traffic; pass `after_event_id` or `after_sequence` on that route. `GET /events` remains a **compatibility-only** process-global stream for legacy tooling and operator diagnostics—new session-aware consumers should migrate to the session-scoped route. |
-| CLI | `you session show` prints live-session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API; `you workflow status`, `result`, `dispatches`, `artifacts`, and `events` do the same for durable JavaScript session inspection. |
+| CLI | `you session show` prints Factory Session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs; `you session dispatches` lists durable session Dispatch records. |
 | Dashboard | Opens the selected session's `GET /factory-sessions/{session_id}/events` stream, replays lifecycle events into the timeline projection, and shows reconnecting/stale, partial, paused, running, and terminal states in the session lifecycle banner. |
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 

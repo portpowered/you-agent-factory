@@ -35,7 +35,6 @@ Available Commands:
   session     List, open, and close factory sessions on a running host
   submit      Submit work to a running factory
   work        Inspect work from a running factory
-  workflow    Compatibility commands for Factory Preview and Factory Session behavior
 
 Flags:
   -d, --debug                                  emit lower-level command diagnostics where supported (implies --verbose)

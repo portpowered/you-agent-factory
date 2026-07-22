@@ -2,10 +2,8 @@ package validationentry
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -27,8 +25,10 @@ func TestWorkerWorkstationCompatibilityTargetsFromAPI_PreservesPublicAliases(t *
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			factory := decodeCompatibilityFactory(t, tc.workerType, tc.workstationType, "")
-			if targets := workerWorkstationCompatibilityTargetsFromAPI(factory); len(targets) != 0 {
-				t.Fatalf("compatibility targets = %#v, want none", targets)
+			taxonomy := submittedDefinitionTaxonomyFromAPI(factory)
+			if len(taxonomy.Workers) != 1 || taxonomy.Workers[0].Type != tc.workerType ||
+				len(taxonomy.Workstations) != 1 || taxonomy.Workstations[0].Type != tc.workstationType {
+				t.Fatalf("taxonomy = %#v, want exact public values %q/%q", taxonomy, tc.workerType, tc.workstationType)
 			}
 		})
 	}
@@ -38,20 +38,11 @@ func TestWorkerWorkstationCompatibilityTargetsFromAPI_ReportsPublicTaxonomyMisma
 	t.Parallel()
 
 	factory := decodeCompatibilityFactory(t, "AGENT_WORKER", "INFERENCE_RUN", "")
-	targets := workerWorkstationCompatibilityTargetsFromAPI(factory)
-	if len(targets) != 1 {
-		t.Fatalf("compatibility targets = %#v, want one", targets)
-	}
-	target := targets[0]
-	if target.Code != factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility ||
-		target.Subject.Type != factoryvalidation.SubjectTypeWorkstation ||
-		target.Subject.ID != "process" ||
-		target.Subject.Location != factoryvalidation.SubjectLocationReference ||
-		target.Path != "factory.workstations[0].worker" {
-		t.Fatalf("compatibility target = %#v, want canonical workstation reference", target)
-	}
-	if !strings.Contains(target.Message, "INFERENCE_RUN") {
-		t.Fatalf("message = %q, want public INFERENCE_RUN taxonomy", target.Message)
+	taxonomy := submittedDefinitionTaxonomyFromAPI(factory)
+	if len(taxonomy.Workers) != 1 || taxonomy.Workers[0].Type != "AGENT_WORKER" ||
+		len(taxonomy.Workstations) != 1 || taxonomy.Workstations[0].Type != "INFERENCE_RUN" ||
+		taxonomy.Workstations[0].Worker != "worker-a" || taxonomy.Workstations[0].Index != 0 {
+		t.Fatalf("taxonomy = %#v, want lossless detached mismatch input", taxonomy)
 	}
 }
 
@@ -62,8 +53,10 @@ func TestDisplayWorkstationTypeFromAPI_ProjectsImplicitPoller(t *testing.T) {
 	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
 		t.Fatalf("workstations = %#v, want one", factory.Workstations)
 	}
-	if got := displayWorkstationTypeFromAPI((*factory.Workstations)[0]); got != "POLLER_RUN" {
-		t.Fatalf("display workstation type = %q, want POLLER_RUN", got)
+	taxonomy := submittedDefinitionTaxonomyFromAPI(factory)
+	if len(taxonomy.Workstations) != 1 || taxonomy.Workstations[0].Type != "" ||
+		string(taxonomy.Workstations[0].Behavior) != "POLLER" {
+		t.Fatalf("taxonomy = %#v, want implicit poller values copied without projection", taxonomy)
 	}
 }
 
@@ -81,8 +74,9 @@ func TestWorkerWorkstationCompatibilityTargetsFromAPI_IgnoresIncompleteReference
 	}`), &factory); err != nil {
 		t.Fatalf("unmarshal factory: %v", err)
 	}
-	if targets := workerWorkstationCompatibilityTargetsFromAPI(factory); len(targets) != 0 {
-		t.Fatalf("compatibility targets = %#v, want none for incomplete references", targets)
+	taxonomy := submittedDefinitionTaxonomyFromAPI(factory)
+	if len(taxonomy.Workers) != 2 || len(taxonomy.Workstations) != 2 {
+		t.Fatalf("taxonomy = %#v, want incomplete entries preserved for owner validation", taxonomy)
 	}
 }
 

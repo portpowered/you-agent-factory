@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func TestVerifyCatalogInputSchemaParity_PassesForDiscoverToolsProjection(t *testing.T) {

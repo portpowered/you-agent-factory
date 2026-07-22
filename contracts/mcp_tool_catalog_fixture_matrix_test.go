@@ -22,11 +22,11 @@ var mcpRegistryValidFixturePaths = []string{
 }
 
 const (
-	toolCatalogSchemaID        = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
-	mcpContentSchemaID         = "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json"
-	mcpCallToolResultSchemaID  = "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json"
-	mcpDomainToolResponseID    = "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json"
-	mcpJSONRPCErrorSchemaID    = "https://schemas.portpowered.com/you/contracts/mcp/protocol/json-rpc-error.schema.json"
+	toolCatalogSchemaID       = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+	mcpContentSchemaID        = "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json"
+	mcpCallToolResultSchemaID = "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json"
+	mcpDomainToolResponseID   = "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json"
+	mcpJSONRPCErrorSchemaID   = "https://schemas.portpowered.com/you/contracts/mcp/protocol/json-rpc-error.schema.json"
 )
 
 var mcpValidCatalogFixtures = []struct {

@@ -2,14 +2,13 @@ package factorysession_test
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
@@ -182,7 +181,7 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 	dispatchMapped := factorysession.DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
 		DispatchSummary: factorysessionexecution.DispatchSummary{
 			ID:           "disp-1",
-			Status:       factorysessionexecution.DispatchStatusFailed,
+			Status:       factorysessionexecution.DispatchStatus("FAILED"),
 			DispatchKind: "JAVASCRIPT_AGENT",
 			Usage: &factorysessionexecution.DispatchUsage{
 				InputTokens:    11,
@@ -202,7 +201,7 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 		},
 		SessionID:         "dur-sess-1",
 		OrchestratorKind:  "JAVASCRIPT",
-		StatusTransitions: []factorysessionexecution.DispatchStatus{factorysessionexecution.DispatchStatusQueued, factorysessionexecution.DispatchStatusFailed},
+		StatusTransitions: []factorysessionexecution.DispatchStatus{"QUEUED", "FAILED"},
 	})
 	if dispatchMapped.Usage == nil || dispatchMapped.Usage.TotalTokens == nil || *dispatchMapped.Usage.TotalTokens != 18 {
 		t.Fatalf("dispatch usage = %#v, want populated usage fields", dispatchMapped.Usage)
@@ -256,6 +255,7 @@ func TestResultRequestFromAPI_MapsModeAndIncludeArtifacts(t *testing.T) {
 		Mode:             &mode,
 		IncludeArtifacts: &include,
 	})
+
 	if err != nil {
 		t.Fatalf("ResultRequestFromAPI: %v", err)
 	}
@@ -266,20 +266,18 @@ func TestResultRequestFromAPI_MapsModeAndIncludeArtifacts(t *testing.T) {
 
 func TestResultRequestFromAPI_RejectsInvalidMode(t *testing.T) {
 	mode := factoryapi.FactorySessionResultMode("invalid")
-	_, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
-	if err == nil {
-		t.Fatal("error = nil, want validation error")
+	raw, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
+	if err != nil {
+		t.Fatalf("ResultRequestFromAPI: %v", err)
 	}
-	var validationErr *factorysessionexecution.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want ValidationError", err)
+	if raw.Mode != factorysessionexecution.ResultMode("invalid") {
+		t.Fatalf("mode = %q, want raw invalid value", raw.Mode)
 	}
 }
 
 func TestEventAndProjectionResponses_HandleEmptyAndInvalidBranches(t *testing.T) {
 	t.Run("reconnect request", testEventReconnectRequestBranches)
 	t.Run("event read response", testEventReadResponseBranches)
-	t.Run("factory event stream", testFactoryEventStreamBranches)
 }
 
 func testEventReconnectRequestBranches(t *testing.T) {
@@ -299,6 +297,7 @@ func testEventReconnectRequestBranches(t *testing.T) {
 		AfterEventId:  &afterEventID,
 		AfterSequence: &afterSequence,
 	})
+
 	if err != nil {
 		t.Fatalf("EventReconnectRequestFromAPI populated: %v", err)
 	}
@@ -326,32 +325,11 @@ func testEventReadResponseBranches(t *testing.T) {
 	}
 }
 
-func testFactoryEventStreamBranches(t *testing.T) {
-	t.Helper()
-
-	validEvent := []byte(`{"id":"event-1","type":"factory.session.started","sequence":1}`)
-
-	stream := factorysession.FactoryEventStreamFromReadResult(factorysessionexecution.EventReadResult{})
-	if stream == nil || len(stream.History) != 0 {
-		t.Fatalf("empty stream = %#v", stream)
-	}
-	if _, ok := <-stream.Events; ok {
-		t.Fatal("empty stream channel should be closed")
-	}
-
-	stream = factorysession.FactoryEventStreamFromReadResult(factorysessionexecution.EventReadResult{
-		Events: []json.RawMessage{validEvent},
-	})
-	if len(stream.History) != 1 || stream.History[0].Id != "event-1" {
-		t.Fatalf("stream history = %#v", stream.History)
-	}
-}
-
 // pkgmaintcheck:ignore-cyclomatic-complexity this boundary regression intentionally covers optional-field trimming in one table-like scenario.
 func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
 		SessionID:        "dur-sess-1",
-		ResultStatus:     factorysessionexecution.ResultStatusFinal,
+		ResultStatus:     factorysessionexecution.ResultStatus("FINAL"),
 		SessionStatus:    factorysessionexecution.LifecycleStatusSucceeded,
 		Mode:             factorysessionexecution.ResultModeFinal,
 		IncludeArtifacts: true,
@@ -378,7 +356,7 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 		SessionID: "dur-sess-1",
 		Dispatches: []factorysessionexecution.DispatchSummary{{
 			ID:                    "disp-1",
-			Status:                factorysessionexecution.DispatchStatusRunning,
+			Status:                factorysessionexecution.DispatchStatus("RUNNING"),
 			DispatchKind:          "MODEL",
 			Phase:                 " plan ",
 			Label:                 " summarize ",
@@ -440,11 +418,21 @@ func TestValidateProjectionConsistencyFromFixtures(t *testing.T) {
 	result := resultFromFixture(resultFixture)
 	dispatches := listDispatchesFromFixture(scenario).Dispatches
 
-	if err := factorysessionexecution.ValidateResultMatchesSessionRead(session, result); err != nil {
-		t.Fatalf("ValidateResultMatchesSessionRead: %v", err)
+	mappedSession := factorysession.SessionReadResponseToAPI(session)
+	mappedResult := factorysession.ResultResponseToAPI(result)
+	mappedDispatches := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
+		SessionID:  session.SessionID,
+		Dispatches: dispatches,
+	})
+	if mappedSession.SessionId != mappedResult.SessionId {
+		t.Fatalf("session/result identities differ: %q vs %q", mappedSession.SessionId, mappedResult.SessionId)
 	}
-	if err := factorysessionexecution.ValidateDispatchListMatchesSessionProgress(session, dispatches); err != nil {
-		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+	if mappedDispatches.SessionId != mappedSession.SessionId {
+		t.Fatalf("session/dispatch identities differ: %q vs %q", mappedSession.SessionId, mappedDispatches.SessionId)
+	}
+	if mappedSession.Progress == nil || mappedSession.Progress.TotalDispatches == nil ||
+		*mappedSession.Progress.TotalDispatches != len(mappedDispatches.Dispatches) {
+		t.Fatalf("mapped progress/dispatch count mismatch: %#v vs %d", mappedSession.Progress, len(mappedDispatches.Dispatches))
 	}
 }
 

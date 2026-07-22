@@ -11,12 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func assertExportImportPortableLayoutResponse(t *testing.T, layout *factoryapi.FactoryLayout, contextLabel string) {
@@ -172,14 +169,8 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 	importBootstrapFactoryName := "seeded-share-bootstrap"
 	sourceFactoryName := "seeded-share-source"
 	importFactoryName := "seeded-share-imported"
-	sourceFactoryDir := fixture.persistAs(t, sourceRootDir, sourceFactoryName)
-	if err := config.WriteCurrentFactoryPointer(sourceRootDir, sourceFactoryName); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", sourceFactoryName, err)
-	}
-	fixture.persistAs(t, importRootDir, importBootstrapFactoryName)
-	if err := config.WriteCurrentFactoryPointer(importRootDir, importBootstrapFactoryName); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", importBootstrapFactoryName, err)
-	}
+	sourceFactoryDir := fixture.persistAndActivateAs(t, sourceRootDir, sourceFactoryName)
+	fixture.persistAndActivateAs(t, importRootDir, importBootstrapFactoryName)
 
 	sourceSnapshot := map[string]string{
 		"factory/inputs/" + fixture.Expected.WorkTypeName + "/default/starter.md":    "source starter markdown\n",
@@ -187,10 +178,7 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 	}
 	writeSeededStarterInputs(t, sourceFactoryDir, sourceSnapshot)
 
-	sourceServer := startFunctionalServerWithConfig(t, sourceRootDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeBatch
-		cfg.Logger = zap.NewNop()
-	})
+	sourceServer := startFunctionalServer(t, sourceRootDir, true)
 
 	exported := getCurrentFactory(t, sourceServer.URL())
 	assertStarterBundledFiles(t, exported, sourceSnapshot)
@@ -198,11 +186,8 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 	importRequest := exported
 	importRequest.Name = factoryapi.FactoryName(importFactoryName)
 
-	importServer := startFunctionalServerWithConfig(t, importRootDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.Logger = zap.NewNop()
-	})
-	waitForCurrentFactoryRuntimeIdle(t, importServer.service, 5*time.Second)
+	importServer := startFunctionalServer(t, importRootDir, true)
+	waitForCurrentFactoryRuntimeIdle(t, importServer.URL(), 5*time.Second)
 
 	imported := createNamedFactory(t, importServer.URL(), importRequest)
 	assertStarterBundledFileTargets(t, imported, sourceSnapshot)
@@ -330,30 +315,30 @@ func assertImportedFactoryRuntimeReloadPreservesBodies(
 ) {
 	t.Helper()
 
-	loaded, err := config.LoadRuntimeConfig(factoryDir, nil)
+	loaded, err := support.LoadedFactory(t, factoryDir)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(%s): %v", factoryDir, err)
 	}
 
 	for _, worker := range workers {
-		runtimeWorker, ok := loaded.Worker(worker.Name)
+		runtimeWorker, ok := support.FindFactoryWorker(loaded, worker.Name)
 		if !ok {
 			t.Fatalf("expected imported runtime worker %q to load", worker.Name)
 		}
-		if worker.Body == nil || runtimeWorker.Body != *worker.Body {
-			t.Fatalf("runtime worker %q body = %q, want %q", worker.Name, runtimeWorker.Body, stringPtrValue(worker.Body))
+		if worker.Body == nil || runtimeWorker.Body == nil || *runtimeWorker.Body != *worker.Body {
+			t.Fatalf("runtime worker %q body = %q, want %q", worker.Name, stringPtrValue(runtimeWorker.Body), stringPtrValue(worker.Body))
 		}
 	}
 	for _, workstation := range workstations {
-		runtimeWorkstation, ok := loaded.Workstation(workstation.Name)
+		runtimeWorkstation, ok := support.FindFactoryWorkstation(loaded, workstation.Name)
 		if !ok {
 			t.Fatalf("expected imported runtime workstation %q to load", workstation.Name)
 		}
-		if workstation.Body == nil || runtimeWorkstation.Body != *workstation.Body {
-			t.Fatalf("runtime workstation %q body = %q, want %q", workstation.Name, runtimeWorkstation.Body, stringPtrValue(workstation.Body))
+		if workstation.Body == nil || runtimeWorkstation.Body == nil || *runtimeWorkstation.Body != *workstation.Body {
+			t.Fatalf("runtime workstation %q body = %q, want %q", workstation.Name, stringPtrValue(runtimeWorkstation.Body), stringPtrValue(workstation.Body))
 		}
-		if runtimeWorkstation.PromptTemplate != stringPtrValue(workstation.Body) {
-			t.Fatalf("runtime workstation %q prompt template = %q, want %q", workstation.Name, runtimeWorkstation.PromptTemplate, stringPtrValue(workstation.Body))
+		if runtimeWorkstation.Body == nil || *runtimeWorkstation.Body != stringPtrValue(workstation.Body) {
+			t.Fatalf("runtime workstation %q prompt body = %q, want %q", workstation.Name, stringPtrValue(runtimeWorkstation.Body), stringPtrValue(workstation.Body))
 		}
 	}
 }

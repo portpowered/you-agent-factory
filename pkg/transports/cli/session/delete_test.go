@@ -21,7 +21,7 @@ func TestDelete_PerformsDELETEWithEscapedSessionPath(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      serverPort(t, srv),
 		SessionID: "session/beta",
 		Output:    &out,
@@ -44,7 +44,7 @@ func TestDelete_Success204PrintsHumanConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      serverPort(t, srv),
 		SessionID: "session-beta",
 		Output:    &out,
@@ -64,7 +64,7 @@ func TestDelete_Success204EmitsJSONConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      serverPort(t, srv),
 		SessionID: "session-beta",
 		JSON:      true,
@@ -96,7 +96,7 @@ func TestDelete_NotFoundReturnsClearMessage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      serverPort(t, srv),
 		SessionID: "missing-session",
 		Output:    ioDiscardWriter{t},
@@ -114,7 +114,7 @@ func TestDelete_NotFoundReturnsClearMessage(t *testing.T) {
 
 func TestDelete_UnreachableServiceNamesEndpoint(t *testing.T) {
 	var out bytes.Buffer
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      1,
 		SessionID: "session-beta",
 		JSON:      true,
@@ -145,7 +145,7 @@ func TestDelete_APIErrorSurfacesMessage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Delete(DeleteConfig{
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
 		Port:      serverPort(t, srv),
 		SessionID: "session-beta",
 		Output:    ioDiscardWriter{t},
@@ -171,7 +171,7 @@ func (w ioDiscardWriter) Write(p []byte) (int, error) {
 }
 
 func TestDelete_RejectsMissingSessionID(t *testing.T) {
-	err := Delete(DeleteConfig{Port: 8080, SessionID: "   "})
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{Port: 8080, SessionID: "   "})
 	if err == nil {
 		t.Fatal("expected validation error")
 	}

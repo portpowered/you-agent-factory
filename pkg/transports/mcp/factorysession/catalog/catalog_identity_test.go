@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func TestVerifyCatalogToolIdentityCompleteness_PassesForAuthoredCatalogShape(t *testing.T) {
@@ -80,24 +80,6 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenPublicNameDuplicated(t *
 	}
 	if !strings.Contains(err.Error(), "duplicate catalog public name") {
 		t.Fatalf("VerifyCatalogToolIdentityCompleteness() error = %v, want duplicate public name", err)
-	}
-}
-
-func TestVerifyCatalogToolIdentityCompleteness_RejectsCompatibilityAliasName(t *testing.T) {
-	discovered := mcpfactorysession.DiscoverTools()
-	catalog := []mcpfactorycatalog.CatalogToolIdentity{{
-		ID:   mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolWorkflowValidate),
-		Name: mcpfactorysession.ToolWorkflowValidate,
-	}}
-	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
-	if err == nil {
-		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want alias rejection")
-	}
-	if !strings.Contains(err.Error(), mcpfactorysession.ToolWorkflowValidate) {
-		t.Fatalf("VerifyCatalogToolIdentityCompleteness() error = %v, want alias name", err)
-	}
-	if !strings.Contains(err.Error(), "compatibility alias") {
-		t.Fatalf("VerifyCatalogToolIdentityCompleteness() error = %v, want compatibility alias wording", err)
 	}
 }
 

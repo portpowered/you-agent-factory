@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // DeleteConfig holds parameters for deleting a persisted named factory.
@@ -24,10 +24,19 @@ type DeleteResult struct {
 	Name string `json:"name"`
 }
 
+// NewDelete binds the Factory Definitions catalog to the CLI representation.
+func NewDelete(
+	catalog factorydefinitions.NamedFactoryCatalog,
+) func(DeleteConfig) error {
+	return func(cfg DeleteConfig) error {
+		return Delete(catalog, cfg)
+	}
+}
+
 // Delete removes a persisted named factory from disk.
-func Delete(cfg DeleteConfig) error {
+func Delete(catalog factorydefinitions.NamedFactoryCatalog, cfg DeleteConfig) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
 	}
 
 	name := strings.TrimSpace(cfg.Name)
@@ -37,8 +46,11 @@ func Delete(cfg DeleteConfig) error {
 	if strings.TrimSpace(cfg.Dir) == "" {
 		return fmt.Errorf("factory root is required")
 	}
+	if catalog == nil {
+		return fmt.Errorf("Factory Definitions named-factory catalog is required")
+	}
 
-	if err := factoryconfig.DeleteNamedFactory(cfg.Dir, name); err != nil {
+	if err := catalog.DeleteNamedFactory(cfg.Dir, name); err != nil {
 		return renderDeleteError(err)
 	}
 
@@ -54,7 +66,7 @@ func renderDeleteError(err error) error {
 	if errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("factory not found: %w", err)
 	}
-	if errors.Is(err, factoryconfig.ErrNamedFactoryIsCurrent) {
+	if errors.Is(err, factorydefinitions.ErrNamedFactoryIsCurrent) {
 		return fmt.Errorf("cannot delete current factory: %w", err)
 	}
 	return err

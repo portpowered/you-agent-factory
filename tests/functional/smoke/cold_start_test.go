@@ -2,10 +2,9 @@ package smoke
 
 import (
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -29,17 +28,10 @@ func TestColdStart_PreSeededTokensProcessed(t *testing.T) {
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("code-change:complete", 3).
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review")
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 3 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want three terminal work items", status.Categories)
+	}
 
 	if provider.CallCount("swe") != 3 {
 		t.Errorf("expected swe called 3 times, got %d", provider.CallCount("swe"))
@@ -57,15 +49,11 @@ func TestColdStart_MixedPreSeededAndLateSubmit(t *testing.T) {
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("code-change:complete", 2).
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review")
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 2 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want two terminal work items", status.Categories)
+	}
+	if provider.CallCount("swe") != 2 {
+		t.Errorf("expected swe called 2 times, got %d", provider.CallCount("swe"))
+	}
 }

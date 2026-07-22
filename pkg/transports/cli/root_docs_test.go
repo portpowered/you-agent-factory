@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
@@ -88,7 +89,7 @@ func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected, pulled s
 func assertModelCommandsRequireName(t *testing.T) {
 	t.Helper()
 	for _, subcommand := range []string{"inspect", "pull", "invoke"} {
-		root := NewRootCommand()
+		root := newLegacyTestRootCommand()
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs([]string{"models", subcommand})
@@ -100,7 +101,7 @@ func assertModelCommandsRequireName(t *testing.T) {
 
 func executeDocumentedModelExample(t *testing.T, args []string) {
 	t.Helper()
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
@@ -157,7 +158,7 @@ func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
 	}
 
 	for _, subcommand := range []string{"validate", "flatten", "expand"} {
-		root := NewRootCommand()
+		root := newLegacyTestRootCommand()
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs([]string{"factory", "config", subcommand})
@@ -169,7 +170,7 @@ func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
 
 func executeDocumentedConfigExample(t *testing.T, args []string) {
 	t.Helper()
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
@@ -206,7 +207,11 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 
 	executeDocumentedRunExample(t, []string{"run", "--work", "./docs/examples/startup-work.json"})
 	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
-	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "Review the release notes"})
+	executeDocumentedRunExample(
+		t,
+		[]string{"run", "--factory", factoryPath, "Review the release notes"},
+		programmedTextInvocationInput(work.InputSourcePositionalText, "Review the release notes"),
+	)
 	executeDocumentedRunExample(t, []string{"run", "--dir", "./factory", "--work", "./docs/examples/startup-work.json"})
 
 	if len(runs) != 3 {
@@ -284,9 +289,12 @@ func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t 
 	}
 }
 
-func executeDocumentedRunExample(t *testing.T, args []string) {
+func executeDocumentedRunExample(t *testing.T, args []string, prepare ...rootInvocationInputScript) {
 	t.Helper()
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
+	if len(prepare) > 0 {
+		root = newLegacyTestRootCommandWithInvocationInput(prepare[0])
+	}
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -298,7 +306,7 @@ func executeDocumentedRunExample(t *testing.T, args []string) {
 
 func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"docs"})
@@ -367,7 +375,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 
 func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"docs", "--help"})
@@ -427,7 +435,7 @@ func TestDocsCommand_BatchAndRelationshipTopicsUseOpenAPICamelCaseFieldNames(t *
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{"docs", tc.topic})
@@ -471,7 +479,7 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{"docs", tc.topic})
@@ -486,54 +494,6 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 	}
 }
 
-func TestDocsCommand_JavaScriptWorkflowExamplesMatchCLIBoundary(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		args       []string
-		wantOutput string
-		wantError  string
-	}{
-		{name: "validate", args: []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", `phase("setup");`}, wantOutput: "Workflow validation passed."},
-		{name: "synchronous run", args: []string{"--json", "workflow", "run", "--request-id", "req-js-timeout-001", "--workflow", "long-running-audit", "--args", `{"scope":"release"}`, "--wait-timeout-millis", "1000"}, wantOutput: `"sessionId":"dur-sess-js-timeout-001"`},
-		{name: "asynchronous start", args: []string{"--json", "workflow", "start", "--request-id", "req-js-run-n-001", "--workflow", "release-train", "--args", `{"release":"2026.06"}`}, wantOutput: `"sessionId":"dur-sess-js-run-n-001"`},
-		{name: "status", args: []string{"--json", "workflow", "status", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
-		{name: "result", args: []string{"--json", "workflow", "result", "dur-sess-js-run-n-001", "--mode", "partial"}, wantError: "SESSION_NOT_FOUND"},
-		{name: "dispatches", args: []string{"--json", "workflow", "dispatches", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
-		{name: "artifacts", args: []string{"--json", "workflow", "artifacts", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
-		{name: "events", args: []string{"--json", "workflow", "events", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assertDocumentedWorkflowCommand(t, tc.args, tc.wantOutput, tc.wantError)
-		})
-	}
-}
-
-func assertDocumentedWorkflowCommand(t *testing.T, args []string, wantOutput, wantError string) {
-	t.Helper()
-	var output bytes.Buffer
-	root := newComposedTestRootCommand(t)
-	root.SetOut(&output)
-	root.SetErr(io.Discard)
-	root.SetArgs(args)
-
-	err := root.Execute()
-	if wantError == "" && err != nil {
-		t.Fatalf("execute %v: %v\n%s", args, err, output.String())
-	}
-	if wantError != "" && (err == nil || !strings.Contains(output.String(), wantError)) {
-		t.Fatalf("execute %v error = %v, output = %q, want %q", args, err, output.String(), wantError)
-	}
-	if wantOutput != "" && !strings.Contains(output.String(), wantOutput) {
-		t.Fatalf("execute %v output missing %q:\n%s", args, wantOutput, output.String())
-	}
-}
-
 func TestDocsCommand_RetiredTopicsAreUnsupportedWithoutAliases(t *testing.T) {
 	t.Parallel()
 
@@ -543,7 +503,7 @@ func TestDocsCommand_RetiredTopicsAreUnsupportedWithoutAliases(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{"docs", topic})
@@ -562,7 +522,7 @@ func TestDocsCommand_RetiredTopicsAreUnsupportedWithoutAliases(t *testing.T) {
 func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"docs", "unknown"})
@@ -584,7 +544,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 
 func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--help"})
@@ -649,7 +609,7 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 
 func TestRunCommand_HelpUsesCanonicalDocsAndCompleteInputs(t *testing.T) {
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--help"})
@@ -711,7 +671,7 @@ func sectionProseLines(long, sectionName string) []string {
 
 func TestRootCommand_HelpDocumentsDiagnosticsOneLiner(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--help"})
@@ -751,7 +711,7 @@ func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testin
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"docs", "config", "--verbose"})
@@ -776,7 +736,7 @@ func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testin
 }
 
 func TestInitCommand_DefaultDir(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	initCmd, _, err := root.Find([]string{"init"})
 	if err != nil {
 		t.Fatalf("find init: %v", err)
@@ -794,8 +754,8 @@ func TestInitCommand_DefaultDir(t *testing.T) {
 	if executorFlag == nil {
 		t.Fatal("expected --executor flag on init command")
 	}
-	if executorFlag.DefValue != initcmd.DefaultStarterExecutor {
-		t.Errorf("default executor = %q, want %q", executorFlag.DefValue, initcmd.DefaultStarterExecutor)
+	if executorFlag.DefValue != factorydefinitions.DefaultStarterExecutor {
+		t.Errorf("default executor = %q, want %q", executorFlag.DefValue, factorydefinitions.DefaultStarterExecutor)
 	}
 }
 
@@ -805,13 +765,13 @@ func TestInitCommand_ExecutorFlagMapsToInitConfig(t *testing.T) {
 		initFactory = originalInitFactory
 	}()
 
-	var got initcmd.InitConfig
-	initFactory = func(cfg initcmd.InitConfig) error {
+	var got factorydefinitions.ScaffoldConfig
+	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
 		got = cfg
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"init", "--dir", "custom-factory", "--executor", "claude"})
@@ -830,7 +790,7 @@ func TestInitCommand_ExecutorFlagMapsToInitConfig(t *testing.T) {
 
 func TestInitCommand_HelpDocumentsExecutorOptions(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"init", "--help"})

@@ -4,10 +4,9 @@ package smoke
 
 import (
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,17 +21,7 @@ func TestColdStart_SingleTokenReachesTerminal(t *testing.T) {
 		"reviewer": {{Content: "Done. COMPLETE"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:init").
-		TokenCount(1)
+	runFactoryThroughCustomerProcess(t, dir, provider)
 
 	if provider.CallCount("swe") != 1 {
 		t.Errorf("expected swe called once, got %d", provider.CallCount("swe"))

@@ -4,48 +4,61 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
-	"github.com/portpowered/infinite-you/pkg/service"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), "@you/deep-research", deepresearch.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	server := startFunctionalServerWithConfig(t, factoryDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-	})
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedDeepResearchFactoryName,
+	)
+	server := startFunctionalServerWithArgs(t, factoryDir, true, nil)
 
 	args := map[string]any{
 		"topic":         "event sourcing for workflow orchestration",
-		"researchDepth": "3",
-		"maxSubagents":  "1",
+		"researchDepth": 3,
+		"maxSubagents":  1,
 	}
-	response := postInvocation(t, server.URL(), factoryapi.InvocationRequest{Args: &args})
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("invocation status = %q, want COMPLETED", response.Status)
+	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
+	workflowFile := filepath.Join(factoryDir, "scripts", "deep-research.workflow.js")
+	response := postJSON[factoryapi.FactorySessionSyncExecutionResponse](
+		t,
+		server.URL()+"/factory-sessions/sync",
+		factoryapi.FactorySessionExecutionRequest{
+			RequestId: "deep-research-materialized-source",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+				WorkflowFile: &workflowFile,
+			},
+			Args:         &args,
+			Orchestrator: factory.Orchestrator,
+		},
+		"start durable deep-research session",
+	)
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", response.Status)
 	}
-	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-		t.Fatalf("primary result = %#v, want one synthesized result", response.PrimaryResult)
+	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one synthesized result", response.Result)
 	}
-	primary, err := json.Marshal((*response.PrimaryResult)[0])
+	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
 		t.Fatalf("marshal primary result: %v", err)
 	}
 	if got := string(primary); !strings.Contains(got, "event sourcing for workflow orchestration") || !strings.Contains(got, `"researchDepth":3`) || !strings.Contains(got, `"maxSubagents":1`) || !strings.Contains(got, "research-specialist-technical") {
 		t.Fatalf("primary result = %s, want configured lead synthesis", got)
 	}
-	if response.SessionId == nil || strings.TrimSpace(*response.SessionId) == "" {
-		t.Fatalf("invocation sessionId = %#v, want durable JavaScript session ID", response.SessionId)
+	if strings.TrimSpace(response.SessionId) == "" {
+		t.Fatal("sessionId is empty, want durable JavaScript session ID")
 	}
-	dispatches := listFactorySessionDispatches(t, server.URL(), *response.SessionId)
+	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
 	if len(dispatches.Dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want one bounded specialist dispatch and one lead synthesis", len(dispatches.Dispatches))
 	}

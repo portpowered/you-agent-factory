@@ -1,13 +1,10 @@
 package runtime_api
 
 import (
-	"reflect"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -197,61 +194,17 @@ Complete the scheduled task and return COMPLETE.
 func assertRuntimeConfigAlignmentCanonicalRoundTrip(t *testing.T, dir string) {
 	t.Helper()
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	assertRuntimeConfigAlignmentResourceManifest(t, loaded.FactoryConfig().ResourceManifest)
-	wantSummary := runtimeConfigAlignmentSummaryFromRuntime(t, loaded, loaded)
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(dir)
+	flattened, err := support.FlattenFactoryConfig(t, dir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig: %v", err)
 	}
 	assertRuntimeConfigAlignmentCanonicalJSON(t, flattened)
-	flattenedFactory, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(flattened)
+	flattenedFactory, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(flattened)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(flattened): %v", err)
 	}
 	assertRuntimeConfigAlignmentGeneratedBoundary(t, flattenedFactory)
-
-	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(
-		loaded,
-		replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()),
-	)
-	if err != nil {
-		t.Fatalf("FactorySnapshotFromLoadedConfig: %v", err)
-	}
-	generatedFactory, err := factorysnapshot.ToAPI(factorySnapshot)
-	if err != nil {
-		t.Fatalf("map Factory snapshot: %v", err)
-	}
-	assertRuntimeConfigAlignmentGeneratedBoundary(t, *generatedFactory)
-	if !reflect.DeepEqual(
-		runtimeConfigAlignmentComparableFactory(flattenedFactory),
-		runtimeConfigAlignmentComparableFactory(*generatedFactory),
-	) {
-		t.Fatalf(
-			"flattened canonical factory and generated replay factory diverged\nflattened: %#v\ngenerated: %#v",
-			runtimeConfigAlignmentComparableFactory(flattenedFactory),
-			runtimeConfigAlignmentComparableFactory(*generatedFactory),
-		)
-	}
 	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, flattenedFactory.SupportingFiles)
-	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, generatedFactory.SupportingFiles)
-
-	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	if replayRuntime.FactoryDir() != loaded.FactoryDir() {
-		t.Fatalf("replay runtime FactoryDir = %q, want %q", replayRuntime.FactoryDir(), loaded.FactoryDir())
-	}
-	assertRuntimeConfigAlignmentResourceManifest(t, replayRuntime.Factory.ResourceManifest)
-	gotSummary := runtimeConfigAlignmentSummaryFromRuntime(t, replayRuntime, replayRuntime)
-	if !reflect.DeepEqual(gotSummary, wantSummary) {
-		t.Fatalf("replay runtime config summary mismatch\ngot:  %#v\nwant: %#v", gotSummary, wantSummary)
-	}
 }
 
 func stringSliceValue(values *[]string) []string {

@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const ralphInitSmokeWorkType = "request"
 
 const ralphInitSmokeRequest = `Create a minimal release-planning loop for a document processing service.
 Generate a human-readable PRD, a matching Ralph JSON plan, and an execution loop
@@ -36,7 +38,6 @@ type ralphInitSmokeRunner struct {
 	mode                 ralphInitSmokeMode
 	plannerCalls         int
 	executorCalls        int
-	executorStoryWorkID  string
 	executorSawArtifacts bool
 	executorPRDHistory   []ralphInitSmokePRD
 	executorResponses    []string
@@ -70,20 +71,15 @@ func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing
 	writeRalphSmokeRequest(t, dir, "release-planning-loop.md")
 
 	runner := newRalphInitSmokeRunner(dir, ralphInitSmokeModeComplete)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	harness.RunUntilComplete(t, 15*time.Second)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 15*time.Second)
 	runner.Assert(t)
 
-	harness.Assert().
-		PlaceTokenCount("request:planned", 1).
-		PlaceTokenCount("story:complete", 1).
-		HasNoTokenInPlace("request:failed").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:failed")
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"request:planned": 1, "story:complete": 1, "request:failed": 0,
+		"story:init": 0, "story:failed": 0,
+	})
 
 	assertRalphInitSmokeSequence(t, runner.WorkstationSequence(), []string{
 		"plan-request",
@@ -150,20 +146,20 @@ func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.
 	writeRalphSmokeRequest(t, dir, "never-converges.md")
 
 	runner := newRalphInitSmokeRunner(dir, ralphInitSmokeModeExhaust)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	harness.RunUntilComplete(t, 15*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
 	runner.Assert(t)
 
-	harness.Assert().
-		PlaceTokenCount("request:planned", 1).
-		PlaceTokenCount("story:failed", 1).
-		HasNoTokenInPlace("request:failed").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:complete")
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"request:planned": 1, "story:failed": 1, "request:failed": 0,
+		"story:init": 0, "story:complete": 0,
+	})
 
 	if got := runner.PlannerCalls(); got != 1 {
 		t.Fatalf("planner calls = %d, want 1", got)
@@ -171,15 +167,8 @@ func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.
 	if got := runner.ExecutorCalls(); got != 8 {
 		t.Fatalf("executor calls = %d, want 8 before guarded loop breaker", got)
 	}
-	if runner.ExecutorStoryWorkID() == "" {
-		t.Fatal("executor story work ID was not captured")
-	}
-
-	snapshot, err := harness.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	assertDispatchHistoryContainsWorkstation(t, snapshot.DispatchHistory, "execute-story-loop-breaker", "story:failed", runner.ExecutorStoryWorkID())
+	assertPublicDispatchContainsWorkstation(t, server.GetFactoryEvents(t), "execute-story-loop-breaker")
+	server.Stop(t)
 
 	prd := loadRalphInitSmokePRD(t, dir)
 	if len(prd.UserStories) == 0 || prd.UserStories[0].Passes {
@@ -187,20 +176,37 @@ func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.
 	}
 }
 
+func assertPublicDispatchContainsWorkstation(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	workstationName string,
+) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err == nil && payload.TransitionId == workstationName &&
+			event.Context.WorkIds != nil && len(*event.Context.WorkIds) > 0 {
+			return
+		}
+	}
+	t.Fatalf("factory events missing dispatch for workstation %q", workstationName)
+}
+
 func initRalphSmokeScaffold(t *testing.T) string {
 	t.Helper()
 
 	dir := filepath.Join(t.TempDir(), "ralph-factory")
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir, Type: string(initcmd.RalphScaffoldType)}); err != nil {
-		t.Fatalf("Init ralph scaffold: %v", err)
-	}
+	support.RunInitCommand(t, dir, "--type", "ralph")
 	return dir
 }
 
 func writeRalphSmokeRequest(t *testing.T, dir string, name string) {
 	t.Helper()
 
-	path := filepath.Join(dir, "inputs", initcmd.RalphFactoryInputType, "default", name)
+	path := filepath.Join(dir, "inputs", ralphInitSmokeWorkType, "default", name)
 	if err := os.WriteFile(path, []byte(ralphInitSmokeRequest), 0o644); err != nil {
 		t.Fatalf("write request %s: %v", path, err)
 	}
@@ -247,23 +253,23 @@ func newRalphInitSmokeRunner(rootDir string, mode ralphInitSmokeMode) *ralphInit
 	}
 }
 
-func (r *ralphInitSmokeRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *ralphInitSmokeRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.workstationSequence = append(r.workstationSequence, req.WorkstationName)
+	workstationName := ralphWorkstationFromProcessRequest(req)
+	r.workstationSequence = append(r.workstationSequence, workstationName)
 
-	switch req.WorkstationName {
+	switch workstationName {
 	case "plan-request":
 		r.plannerCalls++
 		workDir := r.requireWorkDir(req)
 		if err := writeRalphInitSmokeArtifacts(workDir, plannedRalphInitSmokePRD()); err != nil {
 			r.recordError("write plan artifacts: %v", err)
 		}
-		return workers.CommandResult{Stdout: []byte("planned artifacts ready\n<COMPLETE>")}, nil
+		return platformprocess.CommandResult{Stdout: []byte("planned artifacts ready\n<COMPLETE>")}, nil
 	case "execute-story":
 		r.executorCalls++
-		r.captureStoryWorkID(req)
 		workDir := r.requireWorkDir(req)
 		prd, err := loadRalphInitSmokePRDFromPath(filepath.Join(workDir, "prd.json"))
 		if err != nil {
@@ -279,46 +285,59 @@ func (r *ralphInitSmokeRunner) Run(_ context.Context, req workers.CommandRequest
 		r.executorResponses = append(r.executorResponses, string(result.Stdout))
 		return result, nil
 	default:
-		r.recordError("unexpected workstation %q", req.WorkstationName)
-		return workers.CommandResult{Stdout: []byte("<COMPLETE>")}, nil
+		r.recordError("unexpected workstation %q", workstationName)
+		return platformprocess.CommandResult{Stdout: []byte("<COMPLETE>")}, nil
 	}
 }
 
-func (r *ralphInitSmokeRunner) requireWorkDir(req workers.CommandRequest) string {
+func ralphWorkstationFromProcessRequest(req platformprocess.CommandRequest) string {
+	invocation := strings.Join(append(append([]string(nil), req.Args...), string(req.Stdin)), "\n")
+	switch {
+	case strings.Contains(invocation, "Create the planning artifacts in the current working directory"):
+		return "plan-request"
+	case strings.Contains(invocation, "You are executing Ralph story work item"):
+		return "execute-story"
+	default:
+		return "unknown"
+	}
+}
+
+func (r *ralphInitSmokeRunner) requireWorkDir(req platformprocess.CommandRequest) string {
+	workstationName := ralphWorkstationFromProcessRequest(req)
 	if req.WorkDir == "" {
-		r.recordError("%s request missing work dir", req.WorkstationName)
+		r.recordError("%s request missing work dir", workstationName)
 		return r.rootDir
 	}
 	if req.WorkDir != r.rootDir {
-		r.recordError("%s work dir = %q, want %q", req.WorkstationName, req.WorkDir, r.rootDir)
+		r.recordError("%s work dir = %q, want %q", workstationName, req.WorkDir, r.rootDir)
 	}
 	return req.WorkDir
 }
 
-func (r *ralphInitSmokeRunner) executeResult(workDir string, prd ralphInitSmokePRD) workers.CommandResult {
+func (r *ralphInitSmokeRunner) executeResult(workDir string, prd ralphInitSmokePRD) platformprocess.CommandResult {
 	switch r.mode {
 	case ralphInitSmokeModeComplete:
 		return r.completeLoopResult(workDir, prd)
 	case ralphInitSmokeModeExhaust:
-		return workers.CommandResult{Stdout: []byte("still iterating\n<CONTINUE>")}
+		return platformprocess.CommandResult{Stdout: []byte("still iterating\n<CONTINUE>")}
 	default:
 		r.recordError("unexpected smoke mode %q", r.mode)
-		return workers.CommandResult{Stdout: []byte("<COMPLETE>")}
+		return platformprocess.CommandResult{Stdout: []byte("<COMPLETE>")}
 	}
 }
 
-func (r *ralphInitSmokeRunner) completeLoopResult(workDir string, prd ralphInitSmokePRD) workers.CommandResult {
+func (r *ralphInitSmokeRunner) completeLoopResult(workDir string, prd ralphInitSmokePRD) platformprocess.CommandResult {
 	switch r.executorCalls {
 	case 1:
 		if len(prd.UserStories) < 2 {
 			r.recordError("first execute call saw %d stories, want at least 2", len(prd.UserStories))
-			return workers.CommandResult{Stdout: []byte("<CONTINUE>")}
+			return platformprocess.CommandResult{Stdout: []byte("<CONTINUE>")}
 		}
 		prd.UserStories[0].Passes = true
 		if err := writeRalphInitSmokeArtifacts(workDir, prd); err != nil {
 			r.recordError("write prd after first execute call: %v", err)
 		}
-		return workers.CommandResult{Stdout: []byte("completed top priority story\n<CONTINUE>")}
+		return platformprocess.CommandResult{Stdout: []byte("completed top priority story\n<CONTINUE>")}
 	case 2:
 		for i := range prd.UserStories {
 			prd.UserStories[i].Passes = true
@@ -326,10 +345,10 @@ func (r *ralphInitSmokeRunner) completeLoopResult(workDir string, prd ralphInitS
 		if err := writeRalphInitSmokeArtifacts(workDir, prd); err != nil {
 			r.recordError("write prd after second execute call: %v", err)
 		}
-		return workers.CommandResult{Stdout: []byte("all stories complete\n<COMPLETE>")}
+		return platformprocess.CommandResult{Stdout: []byte("all stories complete\n<COMPLETE>")}
 	default:
 		r.recordError("complete-mode execute call %d exceeded planned iterations", r.executorCalls)
-		return workers.CommandResult{Stdout: []byte("<COMPLETE>")}
+		return platformprocess.CommandResult{Stdout: []byte("<COMPLETE>")}
 	}
 }
 
@@ -342,17 +361,6 @@ func (r *ralphInitSmokeRunner) verifyExecutorArtifacts(workDir string) error {
 	return nil
 }
 
-func (r *ralphInitSmokeRunner) captureStoryWorkID(req workers.CommandRequest) {
-	if r.executorStoryWorkID != "" {
-		return
-	}
-	if len(req.Execution.WorkIDs) > 0 {
-		r.executorStoryWorkID = req.Execution.WorkIDs[0]
-		return
-	}
-	r.recordError("execute-story request missing execution work IDs")
-}
-
 func (r *ralphInitSmokeRunner) recordError(format string, args ...any) {
 	r.internalErrors = append(r.internalErrors, fmt.Sprintf(format, args...))
 }
@@ -363,11 +371,11 @@ func (r *ralphInitSmokeRunner) Assert(t *testing.T) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !r.executorSawArtifacts {
-		t.Fatal("executor never observed planned artifacts before running")
-	}
 	if len(r.internalErrors) > 0 {
 		t.Fatalf("smoke runner errors: %v", r.internalErrors)
+	}
+	if !r.executorSawArtifacts {
+		t.Fatal("executor never observed planned artifacts before running")
 	}
 }
 
@@ -381,12 +389,6 @@ func (r *ralphInitSmokeRunner) ExecutorCalls() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.executorCalls
-}
-
-func (r *ralphInitSmokeRunner) ExecutorStoryWorkID() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.executorStoryWorkID
 }
 
 func (r *ralphInitSmokeRunner) WorkstationSequence() []string {
@@ -570,4 +572,4 @@ func assertRalphInitSmokeSequence(t *testing.T, got []string, want []string) {
 	}
 }
 
-var _ workers.CommandRunner = (*ralphInitSmokeRunner)(nil)
+var _ platformprocess.CommandRunner = (*ralphInitSmokeRunner)(nil)

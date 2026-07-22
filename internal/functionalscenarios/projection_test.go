@@ -23,7 +23,7 @@ func TestProjectCanonicalRepositoryInventories(t *testing.T) {
 		t.Fatalf("Project() error = %v", err)
 	}
 
-	wantCounts := map[string]int{InterfaceCLI: 39, InterfaceREST: 45, InterfaceMCP: 10, InterfaceSSE: 3}
+	wantCounts := map[string]int{InterfaceCLI: 39, InterfaceREST: 43, InterfaceMCP: 10, InterfaceSSE: 2}
 	gotCounts := make(map[string]int)
 	byID := make(map[string]Component, len(projection.Components))
 	for _, component := range projection.Components {
@@ -66,9 +66,6 @@ func TestProjectCanonicalRepositoryInventories(t *testing.T) {
 		if got, ok := byID[stableID]; !ok || got != want {
 			t.Fatalf("component %q = %+v, present %v, want %+v", stableID, got, ok, want)
 		}
-	}
-	if _, ok := byID["sse/getEvents"]; !ok {
-		t.Fatal("component sse/getEvents is absent")
 	}
 }
 

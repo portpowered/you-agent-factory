@@ -10,9 +10,9 @@ import (
 // the S24 matrix. Keep this map aligned with builtcliacceptance.S24Scenarios().
 var acceptanceScenarioTests = map[string]struct{}{
 	"TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome":                           {},
-	"TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite":                             {},
+	"TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite":                           {},
 	"TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance":             {},
-	"TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath":            {},
+	"TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath":          {},
 	"TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider":                  {},
 	"TestInvalidGoal_UnknownNamedFactory_RejectsWithDocumentedError":                        {},
 	"TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrimaryResult":  {},
@@ -20,7 +20,7 @@ var acceptanceScenarioTests = map[string]struct{}{
 	"TestStreamOutputMode_JSONMode_EmitsCanonicalNDJSONRecordsWithTerminalInvocationResult": {},
 	"TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance":            {},
 	"TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy": {},
-	"TestSubagentInvocation_PrimaryAndResponseStreamAgreeOnTerminalOutcome":                   {},
+	"TestSubagentInvocation_PrimaryAndResponseStreamAgreeOnTerminalOutcome":                 {},
 }
 
 func TestS24ScenarioMatrix_EveryDocumentedScenarioHasFocusedAcceptanceTest(t *testing.T) {

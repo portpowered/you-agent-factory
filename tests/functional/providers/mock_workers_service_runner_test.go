@@ -1,88 +1,85 @@
 package providers
 
 import (
-	"context"
-	"errors"
-	"strings"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker service-runner sweep")
-	tests := []struct {
-		name      string
-		fixture   string
-		workType  string
-		donePlace string
+	support.SetWorkingDirectory(t, t.TempDir())
+	for _, test := range []struct {
+		name     string
+		fixture  string
+		workType string
 	}{
-		{
-			name:      "model worker",
-			fixture:   "executor_success",
-			workType:  "task",
-			donePlace: "task:done",
-		},
-		{
-			name:      "script worker",
-			fixture:   "script_executor_dir",
-			workType:  "task",
-			donePlace: "task:done",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, tt.fixture))
-			testutil.WriteSeedFile(t, dir, tt.workType, []byte("mock-worker service payload"))
+		{name: "model worker", fixture: "executor_success", workType: "task"},
+		{name: "script worker", fixture: "script_executor_dir", workType: "task"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, test.fixture))
+			testutil.WriteSeedFile(t, dir, test.workType, []byte("mock-worker service payload"))
 			logDir := t.TempDir()
-			runtimeID := strings.ReplaceAll(tt.name, " ", "-")
 
-			svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
-				Dir:                      dir,
-				MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
-				RuntimeLogDir:            logDir,
-				RuntimeInstanceID:        runtimeID,
-				RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyEnabled,
-			}))
-			if err != nil {
-				t.Fatalf("BuildFactoryService: %v", err)
-			}
+			server := support.NewProcessAPIServer()
+			process := support.BuildProcess(t, serviceedges.Edges{
+				APIServerStarter: server.Start,
+			})
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run",
+				"--dir", dir,
+				"--continuously",
+				"--server", "http://127.0.0.1:1",
+				"--with-mock-workers",
+				"--runtime-log-dir", logDir,
+				"--quiet",
+				"--no-record",
+			})
+			daemon := support.StartProcessCommand(t, process, inputs.Input)
+			defer daemon.Stop(t)
+			baseURL := server.WaitForURL(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				t.Fatalf("Run: %v", err)
+			status := support.WaitForStatus(t, baseURL, 5*time.Second, func(status factoryapi.StatusResponse) bool {
+				return status.TotalTokens == 1 && status.Categories.Terminal == 1
+			})
+			if status.Categories.Failed != 0 {
+				t.Fatalf("GET /status failed count = %d, want 0", status.Categories.Failed)
 			}
-
-			snapshot, err := svc.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				t.Fatalf("GetEngineStateSnapshot: %v", err)
-			}
-			if got := len(snapshot.Marking.TokensInPlace(tt.donePlace)); got != 1 {
-				t.Fatalf("%s token count = %d, want 1", tt.donePlace, got)
-			}
-			if len(snapshot.DispatchHistory) != 1 {
-				t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
-			}
-			if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeAccepted {
-				t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeAccepted)
+			work := support.ListDefaultSessionWork(t, baseURL)
+			if len(work.Results) != 1 || work.Results[0].State == nil ||
+				work.Results[0].State.Type != factoryapi.WorkStateTypeTERMINAL {
+				t.Fatalf("GET /work results = %#v, want one terminal work", work.Results)
 			}
 
-			record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, runtimeID), workers.WorkLogEventCommandRunnerCompleted)
+			record := findRuntimeLogRecord(
+				t,
+				requireOnlyRuntimeLogPath(t, logDir),
+				commandRunnerCompletedLogEvent,
+			)
 			if _, ok := record["stdout"]; ok {
-				t.Fatalf("command runner completion should omit stdout on success")
+				t.Fatal("command runner completion should omit stdout on success")
 			}
 			if _, ok := record["stderr"]; ok {
-				t.Fatalf("command runner completion should omit stderr on success")
+				t.Fatal("command runner completion should omit stderr on success")
 			}
 		})
 	}
+}
+
+func requireOnlyRuntimeLogPath(t *testing.T, logDir string) string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-*.log"))
+	if err != nil {
+		t.Fatalf("glob runtime log path: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("runtime log paths under %s = %v, want exactly one", logDir, matches)
+	}
+	return matches[0]
 }

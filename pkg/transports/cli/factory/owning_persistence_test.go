@@ -1,18 +1,17 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,26 +19,29 @@ func TestOwningPersistence_CreateNamedFactoryIsDurableWithoutSave(t *testing.T) 
 	rootDir := t.TempDir()
 	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
 
-	if err := CreateFromFile(CreateFromFileConfig{
+	if err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:   "gamma",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "gamma", FactoryDir: filepath.Join(rootDir, "gamma")}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.Mode != interfaces.NamedFactoryPersistenceModeCreate || request.Name != "gamma" || !strings.Contains(string(request.Payload), "execute-gamma") {
+			t.Fatalf("request = %#v, want durable create operation", request)
+		}
 	}); err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
 	}
 
-	configPath := filepath.Join(rootDir, "gamma", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", configPath, err)
-	}
-	if !strings.Contains(string(data), "execute-gamma") {
-		t.Fatalf("factory config = %q, want durable gamma workstation body", string(data))
-	}
-
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		list: func(string) ([]interfaces.NamedFactoryListEntry, error) {
+			return []interfaces.NamedFactoryListEntry{{
+				Name:       "gamma",
+				FactoryDir: filepath.Join(rootDir, "gamma"),
+			}}, nil
+		},
+	})
 	var out strings.Builder
-	if err := List(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if !strings.Contains(out.String(), "gamma\t"+filepath.Join(rootDir, "gamma")) {
@@ -50,17 +52,15 @@ func TestOwningPersistence_CreateNamedFactoryIsDurableWithoutSave(t *testing.T) 
 func TestOwningPersistence_CreateNamedFactoryRejectsDuplicateName(t *testing.T) {
 	rootDir := t.TempDir()
 	payload := saveTestNamedFactoryPayload(t, "alpha")
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-copy", payload)
 
-	err := CreateFromFile(CreateFromFileConfig{
+	err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, interfaces.ErrNamedFactoryAlreadyExists, nil)
+
 	if err == nil {
 		t.Fatal("expected duplicate factory name to fail")
 	}
@@ -71,27 +71,19 @@ func TestOwningPersistence_CreateNamedFactoryRejectsDuplicateName(t *testing.T) 
 
 func TestOwningPersistence_UpdateNamedFactoryReplacesWithoutSave(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "alpha-updated", saveTestNamedFactoryPayload(t, "alpha-v2"))
 
-	if err := UpdateFromFile(UpdateFromFileConfig{
+	if err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "alpha", FactoryDir: filepath.Join(rootDir, "alpha")}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.Mode != interfaces.NamedFactoryPersistenceModeReplace || !strings.Contains(string(request.Payload), "execute-alpha-v2") {
+			t.Fatalf("request = %#v, want replacement payload", request)
+		}
 	}); err != nil {
 		t.Fatalf("UpdateFromFile: %v", err)
-	}
-
-	configPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", configPath, err)
-	}
-	if !strings.Contains(string(data), "execute-alpha-v2") {
-		t.Fatalf("factory config = %q, want updated workstation body", string(data))
 	}
 }
 
@@ -99,12 +91,13 @@ func TestOwningPersistence_UpdateNamedFactoryRejectsMissingName(t *testing.T) {
 	rootDir := t.TempDir()
 	from := writeFactoryConfigFile(t, rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha"))
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
-	})
+	}, interfaces.NamedFactoryPersistenceResult{}, fs.ErrNotExist, nil)
+
 	if err == nil {
 		t.Fatal("expected missing factory name to fail")
 	}
@@ -115,29 +108,26 @@ func TestOwningPersistence_UpdateNamedFactoryRejectsMissingName(t *testing.T) {
 
 func TestOwningPersistence_InvalidUpdateDoesNotCorruptExistingFactory(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
+	from := writeFactoryConfigFile(t, rootDir, "invalid", saveTestNamedFactoryPayload(t, "invalid"))
 
-	err := UpdateFromFile(UpdateFromFileConfig{
+	err := updateFromFileWithScriptedPersistence(t, UpdateFromFileConfig{
 		Name:   "alpha",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{}, &interfaces.BlockingFactoryLoadError{Targets: []interfaces.ValidationTarget{{
+		Code:    interfaces.ValidationCodeFactoryPayloadInvalid,
+		Message: "Factory topology contains invalid graph references.",
+	}}}, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.Mode != interfaces.NamedFactoryPersistenceModeReplace {
+			t.Fatalf("mode = %q, want replace", request.Mode)
+		}
 	})
+
 	if err == nil {
 		t.Fatal("expected invalid factory topology to fail")
 	}
 
-	configPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", configPath, err)
-	}
-	if !strings.Contains(string(data), "execute-alpha") {
-		t.Fatalf("factory config = %q, want original alpha workstation body preserved", string(data))
-	}
 }
 
 func TestOwningPersistence_ReplaceCurrentPersistsWithoutSave(t *testing.T) {
@@ -171,7 +161,7 @@ func TestOwningPersistence_ReplaceCurrentPersistsWithoutSave(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := ReplaceCurrent(ReplaceCurrentConfig{
+	if err := NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: ioDiscard(t),
 	}); err != nil {
@@ -187,27 +177,19 @@ func TestOwningPersistence_ReplaceCurrentPersistsWithoutSave(t *testing.T) {
 
 func TestOwningPersistence_CreateNamedFactoryLeavesUnrelatedFactoriesIntact(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
 	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
 
-	if err := CreateFromFile(CreateFromFileConfig{
+	if err := createFromFileWithScriptedPersistence(t, CreateFromFileConfig{
 		Name:   "gamma",
 		From:   from,
 		Dir:    rootDir,
 		Output: ioDiscard(t),
+	}, interfaces.NamedFactoryPersistenceResult{Name: "gamma", FactoryDir: filepath.Join(rootDir, "gamma")}, nil, func(request interfaces.NamedFactoryPersistenceRequest) {
+		if request.RootDir != rootDir || request.Name != "gamma" {
+			t.Fatalf("request = %#v, want isolated gamma create", request)
+		}
 	}); err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
-	}
-
-	alphaPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	data, err := os.ReadFile(alphaPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", alphaPath, err)
-	}
-	if !strings.Contains(string(data), "execute-alpha") {
-		t.Fatalf("alpha factory config = %q, want original alpha workstation body preserved", string(data))
 	}
 }
 
@@ -234,7 +216,7 @@ func TestOwningPersistence_ReplaceCurrentRejectsStaleVersionWithoutWriting(t *te
 	}))
 	defer srv.Close()
 
-	err := ReplaceCurrent(ReplaceCurrentConfig{Server: serverBase(t, srv), Output: ioDiscard(t)})
+	err := NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background(), Server: serverBase(t, srv), Output: ioDiscard(t)})
 	if err == nil {
 		t.Fatal("expected conflict error")
 	}

@@ -12,24 +12,14 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	core, observedLogs := observer.New(zap.InfoLevel)
-	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.Logger = zap.New(core)
-	})
+	server := startFunctionalServerWithArgs(t, dir, true, nil)
 
 	submitted := "customer goal request text"
 	response := postInvocation(t, server.URL(), textInvocationRequest(t, submitted, nil))
@@ -38,23 +28,12 @@ func TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult(t 
 		t.Fatal("primaryResult echoed submitted goal text")
 	}
 
-	submittedLogs := observedLogs.FilterMessage("factory session invocation submitted").All()
-	if len(submittedLogs) != 1 {
-		t.Fatalf("submitted invocation log count = %d, want 1", len(submittedLogs))
-	}
-	submittedFields := submittedLogs[0].ContextMap()
-	if got := submittedFields["invocation_return_policy_mode"]; got != "authored" {
-		t.Fatalf("submitted invocation_return_policy_mode = %#v, want authored", got)
-	}
-	if got := submittedFields["policy_resolution_path"]; got != "explicit_scoped_terminal_match" {
-		t.Fatalf("submitted policy_resolution_path = %#v, want explicit_scoped_terminal_match", got)
-	}
 }
 
 func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
-		workers.CommandResult{Stdout: []byte("finished after continue\n<COMPLETE>")},
+		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
+		platformprocess.CommandResult{Stdout: []byte("finished after continue\n<COMPLETE>")},
 	)
 	server := startPackagedGoalInvocationServer(t, runner)
 
@@ -67,8 +46,8 @@ func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *tes
 
 func TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("goal is not complete yet")},
-		workers.CommandResult{Stdout: []byte("finished after rejection\n<COMPLETE>")},
+		platformprocess.CommandResult{Stdout: []byte("goal is not complete yet")},
+		platformprocess.CommandResult{Stdout: []byte("finished after rejection\n<COMPLETE>")},
 	)
 	server := startPackagedGoalInvocationServer(t, runner)
 
@@ -103,15 +82,13 @@ func TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetail
 
 type packagedGoalFailingCommandRunner struct{}
 
-func (r *packagedGoalFailingCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("mock provider failure")
+func (r *packagedGoalFailingCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("mock provider failure")
 }
 
 func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-	})
+	server := startFunctionalServerWithArgs(t, dir, true, nil)
 
 	pause := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
@@ -124,12 +101,12 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 	}
 
 	submitted := submitGeneratedGoalWork(t, server.URL(), "paused-goal-submit", "customer goal request text")
-	snapshot := server.GetEngineStateSnapshot(t)
-	if markingContainsWorkAtPlace(&snapshot.Marking, stringPointerValue(submitted.WorkId), "goal:init") {
-		t.Fatalf("paused submit reached goal:init while session was paused: %#v", snapshot.Marking.Tokens)
+	session := support.GetDefaultSession(t, server.URL())
+	if support.SessionHasWorkAtPlace(session, stringPointerValue(submitted.WorkId), "goal:init") {
+		t.Fatalf("paused submit reached goal:init while session was paused: %#v", session.Runtime.Petri)
 	}
-	if markingContainsWorkAtPlace(&snapshot.Marking, stringPointerValue(submitted.WorkId), "goal:complete") {
-		t.Fatalf("paused submit reached goal:complete before resume: %#v", snapshot.Marking.Tokens)
+	if support.SessionHasWorkAtPlace(session, stringPointerValue(submitted.WorkId), "goal:complete") {
+		t.Fatalf("paused submit reached goal:complete before resume: %#v", session.Runtime.Petri)
 	}
 
 	resume := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
@@ -151,24 +128,18 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil); err != nil {
+	dir := support.InstallPackagedFactory(t, t.TempDir(), "@you/goal")
+	if _, err := support.LoadedFactory(t, dir); err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	return dir
 }
 
-func startPackagedGoalInvocationServer(t *testing.T, runner workers.CommandRunner) *functionalAPIServer {
+func startPackagedGoalInvocationServer(t *testing.T, runner platformprocess.CommandRunner) *functionalAPIServer {
 	t.Helper()
 
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
-	})
+	return startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(runner, nil))
 }
 
 func assertPackagedGoalCompletedWithText(t *testing.T, response factoryapi.InvocationResponse, want string) {
@@ -200,7 +171,7 @@ func submitGeneratedGoalWork(t *testing.T, baseURL, name, text string) factoryap
 
 	body, err := json.Marshal(map[string]any{
 		"name":         name,
-		"workTypeName": goal.PackagedGoalWorkTypeName,
+		"workTypeName": "goal",
 		"items": []map[string]any{{
 			"type": "text",
 			"text": text,

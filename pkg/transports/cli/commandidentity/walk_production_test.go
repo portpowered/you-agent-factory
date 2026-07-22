@@ -5,25 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/baseline"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	"github.com/spf13/cobra"
 )
 
 func TestWalk_ProductionRootInventoriesEveryReachableCommandOnce(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
-	}
+	observation := productionCLIObservation(t)
+	inventory := observation.Snapshot.Commands
 
 	if inventory.RootPath != "you" {
 		t.Fatalf("RootPath = %q, want you", inventory.RootPath)
 	}
 
-	wantPaths := productionCommandPaths(t, root)
+	wantPaths := productionCommandPaths(t, observation.Snapshot.CommandTree)
 	gotPaths := commandPathsFromInventory(t, inventory.Commands)
 
 	if len(gotPaths) != len(wantPaths) {
@@ -55,12 +48,7 @@ func TestWalk_ProductionRootInventoriesEveryReachableCommandOnce(t *testing.T) {
 }
 
 func TestWalk_ProductionRootRepresentativeCommandsRetainIdentity(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
-	}
+	inventory := productionCLIObservation(t).Snapshot.Commands
 
 	byPath := indexCommandsByPath(t, inventory.Commands)
 
@@ -73,8 +61,10 @@ func TestWalk_ProductionRootRepresentativeCommandsRetainIdentity(t *testing.T) {
 		{path: "you run", visibility: "visible", runnable: true},
 		{path: "you submit batch", visibility: "visible", runnable: true},
 		{path: "you session show", visibility: "visible", runnable: true},
-		{path: "you workflow", visibility: "visible", runnable: false},
 		{path: "you mcp serve", visibility: "visible", runnable: true},
+	}
+	if _, ok := byPath["you workflow"]; ok {
+		t.Fatal("production command tree must not expose the removed workflow alias family")
 	}
 
 	for _, tc := range cases {
@@ -91,11 +81,10 @@ func TestWalk_ProductionRootRepresentativeCommandsRetainIdentity(t *testing.T) {
 	}
 }
 
-func productionCommandPaths(t *testing.T, root *cobra.Command) []string {
+func productionCommandPaths(t *testing.T, commandTree string) []string {
 	t.Helper()
 
-	serialized := baseline.SerializeCommandTree(root)
-	lines := strings.Split(strings.TrimSuffix(serialized, "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(commandTree, "\n"), "\n")
 	paths := make([]string, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {

@@ -1,0 +1,37 @@
+package subagent
+
+import (
+	"strings"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	builtinsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent"
+)
+
+// BuiltInFactoryJSON is the canonical runnable @you/subagent definition owned
+// by the factory packages family.
+var BuiltInFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
+
+const (
+	// PackagedFactoryName is the canonical named factory identifier for @you/subagent.
+	PackagedFactoryName = factorydefinitions.PackagedSubagentFactoryName
+	// PackagedFactoryProject is the stable project id for the built-in subagent factory.
+	PackagedFactoryProject = factorydefinitions.PackagedSubagentFactoryProject
+	// PackagedWorkTypeName is the DEFAULT-handled work type for one-pass subagent runs.
+	PackagedWorkTypeName = factorydefinitions.PackagedSubagentWorkTypeName
+	// PackagedRunWorkstationName is the single AGENT_RUN workstation name.
+	PackagedRunWorkstationName = factorydefinitions.PackagedSubagentRunWorkstationName
+	// PackagedWorkerName is the single AGENT_WORKER name.
+	PackagedWorkerName = factorydefinitions.PackagedSubagentWorkerName
+)
+
+// IsPackagedFactory reports whether cfg identifies the built-in @you/subagent factory.
+func IsPackagedFactory(cfg *interfaces.FactoryConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	if strings.TrimSpace(cfg.Name) == PackagedFactoryName {
+		return true
+	}
+	return strings.TrimSpace(cfg.Project) == PackagedFactoryProject
+}

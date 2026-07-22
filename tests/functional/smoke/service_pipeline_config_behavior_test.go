@@ -2,12 +2,10 @@ package smoke
 
 import (
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,18 +17,10 @@ func TestServicePipelineConfigBehavior_SimplePipelineCompletesOneTask(t *testing
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Simple pipeline done. COMPLETE"},
 	)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-	assertCompletedFactoryState(t, harness)
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want one terminal work item", status.Categories)
+	}
 
 	if got := provider.CallCount(); got != 1 {
 		t.Fatalf("provider call count = %d, want 1", got)
@@ -47,19 +37,10 @@ func TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorker
 		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed")
-	assertCompletedFactoryState(t, harness)
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want one terminal work item", status.Categories)
+	}
 
 	if got := provider.CallCount(); got != 2 {
 		t.Fatalf("provider call count = %d, want 2", got)
@@ -69,17 +50,5 @@ func TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorker
 func writeSharedServicePipelineWorkerConfig(t *testing.T, dir, workerName string) {
 	t.Helper()
 
-	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
-}
-
-func assertCompletedFactoryState(t *testing.T, harness *testutil.ServiceTestHarness) {
-	t.Helper()
-
-	snapshot, err := harness.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	if snapshot.FactoryState != string(interfaces.FactoryStateCompleted) {
-		t.Fatalf("factory state = %s, want %s", snapshot.FactoryState, interfaces.FactoryStateCompleted)
-	}
+	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 }

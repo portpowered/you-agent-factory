@@ -2,15 +2,37 @@ package discoverygen_test
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
+
+type testFileSystem struct{}
+
+func (testFileSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+func (testFileSystem) Remove(path string) error             { return os.Remove(path) }
+func (testFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+func (testFileSystem) WriteFile(path string, payload []byte, mode fs.FileMode) error {
+	return os.WriteFile(path, payload, mode)
+}
+func (testFileSystem) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
+
+func testArtifactStore() generatedartifacts.LocalStore {
+	store, err := generatedartifacts.NewLocalStore(testFileSystem{})
+	if err != nil {
+		panic(err)
+	}
+	return store
+}
 
 const canonicalFactorySessionToolCount = 10
 
@@ -47,18 +69,13 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	}
 }
 
-func TestProductionDiscoveryExcludesCompatibilityAliasesAndUnsupportedModalities(t *testing.T) {
+func TestProductionDiscoveryExcludesUnsupportedModalities(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	payload, err := discoverygen.DiscoveryArtifact(repositoryRoot)
 	if err != nil {
 		t.Fatalf("DiscoveryArtifact() error = %v", err)
 	}
 
-	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		if bytes.Contains(payload, []byte(alias.Name)) {
-			t.Errorf("generated discovery contains compatibility alias %q", alias.Name)
-		}
-	}
 	for _, forbidden := range []string{
 		`"outputSchema"`,
 		`"structuredContent"`,
@@ -77,7 +94,7 @@ func TestGenerateIsDeterministicAcrossCleanRuns(t *testing.T) {
 	root := t.TempDir()
 	copyCatalog(t, repositoryRoot, root)
 
-	if err := discoverygen.Generate(root); err != nil {
+	if err := writeDiscoveryArtifacts(root); err != nil {
 		t.Fatalf("first Generate() error = %v", err)
 	}
 	firstJSON := readGeneratedArtifact(t, root, discoverygen.DiscoveryJSONPath)
@@ -87,7 +104,7 @@ func TestGenerateIsDeterministicAcrossCleanRuns(t *testing.T) {
 			t.Fatalf("remove first generated artifact %s: %v", path, err)
 		}
 	}
-	if err := discoverygen.Generate(root); err != nil {
+	if err := writeDiscoveryArtifacts(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
 	}
 	secondJSON := readGeneratedArtifact(t, root, discoverygen.DiscoveryJSONPath)
@@ -100,7 +117,7 @@ func TestGenerateIsDeterministicAcrossCleanRuns(t *testing.T) {
 
 func TestProductionDiscoveryArtifactMatchesGenerator(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
-	drift, err := discoverygen.Check(repositoryRoot)
+	drift, err := checkDiscoveryArtifacts(repositoryRoot)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -113,7 +130,7 @@ func TestCheckReportsMissingAndStaleArtifacts(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	copyCatalog(t, repositoryRoot, root)
-	if err := discoverygen.Generate(root); err != nil {
+	if err := writeDiscoveryArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	if err := os.Remove(filepath.Join(root, filepath.FromSlash(discoverygen.DiscoveryJSONPath))); err != nil {
@@ -124,7 +141,7 @@ func TestCheckReportsMissingAndStaleArtifacts(t *testing.T) {
 		t.Fatalf("write stale generated Go: %v", err)
 	}
 
-	drift, err := discoverygen.Check(root)
+	drift, err := checkDiscoveryArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -137,6 +154,22 @@ func TestCheckReportsMissingAndStaleArtifacts(t *testing.T) {
 	if len(drift.Stale) != 1 || drift.Stale[0] != discoverygen.DiscoveryGoPath {
 		t.Fatalf("stale artifacts = %#v", drift.Stale)
 	}
+}
+
+func writeDiscoveryArtifacts(root string) error {
+	artifacts, err := discoverygen.Artifacts(root)
+	if err != nil {
+		return err
+	}
+	return testArtifactStore().Write(root, artifacts)
+}
+
+func checkDiscoveryArtifacts(root string) (generatedartifacts.Drift, error) {
+	artifacts, err := discoverygen.Artifacts(root)
+	if err != nil {
+		return generatedartifacts.Drift{}, err
+	}
+	return testArtifactStore().Check(root, artifacts)
 }
 
 func TestProjectDiscoveryRejectsMalformedCatalogToolRecords(t *testing.T) {

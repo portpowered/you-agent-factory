@@ -6,12 +6,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/workers/cliprovider"
 )
 
 var settledRetiredCLIPaths = retiredsurfaceguard.SettledRetiredCLIPaths()
@@ -99,7 +97,7 @@ func TestRetiredCLICommands_RejectUnknownAtRuntime(t *testing.T) {
 	for _, tc := range settledRetiredCLIInvocations {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(tc.args)
@@ -132,7 +130,7 @@ func TestRetiredCLICommands_RejectUnknownAtRuntime(t *testing.T) {
 }
 
 func TestRetiredCLICommands_AbsentFromProductionCommandTree(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 
 	inventory, err := commandidentity.Walk(root)
 	if err != nil {
@@ -152,7 +150,7 @@ func TestRetiredCLICommands_AbsentFromProductionCommandTree(t *testing.T) {
 }
 
 func TestRetiredCLICommands_NoHiddenDeprecatedOrAliasWrappers(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 
 	inventory, err := commandidentity.Walk(root)
 	if err != nil {
@@ -195,7 +193,7 @@ func TestRetiredCLICommands_NoHiddenDeprecatedOrAliasWrappers(t *testing.T) {
 }
 
 func TestRetiredCLICommands_CanonicalReplacementsRemainReachable(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 
 	for _, path := range canonicalCLIReplacementPaths {
 		if _, _, err := root.Find(path); err != nil {
@@ -209,7 +207,7 @@ func TestRetiredDocsTopics_RejectUnsupportedAtRuntime(t *testing.T) {
 		topic := topic
 		t.Run(topic, func(t *testing.T) {
 			var stdout strings.Builder
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{"docs", topic})
@@ -274,7 +272,7 @@ func TestRetiredDocsTopics_NoCompatibilityAliases(t *testing.T) {
 }
 
 func TestRetiredDocsTopics_AbsentFromDocsCommandValidArgs(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	docsCmd, _, err := root.Find([]string{"docs"})
 	if err != nil {
 		t.Fatalf("find docs command: %v", err)
@@ -319,7 +317,7 @@ func TestRetiredDocsTopics_CanonicalTopicsRemainResolvable(t *testing.T) {
 		topic := topic
 		t.Run("cli/"+topic, func(t *testing.T) {
 			var stdout strings.Builder
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{"docs", topic})
@@ -348,7 +346,7 @@ func TestRetiredDocsTopics_CanonicalTopicsRemainResolvable(t *testing.T) {
 }
 
 func TestRetiredSurfaceGuards_ProductionTreePasses(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	inventory, err := commandidentity.Walk(root)
 	if err != nil {
 		t.Fatalf("walk command tree: %v", err)
@@ -407,7 +405,7 @@ func TestRetiredSurfaceResidue_FactorySaveDoesNotInvokeOwningPersistence(t *test
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	var output strings.Builder
 	root.SetOut(&output)
 	root.SetErr(&output)
@@ -427,42 +425,5 @@ func TestRetiredSurfaceResidue_FactorySaveDoesNotInvokeOwningPersistence(t *test
 	}
 	if replaceCalled {
 		t.Fatal("removed factory save must not invoke replace-current persistence")
-	}
-}
-
-func TestRetiredSurfaceResidue_SelectCLIProviderDoesNotInjectDeprecatedDefaults(t *testing.T) {
-	discovery := cliprovider.CLIProviderDiscoveryView{
-		Registrations: cliprovider.RegisteredCLIProviders(),
-		Probe: func(cliprovider.CLIProviderRegistration) cliprovider.CLIProviderAvailability {
-			return cliprovider.CLIProviderAvailability{Available: false}
-		},
-	}
-	result := cliprovider.SelectCLIProvider(
-		cliprovider.CLIProviderSelectionInput{
-			ExplicitInvocation: "openai",
-			FactoryDefault:     "DEFAULT",
-			SystemDefault:      "DEFAULT",
-		},
-		discovery,
-	)
-	if result.OK() {
-		t.Fatalf("selected = %#v, want nil without deprecated model-default injection", result.Selected)
-	}
-	if result.Failure == nil || result.Failure.Code != cliprovider.CLIProviderSelectionFailureNoAgentHarness {
-		t.Fatalf("failure = %#v, want NO_AGENT_HARNESS without deprecated fallback", result.Failure)
-	}
-}
-
-func TestRetiredSurfaceResidue_PackagedGoalPromptsStayOnCanonicalOwner(t *testing.T) {
-	if err := goal.CheckPackagedGoalAssembledPromptDrift(); err != nil {
-		t.Fatalf("assembled packaged goal prompts drifted from canonical owner: %v", err)
-	}
-	for _, source := range goal.PackagedGoalRolePromptSources {
-		if strings.TrimSpace(source.Role) == "" {
-			t.Fatalf("packaged goal prompt source %#v must identify a role", source)
-		}
-		if source.SourceKind == "" {
-			t.Fatalf("packaged goal prompt source for role %q must declare canonical owner kind", source.Role)
-		}
 	}
 }

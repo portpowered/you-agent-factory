@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func validCatalogToolRecord(name string) map[string]any {
@@ -24,8 +24,8 @@ func validCatalogToolRecord(name string) map[string]any {
 func TestCatalogToolIdentitiesFromCatalogDocument_ExtractsSortedIdentities(t *testing.T) {
 	document := map[string]any{
 		"tools": map[string]any{
-			mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolGetSession): validCatalogToolRecord(mcpfactorysession.ToolGetSession),
-			mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolListSessions):      validCatalogToolRecord(mcpfactorysession.ToolListSessions),
+			mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolGetSession):   validCatalogToolRecord(mcpfactorysession.ToolGetSession),
+			mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolListSessions): validCatalogToolRecord(mcpfactorysession.ToolListSessions),
 		},
 	}
 	identities, err := mcpfactorycatalog.CatalogToolIdentitiesFromCatalogDocument(document)

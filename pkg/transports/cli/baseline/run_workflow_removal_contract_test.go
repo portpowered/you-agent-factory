@@ -6,10 +6,9 @@ import (
 )
 
 func TestRunWorkflowRemovalContract_RunFlagsBaselineOmitsWorkflow(t *testing.T) {
-	root := ProductionRootCommand()
-	runCmd, err := ProductionRunCommand(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("resolve run command: %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
 
 	for _, serialized := range []struct {
@@ -17,7 +16,7 @@ func TestRunWorkflowRemovalContract_RunFlagsBaselineOmitsWorkflow(t *testing.T) 
 		text string
 	}{
 		{name: "fixture", text: mustReadFixtureText(t, "testdata/run_flags.txt")},
-		{name: "production", text: SerializeRunFlags(runCmd)},
+		{name: "production", text: observation.Snapshot.RunFlags},
 	} {
 		t.Run(serialized.name, func(t *testing.T) {
 			if runFlagPresent(serialized.text, "workflow") {
@@ -28,7 +27,7 @@ func TestRunWorkflowRemovalContract_RunFlagsBaselineOmitsWorkflow(t *testing.T) 
 }
 
 func TestRunWorkflowRemovalContract_IntentionalChangesLedgerOmitsRunWorkflowRemoval(t *testing.T) {
-	ledger, err := LoadIntentionalChangesLedger()
+	ledger, err := LoadIntentionalChangesLedger(testSourceStore())
 	if err != nil {
 		t.Fatalf("load intentional changes ledger: %v", err)
 	}
@@ -51,7 +50,6 @@ func TestRunWorkflowRemovalContract_RunHelpBaselineDocumentsSupportedContract(t 
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
 		"primary-result-only stdout by default",
 		"--output response-stream",
-		"you workflow",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("run help baseline missing %q", want)
@@ -65,7 +63,7 @@ func TestRunWorkflowRemovalContract_RunHelpBaselineDocumentsSupportedContract(t 
 func mustReadFixtureText(t *testing.T, fixture string) string {
 	t.Helper()
 
-	text, err := ReadFixtureText(fixture)
+	text, err := ReadFixtureText(testSourceStore(), fixture)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", fixture, err)
 	}

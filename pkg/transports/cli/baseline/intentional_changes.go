@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/spf13/cobra"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 )
 
 const intentionalChangesLedgerFixture = "testdata/intentional_changes.json"
@@ -35,8 +34,8 @@ type PlannedMove struct {
 }
 
 // LoadIntentionalChangesLedger reads the committed intentional-change ledger.
-func LoadIntentionalChangesLedger() (IntentionalChangesLedger, error) {
-	raw, err := ReadFixtureText(intentionalChangesLedgerFixture)
+func LoadIntentionalChangesLedger(store generatedartifacts.SourceStore) (IntentionalChangesLedger, error) {
+	raw, err := ReadFixtureText(store, intentionalChangesLedgerFixture)
 	if err != nil {
 		return IntentionalChangesLedger{}, err
 	}
@@ -50,16 +49,16 @@ func LoadIntentionalChangesLedger() (IntentionalChangesLedger, error) {
 
 // ValidateIntentionalChangesLedger asserts each ledger entry still appears in
 // today's production command-tree and/or run-flag baselines.
-func ValidateIntentionalChangesLedger(root *cobra.Command, runCmd *cobra.Command) error {
-	ledger, err := LoadIntentionalChangesLedger()
+func ValidateIntentionalChangesLedger(store generatedartifacts.SourceStore, commandTree, runFlags string) error {
+	ledger, err := LoadIntentionalChangesLedger(store)
 	if err != nil {
 		return err
 	}
 
 	return validateLedgerAgainstBaselines(
 		ledger,
-		SerializeCommandTree(root),
-		SerializeRunFlags(runCmd),
+		commandTree,
+		runFlags,
 	)
 }
 
@@ -124,18 +123,4 @@ func runFlagPresent(runFlags, name string) bool {
 		}
 	}
 	return false
-}
-
-// ProductionRootCommand returns the canonical production CLI root command.
-func ProductionRootCommand() *cobra.Command {
-	return cli.NewRootCommand()
-}
-
-// ProductionRunCommand resolves the production you run command from root.
-func ProductionRunCommand(root *cobra.Command) (*cobra.Command, error) {
-	runCmd, _, err := root.Find([]string{"run"})
-	if err != nil {
-		return nil, fmt.Errorf("find run command: %w", err)
-	}
-	return runCmd, nil
 }

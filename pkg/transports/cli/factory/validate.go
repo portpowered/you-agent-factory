@@ -5,40 +5,57 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // ValidateConfig holds parameters for factory validation output.
 type ValidateConfig struct {
-	Path   string
-	JSON   bool
-	Output io.Writer
+	Context context.Context
+	Path    string
+	JSON    bool
+	Output  io.Writer
 }
 
-// Validate resolves a factory config path and validates it through the shared
-// validate-only API contract used by POST /factory-validations.
-func Validate(cfg ValidateConfig) error {
+// ValidateWithServices validates through injected Factory Definitions root
+// capabilities. The transport decodes supplied representation bytes but owns
+// no filesystem or path-resolution behavior.
+func ValidateWithServices(
+	cfg ValidateConfig,
+	validate factorydefinitions.SubmittedDefinitionValidationOperation,
+	loadSource factorydefinitions.AuthoredFactorySourceLoader,
+) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
 	}
 	if cfg.Path == "" {
 		return fmt.Errorf("factory path is required")
 	}
+	if loadSource == nil {
+		return fmt.Errorf("authored Factory Definition source loader is required")
+	}
 
-	factory, err := factoryconfig.LoadAuthoredFactoryAPIFromPath(cfg.Path)
+	source, err := loadSource(cfg.Path)
+	if err != nil {
+		return err
+	}
+	factory, err := factoryconfig.DecodeAuthoredFactoryAPI(source)
 	if err != nil {
 		return err
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
+	result, err := validationentry.ValidateFactoryAPI(
+		cfg.Context,
+		factory,
+		validate,
+	)
 	if err != nil {
 		return fmt.Errorf("validate factory config: %w", err)
 	}

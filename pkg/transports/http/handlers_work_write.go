@@ -9,21 +9,13 @@ import (
 	"net/http"
 	"strings"
 
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workdomain "github.com/portpowered/infinite-you/pkg/work"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/engine"
-	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	"github.com/portpowered/infinite-you/pkg/work/content"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
-	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"go.uber.org/zap"
 )
 
@@ -38,17 +30,17 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	if s.sessionRuntime == nil {
+	if s.invocation == nil {
 		s.writeError(w, http.StatusInternalServerError, "session invocation API is unavailable", "INTERNAL_ERROR")
 		return
 	}
 
-	result, err := s.sessionRuntime.InvokeFactorySession(r.Context(), string(sessionID), req)
+	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
 	if err != nil {
 		switch typed := err.(type) {
-		case *invocations.InputError:
+		case *work.InputError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
-		case *invocations.ArgumentError:
+		case *work.ArgumentError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
 		case *apisurface.RequestValidationError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, "BAD_REQUEST")
@@ -71,142 +63,106 @@ func decodeInvocationRequestBody(body io.Reader) (factoryapi.InvokeFactorySessio
 	return decodeStrictJSON[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](body)
 }
 
-func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]work.WorkContentPart, error) {
+func (s *Server) submitWorkContent(
+	ctx context.Context,
+	req factoryapi.SubmitWorkRequest,
+) ([]work.WorkContentPart, error) {
 	if req.Items == nil {
 		return contentcontract.PartsFromGenerated(req.Content), nil
 	}
-	return submitWorkItemsToContent(*req.Items)
-}
-
-func submitWorkItemsToContent(items []factoryapi.SubmitWorkItem) ([]work.WorkContentPart, error) {
-	if len(items) == 0 {
-		return []work.WorkContentPart{}, nil
+	if s.contentStaging == nil {
+		return nil, errors.New("Work content staging service is unavailable")
 	}
-
-	content := make([]work.WorkContentPart, 0, len(items))
-	hasMeaningfulItem := false
-	for i, item := range items {
-		part, meaningful, err := submitWorkItemToContentPart(item)
-		if err != nil {
-			return nil, requestFieldValidationError{message: fmt.Sprintf("items[%d]: %v", i, err)}
+	items, err := stagedSubmissionItemsFromGenerated(*req.Items)
+	if err != nil {
+		return nil, err
+	}
+	content, err := s.contentStaging.PrepareContent(ctx, items)
+	if err != nil {
+		var stagingErr *work.ContentStagingError
+		if errors.As(err, &stagingErr) {
+			return nil, requestFieldValidationError{message: stagingErr.Message}
 		}
-		content = append(content, part)
-		hasMeaningfulItem = hasMeaningfulItem || meaningful
+		return nil, err
 	}
-	if !hasMeaningfulItem {
-		return nil, requestFieldValidationError{message: "items must contain at least one non-empty item"}
-	}
-
 	return content, nil
 }
 
-func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (work.WorkContentPart, bool, error) {
+func stagedSubmissionItemsFromGenerated(
+	items []factoryapi.SubmitWorkItem,
+) ([]work.StagedSubmissionItem, error) {
+	result := make([]work.StagedSubmissionItem, 0, len(items))
+	for i, item := range items {
+		mapped, err := stagedSubmissionItemFromGenerated(item)
+		if err != nil {
+			return nil, requestFieldValidationError{message: fmt.Sprintf("items[%d]: %v", i, err)}
+		}
+		result = append(result, mapped)
+	}
+	return result, nil
+}
+
+func stagedSubmissionItemFromGenerated(
+	item factoryapi.SubmitWorkItem,
+) (work.StagedSubmissionItem, error) {
 	textItem, textErr := item.AsSubmitWorkTextItem()
 	if textErr == nil && textItem.Type == factoryapi.SubmitWorkItemTypeText {
-		return work.WorkContentPart{
-			Type: work.WorkContentPartTypeText,
-			Text: textItem.Text,
-		}, strings.TrimSpace(textItem.Text) != "", nil
+		return work.StagedSubmissionItem{
+			ItemType: string(textItem.Type),
+			Text:     textItem.Text,
+		}, nil
 	}
 
 	imageItem, imageErr := item.AsSubmitWorkImageItem()
 	if imageErr == nil && imageItem.Type == factoryapi.SubmitWorkItemTypeImage {
-		stagedFilePath, err := resolveSubmitWorkStagedFileRef(imageItem.StagedFileRef)
-		if err != nil {
-			return work.WorkContentPart{}, false, err
-		}
-		part, err := submitWorkStagedFileItemContentPart(
-			work.WorkContentPartTypeImage,
-			string(imageItem.Type),
-			stagedFilePath,
-			imageItem.FileName,
-			imageItem.MediaType,
-		)
-		return part, true, err
+		return stagedSubmissionFileItem(
+			string(imageItem.Type), imageItem.StagedFileRef,
+			imageItem.FileName, imageItem.MediaType,
+		), nil
 	}
 
 	videoItem, videoErr := item.AsSubmitWorkVideoItem()
 	if videoErr == nil && videoItem.Type == factoryapi.SubmitWorkItemTypeVideo {
-		stagedFilePath, err := resolveSubmitWorkStagedFileRef(videoItem.StagedFileRef)
-		if err != nil {
-			return work.WorkContentPart{}, false, err
-		}
-		part, err := submitWorkStagedFileItemContentPart(
-			work.WorkContentPartTypeBinary,
-			string(videoItem.Type),
-			stagedFilePath,
-			videoItem.FileName,
-			videoItem.MediaType,
-		)
-		return part, true, err
+		return stagedSubmissionFileItem(
+			string(videoItem.Type), videoItem.StagedFileRef,
+			videoItem.FileName, videoItem.MediaType,
+		), nil
 	}
 
 	audioItem, audioErr := item.AsSubmitWorkAudioItem()
 	if audioErr == nil && audioItem.Type == factoryapi.SubmitWorkItemTypeAudio {
-		stagedFilePath, err := resolveSubmitWorkStagedFileRef(audioItem.StagedFileRef)
-		if err != nil {
-			return work.WorkContentPart{}, false, err
-		}
-		part, err := submitWorkStagedFileItemContentPart(
-			work.WorkContentPartTypeAudio,
-			string(audioItem.Type),
-			stagedFilePath,
-			audioItem.FileName,
-			audioItem.MediaType,
-		)
-		return part, true, err
+		return stagedSubmissionFileItem(
+			string(audioItem.Type), audioItem.StagedFileRef,
+			audioItem.FileName, audioItem.MediaType,
+		), nil
 	}
 
 	documentItem, documentErr := item.AsSubmitWorkDocumentItem()
 	if documentErr == nil && documentItem.Type == factoryapi.SubmitWorkItemTypeDocument {
-		stagedFilePath, err := resolveSubmitWorkStagedFileRef(documentItem.StagedFileRef)
-		if err != nil {
-			return work.WorkContentPart{}, false, err
-		}
-		part, err := submitWorkStagedFileItemContentPart(
-			work.WorkContentPartTypeBinary,
-			string(documentItem.Type),
-			stagedFilePath,
-			documentItem.FileName,
-			documentItem.MediaType,
-		)
-		return part, true, err
+		return stagedSubmissionFileItem(
+			string(documentItem.Type), documentItem.StagedFileRef,
+			documentItem.FileName, documentItem.MediaType,
+		), nil
 	}
 
-	return work.WorkContentPart{}, false, fmt.Errorf("unsupported item type")
+	return work.StagedSubmissionItem{}, fmt.Errorf("unsupported item type")
 }
 
-func submitWorkStagedFileItemContentPart(
-	partType work.WorkContentPartType,
+func stagedSubmissionFileItem(
 	itemType string,
-	stagedFilePath string,
+	stagedFileRef string,
 	fileName string,
 	mediaType string,
-) (work.WorkContentPart, error) {
-	contentURL, err := content.FilesystemPathToContentURL(stagedFilePath)
-	if err != nil {
-		return work.WorkContentPart{}, err
+) work.StagedSubmissionItem {
+	return work.StagedSubmissionItem{
+		ItemType: itemType, StagedFileRef: stagedFileRef,
+		FileName: fileName, MediaType: mediaType,
 	}
-	return work.WorkContentPart{
-		Type:        partType,
-		URL:         contentURL,
-		ContentType: mediaType,
-		Metadata: map[string]any{
-			submitWorkItemTypeMetadataKey: itemType,
-			submitWorkFileNameMetadataKey: fileName,
-		},
-	}, nil
 }
 
 func validateSubmitWorkStructuredInputFields(fields map[string]json.RawMessage) error {
 	if _, ok := fields["items"]; !ok {
 		return nil
-	}
-	if _, ok := fields["content"]; ok {
-		return requestFieldValidationError{message: "items cannot be combined with content"}
-	}
-	if _, ok := fields["payload"]; ok {
-		return requestFieldValidationError{message: "items cannot be combined with payload"}
 	}
 	return validateSubmitWorkItemsField(fields, "")
 }
@@ -225,20 +181,15 @@ func validateSubmitWorkItemsField(fields map[string]json.RawMessage, prefix stri
 		return nil
 	}
 
-	hasMeaningfulItem := false
 	for i, payload := range itemPayloads {
 		var itemFields map[string]json.RawMessage
 		if err := json.Unmarshal(payload, &itemFields); err != nil {
 			return requestFieldValidationError{message: fmt.Sprintf("%sitems[%d] must be an object", prefix, i)}
 		}
-		meaningful, err := validateSubmitWorkItemField(itemFields, fmt.Sprintf("%sitems[%d].", prefix, i))
+		_, err := validateSubmitWorkItemField(itemFields, fmt.Sprintf("%sitems[%d].", prefix, i))
 		if err != nil {
 			return err
 		}
-		hasMeaningfulItem = hasMeaningfulItem || meaningful
-	}
-	if !hasMeaningfulItem {
-		return requestFieldValidationError{message: fmt.Sprintf("%sitems must contain at least one non-empty item", prefix)}
 	}
 
 	return nil
@@ -255,21 +206,17 @@ func validateSubmitWorkItemField(fields map[string]json.RawMessage, prefix strin
 		if err := requireOnlyFields(fields, prefix, "type", "text"); err != nil {
 			return false, err
 		}
-		text, err := requiredStringField(fields, prefix, "text", "text items")
+		_, err := requiredStringField(fields, prefix, "text", "text items")
 		if err != nil {
 			return false, err
 		}
-		return strings.TrimSpace(text) != "", nil
+		return true, nil
 	case factoryapi.SubmitWorkItemTypeImage, factoryapi.SubmitWorkItemTypeVideo, factoryapi.SubmitWorkItemTypeAudio, factoryapi.SubmitWorkItemTypeDocument:
 		if err := requireOnlyFields(fields, prefix, "type", "url", "stagedFileRef", "fileName", "mediaType"); err != nil {
 			return false, err
 		}
-		contentURL, err := requiredNonEmptyStringField(fields, prefix, "url", string(itemType)+" items")
-		if err != nil {
+		if _, err := requiredNonEmptyStringField(fields, prefix, "url", string(itemType)+" items"); err != nil {
 			return false, err
-		}
-		if err := content.ValidateContentURL(contentURL); err != nil {
-			return false, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
 		}
 		if _, err := requiredNonEmptyStringField(fields, prefix, "stagedFileRef", string(itemType)+" items"); err != nil {
 			return false, err
@@ -331,12 +278,12 @@ func submitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID
 }
 
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
+	workAPI, ok := s.requireWorkAPI(w)
 	if !ok {
 		return
 	}
 
-	req, err := decodeSubmitWorkRequestBody(r.Body)
+	decoded, err := decodeSubmitWorkRequestBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -346,53 +293,57 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	if req.WorkTypeName == "" {
-		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
-		return
-	}
-
-	s.submitWorkCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
-		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
+	s.submitWorkCore(w, r, decoded.Request, decoded.CanonicalJSON, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
+		return workAPI.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
 	})
 }
 
-func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONRequestBody) (workdomain.WorkRequest, error) {
+func (s *Server) submitWorkRequestFromDecoded(
+	ctx context.Context,
+	req factoryapi.SubmitWorkBySessionIdJSONRequestBody,
+) (workdomain.WorkRequest, error) {
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
 		return workdomain.WorkRequest{}, err
 	}
-	content, err := submitWorkContent(req)
+	content, err := s.submitWorkContent(ctx, req)
 	if err != nil {
 		return workdomain.WorkRequest{}, err
 	}
 
 	submitReq := workdomain.SubmitRequest{
-		Name:                   strings.TrimSpace(stringValue(req.Name)),
+		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                stringValue(req.TraceId),
 		Content:                content,
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	return factoryrequests.WorkRequestFromSubmitRequests([]workdomain.SubmitRequest{submitReq}), nil
+	return workdomain.WorkRequestFromSubmitRequests([]workdomain.SubmitRequest{submitReq}), nil
 }
 
 func (s *Server) submitWorkCore(
 	w http.ResponseWriter,
 	r *http.Request,
 	req factoryapi.SubmitWorkBySessionIdJSONRequestBody,
+	canonicalJSON []byte,
 	sessionID string,
 	submit func(context.Context, workdomain.WorkRequest) (work.WorkRequestSubmitResult, error),
 ) {
-	workRequest, err := submitWorkRequestFromDecoded(req)
+	workRequest, err := s.submitWorkRequestFromDecoded(r.Context(), req)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		}
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	workRequest, err = s.prepareWorkRequest(r.Context(), workRequest, canonicalJSON)
+	if err != nil {
+		s.writeWorkRequestPreparationError(w, err)
 		return
 	}
 
@@ -419,12 +370,12 @@ func (s *Server) submitWorkCore(
 }
 
 func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, requestID string) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
+	workAPI, ok := s.requireWorkAPI(w)
 	if !ok {
 		return
 	}
 
-	req, err := decodeWorkRequestBody(r.Body)
+	decoded, err := decodeWorkRequestBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -438,17 +389,17 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 		s.writeError(w, http.StatusBadRequest, "request_id is required", "BAD_REQUEST")
 		return
 	}
-	if req.RequestId == "" {
+	if decoded.Request.RequestId == "" {
 		s.writeError(w, http.StatusBadRequest, "requestId is required", "BAD_REQUEST")
 		return
 	}
-	if req.RequestId != requestID {
+	if decoded.Request.RequestId != requestID {
 		s.writeError(w, http.StatusBadRequest, "request_id path and requestId body must match", "BAD_REQUEST")
 		return
 	}
 
-	s.upsertWorkRequestCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
-		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
+	s.upsertWorkRequestCore(w, r, decoded.Request, decoded.CanonicalJSON, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
+		return workAPI.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
 	})
 }
 
@@ -456,6 +407,7 @@ func (s *Server) upsertWorkRequestCore(
 	w http.ResponseWriter,
 	r *http.Request,
 	req factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody,
+	canonicalJSON []byte,
 	sessionID string,
 	submit func(context.Context, workdomain.WorkRequest) (work.WorkRequestSubmitResult, error),
 ) {
@@ -468,7 +420,11 @@ func (s *Server) upsertWorkRequestCore(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	applyStableTraceToWorkRequest(&workRequest)
+	workRequest, err = s.prepareWorkRequest(r.Context(), workRequest, canonicalJSON)
+	if err != nil {
+		s.writeWorkRequestPreparationError(w, err)
+		return
+	}
 
 	result, err := submit(r.Context(), workRequest)
 	if err != nil {
@@ -537,10 +493,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (workdomain.WorkRe
 	}
 	if req.Works != nil {
 		workRequest.Works = make([]workdomain.Work, 0, len(*req.Works))
-		for i, work := range *req.Works {
-			if err := validateGeneratedWorkContentAtPath(work.Content, fmt.Sprintf("works[%d].content", i)); err != nil {
-				return workdomain.WorkRequest{}, err
-			}
+		for _, work := range *req.Works {
 			workRequest.Works = append(workRequest.Works, workdomain.Work{
 				Name:                     work.Name,
 				WorkID:                   stringValue(work.WorkId),
@@ -571,92 +524,76 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (workdomain.WorkRe
 	return workRequest, nil
 }
 
-func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPath string) error {
-	if content == nil || len(*content) == 0 {
-		return nil
-	}
-
-	for i, part := range *content {
-		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		if _, ok := contentcontract.PartFromGenerated(part); ok {
-			continue
-		}
-
-		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", pathPrefix)}
-	}
-	return nil
+type decodedSubmitWorkRequest struct {
+	Request       factoryapi.SubmitWorkBySessionIdJSONRequestBody
+	CanonicalJSON []byte
 }
 
-func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkBySessionIdJSONRequestBody, error) {
+func decodeSubmitWorkRequestBody(body io.Reader) (decodedSubmitWorkRequest, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return decodedSubmitWorkRequest{}, err
 	}
 
 	var req factoryapi.SubmitWorkBySessionIdJSONRequestBody
 	if err := json.Unmarshal(data, &req); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return decodedSubmitWorkRequest{}, err
 	}
-	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, requestFieldValidationError{message: err.Error()}
-	}
-
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return decodedSubmitWorkRequest{}, err
 	}
 	if err := validateSubmitWorkStructuredInputFields(fields); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return decodedSubmitWorkRequest{}, err
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return decodedSubmitWorkRequest{}, err
 	}
-	return req, nil
+	return decodedSubmitWorkRequest{
+		Request: req, CanonicalJSON: append([]byte(nil), data...),
+	}, nil
 }
 
-func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody, error) {
+type decodedUpsertWorkRequest struct {
+	Request       factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody
+	CanonicalJSON []byte
+}
+
+func decodeWorkRequestBody(body io.Reader) (decodedUpsertWorkRequest, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+		return decodedUpsertWorkRequest{}, err
 	}
 	if !json.Valid(data) {
 		var invalid any
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, json.Unmarshal(data, &invalid)
-	}
-
-	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, requestFieldValidationError{message: err.Error()}
+		return decodedUpsertWorkRequest{}, json.Unmarshal(data, &invalid)
 	}
 	decodedData, err := normalizeWorkRequestStateJSON(data)
 	if err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+		return decodedUpsertWorkRequest{}, err
 	}
 
 	var req factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody
 	if err := json.Unmarshal(decodedData, &req); err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+		return decodedUpsertWorkRequest{}, err
 	}
-
-	if req.Works == nil || len(*req.Works) == 0 {
-		return req, nil
-	}
-
 	var rawRequest struct {
 		Works []map[string]json.RawMessage `json:"works"`
 	}
 	if err := json.Unmarshal(data, &rawRequest); err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+		return decodedUpsertWorkRequest{}, err
 	}
-
-	for i := range *req.Works {
-		if i >= len(rawRequest.Works) {
-			return req, nil
-		}
-		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+	for index := range rawRequest.Works {
+		if err := validateWorkContentField(
+			rawRequest.Works[index],
+			fmt.Sprintf("works[%d].", index),
+		); err != nil {
+			return decodedUpsertWorkRequest{}, err
 		}
 	}
-	return req, nil
+	return decodedUpsertWorkRequest{
+		Request: req, CanonicalJSON: append([]byte(nil), data...),
+	}, nil
 }
 
 // normalizeWorkRequestStateJSON preserves the supported legacy string form at
@@ -702,44 +639,27 @@ func normalizeWorkRequestStateJSON(data []byte) ([]byte, error) {
 	return json.Marshal(request)
 }
 
-func applyStableTraceToWorkRequest(req *workdomain.WorkRequest) {
-	if req == nil || len(req.Works) == 0 {
+func (s *Server) prepareWorkRequest(
+	ctx context.Context,
+	request workdomain.WorkRequest,
+	canonicalJSON []byte,
+) (workdomain.WorkRequest, error) {
+	if s.requestPreparation == nil {
+		return workdomain.WorkRequest{}, errors.New("Work Request preparation service is unavailable")
+	}
+	return s.requestPreparation.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
+		Request: request, CanonicalJSON: canonicalJSON,
+	})
+}
+
+func (s *Server) writeWorkRequestPreparationError(w http.ResponseWriter, err error) {
+	var validation *work.RequestPreparationError
+	if errors.As(err, &validation) {
+		s.writeError(w, http.StatusBadRequest, validation.Message, "BAD_REQUEST")
 		return
 	}
-	traceID := ""
-	if req.CurrentChainingTraceID != "" {
-		traceID = req.CurrentChainingTraceID
-	}
-	if traceID == "" {
-		for _, work := range req.Works {
-			if work.CurrentChainingTraceID != "" {
-				traceID = work.CurrentChainingTraceID
-				break
-			}
-			if work.TraceID != "" {
-				traceID = work.TraceID
-				break
-			}
-		}
-	}
-	if traceID == "" {
-		traceID = "trace-" + req.RequestID
-	}
-	if req.CurrentChainingTraceID == "" {
-		req.CurrentChainingTraceID = traceID
-	}
-	for i := range req.Works {
-		if req.Works[i].CurrentChainingTraceID == "" {
-			if req.Works[i].TraceID != "" {
-				req.Works[i].CurrentChainingTraceID = req.Works[i].TraceID
-			} else {
-				req.Works[i].CurrentChainingTraceID = traceID
-			}
-		}
-		if req.Works[i].TraceID == "" {
-			req.Works[i].TraceID = req.Works[i].CurrentChainingTraceID
-		}
-	}
+	s.logger.Error("prepare Work Request failed", zap.Error(err))
+	s.writeError(w, http.StatusInternalServerError, "failed to prepare Work Request", "INTERNAL_ERROR")
 }
 
 func generatedPayloadToRawMessage(payload any) (json.RawMessage, error) {
@@ -773,7 +693,7 @@ func submitWorkTypeNameMessage(message string) string {
 }
 
 func (s *Server) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, id factoryapi.WorkOrTokenID) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
+	workAPI, ok := s.requireWorkReadAPI(w)
 	if !ok {
 		return
 	}
@@ -781,25 +701,19 @@ func (s *Server) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 		w,
 		r,
 		string(id),
-		func(ctx context.Context, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
-			return sessionRuntime.MoveWorkForSession(ctx, string(sessionID), workID, stateName, requestID)
-		},
-		func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-			return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
+		func(ctx context.Context, workID, stateName, requestID string) (work.ReadModel, error) {
+			return workAPI.MoveWorkAndRead(ctx, string(sessionID), workID, stateName, requestID)
 		},
 	)
 }
 
-type moveWorkInvoker func(ctx context.Context, workID, stateName, requestID string) (work.OperatorMoveResult, error)
-
-type moveWorkSnapshotLoader func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+type moveWorkInvoker func(ctx context.Context, workID, stateName, requestID string) (work.ReadModel, error)
 
 func (s *Server) handleMoveWork(
 	w http.ResponseWriter,
 	r *http.Request,
 	workID string,
 	invoke moveWorkInvoker,
-	loadSnapshot moveWorkSnapshotLoader,
 ) {
 	req, err := decodeMoveWorkRequestBody(r.Body)
 	if err != nil {
@@ -817,7 +731,8 @@ func (s *Server) handleMoveWork(
 	}
 
 	requestID := strings.TrimSpace(stringValue(req.RequestId))
-	if _, err := invoke(r.Context(), workID, stateName, requestID); err != nil {
+	result, err := invoke(r.Context(), workID, stateName, requestID)
+	if err != nil {
 		if status, message, code, ok := moveWorkHTTPError(err); ok {
 			s.writeError(w, status, message, code)
 			return
@@ -827,27 +742,7 @@ func (s *Server) handleMoveWork(
 		return
 	}
 
-	snapshot, err := loadSnapshot(r.Context())
-	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-			return
-		}
-		s.logger.Error("get engine state snapshot after move failed", zap.Error(err), zap.String("work_id", workID))
-		s.writeError(w, http.StatusInternalServerError, "failed to get work after move", "INTERNAL_ERROR")
-		return
-	}
-
-	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
-	token, inFlightOnly, ok := findPublicWorkToken(materialized, workID)
-	if !ok {
-		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
-		return
-	}
-	workNamesByID := publicWorkNamesByID(materialized.Tokens)
-	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
-	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
-	s.writeJSON(w, http.StatusOK, work)
+	s.writeJSON(w, http.StatusOK, workReadModelToGenerated(result))
 }
 
 func decodeMoveWorkRequestBody(body io.Reader) (factoryapi.MoveWorkRequest, error) {
@@ -867,15 +762,15 @@ func decodeMoveWorkRequestBody(body io.Reader) (factoryapi.MoveWorkRequest, erro
 
 func moveWorkHTTPError(err error) (status int, message, code string, ok bool) {
 	switch {
-	case errors.Is(err, engine.ErrMoveWorkNotFound):
+	case errors.Is(err, state.ErrMoveWorkNotFound):
 		return http.StatusNotFound, "work not found", "NOT_FOUND", true
 	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		return http.StatusNotFound, "factory session not found", "NOT_FOUND", true
-	case errors.Is(err, engine.ErrMoveWorkInvalidState):
+	case errors.Is(err, state.ErrMoveWorkInvalidState):
 		return http.StatusBadRequest, "invalid target state for work type", "BAD_REQUEST", true
-	case errors.Is(err, engine.ErrMoveWorkInFlightDispatch):
+	case errors.Is(err, state.ErrMoveWorkInFlightDispatch):
 		return http.StatusBadRequest, "work is in an active dispatch", "BAD_REQUEST", true
-	case errors.Is(err, engine.ErrMoveWorkEngineTerminated):
+	case errors.Is(err, state.ErrMoveWorkEngineTerminated):
 		return http.StatusBadRequest, "engine has terminated", "BAD_REQUEST", true
 	case errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied):
 		return http.StatusConflict, "Operator move request was already applied.", "MOVE_WORK_REQUEST_ALREADY_APPLIED", true

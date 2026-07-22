@@ -6,12 +6,6 @@ import viteConfig from "./vite.config";
 const config = viteConfig as UserConfig;
 
 describe("dashboard Vite config", () => {
-  it("proxies factory events from preview to the local factory API", () => {
-    expect(config.preview?.proxy?.["/events"]).toEqual(
-      config.server?.proxy?.["/events"],
-    );
-  });
-
   it("dedupes context-bearing packages used by linked component sources", () => {
     expect(config.resolve?.dedupe).toEqual(
       expect.arrayContaining([
@@ -41,7 +35,6 @@ describe("dashboard Vite config", () => {
       "^/factory-sessions/[^/]+/work-requests/[^/]+$",
       "^/work/[^/]+$",
       "^/factory-sessions/[^/]+/work/[^/]+$",
-      "/events",
       "^/factory-sessions/[^/]+/events$",
       "/status",
       "^/factory-sessions/[^/]+/status$",

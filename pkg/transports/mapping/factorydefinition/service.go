@@ -6,19 +6,18 @@ import (
 	"context"
 	"fmt"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	domain "github.com/portpowered/infinite-you/pkg/factory/definition"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 // Service adapts one Factory-owned definition service to generated contracts.
-type Service struct{ domain *domain.Service }
+type Service struct{ domain factorydefinitions.Service }
 
 // New constructs a generated-contract adapter around a Factory definition owner.
-func New(owner *domain.Service) *Service { return &Service{domain: owner} }
+func New(owner factorydefinitions.Service) *Service { return &Service{domain: owner} }
 
 // ActivateNamedFactory delegates named activation policy to the Factory owner.
 func (s *Service) ActivateNamedFactory(ctx context.Context, name string) error {
@@ -58,7 +57,20 @@ func (s *Service) GetCurrentFactoryForSession(ctx context.Context, sessionID str
 	if s == nil || s.domain == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	editable, err := s.domain.GetCurrentFactoryForSession(ctx, sessionID)
+	return GetCurrentFactoryForSession(ctx, s.domain, sessionID)
+}
+
+// GetCurrentFactoryForSession maps one session-local definition read without
+// constructing a stateful transport adapter.
+func GetCurrentFactoryForSession(
+	ctx context.Context,
+	domain factorydefinitions.Service,
+	sessionID string,
+) (factoryapi.Factory, error) {
+	if domain == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+	}
+	editable, err := domain.GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -76,33 +88,22 @@ func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name fac
 	return factoryVersionToAPI(version), nil
 }
 
-func (s *Service) SerializeNamedFactory(name factoryapi.FactoryName, current *factoryconfig.LoadedFactoryConfig, inlineBundledFiles bool) (factoryapi.Factory, error) {
-	if s == nil || s.domain == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
-	}
-	snapshot, err := s.domain.SerializeNamedFactory(string(name), current, inlineBundledFiles)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return snapshotToAPI(snapshot)
-}
-
-func saveModeFromAPI(mode factoryapi.FactorySaveMode) domain.SaveMode {
+func saveModeFromAPI(mode factoryapi.FactorySaveMode) factorydefinitions.SaveMode {
 	if mode == factoryapi.FactorySaveModeUpsertNamedAndActivate {
-		return domain.SaveModeUpsertNamedAndActivate
+		return factorydefinitions.SaveModeUpsertNamedAndActivate
 	}
-	return domain.SaveModeReplaceCurrent
+	return factorydefinitions.SaveModeReplaceCurrent
 }
 
-func editableFactoryFromAPI(request factoryapi.Factory) (domain.EditableFactory, error) {
+func editableFactoryFromAPI(request factoryapi.Factory) (factorydefinitions.EditableFactory, error) {
 	snapshot, err := interfaces.NewFactorySnapshot(request)
 	if err != nil {
-		return domain.EditableFactory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+		return factorydefinitions.EditableFactory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
 	}
-	return domain.EditableFactory{Name: string(request.Name), Snapshot: snapshot, Version: factoryVersionFromAPI(request.Version)}, nil
+	return factorydefinitions.EditableFactory{Name: string(request.Name), Snapshot: snapshot, Version: factoryVersionFromAPI(request.Version)}, nil
 }
 
-func editableFactoryToAPI(editable domain.EditableFactory) (factoryapi.Factory, error) {
+func editableFactoryToAPI(editable factorydefinitions.EditableFactory) (factoryapi.Factory, error) {
 	mapped, err := snapshotToAPI(editable.Snapshot)
 	if err != nil {
 		return factoryapi.Factory{}, err

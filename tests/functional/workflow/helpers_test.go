@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func assertDispatchHistoryContainsWorkstationRoute(
@@ -82,24 +81,24 @@ func assertDispatchHistoryContainsWorkstation(
 	)
 }
 
-func firstInputToken(rawTokens any) factorytoken.Token {
+func firstInputToken(rawTokens any) workerexecution.Token {
 	switch tokens := rawTokens.(type) {
 	case []any:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return workerexecution.Token{}
 		}
-		tok, ok := tokens[0].(factorytoken.Token)
+		tok, ok := tokens[0].(workerexecution.Token)
 		if !ok {
-			return factorytoken.Token{}
+			return workerexecution.Token{}
 		}
 		return tok
-	case []factorytoken.Token:
+	case []workerexecution.Token:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return workerexecution.Token{}
 		}
 		return tokens[0]
 	default:
-		return factorytoken.Token{}
+		return workerexecution.Token{}
 	}
 }
 

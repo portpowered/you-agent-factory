@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,18 +28,8 @@ func TestPartialBatch_SomeTokensFail(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Task incomplete, no stop token"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		TokenCount(2)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:failed": 1, "task:init": 0})
 }
 
 func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
@@ -53,19 +44,10 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Work needs review, no stop token"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		PlaceTokenCount("task:rejected", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(2)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{
+		"task:complete": 1, "task:rejected": 1, "task:init": 0, "task:failed": 0,
+	})
 }
 
 func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
@@ -87,27 +69,20 @@ stopToken: COMPLETE
 Process the task input.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Work done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Work done. COMPLETE")},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(modelprovider.Codex) {
-		t.Fatalf("expected command %q, got %q", modelprovider.Codex, call.Command)
+	if call.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("expected command %q, got %q", modelprovider.ProviderCodex, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
@@ -139,42 +114,27 @@ stopToken: COMPLETE
 Process the input task.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{
+		platformprocess.CommandResult{
 			Stdout:   []byte("provider stdout before failure"),
-			Stderr:   providerErrorCorpusEntryForTest(t, "claude_authentication_error").CommandResult().Stderr,
+			Stderr:   support.ProviderErrorCommandResult(t, "claude_authentication_error").Stderr,
 			ExitCode: 1,
 		},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:complete")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(modelprovider.Claude) {
-		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
+	if call.Command != string(modelprovider.ProviderClaude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.ProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
 
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:failed" {
-			return
-		}
-	}
-
-	t.Fatal("no token found in task:failed")
 }
 
 func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *testing.T) {
@@ -198,51 +158,42 @@ stopToken: COMPLETE
 Process the input task.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		providerErrorCorpusEntryForTest(t, "claude_internal_server_api_error").CommandResult(),
-		providerErrorCorpusEntryForTest(t, "claude_internal_server_api_error").CommandResult(),
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		support.ProviderErrorCommandResult(t, "claude_internal_server_api_error"),
+		support.ProviderErrorCommandResult(t, "claude_internal_server_api_error"),
+		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Done. COMPLETE","session_id":"retry-success"}` + "\n")},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() != 3 {
 		t.Fatalf("expected provider runner called 3 times, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(modelprovider.Claude) {
-		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
+	if call.Command != string(modelprovider.ProviderClaude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.ProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }
 
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
 	support.SkipLongFunctional(t, "slow partial-batch throttled-provider failure sweep")
-	h, runner := throttledProviderFailureHarness(t)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:complete")
+	dir, runner := throttledProviderFailureFixture(t)
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 5*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
 	if runner.CallCount() != 4 {
 		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())
 	}
 
-	assertThrottledWorkFailedAfterRetries(t, h)
+	assertListedFailedWorkID(t, listedWork, "work-provider-throttle-requeue")
 }
 
-func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.ProviderCommandRunner) {
+func throttledProviderFailureFixture(t *testing.T) (string, *testutil.ProviderCommandRunner) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
@@ -264,44 +215,18 @@ stopToken: COMPLETE
 Process the input task.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		providerErrorCorpusEntryForTest(t, "claude_rate_limit_error").RepeatedCommandResults(3)...,
+		support.RepeatedProviderErrorCommandResults(t, "claude_rate_limit_error", 3)...,
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	return h, runner
+	return dir, runner
 }
 
-func assertThrottledWorkFailedAfterRetries(t *testing.T, h *testutil.ServiceTestHarness) {
+func assertListedFailedWorkID(t *testing.T, response factoryapi.ListWorkResponse, wantWorkID string) {
 	t.Helper()
-
-	snap := h.Marking()
-	var failed *factorytoken.Token
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:failed" && tok.Color.WorkID == "work-provider-throttle-requeue" {
-			failed = tok
-			break
+	for _, item := range response.Results {
+		if item.State != nil && item.State.Name == "failed" && item.WorkId != nil && *item.WorkId == wantWorkID {
+			return
 		}
 	}
-	if failed == nil {
-		t.Fatal("expected failed token in task:failed")
-	}
-	if failed.Color.WorkID != "work-provider-throttle-requeue" {
-		t.Fatalf("failed token work id = %q, want %q", failed.Color.WorkID, "work-provider-throttle-requeue")
-	}
-
-	engineState, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	if len(engineState.DispatchHistory) == 0 {
-		t.Fatal("expected failed throttle path to record dispatch history")
-	}
-	last := engineState.DispatchHistory[len(engineState.DispatchHistory)-1]
-	if last.TransitionID != "process" {
-		t.Fatalf("last dispatch transition = %q, want %q", last.TransitionID, "process")
-	}
+	t.Fatalf("listed Work missing failed work ID %q", wantWorkID)
 }

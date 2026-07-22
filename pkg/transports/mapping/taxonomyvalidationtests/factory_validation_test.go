@@ -5,16 +5,24 @@ import (
 	"strings"
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestFactoryValidationTargetToAPI_PreservesOperationalTargetAndSafeDefaults(t *testing.T) {
 	t.Parallel()
 
 	operational := apisurface.FactoryValidationTargetToAPI(
-		factoryvalidation.FactorySessionFieldTarget("required", "folderPath", "folderPath is required"),
+		factorydefinitions.ValidationTarget{
+			Code:     "factory.session.field.required",
+			Severity: factorydefinitions.ValidationSeverityError,
+			Message:  "folderPath is required",
+			Subject: factorydefinitions.ValidationSubject{
+				Type: factorydefinitions.ValidationSubjectTypeFactory, ID: "folderPath",
+				Location: factorydefinitions.ValidationSubjectLocationReference,
+			},
+		},
 	)
 	if operational.Code != "factory.session.field.required" ||
 		operational.Severity != factoryapi.FactoryValidationSeverityError ||
@@ -24,9 +32,9 @@ func TestFactoryValidationTargetToAPI_PreservesOperationalTargetAndSafeDefaults(
 		t.Fatalf("mapped operational target = %#v", operational)
 	}
 
-	unknown := apisurface.FactoryValidationTargetToAPI(factoryvalidation.Target{
+	unknown := apisurface.FactoryValidationTargetToAPI(factorydefinitions.ValidationTarget{
 		Severity: "future-severity",
-		Subject: factoryvalidation.Subject{
+		Subject: factorydefinitions.ValidationSubject{
 			Type:     "FUTURE_SUBJECT",
 			Location: "FUTURE_LOCATION",
 		},

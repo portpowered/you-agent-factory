@@ -15,8 +15,8 @@
 - Real local-inference lane: `make long-tests`
 
 `make long-tests` is the maintainer entrypoint for OMNIVOICE real local
-inference coverage. It first reruns the package-level managed-local-model
-integration tests in `pkg/service`, then runs the tagged runtime API long test
+inference coverage. It first reruns the managed-local-model integration tests
+in `pkg/models/local`, then runs the tagged runtime API long test
 that exercises `POST /models/{model_name}/pull`, direct
 `/models/{model_name}/invocations`, and a factory-level `MODEL_INVOKE` path.
 The real-runtime test is opt-in: set `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`
@@ -80,7 +80,7 @@ test results.
 - Cross-package functional helpers belong in `tests/functional/internal/support`.
 - `tests/functional/internal/support.StartFunctionalAPIServer` is the
   canonical Wire-backed HTTP harness for backend transport regressions: it
-  builds runtime services through `compose.InjectFactoryService`, so runtime
+  builds the decomposed services through `wire.Build`, so runtime
   API smoke coverage for `/status`, `/models`, session routes, and factory
   activation should prefer that seam over hand-built HTTP doubles when the
   goal is startup-path parity.

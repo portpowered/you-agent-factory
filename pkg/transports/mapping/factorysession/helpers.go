@@ -1,7 +1,7 @@
 package factorysession
 
 import (
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

@@ -1,0 +1,117 @@
+// Package wire is the Models service composition boundary. Application Wire
+// uses these constructors without importing Models implementation packages.
+package wire
+
+import (
+	"context"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
+	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	"go.uber.org/zap"
+)
+
+// NewService constructs the inert, process-scoped Models service.
+func NewService(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP models.AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll models.AssetMakeDirectories,
+	assetStat models.AssetInspectPath,
+	assetHome models.AssetResolveHomeDirectory,
+	assetWriteFile models.AssetWriteFile,
+	assetRename models.AssetRenamePath,
+	assetRemove models.AssetRemovePath,
+	assetReadFile models.AssetReadFile,
+	assetReadDir models.AssetReadDirectory,
+	assetCreate models.AssetCreateFile,
+	assetOpen models.AssetOpenFile,
+	processLauncher models.HostProcessLauncher,
+	hostHTTP models.HostHTTPDoer,
+	hostClock models.HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP models.RuntimeHTTPDoer,
+	runtimeInspect models.RuntimeInspectFile,
+	runtimeTempDir models.RuntimeTempDirectory,
+	runtimeTempFile models.RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	pullMetrics models.PullMetricsRecorder,
+	hostLogger models.HostDiagnosticLogger,
+	hostMetrics models.HostMetricsRecorder,
+	localHooks models.LocalRuntimeHooks,
+) (models.Service, error) {
+	defaultEndpoints := modelassets.DefaultEndpoints()
+	if assetEndpoints.BaseURL != "" {
+		defaultEndpoints.BaseURL = assetEndpoints.BaseURL
+	}
+	if assetEndpoints.APIBaseURL != "" {
+		defaultEndpoints.APIBaseURL = assetEndpoints.APIBaseURL
+	}
+	var launcher modelhost.ProcessLauncher
+	if processLauncher != nil {
+		launcher = hostProcessLauncher{next: processLauncher}
+	}
+	var clock modelhost.Clock
+	if hostClock != nil {
+		clock = hostClockAdapter{next: hostClock}
+	}
+	var createTempFile localmodels.CreateTempFile
+	if runtimeTempFile != nil {
+		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
+	}
+	service, err := modelsservice.NewRoot(
+		localmodels.HostPlatform(assetPlatform), assetHTTP, defaultEndpoints,
+		modelassets.MakeDirectories(assetMkdirAll), modelassets.InspectPath(assetStat),
+		modelassets.ResolveHomeDirectory(assetHome), modelassets.WriteFile(assetWriteFile),
+		modelassets.RenamePath(assetRename), modelassets.RemovePath(assetRemove),
+		modelassets.ReadFile(assetReadFile), modelassets.ReadDirectory(assetReadDir),
+		modelassets.CreateFile(assetCreate), modelassets.OpenFile(assetOpen),
+		launcher, hostHTTP, clock,
+		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
+		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		models.ProcessDependencies{
+			Logger: logger, Clock: now, PullMetrics: pullMetrics,
+			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return service, nil
+}
+
+// NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.
+func NewInvocationArtifactExporter(fileSystem models.InvocationArtifactFileSystem) (models.InvocationArtifactExporter, error) {
+	return artifacts.NewExporter(fileSystem)
+}
+
+type hostProcessLauncher struct{ next models.HostProcessLauncher }
+
+func (a hostProcessLauncher) Start(ctx context.Context, spec modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	process, err := a.next.Start(ctx, models.HostProcessStartSpec{
+		Command: spec.Command, Args: spec.Args, Env: spec.Env, WorkDir: spec.WorkDir, HealthEndpoint: spec.HealthEndpoint,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return process, nil
+}
+
+type hostClockAdapter struct{ next models.HostClock }
+
+func (a hostClockAdapter) Now() time.Time { return a.next.Now() }
+func (a hostClockAdapter) NewTimer(duration time.Duration) modelhost.Timer {
+	return a.next.NewTimer(duration)
+}
+
+type runtimeTempFileAdapter struct{ next models.RuntimeCreateTempFile }
+
+func (a runtimeTempFileAdapter) create(dir, pattern string) (localmodels.TempFile, error) {
+	return a.next(dir, pattern)
+}

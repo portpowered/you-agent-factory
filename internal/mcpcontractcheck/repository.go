@@ -89,9 +89,6 @@ func LoadInputs(repositoryRoot string) (Inputs, error) {
 	if err != nil {
 		return Inputs{}, err
 	}
-	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		inputs.RuntimeAliases = append(inputs.RuntimeAliases, RuntimeAliasBinding{Name: alias.Name, CanonicalName: alias.CanonicalName})
-	}
 	return inputs, nil
 }
 

@@ -11,10 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/spf13/cobra"
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot goal/model CLI paths. Each
@@ -22,6 +24,8 @@ import (
 // external network services beyond local loopback transport failure.
 
 const goalFailureBaselineUnreachableServer = "http://127.0.0.1:1"
+const packagedGoalFactoryName = "@you/goal"
+const packagedGoalExecuteWorkstationName = "execute-goal"
 
 const goalFailureBaselineInvalidTopologyJSON = `{
   "name": "@you/goal",
@@ -45,6 +49,118 @@ const goalFailureBaselineInvalidTopologyJSON = `{
     "onFailure": [{"workType": "goal", "state": "failed"}]
   }]
 }`
+
+const goalFailureBaselineNamedFactoryJSON = `{
+  "name": "@you/goal",
+  "workTypes": [{
+    "name": "goal",
+    "handlingBehavior": ["DEFAULT"],
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{"name": "goal-executor", "type": "AGENT_WORKER"}],
+  "workstations": [{
+    "name": "execute-goal",
+    "type": "AGENT_RUN",
+    "worker": "goal-executor",
+    "inputs": [{"workType": "goal", "state": "init"}],
+    "outputs": [{"workType": "goal", "state": "complete"}],
+    "onFailure": [{"workType": "goal", "state": "failed"}]
+  }]
+}`
+
+type goalFailureNamedFactoryCatalog struct {
+	factoryDir string
+}
+
+func (catalog goalFailureNamedFactoryCatalog) ListNamedFactories(string) ([]interfaces.NamedFactoryListEntry, error) {
+	return []interfaces.NamedFactoryListEntry{{
+		Name:       packagedGoalFactoryName,
+		FactoryDir: catalog.factoryDir,
+	}}, nil
+}
+
+func (goalFailureNamedFactoryCatalog) DeleteNamedFactory(string, string) error {
+	return nil
+}
+
+func (catalog goalFailureNamedFactoryCatalog) ResolveNamedFactoryAcrossRoots(
+	projectRoot string,
+	globalRoot string,
+	name string,
+) (*interfaces.NamedFactoryResolution, error) {
+	if name != packagedGoalFactoryName {
+		return nil, fmt.Errorf(
+			"resolve named factory %q in project root %s or global root %s: named factory %q not found",
+			name,
+			projectRoot,
+			globalRoot,
+			name,
+		)
+	}
+	return &interfaces.NamedFactoryResolution{
+		Name:               name,
+		FactoryDir:         catalog.factoryDir,
+		Source:             interfaces.NamedFactoryResolutionSourceGlobal,
+		ProjectRoot:        projectRoot,
+		GlobalRoot:         globalRoot,
+		PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionNone,
+	}, nil
+}
+
+type goalFailureNamedRunEnvironment struct {
+	homeDir    string
+	factoryDir string
+	root       *cobra.Command
+}
+
+func newGoalFailureNamedRunEnvironment(t *testing.T) goalFailureNamedRunEnvironment {
+	return newGoalFailureNamedRunEnvironmentWithInvocation(t, rootInvocationInputScript{})
+}
+
+func newGoalFailureNamedRunEnvironmentWithInvocation(
+	t *testing.T,
+	prepare rootInvocationInputScript,
+) goalFailureNamedRunEnvironment {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	factoryDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll named Factory fixture: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		[]byte(goalFailureBaselineNamedFactoryJSON),
+		0o644,
+	); err != nil {
+		t.Fatalf("write named Factory fixture: %v", err)
+	}
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		namedFactoryCatalog: goalFailureNamedFactoryCatalog{factoryDir: factoryDir},
+	})
+	if prepare.prepare != nil {
+		factory.prepareInvocationInput = prepare
+	}
+	root := factory.NewCommand(
+		func() (string, error) { return homeDir, nil },
+		os.LookupEnv,
+		startupcli.Functions{
+			RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+				return runCLI(ctx, testRunConfig(selection))
+			},
+		},
+	)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), t.TempDir()))
+	return goalFailureNamedRunEnvironment{
+		homeDir:    homeDir,
+		factoryDir: factoryDir,
+		root:       root,
+	}
+}
 
 var goalQuietLeakForbiddenMarkers = []string{
 	"Factory initiated",
@@ -77,63 +193,28 @@ func assertGoalQuietTerminalMute(t *testing.T, stdout, stderr string) {
 	assertGoalQuietLeakContractForbidden(t, stdout+stderr)
 }
 
-func TestFailureBaseline_QuietLeak_InvalidTopologySuppressesTerminalOnOperationalFailure(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	var stdout, stderr bytes.Buffer
-	root := newComposedTestRootCommand(t)
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-		"--quiet",
-		"invalid-topology-baseline",
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected invalid goal topology to fail before invocation")
-	}
-	if !strings.Contains(err.Error(), "invalid graph references") {
-		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
-	}
-	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
-}
-
+// These two cases are owner-local transport invariants: the injected Run
+// operation is the causal seam under test, so they intentionally use the
+// owning CommandFactory rather than pretending an observation edge authored
+// the operational failure.
 func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesTerminalOnOperationalFailure(t *testing.T) {
 	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+	defer func() { runCLI = originalRunCLI }()
 
 	dir := t.TempDir()
 	workPath := filepath.Join(dir, "work.json")
 	if err := os.WriteFile(workPath, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[]}`), 0o644); err != nil {
 		t.Fatalf("write work file: %v", err)
 	}
-
 	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
 		return fmt.Errorf("operational failure: batch run rejected")
 	}
 
 	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{
-		"run",
-		"--dir", dir,
-		"--work", workPath,
-		"--no-record",
-		"--quiet",
-	})
-
+	root.SetArgs([]string{"run", "--dir", dir, "--work", workPath, "--no-record", "--quiet"})
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected operational failure")
@@ -146,32 +227,23 @@ func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesTerminalOnOperationalF
 
 func TestFailureBaseline_QuietLeak_RunFactoryQuietSuppressesTerminalOnInvocationFailure(t *testing.T) {
 	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+	defer func() { runCLI = originalRunCLI }()
 
 	dir := t.TempDir()
 	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
 	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
 		return &runcli.InvocationError{
-			Code:    runcli.InvocationErrorCodeFailed,
-			Message: "quiet operational failure baseline",
+			Code: runcli.InvocationErrorCodeFailed, Message: "quiet operational failure baseline",
 		}
 	}
 
 	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-		"--quiet",
-		"quiet operational failure baseline prompt",
+		"run", "--factory", factoryPath, "--no-record", "--quiet", "quiet operational failure baseline prompt",
 	})
-
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected invocation failure")
@@ -195,7 +267,7 @@ func TestFailureBaseline_NoServer_ModelsInvokeCommandUsesBootstrapInsteadOfUnrea
 	}
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -214,47 +286,12 @@ func TestFailureBaseline_NoServer_ModelsInvokeCommandUsesBootstrapInsteadOfUnrea
 	}
 }
 
-func TestFailureBaseline_NoServer_ModelsListCommandReportsUnreachableEndpoint(t *testing.T) {
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"models", "list",
-		"--server", goalFailureBaselineUnreachableServer,
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected unreachable error")
-	}
-	want := "models endpoint not reachable at http://127.0.0.1:1/models"
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("error = %q, want %q", err.Error(), want)
-	}
-}
-
-func TestFailureBaseline_AbsentDefault_RunCommandRejectsUnresolvedDefaultProvider(t *testing.T) {
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT", "--no-record"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected unresolved DEFAULT provider error")
-	}
-	if !strings.Contains(err.Error(), "DEFAULT requires a concrete provider") {
-		t.Fatalf("error = %q, want unresolved DEFAULT guidance", err.Error())
-	}
-}
-
 func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWithoutConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
 	}()
-	restore := withNamedPackagedFactoryRunRoot(t)
-	defer restore()
+	env := newGoalFailureNamedRunEnvironment(t)
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -262,22 +299,22 @@ func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWi
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := env.root
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"absent-default baseline probe",
 	})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named %s: %v", goal.PackagedFactoryName, err)
+		t.Fatalf("execute run --named %s: %v", packagedGoalFactoryName, err)
 	}
-	if got.NamedFactoryName != goal.PackagedFactoryName {
-		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, goal.PackagedFactoryName)
+	if got.NamedFactoryName != packagedGoalFactoryName {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, packagedGoalFactoryName)
 	}
 	if got.OperatorDefaults.WorkerModelProvider != "" {
 		t.Fatalf("operator provider = %q, want empty without configured defaults", got.OperatorDefaults.WorkerModelProvider)
@@ -309,7 +346,7 @@ func corruptGoalFactoryExecuteOutputStateForTest(t *testing.T, factoryDir, state
 		if !ok {
 			continue
 		}
-		if candidate["name"] == goal.PackagedExecuteWorkstationName {
+		if candidate["name"] == packagedGoalExecuteWorkstationName {
 			workstation = candidate
 			break
 		}
@@ -341,37 +378,37 @@ func TestRunNamedGoalResolutionDefersCorruptedFactoryValidationToRuntime(t *test
 		runCLI = originalRunCLI
 	}()
 
-	env := setupNamedGoalCLIEnv(t)
+	env := newGoalFailureNamedRunEnvironment(t)
 	runCalled := false
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
 		runCalled = true
-		if cfg.NamedFactoryName != goal.PackagedFactoryName {
-			t.Fatalf("named factory = %q, want %q", cfg.NamedFactoryName, goal.PackagedFactoryName)
+		if cfg.NamedFactoryName != packagedGoalFactoryName {
+			t.Fatalf("named factory = %q, want %q", cfg.NamedFactoryName, packagedGoalFactoryName)
 		}
 		return nil
 	}
 
 	env.root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"invalid-topology-materialized-baseline",
 	})
 	if err := env.root.Execute(); err != nil {
-		t.Fatalf("execute first run --named %s: %v", goal.PackagedFactoryName, err)
+		t.Fatalf("execute first run --named %s: %v", packagedGoalFactoryName, err)
 	}
 	if !runCalled {
 		t.Fatal("expected first named goal run to reach runCLI after materialization")
 	}
 
-	factoryDir := materializedGoalDir(env.homeDir)
+	factoryDir := env.factoryDir
 	corruptGoalFactoryExecuteOutputStateForTest(t, factoryDir, "missing-output-state")
 
 	runCalled = false
 	env.root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"invalid-topology-upgrade-baseline",
@@ -395,8 +432,8 @@ func TestRunNamedGoalResolutionDefersInvalidInstalledTargetValidationToRuntime(t
 		return nil
 	}
 
-	env := setupNamedGoalCLIEnv(t)
-	factoryDir := materializedGoalDir(env.homeDir)
+	env := newGoalFailureNamedRunEnvironment(t)
+	factoryDir := env.factoryDir
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
 	}
@@ -407,7 +444,7 @@ func TestRunNamedGoalResolutionDefersInvalidInstalledTargetValidationToRuntime(t
 
 	env.root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"invalid-topology-existing-target-baseline",
@@ -417,39 +454,6 @@ func TestRunNamedGoalResolutionDefersInvalidInstalledTargetValidationToRuntime(t
 	}
 	if !runCalled {
 		t.Fatal("expected read-only named resolution to defer topology validation to runtime")
-	}
-}
-
-func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraphReferences(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	root := newComposedTestRootCommand(t)
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-		"--quiet",
-		"invalid-topology-baseline",
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected invalid goal topology to fail before invocation")
-	}
-	if !strings.Contains(err.Error(), "invalid graph references") {
-		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
-	}
-	if !strings.Contains(err.Error(), "Blocking findings:") {
-		t.Fatalf("error = %q, want blocking findings section", err.Error())
-	}
-	if strings.Count(err.Error(), "you factory config validate") != 1 {
-		t.Fatalf("error = %q, want exactly one recovery command", err.Error())
 	}
 }
 
@@ -476,7 +480,7 @@ func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesStartupChatter(t *test
 	}
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -526,7 +530,7 @@ func TestFailureBaseline_QuietLeak_RunFactoryQuietPromptKeepsStartupOutputSuppre
 	}
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -554,8 +558,10 @@ func TestFailureBaseline_QuietLeak_RunNamedGoalQuietBatchSuppressesOperatorChatt
 	defer func() {
 		runCLI = originalRunCLI
 	}()
-	restore := withNamedPackagedFactoryRunRoot(t)
-	defer restore()
+	env := newGoalFailureNamedRunEnvironmentWithInvocation(t, programmedTextInvocationInput(
+		work.InputSourcePositionalText,
+		"quiet-leak baseline goal prompt",
+	))
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -571,22 +577,22 @@ func TestFailureBaseline_QuietLeak_RunNamedGoalQuietBatchSuppressesOperatorChatt
 	}
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := env.root
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"quiet-leak baseline goal prompt",
 	})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named %s --quiet: %v", goal.PackagedFactoryName, err)
+		t.Fatalf("execute run --named %s --quiet: %v", packagedGoalFactoryName, err)
 	}
-	if got.NamedFactoryName != goal.PackagedFactoryName {
-		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, goal.PackagedFactoryName)
+	if got.NamedFactoryName != packagedGoalFactoryName {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, packagedGoalFactoryName)
 	}
 	if !got.SuppressDashboardRendering {
 		t.Fatal("expected named goal quiet batch run to suppress dashboard rendering")
@@ -600,55 +606,13 @@ func TestFailureBaseline_QuietLeak_RunNamedGoalQuietBatchSuppressesOperatorChatt
 	assertGoalQuietLeakContractForbidden(t, stdout.String())
 }
 
-func TestFailureBaseline_NamedPath_RunNamedMissingLocalFactoryRejectsBeforeInvocation(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	restore := withNamedPackagedFactoryRunRoot(t)
-	defer restore()
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"run",
-		"--named", "missing-alpha",
-		"--no-record",
-		"--quiet",
-		"named-path baseline prompt",
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected missing named factory to fail before invocation")
-	}
-	if !strings.Contains(err.Error(), `resolve named factory "missing-alpha"`) {
-		t.Fatalf("error = %q, want named-path resolution guidance", err.Error())
-	}
-	if !strings.Contains(err.Error(), `named factory "missing-alpha" not found`) {
-		t.Fatalf("error = %q, want named factory not found guidance", err.Error())
-	}
-	if runCalled {
-		t.Fatal("run should not start for unresolved named factory path")
-	}
-}
-
 func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
 	}()
 
-	restore := withNamedPackagedFactoryRunRoot(t)
-	defer restore()
+	env := newGoalFailureNamedRunEnvironment(t)
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -656,22 +620,22 @@ func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := env.root
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", packagedGoalFactoryName,
 		"--no-record",
 		"--quiet",
 		"percent-encoded-path baseline probe",
 	})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named %s: %v", goal.PackagedFactoryName, err)
+		t.Fatalf("execute run --named %s: %v", packagedGoalFactoryName, err)
 	}
-	if got.NamedFactoryName != goal.PackagedFactoryName {
-		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, goal.PackagedFactoryName)
+	if got.NamedFactoryName != packagedGoalFactoryName {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, packagedGoalFactoryName)
 	}
 	if got.Dir == "" {
 		t.Fatal("expected resolved factory directory on run config")
@@ -693,46 +657,5 @@ func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(
 	}
 	if !strings.Contains(got.Dir, filepath.Join(".you-agent-factory", "factories")) {
 		t.Fatalf("run dir = %q, want global named-factory root layout", got.Dir)
-	}
-}
-
-func TestFailureBaseline_NamedPath_RunNamedUnknownBuiltInGoalStyleNameRejectsBeforeInvocation(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	restore := withNamedPackagedFactoryRunRoot(t)
-	defer restore()
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"run",
-		"--named", "@you/missing",
-		"--no-record",
-		"--quiet",
-		"named-path baseline prompt",
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected unknown built-in named factory to fail before invocation")
-	}
-	if !strings.Contains(err.Error(), `resolve named factory "@you/missing"`) {
-		t.Fatalf("error = %q, want built-in named-path resolution guidance", err.Error())
-	}
-	if !strings.Contains(err.Error(), "project root") || !strings.Contains(err.Error(), "global root") {
-		t.Fatalf("error = %q, want cross-root named-path context", err.Error())
-	}
-	if runCalled {
-		t.Fatal("run should not start for unknown built-in named factory path")
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestMinimalFactoryConfig_WriteReadSmoke(t *testing.T) {
@@ -26,7 +26,7 @@ func assertWrittenFactoryJSONSmoke(t *testing.T, dir string) {
 
 func readFactoryJSONMap(t *testing.T, dir string) map[string]any {
 	t.Helper()
-	path := filepath.Join(dir, interfaces.FactoryConfigFile)
+	path := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)

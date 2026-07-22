@@ -1,13 +1,12 @@
 package apicontract_test
 
 import (
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,54 +91,34 @@ func TestOpenAPIContract_DocumentsExplicitRootHelperBundlingPolicy(t *testing.T)
 
 func TestOpenAPIContract_ExplicitRootHelperBundlingRoundTripsThroughFlattenBoundary(t *testing.T) {
 	factorySchema := loadFactorySchemaForSmoke(t)
+	mapper := factorymapping.NewFactoryConfigMapper()
 
-	implicitDir := writeExplicitRootHelperContractFactoryDir(t, explicitRootHelperContractFactoryJSON(false))
-	implicitFlattened := flattenFactoryConfigForSmoke(t, implicitDir)
+	implicit, err := mapper.Expand([]byte(explicitRootHelperContractFactoryJSON(false)))
+	if err != nil {
+		t.Fatalf("expand implicit representation fixture: %v", err)
+	}
+	implicit.ResourceManifest = &interfaces.PortableResourceManifestConfig{}
+	implicitFlattened, err := mapper.Flatten(implicit)
+	if err != nil {
+		t.Fatalf("flatten implicit representation fixture: %v", err)
+	}
 	assertFactorySchemaAcceptsJSON(t, factorySchema, implicitFlattened)
 	assertFlattenedBundledFilesOmitMakefile(t, implicitFlattened)
 
-	explicitDir := writeExplicitRootHelperContractFactoryDir(t, explicitRootHelperContractFactoryJSON(true))
-	explicitFlattened := flattenFactoryConfigForSmoke(t, explicitDir)
+	explicit, err := mapper.Expand([]byte(explicitRootHelperContractFactoryJSON(true)))
+	if err != nil {
+		t.Fatalf("expand explicit representation fixture: %v", err)
+	}
+	explicit.ResourceManifest.BundledFiles[0].Content = interfaces.BundledFileContentConfig{
+		Encoding: interfaces.BundledFileEncodingUTF8,
+		Inline:   "test:\n\tgo test ./...\n",
+	}
+	explicitFlattened, err := mapper.Flatten(explicit)
+	if err != nil {
+		t.Fatalf("flatten explicit representation fixture: %v", err)
+	}
 	assertFactorySchemaAcceptsJSON(t, factorySchema, explicitFlattened)
 	assertFlattenedBundledFilesIncludeExplicitMakefile(t, explicitFlattened)
-}
-
-func writeExplicitRootHelperContractFactoryDir(t *testing.T, factoryJSON string) string {
-	t.Helper()
-
-	projectDir := t.TempDir()
-	factoryDir := filepath.Join(projectDir, "factory")
-	if err := os.MkdirAll(filepath.Join(factoryDir, interfaces.WorkersDir, "executor"), 0o755); err != nil {
-		t.Fatalf("mkdir worker dir: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-story"), 0o755); err != nil {
-		t.Fatalf("mkdir workstation dir: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(factoryDir, "scripts"), 0o755); err != nil {
-		t.Fatalf("mkdir scripts: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(factoryDir, "docs"), 0o755); err != nil {
-		t.Fatalf("mkdir docs: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), []byte(factoryJSON), 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName), []byte("---\ntype: SCRIPT_WORKER\n---\nExecute the story.\n"), 0o644); err != nil {
-		t.Fatalf("write worker AGENTS.md: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-story", interfaces.FactoryAgentsFileName), []byte("---\ntype: MODEL_WORKSTATION\n---\nExecute {{ (index .Inputs 0).WorkID }}.\n"), 0o644); err != nil {
-		t.Fatalf("write workstation AGENTS.md: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, "scripts", "setup.py"), []byte("print('portable')\n"), 0o644); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, "docs", "usage.md"), []byte("# Usage\n"), 0o644); err != nil {
-		t.Fatalf("write doc: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(projectDir, "Makefile"), []byte("test:\n\tgo test ./...\n"), 0o644); err != nil {
-		t.Fatalf("write Makefile: %v", err)
-	}
-	return factoryDir
 }
 
 func explicitRootHelperContractFactoryJSON(includeExplicitMakefile bool) string {
@@ -170,7 +149,7 @@ func explicitRootHelperContractFactoryJSON(includeExplicitMakefile bool) string 
 func assertFlattenedBundledFilesOmitMakefile(t *testing.T, flattened []byte) {
 	t.Helper()
 
-	cfg, err := config.FactoryConfigFromOpenAPIJSON(flattened)
+	cfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(flattened)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
@@ -187,7 +166,7 @@ func assertFlattenedBundledFilesOmitMakefile(t *testing.T, flattened []byte) {
 func assertFlattenedBundledFilesIncludeExplicitMakefile(t *testing.T, flattened []byte) {
 	t.Helper()
 
-	cfg, err := config.FactoryConfigFromOpenAPIJSON(flattened)
+	cfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(flattened)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}

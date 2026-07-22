@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	BaselinePath = "backend-exemption-budget.json"
+	BaselinePath = "docs/internal/baselines/backend-exemption-budget.json"
 	Version      = 1
 
 	RuleBackendFile       = "backendsizecheck:ignore-file"

@@ -2,7 +2,9 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +17,7 @@ import (
 )
 
 func TestSubmit_MissingWorkTypeName(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
+	err := Submit(t, SubmitConfig{Context: context.Background(), Name: "submit-task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing work type name")
 	}
@@ -40,7 +42,7 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 	}
 
 	var diagnostics bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "verbose-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -48,6 +50,7 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 		SessionID:    "session-alpha",
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
+		Output:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -96,13 +99,14 @@ func TestSubmit_VerboseLogsJSONPayloadMetadataWithoutPayloadContentOrToken(t *te
 	}
 
 	var diagnostics bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
+		Output:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -143,13 +147,14 @@ func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 	}
 
 	var diagnostics bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
+		Output:       io.Discard,
 	})
 	if err == nil {
 		t.Fatal("expected submit failure")
@@ -164,7 +169,7 @@ func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 }
 
 func TestSubmit_MissingPayload(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Server: "http://127.0.0.1:8080"})
+	err := Submit(t, SubmitConfig{Context: context.Background(), Name: "submit-task", WorkTypeName: "task", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing payload")
 	}
@@ -174,14 +179,14 @@ func TestSubmit_MissingPayload(t *testing.T) {
 }
 
 func TestSubmit_PayloadFileNotFound(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Payload: "/nonexistent/file.json", Server: "http://127.0.0.1:8080"})
+	err := Submit(t, SubmitConfig{Context: context.Background(), Name: "submit-task", WorkTypeName: "task", Payload: "/nonexistent/file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing payload file")
 	}
 }
 
 func TestSubmit_MissingName(t *testing.T) {
-	err := Submit(SubmitConfig{WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
+	err := Submit(t, SubmitConfig{Context: context.Background(), WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
@@ -191,7 +196,7 @@ func TestSubmit_MissingName(t *testing.T) {
 }
 
 func TestSubmit_BlankName(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "   ", WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
+	err := Submit(t, SubmitConfig{Context: context.Background(), Name: "   ", WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for blank name")
 	}
@@ -249,11 +254,12 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "  CLI JSON submit  ",
 		WorkTypeName: "code-change",
 		Payload:      payloadPath,
 		Server:       server,
+		Output:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -312,7 +318,7 @@ func TestSubmit_JSONStdoutEmitsStableSuccessEnvelope(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -378,7 +384,7 @@ func TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "scoped-json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -428,7 +434,7 @@ func TestSubmit_JSONStdoutEncodesNullWorkIdWhenAbsent(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -476,7 +482,7 @@ func TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "human-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -527,7 +533,7 @@ func TestSubmit_HumanStdoutFallsBackToWorkListWithoutWorkId(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "human-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -571,12 +577,13 @@ func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Submit(SubmitConfig{
+	if err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "scoped-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       mustServerBase(t, srv.URL),
 		SessionID:    "session-beta",
+		Output:       io.Discard,
 	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -610,11 +617,12 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "markdown-submit",
 		WorkTypeName: "prd",
 		Payload:      payloadPath,
 		Server:       server,
+		Output:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -654,11 +662,12 @@ func TestSubmit_ServerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       server,
+		Output:       io.Discard,
 	})
 	if err == nil {
 		t.Fatal("expected error for server error response")
@@ -676,7 +685,7 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -710,7 +719,7 @@ func TestSubmit_NonJSONErrorBodyUsesBoundedPreview(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -752,7 +761,7 @@ func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -791,7 +800,7 @@ func TestSubmit_JSONModeDoesNotEmitSuccessOnFailure(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,

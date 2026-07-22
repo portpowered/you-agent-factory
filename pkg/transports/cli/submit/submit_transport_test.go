@@ -2,6 +2,7 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +45,7 @@ func TestSubmit_Transport_HTTP201CreatedSuccess(t *testing.T) {
 	}
 
 	server := mustServerBase(t, srv.URL)
-	baseCfg := SubmitConfig{
+	baseCfg := SubmitConfig{Context: context.Background(),
 		Name:         name,
 		WorkTypeName: workType,
 		Payload:      payloadPath,
@@ -55,7 +56,7 @@ func TestSubmit_Transport_HTTP201CreatedSuccess(t *testing.T) {
 		var out bytes.Buffer
 		cfg := baseCfg
 		cfg.Output = &out
-		if err := Submit(cfg); err != nil {
+		if err := Submit(t, cfg); err != nil {
 			t.Fatalf("Submit: %v", err)
 		}
 		got := out.String()
@@ -76,7 +77,7 @@ func TestSubmit_Transport_HTTP201CreatedSuccess(t *testing.T) {
 		cfg := baseCfg
 		cfg.JSON = true
 		cfg.Output = &out
-		if err := Submit(cfg); err != nil {
+		if err := Submit(t, cfg); err != nil {
 			t.Fatalf("Submit: %v", err)
 		}
 		var envelope SubmitSuccessResult
@@ -119,7 +120,7 @@ func TestSubmit_Transport_UnreachableFactory(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	submitErr := Submit(SubmitConfig{
+	submitErr := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "transport-unreachable",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
@@ -159,7 +160,7 @@ func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := Submit(SubmitConfig{
+	err := Submit(t, SubmitConfig{Context: context.Background(),
 		Name:         "transport-api-error",
 		WorkTypeName: "task",
 		Payload:      payloadPath,

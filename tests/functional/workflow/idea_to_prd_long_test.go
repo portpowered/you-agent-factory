@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -31,20 +32,16 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 		"prd-processor": {{Content: "Done. COMPLETE"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
 
 	if provider.CallCount("planner") != 1 {
 		t.Errorf("expected planner called 1 time, got %d", provider.CallCount("planner"))
 	}
 
-	h.Assert().HasNoTokenInPlace("idea:init")
-	h.Assert().HasTokenInPlace("prd:complete")
-	h.Assert().TokenHasTraceID("prd:complete", originTraceID)
-	h.Assert().TokenHasWorkTypeID("prd:complete", "prd")
+	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:init": 0, "prd:complete": 1})
+	assertListedWorkStateTrace(t, listedWork, "prd", "complete", originTraceID)
 }
 
 // TestIdeaToPRD_PlannerFailure verifies that when the planner fails, the idea
@@ -55,20 +52,14 @@ func TestIdeaToPRD_PlannerFailure(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title": "broken idea"}`))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stderr:   []byte("LLM timeout"),
 		ExitCode: 1,
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:failed").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("prd:complete")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:failed": 1, "prd:init": 0, "prd:complete": 0})
 }
 
 // TestIdeaToPRD_MultipleIdeas verifies that multiple idea tokens each produce
@@ -95,15 +86,9 @@ func TestIdeaToPRD_MultipleIdeas(t *testing.T) {
 		"prd-processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().HasNoTokenInPlace("idea:init")
-	h.Assert().PlaceTokenCount("prd:complete", 2)
-	h.Assert().
-		TokenHasTraceID("prd:complete", trace1).
-		TokenHasTraceID("prd:complete", trace2)
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:init": 0, "prd:complete": 2})
+	assertCompletedWorkTraces(t, listedWork, "prd", "complete", []string{trace1, trace2})
 }

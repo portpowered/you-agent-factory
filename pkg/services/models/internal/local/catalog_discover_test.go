@@ -1,0 +1,181 @@
+package local
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
+	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+)
+
+type stubRuntimeCacheInspector struct {
+	byModel map[string]RuntimeCacheInspection
+}
+
+func (s stubRuntimeCacheInspector) InspectRuntimeCache(_ context.Context, _ *modelRuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
+	if s.byModel == nil {
+		return RuntimeCacheInspection{}, nil
+	}
+	inspection, ok := s.byModel[CanonicalModelName(modelName)]
+	if !ok {
+		return RuntimeCacheInspection{}, nil
+	}
+	return inspection, nil
+}
+
+func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
+		"OMNIVOICE_Q4_K_M": {
+			Supported:          true,
+			Installed:          true,
+			Revision:           "rev-installed",
+			CachePath:          "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed",
+			InstalledFileCount: 2,
+		},
+	}}
+	resolver := DefaultManagedRuntimeSourceResolver()
+
+	models, err := ListModelsWithRuntime(loaded, inspector, resolver)
+	if err != nil {
+		t.Fatalf("ListModelsWithOptions: %v", err)
+	}
+	if len(models.Results) != 1 {
+		t.Fatalf("models count = %d, want 1", len(models.Results))
+	}
+	listRuntime := models.Results[0].ManagedRuntime
+	if listRuntime.ReadinessState != managedruntime.ReadinessStateReady {
+		t.Fatalf("list readiness = %s, want READY", listRuntime.ReadinessState)
+	}
+	if listRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
+		t.Fatalf("list lifecycle = %s, want INSTALLED", listRuntime.LifecycleState)
+	}
+
+	detail, err := GetModelWithRuntime(loaded, "OMNIVOICE_Q4_K_M", inspector, resolver)
+	if err != nil {
+		t.Fatalf("GetModelWithOptions: %v", err)
+	}
+	inspectRuntime := detail.ManagedRuntime
+	if inspectRuntime.Identity != listRuntime.Identity ||
+		inspectRuntime.ReadinessState != listRuntime.ReadinessState ||
+		inspectRuntime.LifecycleState != listRuntime.LifecycleState ||
+		inspectRuntime.Locality != listRuntime.Locality {
+		t.Fatalf("inspect runtime = %#v, want list parity %#v", inspectRuntime, listRuntime)
+	}
+	if detail.Diagnostics["revision"] != "rev-installed" {
+		t.Fatalf("inspect diagnostics revision = %q, want rev-installed", detail.Diagnostics["revision"])
+	}
+	if detail.Diagnostics["installedFileCount"] != "2" {
+		t.Fatalf("inspect diagnostics installedFileCount = %q, want 2", detail.Diagnostics["installedFileCount"])
+	}
+}
+
+func TestListModels_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
+	t.Parallel()
+	cfg := multiRuntimeCatalogFactoryConfig()
+	loaded := mustLoadedCatalogConfig(t, cfg)
+	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
+		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, Revision: "rev-a"},
+		"SECOND_RUNTIME":   {Supported: true, Installed: false, MissingAssets: []string{"weights.bin"}},
+	}}
+	resolver := DefaultManagedRuntimeSourceResolver()
+
+	models, err := ListModelsWithRuntime(loaded, inspector, resolver)
+	if err != nil {
+		t.Fatalf("ListModelsWithOptions: %v", err)
+	}
+	if len(models.Results) != 2 {
+		t.Fatalf("models count = %d, want 2", len(models.Results))
+	}
+	byName := map[string]modelcatalog.Summary{}
+	for _, model := range models.Results {
+		byName[model.Name] = model
+	}
+	ready := byName["OMNIVOICE_Q4_K_M"].ManagedRuntime
+	missing := byName["SECOND_RUNTIME"].ManagedRuntime
+	if ready.ReadinessState != managedruntime.ReadinessStateReady || ready.LifecycleState != managedruntime.LifecycleStateInstalled {
+		t.Fatalf("ready runtime = (%s, %s), want READY/INSTALLED", ready.ReadinessState, ready.LifecycleState)
+	}
+	if missing.ReadinessState != managedruntime.ReadinessStateMissing || missing.LifecycleState != managedruntime.LifecycleStateNotInstalled {
+		t.Fatalf("missing runtime = (%s, %s), want MISSING/NOT_INSTALLED", missing.ReadinessState, missing.LifecycleState)
+	}
+
+	detail, err := GetModelWithRuntime(loaded, "SECOND_RUNTIME", inspector, resolver)
+	if err != nil {
+		t.Fatalf("GetModelWithOptions SECOND_RUNTIME: %v", err)
+	}
+	if detail.ManagedRuntime.Diagnostics == nil || detail.ManagedRuntime.Diagnostics["sourceKind"] != ManagedRuntimeSourceKindManagedMirror {
+		t.Fatalf("mirror runtime source diagnostics = %#v, want MANAGED_MIRROR", detail.ManagedRuntime.Diagnostics)
+	}
+}
+
+func TestInspectRuntimeCache_UsesLocalCacheWithoutUpstreamFetch(t *testing.T) {
+	t.Parallel()
+	cacheDir := t.TempDir()
+	puller := mustNewAssetPuller(t, cacheDir)
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+
+	revisionDir := filepath.Join(cacheDir, "OMNIVOICE_Q4_K_M", "rev-local")
+	if err := os.MkdirAll(revisionDir, 0o755); err != nil {
+		t.Fatalf("mkdir revision cache: %v", err)
+	}
+	for _, name := range []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"} {
+		if err := os.WriteFile(filepath.Join(revisionDir, name), []byte("fixture"), 0o644); err != nil {
+			t.Fatalf("write cache file %s: %v", name, err)
+		}
+	}
+
+	inspection, err := puller.InspectRuntimeCache(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.Installed || inspection.InstalledFileCount != 2 {
+		t.Fatalf("inspection = %#v, want supported installed cache with 2 files", inspection)
+	}
+}
+
+func multiRuntimeCatalogFactoryConfig() *testFactoryConfig {
+	first := modelRuntimeWorker{
+		Name:          "voice-local",
+		Type:          models.RuntimeWorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: models.RuntimeModelLocalityLocal,
+		Operations:    []models.RuntimeOperation{{Name: "TTS"}},
+		Resources:     []modelRuntimeResource{{Name: "omnivoice-cache", Capacity: 1}},
+	}
+	second := modelRuntimeWorker{
+		Name:          "second-local",
+		Type:          models.RuntimeWorkerTypeModel,
+		Model:         "SECOND_RUNTIME",
+		ModelLocality: models.RuntimeModelLocalityLocal,
+		Operations:    []models.RuntimeOperation{{Name: "EMBED"}},
+		Resources:     []modelRuntimeResource{{Name: "second-cache", Capacity: 1}},
+	}
+	return &testFactoryConfig{
+		Name:    "factory",
+		Workers: []modelRuntimeWorker{first, second},
+		Resources: []modelRuntimeResource{
+			{
+				Name:       "omnivoice-cache",
+				Type:       models.RuntimeResourceTypeModel,
+				Capacity:   1,
+				Model:      "OMNIVOICE_Q4_K_M",
+				Backend:    "GGUF",
+				LoadPolicy: "ON_DEMAND",
+			},
+			{
+				Name:       "second-cache",
+				Type:       models.RuntimeResourceTypeModel,
+				Capacity:   1,
+				Model:      "SECOND_RUNTIME",
+				Backend:    "GGUF",
+				LoadPolicy: "ON_DEMAND",
+				Provider:   "MODELSCOPE",
+			},
+		},
+	}
+}

@@ -15,8 +15,8 @@ const (
 	// staged to packages/api/generated/mcp/tools.json.
 	CatalogStagingInventoryFormatVersion = "1"
 
-	catalogTransportStdioJSONRPC = "stdio-json-rpc"
-	catalogExecutionModeToolsCall  = "tools-call"
+	catalogTransportStdioJSONRPC  = "stdio-json-rpc"
+	catalogExecutionModeToolsCall = "tools-call"
 )
 
 var (

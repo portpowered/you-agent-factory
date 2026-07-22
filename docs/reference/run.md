@@ -203,5 +203,6 @@ response events, global `--json` preserves the invocation response contract:
 you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
-Factory authoring and validation live under `you docs config`. Dynamic workflow
-execution uses `you workflow` and `you docs javascript-workflows`.
+Factory authoring and validation live under `you docs config`. JavaScript
+orchestrator authoring uses `you docs javascript-workflows`; execution uses the
+canonical Factory and Factory Session surfaces described above.

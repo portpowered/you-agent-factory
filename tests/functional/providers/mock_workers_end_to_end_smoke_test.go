@@ -1,9 +1,7 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,14 +9,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials(t *testing.T) {
@@ -60,15 +57,7 @@ args:
 	mockWorkersPath := writeMixedMockWorkersSmokeConfig(t, sideEffectPath)
 	artifactPath := filepath.Join(t.TempDir(), "mixed-mock-workers.replay.json")
 
-	output, err := runRecordReplayCLIWithCapturedStdoutForProviders(t, runcli.RunConfig{
-		Dir:                        dir,
-		Port:                       0,
-		MockWorkersEnabled:         true,
-		MockWorkersConfigPath:      mockWorkersPath,
-		RecordPath:                 artifactPath,
-		SuppressDashboardRendering: true,
-		Logger:                     zap.NewNop(),
-	})
+	output, err := runRecordReplayCLIWithCapturedStdoutForProviders(t, dir, mockWorkersPath, artifactPath)
 	if err != nil {
 		t.Fatalf("mock-worker smoke run failed: %v", err)
 	}
@@ -87,14 +76,21 @@ args:
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertMockWorkersSmokeRecordedOutcomes(t, artifact)
 
-	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	replayHarness.Service.Assert().
-		PlaceTokenCount("accept-task:done", 1).
-		PlaceTokenCount("reject-task:failed", 1).
-		PlaceTokenCount("script-task:done", 1).
-		HasNoTokenInPlace("accept-task:init").
-		HasNoTokenInPlace("reject-task:init").
-		HasNoTokenInPlace("script-task:init")
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, replayServer.URL())
+	for placeID, want := range map[string]int{
+		"accept-task:done": 1, "reject-task:failed": 1, "script-task:done": 1,
+		"accept-task:init": 0, "reject-task:init": 0, "script-task:init": 0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+	replayServer.Stop(t)
 }
 
 func mixedMockWorkersSmokeConfig() map[string]any {
@@ -152,14 +148,14 @@ func writeMixedMockWorkersSmokeConfig(t *testing.T, sideEffectPath string) strin
 	t.Helper()
 
 	exitCode := 13
-	cfg := factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				ID:              "reject-agent-by-workstation",
 				WorkerName:      "reject-agent",
 				WorkstationName: "reject-process",
-				RunType:         factoryconfig.MockWorkerRunTypeReject,
-				RejectConfig: &factoryconfig.MockWorkerRejectConfig{
+				RunType:         workers.MockWorkerRunTypeReject,
+				RejectConfig: &workers.MockWorkerRejectConfig{
 					Stdout:   "mixed reject stdout",
 					Stderr:   "mixed reject stderr",
 					ExitCode: &exitCode,
@@ -169,8 +165,8 @@ func writeMixedMockWorkersSmokeConfig(t *testing.T, sideEffectPath string) strin
 				ID:              "script-worker-side-effect",
 				WorkerName:      "script-worker",
 				WorkstationName: "script-process",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: os.Args[0],
 					Args: []string{
 						"-test.run=TestMockWorkers_ScriptHelper",
@@ -246,37 +242,23 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	}
 }
 
-func runRecordReplayCLIWithCapturedStdoutForProviders(t *testing.T, cfg runcli.RunConfig) (string, error) {
+func runRecordReplayCLIWithCapturedStdoutForProviders(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	artifactPath string,
+) (string, error) {
 	t.Helper()
 
-	oldStdout := os.Stdout
-	readPipe, writePipe, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
-	}
-
-	readCh := make(chan []byte, 1)
-	readErrCh := make(chan error, 1)
-	go func() {
-		data, readErr := io.ReadAll(readPipe)
-		readCh <- data
-		readErrCh <- readErr
-	}()
-
-	os.Stdout = writePipe
-	runErr := runcli.Run(context.Background(), cfg)
-	os.Stdout = oldStdout
-
-	if err := writePipe.Close(); err != nil {
-		t.Fatalf("close captured stdout writer: %v", err)
-	}
-	output := <-readCh
-	if err := <-readErrCh; err != nil {
-		t.Fatalf("read captured stdout: %v", err)
-	}
-	if err := readPipe.Close(); err != nil {
-		t.Fatalf("close captured stdout reader: %v", err)
-	}
-
-	return string(output), runErr
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", factoryDir,
+		"--with-mock-workers", mockWorkersPath,
+		"--record", artifactPath,
+		"--quiet",
+	})
+	inputs.WorkingDirectory = t.TempDir()
+	err := process.Execute(inputs.Input)
+	return inputs.Stdout(), err
 }

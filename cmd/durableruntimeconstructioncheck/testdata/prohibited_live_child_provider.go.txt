@@ -3,8 +3,8 @@ package livechild
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers/provider"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 func executeDirectly(ctx context.Context, live provider.Provider) {

@@ -3,7 +3,7 @@ package apisurface
 import (
 	"strings"
 
-	factorysessioncursors "github.com/portpowered/infinite-you/pkg/factory/sessions/cursors"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -11,11 +11,11 @@ import (
 // fields into the Factory Session owner's recovery-classification input.
 func FactorySessionCursorPreflightResult(
 	response factoryapi.FactorySessionSyncPreflightResponse,
-) factorysessioncursors.PreflightResult {
-	return factorysessioncursors.PreflightResult{
+) factorysessions.CursorPreflightResult {
+	return factorysessions.CursorPreflightResult{
 		Reason:             factorySessionCursorPreflightReason(response.ReasonCode),
 		RequestedSessionID: response.RequestedSessionId,
-		Scope: factorysessioncursors.IdentityScope{
+		Scope: factorysessions.CursorIdentityScope{
 			BackendScopeID:      cursorStringValue(response.BackendScopeId),
 			LogicalSessionKeyID: cursorStringValue(response.LogicalSessionKeyId),
 			FactorySessionID:    cursorStringValue(response.FactorySessionId),
@@ -26,14 +26,14 @@ func FactorySessionCursorPreflightResult(
 
 func factorySessionCursorPreflightReason(
 	reason factoryapi.FactorySessionSyncPreflightReasonCode,
-) factorysessioncursors.PreflightReason {
+) factorysessions.CursorPreflightReason {
 	switch reason {
 	case factoryapi.CursorStale:
-		return factorysessioncursors.PreflightCursorStale
+		return factorysessions.CursorPreflightStale
 	case factoryapi.SessionNotFound:
-		return factorysessioncursors.PreflightSessionNotFound
+		return factorysessions.CursorPreflightSessionNotFound
 	case factoryapi.LogicalSessionRemap:
-		return factorysessioncursors.PreflightSessionRemapped
+		return factorysessions.CursorPreflightSessionRemapped
 	default:
 		return ""
 	}

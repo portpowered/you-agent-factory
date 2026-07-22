@@ -3,14 +3,15 @@
 package factoryeventprojection
 
 import (
-	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ReconstructFactoryWorldState converts public events at the transport
 // boundary, then delegates ordering and reduction to the Factory owner.
 func ReconstructFactoryWorldState(
+	reconstruct recordings.WorldStateReconstructor,
 	events []factoryapi.FactoryEvent,
 	selectedTick int,
 ) (factorycontracts.FactoryWorldState, error) {
@@ -22,5 +23,5 @@ func ReconstructFactoryWorldState(
 		}
 		canonicalEvents = append(canonicalEvents, canonicalEvent)
 	}
-	return projections.ReconstructCanonicalFactoryWorldState(canonicalEvents, selectedTick)
+	return reconstruct(canonicalEvents, selectedTick)
 }

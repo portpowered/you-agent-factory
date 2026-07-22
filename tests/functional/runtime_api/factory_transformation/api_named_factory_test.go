@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,8 +25,6 @@ func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testi
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
-	assertCurrentFactoryPointer(t, rootDir, "beta")
-
 	current := getCurrentFactory(t, server.URL())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
@@ -109,7 +105,7 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *t
 	}
 	if errResp.Targets == nil || !hasValidationTarget(
 		*errResp.Targets,
-		factoryvalidation.CodeWorkstationMissingFailureRoute,
+		factoryValidationCodeWorkstationMissingFailureRoute,
 		factoryapi.FactoryValidationSubjectTypeWorkstation,
 		"bob",
 		factoryapi.FactoryValidationSubjectLocationOnFailure,
@@ -153,9 +149,9 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
 		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
 	}
-	if !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDuplicateIdentifier) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingWorkerReference) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+	if !hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDuplicateIdentifier) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingWorkerReference) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingPlaceReference) {
 		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
 	}
 }
@@ -212,17 +208,6 @@ func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code 
 		}
 	}
 	return false
-}
-
-func assertCurrentFactoryPointer(t *testing.T, rootDir, want string) {
-	t.Helper()
-	got, err := config.ReadCurrentFactoryPointer(rootDir)
-	if err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
-	}
-	if got != want {
-		t.Fatalf("current factory pointer = %q, want %q", got, want)
-	}
 }
 
 func assertFactoryWorkType(t *testing.T, factory factoryapi.Factory, want string, contextLabel string) {

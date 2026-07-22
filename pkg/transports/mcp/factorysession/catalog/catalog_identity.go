@@ -66,11 +66,8 @@ func CatalogToolIdentitiesFromCatalogDocument(value any) ([]CatalogToolIdentity,
 }
 
 // VerifyCatalogToolIdentityCompleteness ensures every discovered canonical tool occurs
-// exactly once in the catalog by stable ID and public name, rejects extras and
-// duplicates, and excludes compatibility alias names from canonical catalog identity.
+// exactly once in the catalog by stable ID and public name and rejects extras and duplicates.
 func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discovered []mcpfactorysession.ToolDefinition) error {
-	aliasNames := compatibilityAliasNameSet()
-
 	byID := make(map[string]string, len(catalog))
 	byName := make(map[string]string, len(catalog))
 	for _, entry := range catalog {
@@ -79,9 +76,6 @@ func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discov
 		}
 		if previous, ok := byName[entry.Name]; ok {
 			return fmt.Errorf("duplicate catalog public name %q for IDs %q and %q", entry.Name, previous, entry.ID)
-		}
-		if _, isAlias := aliasNames[entry.Name]; isAlias {
-			return fmt.Errorf("compatibility alias %q must not appear in canonical catalog", entry.Name)
 		}
 		wantID := CatalogToolIDForName(entry.Name)
 		if entry.ID != wantID {
@@ -114,13 +108,4 @@ func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discov
 	}
 
 	return nil
-}
-
-func compatibilityAliasNameSet() map[string]struct{} {
-	aliases := mcpfactorysession.DiscoverCompatibilityAliases()
-	names := make(map[string]struct{}, len(aliases))
-	for _, alias := range aliases {
-		names[alias.Name] = struct{}{}
-	}
-	return names
 }

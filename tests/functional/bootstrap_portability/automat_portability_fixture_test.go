@@ -1,7 +1,6 @@
 package bootstrap_portability
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io/fs"
@@ -12,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -51,7 +51,7 @@ func TestAutomatPortabilityFixture_ModelsBoundedPortableRuntimeLayout(t *testing
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, automatFixtureName))
 	activateAutomatRequiredToolsOnPath(t)
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	loaded, err := support.LoadedFactory(t, dir)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(%s): %v", automatFixtureName, err)
 	}
@@ -111,18 +111,18 @@ func TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout(t *testin
 	assertAutomatExpandedBundledFile(t, expandedDir, automatDependencyContract, filepath.Join(authoredFactoryDir, automatDependencyContract))
 
 	activateAutomatRequiredToolsOnPath(t)
-	loaded, err := factoryconfig.LoadRuntimeConfig(expandedDir, nil)
+	loaded, err := support.LoadedFactory(t, expandedDir)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(expanded automat layout): %v", err)
 	}
-	if loaded.FactoryConfig() == nil || loaded.FactoryConfig().ResourceManifest == nil {
+	if loaded.SupportingFiles == nil {
 		t.Fatal("expected expanded automat layout to retain resource manifest")
 	}
-	assertAutomatRequiredToolsManifest(t, loaded.FactoryConfig().ResourceManifest.RequiredTools)
-	bundledFiles := bundledFilesByTarget(loaded.FactoryConfig().ResourceManifest.BundledFiles)
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/docs/portable-workflow.md")
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1")
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/verify-external-tools.ps1")
+	assertAutomatRequiredToolsManifestAPI(t, loaded.SupportingFiles.RequiredTools)
+	bundledFiles := bundledFilesByTargetAPI(loaded.SupportingFiles.BundledFiles)
+	assertAutomatBundledFileEntryWithoutInlineAPI(t, bundledFiles, "factory/docs/portable-workflow.md")
+	assertAutomatBundledFileEntryWithoutInlineAPI(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1")
+	assertAutomatBundledFileEntryWithoutInlineAPI(t, bundledFiles, "factory/scripts/verify-external-tools.ps1")
 
 	assertAutomatDependencyContract(t, expandedDir)
 }
@@ -149,18 +149,19 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 		authoredDir: authoredFactoryDir,
 	}
 	activateAutomatRequiredToolsOnPath(t)
-	harness := testutil.NewServiceTestHarness(t, expandedDir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-
-	harness.Assert().
-		PlaceTokenCount("chapter:ready", 1).
-		HasNoTokenInPlace("chapter:init").
-		HasNoTokenInPlace("chapter:staged").
-		HasNoTokenInPlace("chapter:failed")
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, expandedDir, serviceedges.Edges{
+		ScriptCommandRunner: runner,
+	}, 10*time.Second)
+	for placeID, want := range map[string]int{
+		"chapter:ready":  1,
+		"chapter:init":   0,
+		"chapter:staged": 0,
+		"chapter:failed": 0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 
 	if issues := runner.Issues(); len(issues) > 0 {
 		t.Fatalf("expanded automat readiness smoke issues:\n%s", strings.Join(issues, "\n"))
@@ -170,11 +171,11 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 	if len(requests) != 2 {
 		t.Fatalf("dispatch-ready smoke should issue 2 script requests, got %d", len(requests))
 	}
-	if got := requests[0].WorkstationName; got != automatPrepareWorkstation {
-		t.Fatalf("first workstation = %q, want %q", got, automatPrepareWorkstation)
+	if got, _ := automatScriptPathAndIssues(requests[0].Args); filepath.Base(got) != filepath.Base(automatPrepareScript) {
+		t.Fatalf("first script = %q, want %q", got, automatPrepareScript)
 	}
-	if got := requests[1].WorkstationName; got != automatVerifyWorkstation {
-		t.Fatalf("second workstation = %q, want %q", got, automatVerifyWorkstation)
+	if got, _ := automatScriptPathAndIssues(requests[1].Args); filepath.Base(got) != filepath.Base(automatVerifyToolsScript) {
+		t.Fatalf("second script = %q, want %q", got, automatVerifyToolsScript)
 	}
 
 	prepareReq := requests[0]
@@ -194,7 +195,7 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 		t.Fatalf("verify env missing dependency contract: %v", verifyReq.Env)
 	}
 
-	assertTokenPayload(t, harness.Marking(), "chapter:ready", "required-tools:"+automatExternalMangaka+","+automatExternalMagick)
+	assertListedWorkPayload(t, listed, "chapter", "ready", "required-tools:"+automatExternalMangaka+","+automatExternalMagick)
 }
 
 func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []byte) {
@@ -204,21 +205,23 @@ func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []b
 	authoredFactoryDir := filepath.Join(projectDir, "factory")
 	copyFixtureIntoDir(t, support.LegacyFixtureDir(t, automatFixtureName), authoredFactoryDir)
 
-	var flattenOut bytes.Buffer
-	flattenCmd := cli.NewRootCommand()
-	flattenCmd.SetOut(&flattenOut)
-	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"factory", "config", "flatten", authoredFactoryDir})
-	if err := flattenCmd.Execute(); err != nil {
+	process := support.BuildProcess(t, serviceEdgesForAutomatPortability())
+	flattenInputs := support.FakeInputs(
+		context.Background(),
+		[]string{"you", "factory", "config", "flatten", authoredFactoryDir},
+	)
+	flattenInputs.WorkingDirectory = projectDir
+	if err := process.Execute(flattenInputs.Input); err != nil {
 		t.Fatalf("execute config flatten: %v", err)
 	}
 
-	flattenedCfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(flattenOut.Bytes())
+	flattenedBytes := []byte(flattenInputs.Stdout())
+	flattenedCfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(flattenedBytes)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON(flattened automat fixture): %v", err)
 	}
 
-	return authoredFactoryDir, flattenedCfg, flattenOut.Bytes()
+	return authoredFactoryDir, flattenedCfg, flattenedBytes
 }
 
 func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, string) {
@@ -233,15 +236,21 @@ func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryCo
 	}
 	copyAutomatPortableExportSidecars(t, authoredFactoryDir, expandedDir)
 
-	expandCmd := cli.NewRootCommand()
-	expandCmd.SetOut(&bytes.Buffer{})
-	expandCmd.SetErr(&bytes.Buffer{})
-	expandCmd.SetArgs([]string{"factory", "config", "expand", expandedFactoryPath})
-	if err := expandCmd.Execute(); err != nil {
+	process := support.BuildProcess(t, serviceEdgesForAutomatPortability())
+	expandInputs := support.FakeInputs(
+		context.Background(),
+		[]string{"you", "factory", "config", "expand", expandedFactoryPath},
+	)
+	expandInputs.WorkingDirectory = expandedDir
+	if err := process.Execute(expandInputs.Input); err != nil {
 		t.Fatalf("execute config expand: %v", err)
 	}
 
 	return authoredFactoryDir, flattenedCfg, expandedDir
+}
+
+func serviceEdgesForAutomatPortability() serviceedges.Edges {
+	return serviceedges.Edges{}
 }
 
 func assertAutomatFixtureFiles(t *testing.T, dir string) {
@@ -312,57 +321,57 @@ func assertAutomatDependencyContract(t *testing.T, dir string) {
 	}
 }
 
-func assertAutomatFixtureWorkers(t *testing.T, loaded *factoryconfig.LoadedFactoryConfig) {
+func assertAutomatFixtureWorkers(t *testing.T, loaded factoryapi.Factory) {
 	t.Helper()
 
-	prepareWorker, ok := loaded.Worker(automatPrepareWorker)
+	prepareWorker, ok := support.FindFactoryWorker(loaded, automatPrepareWorker)
 	if !ok {
 		t.Fatalf("expected worker %q", automatPrepareWorker)
 	}
-	if prepareWorker.Type != interfaces.WorkerTypeScript || prepareWorker.Command != "powershell" {
+	if prepareWorker.Type == nil || string(*prepareWorker.Type) != string(interfaces.WorkerTypeScript) || prepareWorker.Command == nil || *prepareWorker.Command != "powershell" {
 		t.Fatalf("prepare worker = %#v", prepareWorker)
 	}
-	if !containsFixtureString(prepareWorker.Args, automatPrepareScript) || !containsFixtureString(prepareWorker.Args, automatDependencyContract) {
+	if prepareWorker.Args == nil || !containsFixtureString(*prepareWorker.Args, automatPrepareScript) || !containsFixtureString(*prepareWorker.Args, automatDependencyContract) {
 		t.Fatalf("prepare worker args = %#v", prepareWorker.Args)
 	}
 
-	verifyWorker, ok := loaded.Worker(automatVerifyExternalWorker)
+	verifyWorker, ok := support.FindFactoryWorker(loaded, automatVerifyExternalWorker)
 	if !ok {
 		t.Fatalf("expected worker %q", automatVerifyExternalWorker)
 	}
-	if verifyWorker.Type != interfaces.WorkerTypeScript || verifyWorker.Command != "powershell" {
+	if verifyWorker.Type == nil || string(*verifyWorker.Type) != string(interfaces.WorkerTypeScript) || verifyWorker.Command == nil || *verifyWorker.Command != "powershell" {
 		t.Fatalf("verify worker = %#v", verifyWorker)
 	}
-	if !containsFixtureString(verifyWorker.Args, automatVerifyToolsScript) || !containsFixtureString(verifyWorker.Args, automatDependencyContract) {
+	if verifyWorker.Args == nil || !containsFixtureString(*verifyWorker.Args, automatVerifyToolsScript) || !containsFixtureString(*verifyWorker.Args, automatDependencyContract) {
 		t.Fatalf("verify worker args = %#v", verifyWorker.Args)
 	}
 }
 
-func assertAutomatFixtureWorkstations(t *testing.T, loaded *factoryconfig.LoadedFactoryConfig) {
+func assertAutomatFixtureWorkstations(t *testing.T, loaded factoryapi.Factory) {
 	t.Helper()
 
-	prepareWorkstation, ok := loaded.Workstation(automatPrepareWorkstation)
+	prepareWorkstation, ok := support.FindFactoryWorkstation(loaded, automatPrepareWorkstation)
 	if !ok {
 		t.Fatalf("expected workstation %q", automatPrepareWorkstation)
 	}
-	if prepareWorkstation.Type != interfaces.WorkstationTypeModel || !prepareWorkstation.CopyReferencedScripts {
+	if prepareWorkstation.Type == nil || string(*prepareWorkstation.Type) != string(interfaces.WorkstationTypeScript) || prepareWorkstation.CopyReferencedScripts == nil || !*prepareWorkstation.CopyReferencedScripts {
 		t.Fatalf("prepare workstation = %#v", prepareWorkstation)
 	}
-	if prepareWorkstation.WorkingDirectory != "runtime/{{ (index .Inputs 0).WorkID }}" {
-		t.Fatalf("prepare workstation working directory = %q", prepareWorkstation.WorkingDirectory)
+	if prepareWorkstation.WorkingDirectory == nil || *prepareWorkstation.WorkingDirectory != "runtime/{{ (index .Inputs 0).WorkID }}" {
+		t.Fatalf("prepare workstation working directory = %q", stringPtrValue(prepareWorkstation.WorkingDirectory))
 	}
-	if prepareWorkstation.Env["AUTOMAT_DEPENDENCY_CONTRACT"] != automatDependencyContract {
+	if prepareWorkstation.Env == nil || (*prepareWorkstation.Env)["AUTOMAT_DEPENDENCY_CONTRACT"] != automatDependencyContract {
 		t.Fatalf("prepare workstation env = %#v", prepareWorkstation.Env)
 	}
 
-	verifyWorkstation, ok := loaded.Workstation(automatVerifyWorkstation)
+	verifyWorkstation, ok := support.FindFactoryWorkstation(loaded, automatVerifyWorkstation)
 	if !ok {
 		t.Fatalf("expected workstation %q", automatVerifyWorkstation)
 	}
-	if verifyWorkstation.Type != interfaces.WorkstationTypeModel || !verifyWorkstation.CopyReferencedScripts {
+	if verifyWorkstation.Type == nil || string(*verifyWorkstation.Type) != string(interfaces.WorkstationTypeScript) || verifyWorkstation.CopyReferencedScripts == nil || !*verifyWorkstation.CopyReferencedScripts {
 		t.Fatalf("verify workstation = %#v", verifyWorkstation)
 	}
-	if verifyWorkstation.Env["AUTOMAT_DEPENDENCY_CONTRACT"] != automatDependencyContract {
+	if verifyWorkstation.Env == nil || (*verifyWorkstation.Env)["AUTOMAT_DEPENDENCY_CONTRACT"] != automatDependencyContract {
 		t.Fatalf("verify workstation env = %#v", verifyWorkstation.Env)
 	}
 }
@@ -455,6 +464,17 @@ func bundledFilesByTarget(bundledFiles []interfaces.BundledFileConfig) map[strin
 	return byTarget
 }
 
+func bundledFilesByTargetAPI(bundledFiles *[]factoryapi.BundledFile) map[string]factoryapi.BundledFile {
+	if bundledFiles == nil {
+		return nil
+	}
+	byTarget := make(map[string]factoryapi.BundledFile, len(*bundledFiles))
+	for _, bundledFile := range *bundledFiles {
+		byTarget[bundledFile.TargetPath] = bundledFile
+	}
+	return byTarget
+}
+
 func assertAutomatBundledFileContent(t *testing.T, bundledFiles map[string]interfaces.BundledFileConfig, targetLocation, sourcePath string) {
 	t.Helper()
 
@@ -474,6 +494,17 @@ func assertAutomatBundledFileContent(t *testing.T, bundledFiles map[string]inter
 func assertAutomatBundledFileEntryWithoutInline(t *testing.T, bundledFiles map[string]interfaces.BundledFileConfig, targetLocation string) {
 	t.Helper()
 
+	bundledFile, ok := bundledFiles[targetLocation]
+	if !ok {
+		t.Fatalf("expected bundled file %s", targetLocation)
+	}
+	if bundledFile.Content.Inline != "" {
+		t.Fatalf("expected bundled file %s to omit inline content, got %q", targetLocation, bundledFile.Content.Inline)
+	}
+}
+
+func assertAutomatBundledFileEntryWithoutInlineAPI(t *testing.T, bundledFiles map[string]factoryapi.BundledFile, targetLocation string) {
+	t.Helper()
 	bundledFile, ok := bundledFiles[targetLocation]
 	if !ok {
 		t.Fatalf("expected bundled file %s", targetLocation)
@@ -528,6 +559,29 @@ func assertAutomatRequiredToolsManifest(t *testing.T, tools []interfaces.Require
 		}
 		if tool.Purpose != wantPurpose {
 			t.Fatalf("required tool %q purpose = %q, want %q", tool.Name, tool.Purpose, wantPurpose)
+		}
+	}
+}
+
+func assertAutomatRequiredToolsManifestAPI(t *testing.T, tools *[]factoryapi.RequiredTool) {
+	t.Helper()
+	if tools == nil || len(*tools) != 2 {
+		t.Fatalf("supportingFiles.requiredTools = %#v, want two external tools", tools)
+	}
+	expected := map[string]string{
+		automatExternalMangaka: "OCR and translation extraction remain external to the portable factory",
+		automatExternalMagick:  "Image normalization remains external to the portable factory",
+	}
+	for name, purpose := range expected {
+		found := false
+		for _, tool := range *tools {
+			if tool.Name == name && tool.Purpose != nil && *tool.Purpose == purpose {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("supportingFiles.requiredTools missing %q: %#v", name, *tools)
 		}
 	}
 }
@@ -697,13 +751,13 @@ type automatDispatchReadyRunner struct {
 	authoredDir string
 
 	mu       sync.Mutex
-	requests []workers.CommandRequest
+	requests []platformprocess.CommandRequest
 	issues   []string
 }
 
-func (r *automatDispatchReadyRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *automatDispatchReadyRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
-	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, cloneAutomatProcessRequest(req))
 	r.mu.Unlock()
 
 	scriptPath, issues := automatScriptPathAndIssues(req.Args)
@@ -717,31 +771,31 @@ func (r *automatDispatchReadyRunner) Run(_ context.Context, req workers.CommandR
 		issues = append(issues, prepareIssues...)
 		if len(issues) > 0 {
 			r.recordIssues(issues)
-			return workers.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
+			return platformprocess.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
 		}
-		return workers.CommandResult{Stdout: []byte(stdout)}, nil
+		return platformprocess.CommandResult{Stdout: []byte(stdout)}, nil
 	case filepath.Base(automatVerifyToolsScript):
 		stdout, verifyIssues := automatVerifyReadinessResult(r.expandedDir, req)
 		issues = append(issues, verifyIssues...)
 		if len(issues) > 0 {
 			r.recordIssues(issues)
-			return workers.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
+			return platformprocess.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
 		}
-		return workers.CommandResult{Stdout: []byte(stdout)}, nil
+		return platformprocess.CommandResult{Stdout: []byte(stdout)}, nil
 	default:
 		issues = append(issues, "unexpected script request: "+strings.Join(req.Args, " "))
 		r.recordIssues(issues)
-		return workers.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
+		return platformprocess.CommandResult{Stderr: []byte(strings.Join(issues, "\n")), ExitCode: 1}, nil
 	}
 }
 
-func (r *automatDispatchReadyRunner) Requests() []workers.CommandRequest {
+func (r *automatDispatchReadyRunner) Requests() []platformprocess.CommandRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]workers.CommandRequest, len(r.requests))
+	out := make([]platformprocess.CommandRequest, len(r.requests))
 	for i := range r.requests {
-		out[i] = workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(r.requests[i]))
+		out[i] = cloneAutomatProcessRequest(r.requests[i])
 	}
 	return out
 }
@@ -761,6 +815,13 @@ func (r *automatDispatchReadyRunner) recordIssues(issues []string) {
 	r.issues = append(r.issues, issues...)
 }
 
+func cloneAutomatProcessRequest(req platformprocess.CommandRequest) platformprocess.CommandRequest {
+	req.Args = append([]string(nil), req.Args...)
+	req.Stdin = append([]byte(nil), req.Stdin...)
+	req.Env = append([]string(nil), req.Env...)
+	return req
+}
+
 func automatScriptPathAndIssues(args []string) (string, []string) {
 	for i := 0; i < len(args); i++ {
 		if !strings.EqualFold(args[i], "-File") && !strings.EqualFold(args[i], "-f") {
@@ -774,7 +835,7 @@ func automatScriptPathAndIssues(args []string) (string, []string) {
 	return "", []string{"script request missing -File script path"}
 }
 
-func automatPrepareReadinessIssues(expandedDir string, req workers.CommandRequest) []string {
+func automatPrepareReadinessIssues(expandedDir string, req platformprocess.CommandRequest) []string {
 	issues := []string{}
 	for _, relativePath := range []string{
 		automatPrepareScript,
@@ -792,7 +853,7 @@ func automatPrepareReadinessIssues(expandedDir string, req workers.CommandReques
 	return issues
 }
 
-func automatPrepareReadinessResult(expandedDir string, req workers.CommandRequest) (string, []string) {
+func automatPrepareReadinessResult(expandedDir string, req platformprocess.CommandRequest) (string, []string) {
 	issues := automatPrepareReadinessIssues(expandedDir, req)
 	scriptContent, err := os.ReadFile(filepath.Join(expandedDir, automatPrepareScript))
 	if err != nil {
@@ -838,7 +899,7 @@ func automatPrepareReadinessResult(expandedDir string, req workers.CommandReques
 	return "dispatch-ready:" + guideHeading + ":" + strings.Join(requiredTools, ","), nil
 }
 
-func automatVerifyReadinessResult(expandedDir string, req workers.CommandRequest) (string, []string) {
+func automatVerifyReadinessResult(expandedDir string, req platformprocess.CommandRequest) (string, []string) {
 	issues := []string{}
 	if _, err := os.Stat(filepath.Join(expandedDir, automatVerifyToolsScript)); err != nil {
 		issues = append(issues, "expanded layout missing "+automatVerifyToolsScript+": "+err.Error())

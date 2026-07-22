@@ -79,7 +79,10 @@ func TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists(t *testing.T)
 	if replaced.Version == nil || replaced.Version.Logical <= created.Version.Logical {
 		t.Fatalf("replaced version = %#v, want logical > %#v", replaced.Version, created.Version.Logical)
 	}
-	assertCurrentFactoryPointer(t, rootDir, "beta")
+	current := getCurrentFactory(t, server.URL())
+	if current.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("current factory name = %q, want beta", current.Name)
+	}
 }
 
 func upsertNamedFactoryFromBody(t *testing.T, serverURL, factoryBody string) factoryapi.Factory {

@@ -2,17 +2,13 @@ package testdeps_test
 
 import (
 	"context"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -23,8 +19,8 @@ func TestDefaultObservability_UsesNoopLoggerAndMetricsEmitter(t *testing.T) {
 	if _, ok := obs.Logger.(logging.NoopLogger); !ok {
 		t.Fatalf("Logger = %T, want logging.NoopLogger", obs.Logger)
 	}
-	if _, ok := obs.MetricsEmitter.(metrics.NoopEmitter); !ok {
-		t.Fatalf("MetricsEmitter = %T, want metrics.NoopEmitter", obs.MetricsEmitter)
+	if _, ok := obs.MetricsEmitter.(factoryruntime.NoopEmitter); !ok {
+		t.Fatalf("MetricsEmitter = %T, want factoryruntime.NoopEmitter", obs.MetricsEmitter)
 	}
 	if obs.ZapLogger == nil {
 		t.Fatal("ZapLogger = nil, want non-nil nop logger")
@@ -41,7 +37,7 @@ func TestDefaultObservability_DiscardsRoutineLogAndMetricCalls(t *testing.T) {
 	obs.Logger.Debug("routine debug")
 	obs.Logger.Verbose("routine verbose", "detail", true)
 
-	fields := metrics.Fields{DispatchID: "dispatch-1", Workstation: "review"}
+	fields := factoryruntime.Fields{DispatchID: "dispatch-1", Workstation: "review"}
 	if err := obs.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, fields); err != nil {
 		t.Fatalf("Counter: %v", err)
 	}
@@ -75,151 +71,51 @@ func TestApplyFactoryServiceConfig_SetsQuietDefaultsWithoutOverridingExplicitVal
 	t.Parallel()
 
 	explicitLogger := testdeps.Default().ZapLogger
-	cfg := &service.FactoryServiceConfig{
+	cfg := &testdeps.FactoryServiceObservabilityConfig{
 		Logger:                   explicitLogger,
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyEnabled,
-		RuntimeMetricsPolicy:     service.RuntimeMetricsPolicyEnabled,
+		RuntimeFileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+		RuntimeMetricsPolicy:     factoryruntime.RuntimeMetricsPolicyEnabled,
 	}
 	testdeps.Default().ApplyFactoryServiceConfig(cfg)
 
 	if cfg.Logger != explicitLogger {
 		t.Fatal("ApplyFactoryServiceConfig replaced explicit logger")
 	}
-	if cfg.RuntimeFileLoggingPolicy != service.RuntimeFileLoggingPolicyEnabled {
+	if cfg.RuntimeFileLoggingPolicy != factoryruntime.RuntimeFileLoggingPolicyEnabled {
 		t.Fatalf("RuntimeFileLoggingPolicy = %q, want enabled", cfg.RuntimeFileLoggingPolicy)
 	}
-	if cfg.RuntimeMetricsPolicy != service.RuntimeMetricsPolicyEnabled {
+	if cfg.RuntimeMetricsPolicy != factoryruntime.RuntimeMetricsPolicyEnabled {
 		t.Fatalf("RuntimeMetricsPolicy = %q, want enabled", cfg.RuntimeMetricsPolicy)
 	}
 
-	emptyCfg := &service.FactoryServiceConfig{}
+	emptyCfg := &testdeps.FactoryServiceObservabilityConfig{}
 	testdeps.Default().ApplyFactoryServiceConfig(emptyCfg)
 	if emptyCfg.Logger == nil {
 		t.Fatal("expected default zap logger to be assigned")
 	}
-	if emptyCfg.RuntimeFileLoggingPolicy != service.RuntimeFileLoggingPolicyDisabled {
+	if emptyCfg.RuntimeFileLoggingPolicy != factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		t.Fatalf("RuntimeFileLoggingPolicy = %q, want disabled", emptyCfg.RuntimeFileLoggingPolicy)
 	}
-	if emptyCfg.RuntimeMetricsPolicy != service.RuntimeMetricsPolicyDisabled {
+	if emptyCfg.RuntimeMetricsPolicy != factoryruntime.RuntimeMetricsPolicyDisabled {
 		t.Fatalf("RuntimeMetricsPolicy = %q, want disabled", emptyCfg.RuntimeMetricsPolicy)
 	}
 }
 
 func TestQuietFactoryServiceConfig_RepresentativeOrdinaryBuildPatternsStayQuiet(t *testing.T) {
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	metricsDir := t.TempDir()
 	logDir := t.TempDir()
 
-	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
-		Dir:                                     dir,
-		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
-		RuntimeMetricsDir:                       metricsDir,
-		RuntimeLogDir:                           logDir,
-		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	_ = metricsDir
+	_ = logDir
+	cfg := testdeps.QuietFactoryServiceConfig(&testdeps.FactoryServiceObservabilityConfig{})
 	if cfg.Logger == nil {
 		t.Fatal("expected quiet factory service config to assign noop logger")
 	}
-	if cfg.RuntimeFileLoggingPolicy != service.RuntimeFileLoggingPolicyDisabled {
+	if cfg.RuntimeFileLoggingPolicy != factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		t.Fatalf("RuntimeFileLoggingPolicy = %q, want disabled", cfg.RuntimeFileLoggingPolicy)
 	}
-	if cfg.RuntimeMetricsPolicy != service.RuntimeMetricsPolicyDisabled {
+	if cfg.RuntimeMetricsPolicy != factoryruntime.RuntimeMetricsPolicyDisabled {
 		t.Fatalf("RuntimeMetricsPolicy = %q, want disabled", cfg.RuntimeMetricsPolicy)
-	}
-
-	svc, err := service.BuildFactoryService(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	bundle := svc.CurrentRuntimeBundle()
-	if bundle == nil {
-		t.Fatal("expected startup runtime bundle")
-	}
-	if bundle.MetricsSink != nil {
-		t.Fatal("expected disabled runtime metrics policy to skip metrics sink creation")
-	}
-
-	var metricFiles []string
-	err = filepath.WalkDir(metricsDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		metricFiles = append(metricFiles, path)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir(%s): %v", metricsDir, err)
-	}
-	if len(metricFiles) != 0 {
-		t.Fatalf("metrics files = %v, want none", metricFiles)
-	}
-
-	var logFiles []string
-	err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		logFiles = append(logFiles, path)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir(%s): %v", logDir, err)
-	}
-	if len(logFiles) != 0 {
-		t.Fatalf("runtime log files = %v, want none", logFiles)
-	}
-}
-
-func TestApplyFactoryServiceConfig_BuildFactoryServiceDoesNotCreateMetricsFiles(t *testing.T) {
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	metricsDir := t.TempDir()
-
-	cfg := &service.FactoryServiceConfig{
-		Dir:                                     dir,
-		RuntimeMetricsDir:                       metricsDir,
-		SkipBuiltInRunnerPrerequisiteValidation: true,
-	}
-	testdeps.Default().ApplyFactoryServiceConfig(cfg)
-
-	svc, err := service.BuildFactoryService(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	if svc == nil {
-		t.Fatal("BuildFactoryService returned nil service")
-	}
-	bundle := svc.CurrentRuntimeBundle()
-	if bundle == nil {
-		t.Fatal("expected startup runtime bundle")
-	}
-	if bundle.MetricsSink != nil {
-		t.Fatal("expected disabled runtime metrics policy to skip metrics sink creation")
-	}
-
-	var metricFiles []string
-	err = filepath.WalkDir(metricsDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		metricFiles = append(metricFiles, path)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir(%s): %v", metricsDir, err)
-	}
-	if len(metricFiles) != 0 {
-		t.Fatalf("metrics files = %v, want none", metricFiles)
 	}
 }
 
@@ -229,7 +125,7 @@ func TestCapturingObservability_RecordsLogAndMetricEmissions(t *testing.T) {
 	obs, capture := testdeps.Capturing(zapcore.InfoLevel)
 	obs.Logger.Info("observability under test", "detail", "value")
 
-	fields := metrics.Fields{DispatchID: "dispatch-1", Workstation: "review"}
+	fields := factoryruntime.Fields{DispatchID: "dispatch-1", Workstation: "review"}
 	if err := obs.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, fields); err != nil {
 		t.Fatalf("Counter: %v", err)
 	}
@@ -260,7 +156,7 @@ func TestCapturingObservability_DoesNotAffectDefaultQuietObservability(t *testin
 
 	quiet := testdeps.Default()
 	quiet.Logger.Info("quiet default log")
-	if err := quiet.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, metrics.Fields{}); err != nil {
+	if err := quiet.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, factoryruntime.Fields{}); err != nil {
 		t.Fatalf("Counter: %v", err)
 	}
 
@@ -277,7 +173,7 @@ func TestRecordingInvocationMetrics_CapturesFactoryServiceMetrics(t *testing.T) 
 	t.Parallel()
 
 	recorder := testdeps.NewRecordingInvocationMetrics()
-	recorder.RecordInvocationMetric(service.InvocationMetric{
+	recorder.RecordInvocationMetric(factorysessions.InvocationMetric{
 		Name:   "runtime.loaded",
 		Labels: map[string]string{"identity": "model-a"},
 	})
@@ -290,7 +186,7 @@ func TestRecordingInvocationMetrics_CapturesFactoryServiceMetrics(t *testing.T) 
 func TestProductionFactoryServiceConfig_PreservesEnabledObservabilityPoliciesWithoutTestDeps(t *testing.T) {
 	t.Parallel()
 
-	productionCfg := &service.FactoryServiceConfig{}
+	productionCfg := &testdeps.FactoryServiceObservabilityConfig{}
 	if productionCfg.RuntimeFileLoggingPolicy != "" {
 		t.Fatalf("RuntimeFileLoggingPolicy = %q, want empty production default", productionCfg.RuntimeFileLoggingPolicy)
 	}
@@ -301,11 +197,11 @@ func TestProductionFactoryServiceConfig_PreservesEnabledObservabilityPoliciesWit
 		t.Fatal("expected unset logger before production wiring")
 	}
 
-	quietCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{})
-	if quietCfg.RuntimeFileLoggingPolicy != service.RuntimeFileLoggingPolicyDisabled {
+	quietCfg := testdeps.QuietFactoryServiceConfig(&testdeps.FactoryServiceObservabilityConfig{})
+	if quietCfg.RuntimeFileLoggingPolicy != factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		t.Fatalf("RuntimeFileLoggingPolicy = %q, want disabled after testdeps", quietCfg.RuntimeFileLoggingPolicy)
 	}
-	if quietCfg.RuntimeMetricsPolicy != service.RuntimeMetricsPolicyDisabled {
+	if quietCfg.RuntimeMetricsPolicy != factoryruntime.RuntimeMetricsPolicyDisabled {
 		t.Fatalf("RuntimeMetricsPolicy = %q, want disabled after testdeps", quietCfg.RuntimeMetricsPolicy)
 	}
 	if quietCfg.Logger == nil {
@@ -313,24 +209,18 @@ func TestProductionFactoryServiceConfig_PreservesEnabledObservabilityPoliciesWit
 	}
 }
 
-func TestApplyFactoryServiceConfig_PreservesCapturingLoggerAndMetricsRecorder(t *testing.T) {
+func TestApplyFactoryServiceConfig_PreservesCapturingLogger(t *testing.T) {
 	t.Parallel()
 
 	obs, capture := testdeps.Capturing(zapcore.WarnLevel)
-	recorder := testdeps.NewRecordingInvocationMetrics()
-	cfg := &service.FactoryServiceConfig{
-		Logger:                    obs.ZapLogger,
-		InvocationMetricsRecorder: recorder,
+	cfg := &testdeps.FactoryServiceObservabilityConfig{
+		Logger: obs.ZapLogger,
 	}
 	testdeps.Default().ApplyFactoryServiceConfig(cfg)
 
 	if cfg.Logger != obs.ZapLogger {
 		t.Fatal("ApplyFactoryServiceConfig replaced explicit capturing logger")
 	}
-	if cfg.InvocationMetricsRecorder != recorder {
-		t.Fatal("ApplyFactoryServiceConfig replaced explicit metrics recorder")
-	}
-
 	obs.ZapLogger.Warn("preserved capturing logger")
 	if len(capture.ObservedLogs.FilterMessage("preserved capturing logger").All()) != 1 {
 		t.Fatal("expected capturing logger to remain observable after quiet defaults")

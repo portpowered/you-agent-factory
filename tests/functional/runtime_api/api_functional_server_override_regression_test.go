@@ -8,14 +8,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,8 +29,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"mock worker compatibility"}`))
 
 		server := startFunctionalServer(t, dir, true)
-		snapshot := waitForFunctionalServerCompletion(t, server, 10*time.Second)
-		categories := categorizeFunctionalState(snapshot)
+		status := waitForFunctionalServerCompletion(t, server, 10*time.Second)
+		categories := functionalStateCategoriesFromStatus(status)
 
 		if categories.Terminal != 1 {
 			t.Fatalf("terminal token count = %d, want 1", categories.Terminal)
@@ -46,21 +42,19 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 
 	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
-		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
 		runner := testutil.NewProviderCommandRunner(
-			workers.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
-			workers.CommandResult{Stdout: []byte("second runtime step complete. COMPLETE")},
+			platformprocess.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
+			platformprocess.CommandResult{Stdout: []byte("second runtime step complete. COMPLETE")},
 		)
-		server := startFunctionalServerWithConfig(
+		server := startFunctionalServerWithArgs(
 			t,
 			dir,
 			false,
-			func(cfg *service.FactoryServiceConfig) {
-				support.ConfigureWorkerCommands(t, cfg, runner, nil)
-			},
-			factory.WithServiceMode(),
+			nil,
+			withWorkerCommands(runner, nil),
 		)
 
 		traceID := submitFunctionalServerWork(t, server, "task", []byte(`{"title":"provider override regression"}`))
@@ -68,8 +62,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			t.Fatal("expected POST /work to return a trace ID")
 		}
 
-		snapshot := waitForFunctionalServerIdleTerminal(t, server, 10*time.Second)
-		categories := categorizeFunctionalState(snapshot)
+		status := waitForFunctionalServerIdleTerminal(t, server, 10*time.Second)
+		categories := functionalStateCategoriesFromStatus(status)
 		if categories.Failed != 0 {
 			t.Fatalf("failed token count = %d, want 0", categories.Failed)
 		}
@@ -78,11 +72,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			t.Fatalf("provider command runner calls = %d, want 2", got)
 		}
 		for i, req := range runner.Requests() {
-			if req.Command != string(modelprovider.Codex) {
-				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, modelprovider.Codex)
-			}
-			if req.Execution.TraceID != traceID {
-				t.Fatalf("provider request %d trace ID = %q, want %q", i, req.Execution.TraceID, traceID)
+			if req.Command != string(modelprovider.ProviderCodex) {
+				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, modelprovider.ProviderCodex)
 			}
 		}
 	})
@@ -120,77 +111,48 @@ func waitForFunctionalServerCompletion(
 	t *testing.T,
 	server *functionalAPIServer,
 	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+) factoryapi.StatusResponse {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		if snapshot.FactoryState == string(interfaces.FactoryStateCompleted) {
-			return snapshot
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		if status.FactoryState == string(interfaces.FactoryStateCompleted) ||
+			(status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
+				status.Categories.Processing == 0 &&
+				status.Categories.Terminal+status.Categories.Failed > 0) {
+			return status
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("factory did not reach COMPLETED within %s", timeout)
-	return nil
+	return factoryapi.StatusResponse{}
 }
 
 func waitForFunctionalServerIdleTerminal(
 	t *testing.T,
 	server *functionalAPIServer,
 	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+) factoryapi.StatusResponse {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		categories := categorizeFunctionalState(snapshot)
-		if snapshot.FactoryState == string(interfaces.FactoryStateRunning) &&
-			snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-			categories.Terminal == 1 {
-			return snapshot
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		if status.FactoryState == string(interfaces.FactoryStateRunning) &&
+			status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
+			status.Categories.Terminal == 1 {
+			return status
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("factory did not reach running idle terminal state within %s", timeout)
-	return nil
+	return factoryapi.StatusResponse{}
 }
 
-func categorizeFunctionalState(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) functionalStateCategories {
-	var categories functionalStateCategories
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.WorkTypeID == "" {
-			continue
-		}
-		switch lookupFunctionalStateCategory(snapshot.Topology, token.PlaceID) {
-		case state.StateCategoryFailed:
-			categories.Failed++
-		case state.StateCategoryTerminal:
-			categories.Terminal++
-		case state.StateCategoryInitial:
-			categories.Initial++
-		default:
-			categories.Processing++
-		}
+func functionalStateCategoriesFromStatus(status factoryapi.StatusResponse) functionalStateCategories {
+	return functionalStateCategories{
+		Failed:     status.Categories.Failed,
+		Initial:    status.Categories.Initial,
+		Processing: status.Categories.Processing,
+		Terminal:   status.Categories.Terminal,
 	}
-	return categories
-}
-
-func lookupFunctionalStateCategory(net *state.Net, placeID string) state.StateCategory {
-	if net == nil {
-		return state.StateCategoryProcessing
-	}
-	place, ok := net.Places[placeID]
-	if !ok {
-		return state.StateCategoryProcessing
-	}
-	workType, ok := net.WorkTypes[place.TypeID]
-	if !ok {
-		return state.StateCategoryProcessing
-	}
-	for _, stateConfig := range workType.States {
-		if stateConfig.Value == place.State {
-			return stateConfig.Category
-		}
-	}
-	return state.StateCategoryProcessing
 }

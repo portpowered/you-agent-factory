@@ -4,20 +4,46 @@ import (
 	"errors"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
+func TestScopedSessionListResponseToAPIMapsDetachedOwnerProjectionOnly(t *testing.T) {
+	t.Parallel()
+
+	result := factorysession.ScopedSessionListResponseToAPI(factorysessions.ScopedSessionListResult{
+		Scope: factorysessions.SessionListScopeAll,
+		LiveSessions: []factorysessions.ScopedLiveSessionSummary{{
+			ID: "live-1", FactoryDir: "/factory", FolderPath: "/workspace", Project: "project",
+			Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
+			Runtime: &factorysessions.RuntimeProjection{Status: "RUNNING"},
+		}},
+		DurableSessions: []factorysessions.DurableSessionListSummary{{
+			SessionID: "durable-1", Status: factorysessions.LifecycleStatusPaused,
+			Actions: factorysessions.SessionActionAvailability{CanResume: true},
+		}},
+	})
+	if len(result.Sessions) != 1 || result.Sessions[0].Runtime == nil ||
+		result.Sessions[0].Target.Name == nil || *result.Sessions[0].Target.Name != "goal" {
+		t.Fatalf("live response = %#v, want detached runtime and target", result.Sessions)
+	}
+	if result.DurableSessions == nil || len(*result.DurableSessions) != 1 ||
+		(*result.DurableSessions)[0].Actions == nil || (*result.DurableSessions)[0].Actions.CanResume == nil ||
+		!*(*result.DurableSessions)[0].Actions.CanResume {
+		t.Fatalf("durable response = %#v, want owner-projected actions", result.DurableSessions)
+	}
+}
+
 func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 	t.Parallel()
 
-	defaultRef, err := logicaltarget.NormalizeDefaultTarget("scope-1", t.TempDir())
-	if err != nil {
-		t.Fatalf("NormalizeDefaultTarget: %v", err)
+	defaultRef := factorysessions.CanonicalLogicalTargetReference{
+		BackendScopeID: "scope-1",
+		FolderPath:     "/workspace",
+		Kind:           factorysessions.LogicalTargetKindDefault,
 	}
 	defaultTarget := factorysession.LogicalTargetToAPI(defaultRef)
 	if defaultTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
@@ -27,9 +53,11 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 		t.Fatalf("default target should not include named or provider fields: %#v", defaultTarget)
 	}
 
-	namedRef, err := logicaltarget.NormalizeNamedTarget("scope-1", t.TempDir(), "goal")
-	if err != nil {
-		t.Fatalf("NormalizeNamedTarget: %v", err)
+	namedRef := factorysessions.CanonicalLogicalTargetReference{
+		BackendScopeID: "scope-1",
+		FolderPath:     "/workspace",
+		Kind:           factorysessions.LogicalTargetKindNamed,
+		NamedTarget:    "goal",
 	}
 	namedTarget := factorysession.LogicalTargetToAPI(namedRef)
 	if namedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindNamed {
@@ -39,11 +67,15 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 		t.Fatalf("namedTarget = %#v, want %q", namedTarget.NamedTarget, namedRef.NamedTarget)
 	}
 
-	providerRef, err := logicaltarget.NormalizeProviderTarget("scope-1", t.TempDir(), logicaltarget.ProviderBoundary{
-		Provider: "cursor", Kind: "agent", Boundary: "workspace-1",
-	})
-	if err != nil {
-		t.Fatalf("NormalizeProviderTarget: %v", err)
+	providerRef := factorysessions.CanonicalLogicalTargetReference{
+		BackendScopeID: "scope-1",
+		FolderPath:     "/workspace",
+		Kind:           factorysessions.LogicalTargetKindProvider,
+		Provider: &factorysessions.LogicalTargetProviderBoundary{
+			Provider: "cursor",
+			Kind:     "agent",
+			Boundary: "workspace-1",
+		},
 	}
 	providerTarget := factorysession.LogicalTargetToAPI(providerRef)
 	if providerTarget.Kind != factoryapi.FactorySessionLogicalTargetKindProvider {
@@ -88,10 +120,16 @@ func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		}},
 	}
-	session := factorysessions.NewLiveSession(
-		"session-beta", "/workspace/factory/beta", "/workspace", "/workspace",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}, nil, false, "demo",
-	)
+	session := &factorysessions.LiveSession{
+		ID: "session-beta",
+		SessionState: factorysessions.SessionState{
+			FactoryDir:       "/workspace/factory/beta",
+			FolderPath:       "/workspace",
+			ExecutionBaseDir: "/workspace",
+		},
+		Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
+		Project: "demo",
+	}
 
 	response := factorysession.OpenResultToAPI(result, session)
 	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
@@ -148,26 +186,28 @@ func TestSyncPreflightResultToAPI_PreservesReconnectDecisionAndIdentity(t *testi
 func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testing.T) {
 	t.Parallel()
 
-	defaultSession := factorysessions.NewLiveSession(
-		factorysessions.DefaultSessionID,
-		"/factories/default",
-		"/workspace",
-		"/workspace",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		nil,
-		true,
-		"default-project",
-	)
-	namedSession := factorysessions.NewLiveSession(
-		"session-beta",
-		"/factories/beta",
-		"/workspace",
-		"/workspace",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
-		nil,
-		false,
-		"beta-project",
-	)
+	defaultSession := &factorysessions.LiveSession{
+		ID: factorysessions.DefaultSessionID,
+		SessionState: factorysessions.SessionState{
+			FactoryDir:       "/factories/default",
+			FolderPath:       "/workspace",
+			ExecutionBaseDir: "/workspace",
+		},
+		Target:                  factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		IsDefault:               true,
+		Project:                 "default-project",
+		RuntimeFactorySessionID: "11111111-1111-4111-8111-111111111111",
+	}
+	namedSession := &factorysessions.LiveSession{
+		ID: "session-beta",
+		SessionState: factorysessions.SessionState{
+			FactoryDir:       "/factories/beta",
+			FolderPath:       "/workspace",
+			ExecutionBaseDir: "/workspace",
+		},
+		Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
+		Project: "beta-project",
+	}
 	summaries := []factoryapi.FactorySessionSummary{
 		factorysession.SessionSummaryToAPI(defaultSession),
 		factorysession.SessionSummaryToAPI(namedSession),
@@ -200,6 +240,7 @@ func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
 	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
 		{
 			Context:          factorysessions.ProjectionContext{Session: withRuntime},
+			Runtime:          factorysessions.RuntimeProjection{Status: "IDLE"},
 			RuntimeAvailable: true,
 		},
 		{Context: factorysessions.ProjectionContext{Session: fallback}},
@@ -220,7 +261,23 @@ func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
 func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 	t.Parallel()
 
-	target, err := factorysession.LogicalTargetFromSession("scope-1", nil)
+	normalize := func(
+		backendScopeID string,
+		folderPath string,
+		ref factorysessions.TargetRef,
+	) (factorysessions.CanonicalLogicalTargetReference, error) {
+		if ref.Kind == factorysessions.TargetKindNamed && ref.Name == "" {
+			return factorysessions.CanonicalLogicalTargetReference{}, errors.New("named target is required")
+		}
+		return factorysessions.CanonicalLogicalTargetReference{
+			BackendScopeID: backendScopeID,
+			FolderPath:     folderPath,
+			Kind:           factorysessions.LogicalTargetKindNamed,
+			NamedTarget:    ref.Name,
+		}, nil
+	}
+
+	target, err := factorysession.LogicalTargetFromSession(normalize, "scope-1", nil)
 	if err != nil || target != nil {
 		t.Fatalf("LogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
 	}
@@ -229,7 +286,7 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
 		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
 	}
-	target, err = factorysession.LogicalTargetFromSession("scope-1", session)
+	target, err = factorysession.LogicalTargetFromSession(normalize, "scope-1", session)
 	if err != nil {
 		t.Fatalf("LogicalTargetFromSession: %v", err)
 	}
@@ -241,7 +298,7 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
 		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
 	}
-	if _, err := factorysession.LogicalTargetFromSession("scope-1", invalidSession); err == nil {
+	if _, err := factorysession.LogicalTargetFromSession(normalize, "scope-1", invalidSession); err == nil {
 		t.Fatal("LogicalTargetFromSession(invalid named target) = nil, want validation error")
 	}
 }
@@ -251,20 +308,19 @@ func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessionsRequestFromAPI: %v", err)
 	}
-	if request.Scope != factorysessionexecution.SessionListScopeLive {
-		t.Fatalf("scope = %q, want live", request.Scope)
+	if request.Scope != "" {
+		t.Fatalf("scope = %q, want raw omitted value", request.Scope)
 	}
 }
 
 func TestListSessionsRequestFromAPI_RejectsUnsupportedScope(t *testing.T) {
 	scope := factoryapi.FactorySessionListScope("workspace")
-	_, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
-	if err == nil {
-		t.Fatal("error = nil, want validation error")
+	raw, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
+	if err != nil {
+		t.Fatalf("ListSessionsRequestFromAPI: %v", err)
 	}
-	var validationErr *factorysessionexecution.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want ValidationError", err)
+	if raw.Scope != factorysessionexecution.SessionListScope("workspace") {
+		t.Fatalf("scope = %q, want raw unsupported value", raw.Scope)
 	}
 }
 
@@ -314,21 +370,22 @@ func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
 				Status:           factorysessionexecution.LifecycleStatusSucceeded,
 				OrchestratorKind: "PETRI",
 				ResolvedSource: factorysessionexecution.ResolvedSource{
-					Kind:       workflowsource.KindFactoryID,
+					Kind:       factory.WorkflowSourceKindFactoryID,
 					SourceRef:  "factory/customer-support-triage",
 					SourceHash: "sha256:petri-factory-001",
 				},
-				ResultSummary: &factorysessionexecution.ResultSummary{ResultStatus: string(factorysessionexecution.ResultStatusFinal)},
+				ResultSummary: &factorysessionexecution.ResultSummary{ResultStatus: "FINAL"},
 				Lifecycle:     &factorysessionexecution.LifecycleTimestamps{StartedAt: startedAt, FinishedAt: finishedAt},
-				Actions:       factorysessionexecution.DeriveSessionActionAvailability(factorysessionexecution.LifecycleStatusSucceeded),
+				Actions:       factorysessionexecution.SessionActionAvailability{},
 			},
 		},
 	}
 
 	persisted := factorysession.ListSessionsResponseToAPI(
-		factorysessionexecution.ApplySessionListScope(base, factorysessionexecution.ListSessionsRequest{
-			Scope: factorysessionexecution.SessionListScopePersisted,
-		}),
+		factorysessionexecution.ListSessionsResult{
+			Scope:           factorysessionexecution.SessionListScopePersisted,
+			DurableSessions: base.DurableSessions,
+		},
 	)
 	if persisted.Scope == nil || *persisted.Scope != factoryapi.FactorySessionListScopePersisted {
 		t.Fatalf("scope = %#v, want persisted", persisted.Scope)
@@ -341,9 +398,11 @@ func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
 	}
 
 	all := factorysession.ListSessionsResponseToAPI(
-		factorysessionexecution.ApplySessionListScope(base, factorysessionexecution.ListSessionsRequest{
-			Scope: factorysessionexecution.SessionListScopeAll,
-		}),
+		factorysessionexecution.ListSessionsResult{
+			Scope:           factorysessionexecution.SessionListScopeAll,
+			LiveSessions:    base.LiveSessions[:1],
+			DurableSessions: base.DurableSessions,
+		},
 	)
 	if all.Scope == nil || *all.Scope != factoryapi.FactorySessionListScopeAll {
 		t.Fatalf("scope = %#v, want all", all.Scope)
@@ -403,11 +462,6 @@ func durableListSummaryFromFixture(summary map[string]any) factorysessionexecuti
 	}
 	if actions, ok := summary["actions"].(map[string]any); ok {
 		row.Actions = sessionActionsFromFixture(actions)
-	} else {
-		row.Actions = factorysessionexecution.DeriveSessionActionAvailability(row.Status)
-	}
-	if !row.Recoverable {
-		row.Recoverable = factorysessionexecution.IsRecoverableSession(row.Status, row.StaleLease)
 	}
 	return row
 }

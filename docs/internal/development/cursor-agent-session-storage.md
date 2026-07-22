@@ -1,6 +1,6 @@
 # Cursor agent CLI session storage (v1)
 
-Infinite-you loads Cursor provider-session detail from **cursor-agent CLI storage** parsed in-process by the policy-free mechanics in `pkg/platform/cursors`. The external [`cursor-session`](https://github.com/iksnae/cursor-session) CLI is not invoked at runtime.
+Infinite-you loads Cursor provider-session detail from **cursor-agent CLI storage** parsed in-process by `pkg/services/provider_sessions/cursor`. The external [`cursor-session`](https://github.com/iksnae/cursor-session) CLI is not invoked at runtime.
 
 ## v1 scope
 
@@ -19,7 +19,7 @@ Session identifiers are validated (`^[A-Za-z0-9_-]+$`). The API and parser never
 
 ## Attribution
 
-MIT-ported parsing from `iksnae/cursor-session` at commit `340f0f72a760ba8b454eac814f986d1a6a4c2f57`. See `pkg/platform/cursors/NOTICE.md`.
+MIT-ported parsing from `iksnae/cursor-session` at commit `340f0f72a760ba8b454eac814f986d1a6a4c2f57`. See `pkg/services/provider_sessions/cursor/NOTICE.md`.
 
 ## Manual verification
 

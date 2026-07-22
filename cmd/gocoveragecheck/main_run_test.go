@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -15,18 +14,18 @@ import (
 )
 
 func TestExecuteReportsPassingCoverage(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandPassing
+	commandRunner = fakeGoCoverageCommandPassing
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -65,18 +64,18 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 }
 
 func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandPassing
+	commandRunner = fakeGoCoverageCommandPassing
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -103,18 +102,18 @@ func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *
 }
 
 func TestExecuteFunctionalFailsForNonBaselinedPackageBelowTarget(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommand
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -139,18 +138,18 @@ func TestExecuteFunctionalFailsForNonBaselinedPackageBelowTarget(t *testing.T) {
 }
 
 func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandPassing
+	commandRunner = fakeGoCoverageCommandPassing
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -189,11 +188,11 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 }
 
 func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
@@ -202,7 +201,7 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 		name         string
 		minimum      string
 		aggregateMin float64
-		command      func(string, ...string) *exec.Cmd
+		command      commandRunnerFunc
 		wantFailure  string
 		rejectText   string
 	}{
@@ -228,7 +227,7 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 			manifestPath := writePackageMinimumManifest(t, "unit", modulePath+"/pkg/config", tc.minimum)
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			execCommand = tc.command
+			commandRunner = tc.command
 			stdoutWriter = &stdout
 			stderrWriter = &stderr
 
@@ -263,18 +262,18 @@ func writePackageMinimumManifest(t *testing.T, lane string, importPath string, m
 }
 
 func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommand
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -318,18 +317,18 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 }
 
 func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommand
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -370,18 +369,18 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 }
 
 func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandWithTempProfileReport
+	commandRunner = fakeGoCoverageCommandWithTempProfileReport
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -425,18 +424,18 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 }
 
 func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandCoverFailsWithStderr
+	commandRunner = fakeGoCoverageCommandCoverFailsWithStderr
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -461,18 +460,18 @@ func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
 }
 
 func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandCoverFailsWithStdout
+	commandRunner = fakeGoCoverageCommandCoverFailsWithStdout
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -497,18 +496,18 @@ func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
 }
 
 func TestRunWrapsCoverageLaneFailure(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandTestFailsWithoutDetail
+	commandRunner = fakeGoCoverageCommandTestFailsWithoutDetail
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -531,18 +530,18 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 }
 
 func TestRunWrapsCoverSummaryFailureWithoutDetail(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	execCommand = fakeGoCoverageCommandCoverFailsWithoutDetail
+	commandRunner = fakeGoCoverageCommandCoverFailsWithoutDetail
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -562,12 +561,12 @@ func TestRunWrapsCoverSummaryFailureWithoutDetail(t *testing.T) {
 }
 
 func TestListGoPackagesWrapsListFailureUsingStderrDetail(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 	}()
 
-	execCommand = fakeGoListCommandFailsWithStderr
+	commandRunner = fakeGoListCommandFailsWithStderr
 
 	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
@@ -586,12 +585,12 @@ func TestListGoPackagesWrapsListFailureUsingStderrDetail(t *testing.T) {
 }
 
 func TestListGoPackagesWrapsListFailureUsingStdoutFallback(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 	}()
 
-	execCommand = fakeGoListCommandFailsWithStdout
+	commandRunner = fakeGoListCommandFailsWithStdout
 
 	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
@@ -610,12 +609,12 @@ func TestListGoPackagesWrapsListFailureUsingStdoutFallback(t *testing.T) {
 }
 
 func TestListGoPackagesWrapsListFailureWithoutDetail(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 	}()
 
-	execCommand = fakeGoListCommandFailsWithoutDetail
+	commandRunner = fakeGoListCommandFailsWithoutDetail
 
 	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
@@ -629,12 +628,12 @@ func TestListGoPackagesWrapsListFailureWithoutDetail(t *testing.T) {
 }
 
 func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPackages(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 	}()
 
-	execCommand = fakeGoListCommandWithExcludedPackagesOnly
+	commandRunner = fakeGoListCommandWithExcludedPackagesOnly
 
 	_, _, err := resolveCoverageLane(config{})
 	if err == nil {
@@ -648,12 +647,12 @@ func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPac
 }
 
 func TestResolveCoverageLaneFailsWhenFunctionalDiscoveryMatchesNoMaintainedPackages(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 	}()
 
-	execCommand = fakeGoListCommandWithCoverageButNoTestPackages
+	commandRunner = fakeGoListCommandWithCoverageButNoTestPackages
 
 	_, _, err := resolveCoverageLane(config{suite: "functional"})
 	if err == nil {
@@ -667,13 +666,13 @@ func TestResolveCoverageLaneFailsWhenFunctionalDiscoveryMatchesNoMaintainedPacka
 }
 
 func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
 	}
 	defer func() {
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
 			t.Fatalf("restore working directory: %v", chdirErr)
 		}
@@ -691,7 +690,7 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 		t.Fatalf("Chdir() error = %v", err)
 	}
 
-	execCommand = fakeGoListCommandWithDuplicatesAndExcludedPackages
+	commandRunner = fakeGoListCommandWithDuplicatesAndExcludedPackages
 
 	packages, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err != nil {
@@ -699,7 +698,6 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 	}
 
 	want := []string{
-		modulePath + "/cmd/factory",
 		modulePath + "/pkg/config",
 	}
 	if !slices.Equal(packages, want) {
@@ -710,8 +708,8 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listGoPackages() for test lane error = %v", err)
 	}
-	if !slices.Contains(testPackages, modulePath+"/pkg/config/exhaustiontests") {
-		t.Fatalf("listGoPackages() for test lane = %v, want test-only package included", testPackages)
+	if slices.Contains(testPackages, modulePath+"/pkg/config/exhaustiontests") {
+		t.Fatalf("listGoPackages() for test lane = %v, maintenance package must be excluded", testPackages)
 	}
 }
 

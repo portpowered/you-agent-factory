@@ -9,9 +9,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestInitFactory_DefaultScaffoldFactoryJSONValidatesAgainstOpenAPISchema proves the
@@ -20,15 +19,19 @@ import (
 func TestInitFactory_DefaultScaffoldFactoryJSONValidatesAgainstOpenAPISchema(t *testing.T) {
 	factorySchema := loadFactoryOpenAPISchema(t)
 
-	t.Run("embedded canonical default factory.json", func(t *testing.T) {
-		assertFactoryJSONValidatesAgainstSchema(t, factorySchema, []byte(initcmd.DefaultFactoryJSON()))
+	t.Run("customer default init factory.json", func(t *testing.T) {
+		dir := t.TempDir()
+		support.RunInitCommand(t, dir)
+		factoryJSON, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
+		if err != nil {
+			t.Fatalf("read factory.json: %v", err)
+		}
+		assertFactoryJSONValidatesAgainstSchema(t, factorySchema, factoryJSON)
 	})
 
 	t.Run("fresh init directory factory.json", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-			t.Fatalf("Init failed: %v", err)
-		}
+		support.RunInitCommand(t, dir, "--executor", "claude")
 
 		factoryJSON, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
 		if err != nil {
@@ -39,11 +42,9 @@ func TestInitFactory_DefaultScaffoldFactoryJSONValidatesAgainstOpenAPISchema(t *
 
 	t.Run("fresh init directory flattened factory export", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-			t.Fatalf("Init failed: %v", err)
-		}
+		support.RunInitCommand(t, dir)
 
-		flattened, err := factoryconfig.FlattenFactoryConfig(dir)
+		flattened, err := support.FlattenFactoryConfig(t, dir)
 		if err != nil {
 			t.Fatalf("FlattenFactoryConfig(%s): %v", dir, err)
 		}

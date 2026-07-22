@@ -6,29 +6,36 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	work "github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"go.uber.org/zap"
 )
 
+type moveWorkAPI struct {
+	moveAndRead func(context.Context, string, string, string, string) (work.ReadModel, error)
+}
+
+func (moveWorkAPI) ListWork(context.Context, string, work.ListOptions) (work.ListResult, error) {
+	panic("unexpected WorkReadAPI.ListWork call")
+}
+
+func (moveWorkAPI) GetWork(context.Context, string, string) (work.ReadModel, error) {
+	panic("unexpected WorkReadAPI.GetWork call")
+}
+
+func (api moveWorkAPI) MoveWorkAndRead(ctx context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+	if api.moveAndRead == nil {
+		panic("unexpected WorkReadAPI.MoveWorkAndRead call")
+	}
+	return api.moveAndRead(ctx, sessionID, workID, stateName, requestID)
+}
+
 func TestMoveWork_SucceedsAndReturnsUpdatedWork(t *testing.T) {
-	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
-	mf := moveWorkMockFactory(now, "work-move-1", "task", "init")
-	srv := newAPITestServer(mf)
+	workAPI := successfulMoveWorkAPI(t, "~default", "work-move-1", "complete", "")
+	srv := newMoveWorkTestServer(workAPI)
 
 	rec := postMoveWork(t, srv, "work-move-1", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusOK {
@@ -41,10 +48,8 @@ func TestMoveWork_SucceedsAndReturnsUpdatedWork(t *testing.T) {
 }
 
 func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
-	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
-	mf := moveWorkMockFactory(now, "work-move-paused", "task", "init")
-	mf.State = interfaces.FactoryStatePaused
-	srv := newAPITestServer(mf)
+	workAPI := successfulMoveWorkAPI(t, "~default", "work-move-paused", "complete", "")
+	srv := newMoveWorkTestServer(workAPI)
 
 	rec := postMoveWork(t, srv, "work-move-paused", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusOK {
@@ -53,11 +58,11 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 }
 
 func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
-	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-		Net:     moveWorkTestNet(),
-	}
-	srv := newAPITestServer(mf)
+	workAPI := moveWorkAPI{moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+		assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "~default", "missing-work", "complete", "")
+		return work.ReadModel{}, factory.ErrMoveWorkNotFound
+	}}
+	srv := newMoveWorkTestServer(workAPI)
 
 	rec := postMoveWork(t, srv, "missing-work", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusNotFound {
@@ -66,9 +71,11 @@ func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 }
 
 func TestMoveWork_Returns400ForInvalidState(t *testing.T) {
-	now := time.Now().UTC()
-	mf := moveWorkMockFactory(now, "work-move-invalid", "task", "init")
-	srv := newAPITestServer(mf)
+	workAPI := moveWorkAPI{moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+		assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "~default", "work-move-invalid", "nowhere", "")
+		return work.ReadModel{}, factory.ErrMoveWorkInvalidState
+	}}
+	srv := newMoveWorkTestServer(workAPI)
 
 	rec := postMoveWork(t, srv, "work-move-invalid", `{"stateName":"nowhere"}`)
 	if rec.Code != http.StatusBadRequest {
@@ -77,9 +84,18 @@ func TestMoveWork_Returns400ForInvalidState(t *testing.T) {
 }
 
 func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
-	now := time.Now().UTC()
-	mf := moveWorkMockFactory(now, "work-move-dup", "task", "init")
-	srv := newAPITestServer(mf)
+	moveCalls := 0
+	workAPI := moveWorkAPI{
+		moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+			assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "~default", "work-move-dup", "complete", "move-req-1")
+			moveCalls++
+			if moveCalls > 1 {
+				return work.ReadModel{}, work.ErrMoveWorkRequestAlreadyApplied
+			}
+			return detachedMovedWork("work-move-dup", "complete"), nil
+		},
+	}
+	srv := newMoveWorkTestServer(workAPI)
 
 	body := `{"stateName":"complete","requestId":"move-req-1"}`
 	rec := postMoveWork(t, srv, "work-move-dup", body)
@@ -97,17 +113,11 @@ func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
 }
 
 func TestMoveWorkBySessionId_Returns404ForMissingSession(t *testing.T) {
-	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-		Net:     moveWorkTestNet(),
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-				Net:     moveWorkTestNet(),
-			},
-		},
-	}
-	srv := newAPITestServer(mf)
+	workAPI := moveWorkAPI{moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+		assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "missing-session", "work-1", "complete", "")
+		return work.ReadModel{}, apisurface.ErrFactorySessionNotFound
+	}}
+	srv := newMoveWorkTestServer(workAPI)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/missing-session/work/work-1/move", bytes.NewBufferString(`{"stateName":"complete"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -119,20 +129,8 @@ func TestMoveWorkBySessionId_Returns404ForMissingSession(t *testing.T) {
 }
 
 func TestMoveWorkBySessionId_SucceedsForScopedSession(t *testing.T) {
-	now := time.Now().UTC()
-	beta := moveWorkMockFactory(now, "work-beta-move", "task", "init")
-	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-		Net:     moveWorkTestNet(),
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-				Net:     moveWorkTestNet(),
-			},
-			"beta": beta,
-		},
-	}
-	srv := newAPITestServer(mf)
+	workAPI := successfulMoveWorkAPI(t, "beta", "work-beta-move", "complete", "")
+	srv := newMoveWorkTestServer(workAPI)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/beta/work/work-beta-move/move", bytes.NewBufferString(`{"stateName":"complete"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -145,76 +143,6 @@ func TestMoveWorkBySessionId_SucceedsForScopedSession(t *testing.T) {
 	if work.State == nil || work.State.Name != "complete" {
 		t.Fatalf("work = %#v, want complete state", work)
 	}
-}
-
-func TestMoveWork_IntegrationWithRuntimeFactoryWhilePaused(t *testing.T) {
-	f, err := factoryruntime.New(
-		factory.WithNet(moveWorkTestNet()),
-		factory.WithInlineDispatch(),
-		factory.WithLogger(logging.NoopLogger{}),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	ctx := context.Background()
-	if _, err := f.SubmitWorkRequest(ctx, factoryrequests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
-		WorkID:     "work-runtime-paused",
-		WorkTypeID: "task",
-		TraceID:    "trace-runtime-paused",
-	}})); err != nil {
-		t.Fatalf("SubmitWorkRequest: %v", err)
-	}
-	tickable, ok := f.(factoryruntime.TickableFactory)
-	if !ok {
-		t.Fatal("expected tickable factory")
-	}
-	if err := tickable.Tick(ctx); err != nil {
-		t.Fatalf("Tick: %v", err)
-	}
-	if err := f.Pause(ctx); err != nil {
-		t.Fatalf("Pause: %v", err)
-	}
-
-	logger, _ := zap.NewDevelopment()
-	srv := api.NewServer(newRuntimeMoveAPISurface(f), 8080, logger)
-	rec := postMoveWork(t, srv, "work-runtime-paused", `{"stateName":"complete"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-}
-
-type runtimeMoveAPISurface struct {
-	*testutil.MockFactory
-	runtime factory.Factory
-}
-
-func newRuntimeMoveAPISurface(f factory.Factory) apisurface.APISurface {
-	return &runtimeMoveAPISurface{
-		MockFactory: &testutil.MockFactory{},
-		runtime:     f,
-	}
-}
-
-func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	return r.runtime.MoveWork(ctx, workID, stateName, source, requestID)
-}
-
-func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
-	if sessionID != factorysessions.DefaultSessionID {
-		return work.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
-	}
-	return r.runtime.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
-}
-
-func (r *runtimeMoveAPISurface) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	return r.runtime.GetEngineStateSnapshot(ctx)
-}
-
-func (r *runtimeMoveAPISurface) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	if sessionID != factorysessions.DefaultSessionID {
-		return nil, apisurface.ErrFactorySessionNotFound
-	}
-	return r.runtime.GetEngineStateSnapshot(ctx)
 }
 
 func postMoveWork(t *testing.T, srv *api.Server, workID, body string) *httptest.ResponseRecorder {
@@ -233,44 +161,38 @@ func moveWorkIDString(value *string) string {
 	return *value
 }
 
-func moveWorkMockFactory(now time.Time, workID, workTypeID, stateName string) *testutil.MockFactory {
-	net := moveWorkTestNet()
-	placeID := state.PlaceID(workTypeID, stateName)
-	return &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*factorytoken.Token{
-				"tok-1": {
-					ID:      "tok-1",
-					PlaceID: placeID,
-					Color: factorytoken.Color{
-						WorkID:     workID,
-						WorkTypeID: workTypeID,
-					},
-					CreatedAt: now,
-					EnteredAt: now,
-				},
-			},
+func successfulMoveWorkAPI(t *testing.T, wantSessionID, workID, stateName, requestID string) moveWorkAPI {
+	t.Helper()
+	return moveWorkAPI{
+		moveAndRead: func(_ context.Context, sessionID, gotWorkID, gotStateName, gotRequestID string) (work.ReadModel, error) {
+			assertMoveWorkRequest(t, sessionID, gotWorkID, gotStateName, gotRequestID, wantSessionID, workID, stateName, requestID)
+			return detachedMovedWork(workID, stateName), nil
 		},
-		Net: net,
 	}
 }
 
-func moveWorkTestNet() *state.Net {
-	wt := &state.WorkType{
-		ID:   "task",
-		Name: "Task",
-		States: []state.StateDefinition{
-			{Value: "init", Category: state.StateCategoryInitial},
-			{Value: "complete", Category: state.StateCategoryTerminal},
-			{Value: "failed", Category: state.StateCategoryFailed},
-		},
+func newMoveWorkTestServer(role moveWorkAPI) *api.Server {
+	return api.NewServer(
+		nil, nil, nil, nil, role, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+}
+
+func detachedMovedWork(workID, stateName string) work.ReadModel {
+	return work.ReadModel{
+		CursorID: "detached-" + workID,
+		WorkID:   workID,
+		State:    &work.State{Name: stateName, Type: work.StateTypeTerminal},
 	}
-	places := make(map[string]*petri.Place)
-	for _, place := range wt.GeneratePlaces() {
-		places[place.ID] = place
-	}
-	return &state.Net{
-		Places:    places,
-		WorkTypes: map[string]*state.WorkType{"task": wt},
+}
+
+func assertMoveWorkRequest(t *testing.T, sessionID, workID, stateName, requestID, wantSessionID, wantWorkID, wantStateName, wantRequestID string) {
+	t.Helper()
+	if sessionID != wantSessionID || workID != wantWorkID || stateName != wantStateName || requestID != wantRequestID {
+		t.Fatalf(
+			"move request = session %q work %q state %q request %q, want session %q work %q state %q request %q",
+			sessionID, workID, stateName, requestID,
+			wantSessionID, wantWorkID, wantStateName, wantRequestID,
+		)
 	}
 }

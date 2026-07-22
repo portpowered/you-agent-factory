@@ -2,13 +2,10 @@ package testutil
 
 import (
 	"testing"
-	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 // ProviderErrorSmokeLane declares one provider/model lane in a generated
@@ -17,27 +14,9 @@ type ProviderErrorSmokeLane struct {
 	WorkTypeID      string
 	WorkerName      string
 	WorkstationName string
-	Provider        modelprovider.ID
+	Provider        modelprovider.Provider
 	Model           string
 	PromptBody      string
-}
-
-type providerErrorSmokePauseIsolationHarnessConfig struct {
-	serviceOptions []ServiceTestHarnessOption
-}
-
-// ProviderErrorSmokePauseIsolationHarnessOption customizes the generated
-// two-lane pause-isolation smoke fixture.
-type ProviderErrorSmokePauseIsolationHarnessOption func(*providerErrorSmokePauseIsolationHarnessConfig)
-
-// WithProviderErrorSmokePauseIsolationServiceOptions forwards service harness
-// options to the generated pause-isolation fixture.
-func WithProviderErrorSmokePauseIsolationServiceOptions(
-	opts ...ServiceTestHarnessOption,
-) ProviderErrorSmokePauseIsolationHarnessOption {
-	return func(cfg *providerErrorSmokePauseIsolationHarnessConfig) {
-		cfg.serviceOptions = append(cfg.serviceOptions, opts...)
-	}
 }
 
 // ProviderErrorSmokePauseIsolationHarness owns a generated two-lane fixture for
@@ -49,7 +28,6 @@ type ProviderErrorSmokePauseIsolationHarness struct {
 	UnaffectedLane ProviderErrorSmokeLane
 
 	providerRunner *ProviderCommandRunner
-	serviceOptions []ServiceTestHarnessOption
 }
 
 // NewProviderErrorSmokePauseIsolationHarness builds a two-lane smoke fixture
@@ -58,14 +36,8 @@ func NewProviderErrorSmokePauseIsolationHarness(
 	t *testing.T,
 	throttledLane ProviderErrorSmokeLane,
 	unaffectedLane ProviderErrorSmokeLane,
-	opts ...ProviderErrorSmokePauseIsolationHarnessOption,
 ) *ProviderErrorSmokePauseIsolationHarness {
 	t.Helper()
-
-	cfg := &providerErrorSmokePauseIsolationHarnessConfig{}
-	for _, opt := range opts {
-		opt(cfg)
-	}
 
 	normalizeProviderErrorSmokeLane(t, &throttledLane)
 	normalizeProviderErrorSmokeLane(t, &unaffectedLane)
@@ -75,7 +47,7 @@ func NewProviderErrorSmokePauseIsolationHarness(
 			providerErrorSmokeLaneWorkType(throttledLane),
 			providerErrorSmokeLaneWorkType(unaffectedLane),
 		},
-		Workers: []workerconfig.Config{
+		Workers: []interfaces.FactoryWorkerConfig{
 			{Name: throttledLane.WorkerName},
 			{Name: unaffectedLane.WorkerName},
 		},
@@ -88,39 +60,18 @@ func NewProviderErrorSmokePauseIsolationHarness(
 	writeProviderErrorSmokeLaneConfig(t, dir, unaffectedLane)
 
 	providerRunner := NewProviderCommandRunner()
-	serviceOptions := append([]ServiceTestHarnessOption{
-		WithProviderCommandRunner(providerRunner),
-	}, cfg.serviceOptions...)
 
 	return &ProviderErrorSmokePauseIsolationHarness{
 		Dir:            dir,
 		ThrottledLane:  throttledLane,
 		UnaffectedLane: unaffectedLane,
 		providerRunner: providerRunner,
-		serviceOptions: serviceOptions,
 	}
-}
-
-// BuildServiceHarness constructs the ServiceTestHarness for the generated
-// pause-isolation fixture. Call this after seeding any startup work.
-func (h *ProviderErrorSmokePauseIsolationHarness) BuildServiceHarness(t *testing.T) *ServiceTestHarness {
-	t.Helper()
-	return NewServiceTestHarness(t, h.Dir, h.serviceOptions...)
-}
-
-// BuildRunningServiceHarness constructs the generated pause-isolation service
-// harness, starts the real async run loop, and registers cleanup for the test.
-func (h *ProviderErrorSmokePauseIsolationHarness) BuildRunningServiceHarness(
-	t *testing.T,
-	timeout time.Duration,
-) *ServiceTestHarness {
-	t.Helper()
-	return buildRunningProviderErrorSmokeServiceHarness(t, h.BuildServiceHarness(t), timeout)
 }
 
 // QueueProviderResults appends ordered provider subprocess outcomes to the
 // shared script-wrap runner for both pause-isolation lanes.
-func (h *ProviderErrorSmokePauseIsolationHarness) QueueProviderResults(results ...workers.CommandResult) {
+func (h *ProviderErrorSmokePauseIsolationHarness) QueueProviderResults(results ...platformprocess.CommandResult) {
 	h.providerRunner.Queue(results...)
 }
 
@@ -134,18 +85,6 @@ func (h *ProviderErrorSmokePauseIsolationHarness) ProviderRunner() *ProviderComm
 func (h *ProviderErrorSmokePauseIsolationHarness) SeedWork(t *testing.T, work ProviderErrorSmokeWork) {
 	t.Helper()
 	WriteSeedRequest(t, h.Dir, submitRequestFromProviderErrorSmokeWork(work))
-}
-
-// WaitForThrottleRequeue waits until the throttled lane requeues to init after
-// exhausting bounded provider retries.
-func (h *ProviderErrorSmokePauseIsolationHarness) WaitForThrottleRequeue(
-	t *testing.T,
-	serviceHarness *ServiceTestHarness,
-	work ProviderErrorSmokeWork,
-	timeout time.Duration,
-) ProviderErrorSmokeOutcome {
-	t.Helper()
-	return WaitForProviderErrorThrottleRequeue(t, serviceHarness, work, timeout)
 }
 
 func normalizeProviderErrorSmokeLane(t *testing.T, lane *ProviderErrorSmokeLane) {

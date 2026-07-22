@@ -2,15 +2,15 @@ package workflow
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -54,51 +54,13 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 	// Seed 3 ideas before harness construction.
 	traceIDs := seedBatchIdeas(t, dir, 3)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	// Run to completion.
-	h.RunUntilComplete(t, 10*time.Second)
-
-	snap := h.Marking()
-
-	// All 3 stories reach story:complete without deadlock.
-	storyCompleteTokens := snap.TokensInPlace("story:complete")
-	if len(storyCompleteTokens) != 3 {
-		t.Fatalf("expected 3 tokens in story:complete, got %d", len(storyCompleteTokens))
-	}
-
-	// No tokens remain in intermediate places.
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review")
-
-	// Each completed story Work item preserves one of the seeded trace IDs.
-	foundTraces := make(map[string]bool)
-	for _, tok := range storyCompleteTokens {
-		if tok.Color.DataType != factorytoken.DataTypeWork {
-			t.Errorf("story:complete token %s: expected work DataType, got %q", tok.ID, tok.Color.DataType)
-			continue
-		}
-		if tok.Color.TraceID == "" {
-			t.Errorf("story:complete token %s: expected TraceID lineage", tok.ID)
-			continue
-		}
-		if !slices.Contains(traceIDs, tok.Color.TraceID) {
-			t.Errorf("unexpected TraceID %q in story:complete", tok.Color.TraceID)
-			continue
-		}
-		foundTraces[tok.Color.TraceID] = true
-	}
-	for _, traceID := range traceIDs {
-		if !foundTraces[traceID] {
-			t.Errorf("expected TraceID %q in story:complete, not found", traceID)
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"story:complete": 3, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
+	})
+	assertCompletedStoryTraces(t, listedWork, traceIDs)
 
 	// Total provider calls: 3 planner + 3 executor + 3 reviewer = 9.
 	if provider.CallCount() != 9 {
@@ -107,10 +69,7 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 	assertSerialPipelineProviderCallsUseAgentsMD(t, provider.Calls())
 
 	// Resource tokens returned: 2 tokens in agent-slot:available (capacity=2).
-	resourceTokens := snap.TokensInPlace("agent-slot:available")
-	if len(resourceTokens) != 2 {
-		t.Errorf("expected 2 resource tokens in agent-slot:available, got %d", len(resourceTokens))
-	}
+	assertResourceAvailability(t, session, "agent-slot", 2)
 }
 
 // TestSerialIdeationPipeline_ConcurrencyLimit1 verifies that with agent-slot
@@ -135,40 +94,13 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 	// Seed 3 ideas before harness construction.
 	traceIDs := seedBatchIdeas(t, dir, 3)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 1000*time.Second)
-
-	snap := h.Marking()
-
-	// All 3 stories reach story:complete without deadlock.
-	storyCompleteTokens := snap.TokensInPlace("story:complete")
-	if len(storyCompleteTokens) != 3 {
-		t.Fatalf("expected 3 tokens in story:complete, got %d", len(storyCompleteTokens))
-	}
-
-	// No tokens remain in intermediate places.
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review")
-
-	// Each idea lineage (TraceID) is independent and traceable through work tokens.
-	foundTraces := make(map[string]bool)
-	for _, tok := range storyCompleteTokens {
-		if tok.Color.DataType == factorytoken.DataTypeWork && tok.Color.TraceID != "" {
-			foundTraces[tok.Color.TraceID] = true
-		}
-	}
-	for traceID := range foundTraces {
-		if !slices.Contains(traceIDs, traceID) {
-			t.Errorf("unexpected TraceID %q in story:complete", traceID)
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 30*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"story:complete": 3, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
+	})
+	assertCompletedStoryTraces(t, listedWork, traceIDs)
 
 	// Total provider calls: 3 planner + 3 executor + 3 reviewer = 9.
 	if provider.CallCount() != 9 {
@@ -177,10 +109,44 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 	assertSerialPipelineProviderCallsUseAgentsMD(t, provider.Calls())
 
 	// Resource tokens properly released: exactly 1 token in agent-slot:available (capacity=1).
-	resourceTokens := snap.TokensInPlace("agent-slot:available")
-	if len(resourceTokens) != 1 {
-		t.Errorf("expected 1 resource token in agent-slot:available, got %d", len(resourceTokens))
+	assertResourceAvailability(t, session, "agent-slot", 1)
+}
+
+func assertCompletedStoryTraces(t *testing.T, response factoryapi.ListWorkResponse, traceIDs []string) {
+	t.Helper()
+	wants := make(map[string]bool, len(traceIDs))
+	for _, traceID := range traceIDs {
+		wants[traceID] = true
 	}
+	found := map[string]bool{}
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != "story" || item.State == nil || item.State.Name != "complete" {
+			continue
+		}
+		if item.TraceId == nil || !wants[*item.TraceId] {
+			t.Errorf("unexpected story:complete trace ID %#v", item.TraceId)
+			continue
+		}
+		found[*item.TraceId] = true
+	}
+	for traceID := range wants {
+		if !found[traceID] {
+			t.Errorf("listed Work missing story:complete trace %q", traceID)
+		}
+	}
+}
+
+func assertResourceAvailability(t *testing.T, session factoryapi.FactorySession, name string, want int) {
+	t.Helper()
+	for _, resource := range session.Runtime.Usage.Resources {
+		if resource.Name == name {
+			if resource.Available != want || resource.Total != want {
+				t.Errorf("resource %s usage = %#v, want %d available and total", name, resource, want)
+			}
+			return
+		}
+	}
+	t.Errorf("session usage missing resource %q", name)
 }
 
 func assertSerialPipelineProviderCallsUseAgentsMD(t *testing.T, calls []workerexecution.ProviderInferenceRequest) {

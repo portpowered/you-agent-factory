@@ -46,23 +46,23 @@ type AcceptanceEvidence struct {
 // unknown-field, and incompatible-value cases for every configuration root.
 func AcceptanceCases() []AcceptanceCase {
 	return []AcceptanceCase{
-		{ID: "global-valid-defaults", Family: FamilyGlobal, Category: CategoryValid, FixturePath: "pkg/config/operatorconfig/testdata/fixtures/valid/defaults-only.json", Outcome: OutcomeAccept},
-		{ID: "global-compat-missing-presets", Family: FamilyGlobal, Category: CategoryCompatibility, FixturePath: "pkg/config/operatorconfig/testdata/fixtures/valid/worker-presets-missing.json", Outcome: OutcomeAccept},
-		{ID: "global-malformed-json", Family: FamilyGlobal, Category: CategoryMalformedDocument, FixturePath: "pkg/config/operatorconfig/testdata/fixtures/invalid/malformed-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
-		{ID: "global-unknown-field", Family: FamilyGlobal, Category: CategoryUnknownField, FixturePath: "pkg/config/operatorconfig/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
-		{ID: "global-incompatible-provider", Family: FamilyGlobal, Category: CategoryIncompatibleValue, FixturePath: "pkg/config/operatorconfig/testdata/fixtures/invalid/preset-unsupported-provider.json", Outcome: OutcomeReject, DocumentPath: "/workerPresets/0/modelProvider"},
+		{ID: "global-valid-defaults", Family: FamilyGlobal, Category: CategoryValid, FixturePath: "pkg/services/operator_settings/testdata/fixtures/valid/defaults-only.json", Outcome: OutcomeAccept},
+		{ID: "global-compat-missing-presets", Family: FamilyGlobal, Category: CategoryCompatibility, FixturePath: "pkg/services/operator_settings/testdata/fixtures/valid/worker-presets-missing.json", Outcome: OutcomeAccept},
+		{ID: "global-malformed-json", Family: FamilyGlobal, Category: CategoryMalformedDocument, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/malformed-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
+		{ID: "global-unknown-field", Family: FamilyGlobal, Category: CategoryUnknownField, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
+		{ID: "global-incompatible-provider", Family: FamilyGlobal, Category: CategoryIncompatibleValue, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/preset-unsupported-provider.json", Outcome: OutcomeReject, DocumentPath: "/workerPresets/0/modelProvider"},
 
-		{ID: "mock-worker-valid-empty", Family: FamilyMockWorker, Category: CategoryValid, FixturePath: "pkg/config/mockworkers/testdata/fixtures/valid/empty-accept.json", Outcome: OutcomeAccept},
-		{ID: "mock-worker-compat-reject-default", Family: FamilyMockWorker, Category: CategoryCompatibility, FixturePath: "pkg/config/mockworkers/testdata/fixtures/valid/reject-without-reject-config.json", Outcome: OutcomeAccept},
-		{ID: "mock-worker-malformed-json", Family: FamilyMockWorker, Category: CategoryMalformedDocument, FixturePath: "pkg/config/mockworkers/testdata/fixtures/invalid/trailing-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
-		{ID: "mock-worker-unknown-field", Family: FamilyMockWorker, Category: CategoryUnknownField, FixturePath: "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
-		{ID: "mock-worker-incompatible-run-type", Family: FamilyMockWorker, Category: CategoryIncompatibleValue, FixturePath: "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-run-type.json", Outcome: OutcomeReject, DocumentPath: "/mockWorkers/0/runType"},
+		{ID: "mock-worker-valid-empty", Family: FamilyMockWorker, Category: CategoryValid, FixturePath: "pkg/services/workers/interface/testdata/fixtures/valid/empty-accept.json", Outcome: OutcomeAccept},
+		{ID: "mock-worker-compat-reject-default", Family: FamilyMockWorker, Category: CategoryCompatibility, FixturePath: "pkg/services/workers/interface/testdata/fixtures/valid/reject-without-reject-config.json", Outcome: OutcomeAccept},
+		{ID: "mock-worker-malformed-json", Family: FamilyMockWorker, Category: CategoryMalformedDocument, FixturePath: "pkg/services/workers/interface/testdata/fixtures/invalid/trailing-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
+		{ID: "mock-worker-unknown-field", Family: FamilyMockWorker, Category: CategoryUnknownField, FixturePath: "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
+		{ID: "mock-worker-incompatible-run-type", Family: FamilyMockWorker, Category: CategoryIncompatibleValue, FixturePath: "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-run-type.json", Outcome: OutcomeReject, DocumentPath: "/mockWorkers/0/runType"},
 
 		{ID: "factory-valid-minimal", Family: FamilyFactory, Category: CategoryValid, FixturePath: "internal/configcontractsmoke/testdata/factory-valid-minimal.json", Outcome: OutcomeAccept},
 		{ID: "factory-malformed-json", Family: FamilyFactory, Category: CategoryMalformedDocument, FixturePath: "internal/configcontractsmoke/testdata/factory-malformed.json", Outcome: OutcomeReject, DocumentPath: "/"},
 		{ID: "factory-unknown-field", Family: FamilyFactory, Category: CategoryUnknownField, FixturePath: "internal/configcontractsmoke/testdata/factory-unknown-field.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
-		{ID: "factory-incompatible-worker-type", Family: FamilyFactory, Category: CategoryIncompatibleValue, FixturePath: "pkg/config/openapitests/testdata/fixtures/reject/miscased-worker-type.json", Outcome: OutcomeReject, DocumentPath: "/workers/0/type"},
-		{ID: "factory-malformed-layout", Family: FamilyFactory, Category: CategoryMalformedDocument, FixturePath: "pkg/config/openapitests/testdata/fixtures/reject/malformed-layout-missing-schema-version.json", Outcome: OutcomeReject, DocumentPath: "/layout/schemaVersion"},
+		{ID: "factory-incompatible-worker-type", Family: FamilyFactory, Category: CategoryIncompatibleValue, FixturePath: "pkg/transports/mapping/factoryconfig/openapitests/testdata/fixtures/reject/miscased-worker-type.json", Outcome: OutcomeReject, DocumentPath: "/workers/0/type"},
+		{ID: "factory-malformed-layout", Family: FamilyFactory, Category: CategoryMalformedDocument, FixturePath: "pkg/transports/mapping/factoryconfig/openapitests/testdata/fixtures/reject/malformed-layout-missing-schema-version.json", Outcome: OutcomeReject, DocumentPath: "/layout/schemaVersion"},
 	}
 }
 

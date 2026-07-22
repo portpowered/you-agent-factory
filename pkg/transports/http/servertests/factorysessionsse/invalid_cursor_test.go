@@ -17,10 +17,10 @@ const factorySessionSSEUnknownCursorEventID = "b08-sse-fixture/unknown-retained-
 
 func TestFactorySessionSSEInvalidCursor_UnknownAfterEventIDReturnsTypedErrorNotFullHistory(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(factorySessionSSEUnknownCursorEventID)
 	resp := harness.GetSessionEvents(server.URL, fixture.SessionID, query, "")
 	defer closeFactorySessionSSEResponse(t, resp)
@@ -32,10 +32,10 @@ func TestFactorySessionSSEInvalidCursor_UnknownAfterEventIDReturnsTypedErrorNotF
 
 func TestFactorySessionSSEInvalidCursor_UnknownAfterSequenceReturnsTypedErrorNotFullHistory(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	resp := harness.GetSessionEvents(server.URL, fixture.SessionID, "after_sequence=999", "")
 	defer closeFactorySessionSSEResponse(t, resp)
 
@@ -46,10 +46,10 @@ func TestFactorySessionSSEInvalidCursor_UnknownAfterSequenceReturnsTypedErrorNot
 
 func TestFactorySessionSSEInvalidCursor_JSONProbeClassifiesStaleCursorWithOmitGuidance(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(factorySessionSSEUnknownCursorEventID)
 	recovery, resp := harness.ProbeRecovery(server.URL, fixture.SessionID, query)
 	defer closeFactorySessionSSEResponse(t, resp)
@@ -70,10 +70,10 @@ func TestFactorySessionSSEInvalidCursor_JSONProbeClassifiesStaleCursorWithOmitGu
 
 func TestFactorySessionSSEInvalidCursor_JSONProbeValidCursorReturnsStreamReady(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(fixture.Retained[1].Id)
 	recovery, resp := harness.ProbeRecovery(server.URL, fixture.SessionID, query)
 	defer closeFactorySessionSSEResponse(t, resp)
@@ -94,11 +94,11 @@ func TestFactorySessionSSEInvalidCursor_JSONProbeValidCursorReturnsStreamReady(t
 
 func TestFactorySessionSSEInvalidCursor_StreamGenerationChangeInvalidatesAndOmitsPriorCheckpoint(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	root := fixture.RootMockFactory()
+	root := fixture.WorkAPI()
 	server := httptest.NewServer(newAPITestServer(root).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	priorStream := harness.Open(server.URL, fixture.SessionID, "")
 	priorStream.ReadEvents(2)
 	priorIdentity := priorStream.Identity

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,17 +25,10 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("request:init").
-		HasNoTokenInPlace("request:failed")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
+	})
 }
 
 func TestMultiOutput_WithoutStopWord(t *testing.T) {
@@ -45,18 +40,10 @@ func TestMultiOutput_WithoutStopWord(t *testing.T) {
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "I tried but could not finish"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("request:failed").
-		HasNoTokenInPlace("plan:init").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("plan:complete").
-		HasNoTokenInPlace("task:complete")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"request:failed": 1, "plan:init": 0, "task:init": 0, "plan:complete": 0, "task:complete": 0,
+	})
 }
 
 func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
@@ -65,23 +52,15 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_no_stopwords_dir"))
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output no stop words"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	h.MockWorker("planner-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "planner output COMPLETE"},
+		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
+		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 	)
-	h.MockWorker("finisher-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("request:init").
-		HasNoTokenInPlace("request:failed")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
+	})
 }
 
 func TestMultiOutput_SecondStopWord(t *testing.T) {
@@ -95,15 +74,8 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:complete")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"plan:complete": 1, "task:complete": 1})
 }
 
 func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
@@ -123,38 +95,32 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"plan:complete": 1, "task:complete": 1})
+	assertListedLineage(t, listedWork, map[string]string{"plan": inputTraceID, "task": inputTraceID})
+}
 
-	h.Assert().
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:complete").
-		TokenHasTraceID("plan:complete", inputTraceID).
-		TokenHasTraceID("task:complete", inputTraceID)
-
-	finalSnap := h.Marking()
-	planTokens := finalSnap.TokensInPlace("plan:complete")
-	taskTokens := finalSnap.TokensInPlace("task:complete")
-
-	if len(planTokens) != 1 {
-		t.Fatalf("expected 1 token in plan:complete, got %d", len(planTokens))
+func assertListedLineage(t *testing.T, response factoryapi.ListWorkResponse, wants map[string]string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, item := range response.Results {
+		if item.State == nil || item.State.Name != "complete" || item.WorkTypeName == nil {
+			continue
+		}
+		want, ok := wants[*item.WorkTypeName]
+		if !ok {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != want {
+			t.Errorf("%s complete trace ID = %#v, want %q", *item.WorkTypeName, item.TraceId, want)
+		}
+		seen[*item.WorkTypeName] = true
 	}
-	if len(taskTokens) != 1 {
-		t.Fatalf("expected 1 token in task:complete, got %d", len(taskTokens))
-	}
-	if planTokens[0].Color.WorkTypeID != "request" {
-		t.Logf("plan:complete token has WorkTypeID %q (inherited from input)", planTokens[0].Color.WorkTypeID)
-	}
-	if taskTokens[0].Color.WorkTypeID != "request" {
-		t.Logf("task:complete token has WorkTypeID %q (inherited from input)", taskTokens[0].Color.WorkTypeID)
-	}
-	if planTokens[0].Color.TraceID != inputTraceID {
-		t.Errorf("plan:complete token TraceID = %q, want %q", planTokens[0].Color.TraceID, inputTraceID)
-	}
-	if taskTokens[0].Color.TraceID != inputTraceID {
-		t.Errorf("task:complete token TraceID = %q, want %q", taskTokens[0].Color.TraceID, inputTraceID)
+	for workType := range wants {
+		if !seen[workType] {
+			t.Errorf("listed Work missing %s:complete", workType)
+		}
 	}
 }

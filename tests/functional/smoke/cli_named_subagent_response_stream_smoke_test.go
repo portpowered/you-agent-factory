@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
@@ -196,13 +196,13 @@ func TestNamedSubagentResponseStream_HumanModeUsesCanonicalHumanFormatNotLegacyD
 func writePackagedSubagentMockWorkers(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
-				WorkerName:      subagent.PackagedWorkerName,
-				WorkstationName: subagent.PackagedRunWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
+				WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 		},
 	}
@@ -225,13 +225,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		subagent.PackagedFactoryName,
-		subagent.BuiltInFactoryJSON,
-	); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
-	}
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -248,7 +242,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 		binaryPath,
 		"--json",
 		"run",
-		"--named", subagent.PackagedFactoryName,
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -257,7 +251,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 		requestText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
@@ -275,13 +269,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		subagent.PackagedFactoryName,
-		subagent.BuiltInFactoryJSON,
-	); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
-	}
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -295,7 +283,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 
 	args := []string{
 		"run",
-		"--named", subagent.PackagedFactoryName,
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -310,7 +298,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf

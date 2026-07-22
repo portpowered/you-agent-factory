@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
 const repoInstallScriptPath = "scripts/install.sh"
@@ -88,7 +89,7 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 		t.Fatalf("install output = %q, want PATH guidance", output)
 	}
 
-	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	configPath := configPathFromBuiltCLI(t, installedBinary, homeDir)
 	if _, statErr := os.Stat(configPath); statErr != nil {
 		t.Fatalf("stat post-install config: %v", statErr)
 	}
@@ -157,7 +158,14 @@ func TestInstallScript_FailsWhenPostInstallConfigInitFails(t *testing.T) {
 	defer server.Close()
 
 	homeDir := t.TempDir()
-	configParent := filepath.Dir(defaultpaths.OperatorConfigPath(homeDir))
+	configPath := configPathFromBuiltCLI(t, buildReleaseSmokeBinary(t), homeDir)
+	configParent := filepath.Dir(configPath)
+	if err := requirePathWithin(configParent, homeDir); err != nil {
+		t.Fatalf("config init returned unsafe parent path: %v", err)
+	}
+	if err := os.RemoveAll(configParent); err != nil {
+		t.Fatalf("remove initialized config parent: %v", err)
+	}
 	if err := os.WriteFile(configParent, []byte("blocked"), 0o644); err != nil {
 		t.Fatalf("write blocking config parent: %v", err)
 	}
@@ -177,6 +185,39 @@ func TestInstallScript_FailsWhenPostInstallConfigInitFails(t *testing.T) {
 	if !strings.Contains(output, "failed to initialize operator/system config and default factories") {
 		t.Fatalf("install output = %q, want actionable config init failure message", output)
 	}
+}
+
+func configPathFromBuiltCLI(t *testing.T, binaryPath, homeDir string) string {
+	t.Helper()
+
+	cmd := exec.Command(binaryPath, "config", "init", "--json")
+	cmd.Dir = testutil.MustRepoRoot(t)
+	cmd.Env = builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("probe config path through built CLI: %v\n%s", err, string(output))
+	}
+	var outcome struct {
+		ConfigPath string `json:"configPath"`
+	}
+	if err := json.Unmarshal(output, &outcome); err != nil {
+		t.Fatalf("decode built CLI config init JSON: %v\n%s", err, string(output))
+	}
+	if strings.TrimSpace(outcome.ConfigPath) == "" {
+		t.Fatalf("built CLI config init returned empty configPath: %s", string(output))
+	}
+	return outcome.ConfigPath
+}
+
+func requirePathWithin(path, root string) error {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return err
+	}
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return fmt.Errorf("path %q is not a child of %q", path, root)
+	}
+	return nil
 }
 
 func TestInstallScript_FailsOnUnsupportedOperatingSystem(t *testing.T) {

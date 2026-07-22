@@ -80,7 +80,7 @@ func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.
 	paths := []string{
 		filepath.FromSlash("../generated/server.gen.go"),
 		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
-		filepath.FromSlash("../../../factory/replay/testdata/inference-events.replay.json"),
+		filepath.FromSlash("../../../services/recordings/replay/testdata/inference-events.replay.json"),
 	}
 
 	for _, path := range paths {
@@ -171,7 +171,7 @@ func TestGeneratedFactoryInferenceResponseEvent_UsesCanonicalPublicFieldsOnly(t 
 func TestGeneratedPublicEventArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
 	paths := []string{
 		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
-		filepath.FromSlash("../../../factory/replay/testdata/inference-events.replay.json"),
+		filepath.FromSlash("../../../services/recordings/replay/testdata/inference-events.replay.json"),
 	}
 
 	for _, path := range paths {

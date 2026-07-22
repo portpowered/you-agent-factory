@@ -46,7 +46,7 @@ func NewSessionFamilyCommand(registry *commandregistry.Registry, bindings Sessio
 	return components.Session, nil
 }
 
-// NewSessionFamilyComponents builds detached commands from the embedded artifact.
+// NewSessionFamilyComponents builds detached commands from generated typed metadata.
 func NewSessionFamilyComponents(registry *commandregistry.Registry, bindings SessionFamilyBindings) (SessionFamilyComponents, error) {
 	manifest, err := generated.SessionFamilyManifest()
 	if err != nil {

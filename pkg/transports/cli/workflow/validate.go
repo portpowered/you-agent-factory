@@ -1,12 +1,13 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/spf13/cobra"
 )
@@ -14,36 +15,53 @@ import (
 // ValidateConfig holds parameters for workflow source validation output.
 type ValidateConfig struct {
 	SourceConfig
-	JSON   bool
-	Output io.Writer
+	Context context.Context
+	JSON    bool
+	Output  io.Writer
 }
 
 // ValidateRunE returns the handwritten workflow validation handler used by
 // compatibility and generated command metadata wiring.
-func ValidateRunE(cfg *ValidateConfig, jsonOutput *bool) func(*cobra.Command, []string) error {
+func ValidateRunE(
+	preview factoryruntime.WorkflowPreviewOperation,
+	cfg *ValidateConfig,
+	jsonOutput *bool,
+) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
 		if jsonOutput != nil {
 			cfg.JSON = *jsonOutput
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return Validate(*cfg)
+		cfg.Context = cmd.Context()
+		return Validate(preview, *cfg)
 	}
 }
 
 // Validate resolves and validates workflow source using the shared validation contract.
-func Validate(cfg ValidateConfig) error {
+func Validate(
+	preview factoryruntime.WorkflowPreviewOperation,
+	cfg ValidateConfig,
+) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("workflow validation context is required")
 	}
 
+	if preview == nil {
+		return fmt.Errorf("workflow preview operation is required")
+	}
 	input, err := previewRequestFromSourceConfig(cfg.SourceConfig)
 	if err != nil {
 		return err
 	}
 
-	result := apisurface.FactoryWorkflowValidationResultFromPreview(
-		apisurface.BuildFactoryWorkflowValidation(input),
-	)
+	workflowPreview, err := preview.PreviewWorkflow(cfg.Context, input)
+	if err != nil {
+		return err
+	}
+	result := apisurface.FactoryWorkflowValidationResultFromPreview(workflowPreview)
 	if cfg.JSON {
 		if err := json.NewEncoder(cfg.Output).Encode(result); err != nil {
 			return err

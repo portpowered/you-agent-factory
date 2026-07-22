@@ -6,29 +6,25 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestEndToEndDispatch_CompletesThroughServiceHarness(t *testing.T) {
+func TestEndToEndDispatch_CompletesThroughCustomerProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "E2E test"}`))
 
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "E2E done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want one terminal work item", status.Categories)
+	}
 
 	if provider.CallCount() != 1 {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount())
@@ -50,14 +46,36 @@ func TestEndToEndDispatch_MultipleWorkItemsCompleteIndependently(t *testing.T) {
 		})
 	}
 
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap())
+	status := runFactoryThroughCustomerProcess(t, dir, nil)
+	if status.Categories.Terminal != 3 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want three terminal work items", status.Categories)
+	}
+}
 
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 3).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+func runFactoryThroughCustomerProcess(
+	t *testing.T,
+	dir string,
+	provider providercontract.Provider,
+) factoryapi.StatusResponse {
+	t.Helper()
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: server.Start,
+		ProviderOverride: provider,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	inputs.Input.WorkingDirectory = dir
+	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	status := support.WaitForTerminalStatus(t, server.WaitForURL(t), 15*time.Second)
+	daemon.Stop(t)
+	return status
 }
 
 func simpleEndToEndPipelineConfig() map[string]any {

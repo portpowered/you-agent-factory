@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout(t *testing.T) {

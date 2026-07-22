@@ -3,6 +3,7 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -18,7 +19,7 @@ func TestList_WritesHumanReadableTable(t *testing.T) {
 	rootDir := setupNamedFactoriesForListTest(t, []string{"alpha", "beta"}, "beta")
 
 	var out strings.Builder
-	if err := List(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -36,11 +37,11 @@ func TestList_JSONEmitsArray(t *testing.T) {
 	rootDir := setupNamedFactoriesForListTest(t, []string{"alpha"}, "")
 
 	var out bytes.Buffer
-	if err := List(ListConfig{Dir: rootDir, JSON: true, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, JSON: true, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
-	var entries []factoryconfig.NamedFactoryListEntry
+	var entries []factorydefinitions.NamedFactoryListEntry
 	if err := json.Unmarshal(out.Bytes(), &entries); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestList_EmptyRootPrintsEmptyState(t *testing.T) {
 	rootDir := t.TempDir()
 
 	var out strings.Builder
-	if err := List(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if got := out.String(); got != "No factories found.\n" {
@@ -62,8 +63,14 @@ func TestList_EmptyRootPrintsEmptyState(t *testing.T) {
 }
 
 func TestList_InvalidRootFailsBeforePrinting(t *testing.T) {
+	wantErr := errors.New("list named factories")
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		list: func(string) ([]factorydefinitions.NamedFactoryListEntry, error) {
+			return nil, wantErr
+		},
+	})
 	var out strings.Builder
-	err := List(ListConfig{Dir: filepath.Join(t.TempDir(), "missing"), Output: &out})
+	err := testList(ListConfig{Dir: filepath.Join(t.TempDir(), "missing"), Output: &out})
 	if err == nil {
 		t.Fatal("expected invalid factory root to fail")
 	}
@@ -76,16 +83,19 @@ func setupNamedFactoriesForListTest(t *testing.T, names []string, current string
 	t.Helper()
 
 	rootDir := t.TempDir()
+	entries := make([]factorydefinitions.NamedFactoryListEntry, 0, len(names))
 	for _, name := range names {
-		if _, err := factoryconfig.PersistNamedFactory(rootDir, name, listTestNamedFactoryPayload(t, name)); err != nil {
-			t.Fatalf("PersistNamedFactory(%s): %v", name, err)
-		}
+		entries = append(entries, factorydefinitions.NamedFactoryListEntry{
+			Name:       name,
+			FactoryDir: filepath.Join(rootDir, name),
+			Current:    name == current,
+		})
 	}
-	if current != "" {
-		if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, current); err != nil {
-			t.Fatalf("WriteCurrentFactoryPointer: %v", err)
-		}
-	}
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		list: func(string) ([]factorydefinitions.NamedFactoryListEntry, error) {
+			return append([]factorydefinitions.NamedFactoryListEntry(nil), entries...), nil
+		},
+	})
 	return rootDir
 }
 

@@ -1,23 +1,16 @@
 package runtime_api
 
 import (
-	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -36,19 +29,18 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--record", recordPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	events := server.GetFactoryEvents(t)
 	assertFirstInferenceAttemptOrder(t, events)
+	server.Stop(t)
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
 	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }
@@ -62,17 +54,16 @@ func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 		TraceID:    "trace-script-no-inference",
 		Payload:    []byte("script input"),
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+		},
+	})
+	defer server.Stop(t)
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	events := server.GetFactoryEvents(t)
 	if !hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest) ||
 		!hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse) {
 		t.Fatalf("script worker canonical events = %v, want dispatch lifecycle events", functionalEventTypes(events))
@@ -83,7 +74,7 @@ func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 	}
 }
 
-func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(t *testing.T) {
+func TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event stream-projection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	provider := testutil.NewMockProviderWithErrors(
@@ -94,20 +85,18 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 			{Content: "Step two done. COMPLETE"},
 		},
 		[]error{
-			workers.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
-			workers.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
+			workerexecution.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
+			workerexecution.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
 			nil,
 			nil,
 		},
 	)
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderOverride = provider
-		},
-		factory.WithServiceMode(),
+		nil,
+		withProvider(provider),
 	)
 
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
@@ -125,22 +114,19 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 	}
 
 	events := collectFunctionalEventsUntilDispatchCompletions(t, stream, 2, 10*time.Second)
-	firstDispatchID := assertHTTPInferenceRetrySequence(t, events)
-	assertDashboardInferenceProjection(t, server.GetDashboard(t), firstDispatchID, traceID)
+	assertHTTPInferenceRetrySequence(t, events)
+	assertInferenceTraceReachedPublicWork(t, server.ListWork(t), traceID)
 }
 
 func TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event thin-event sweep")
 	smoke := newThinEventSmokeHarness(t)
 
-	runCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	errCh := smoke.harness.RunInBackground(runCtx)
 	active := captureThinEventSmokeActiveSnapshot(t, smoke)
 	assertThinEventSmokeActiveSnapshot(t, active)
 
 	smoke.provider.ReleaseFirst()
-	waitForFunctionalHarnessCompletion(t, smoke.harness, errCh, cancel, 5*time.Second)
+	waitForFunctionalHarnessCompletion(t, smoke.server, 5*time.Second)
 
 	final := loadThinEventSmokeFinalSnapshot(t, smoke, active)
 	assertThinEventSmokeFinalSnapshot(t, active, final)
@@ -320,31 +306,15 @@ func assertFunctionalInferenceResponse(t *testing.T, event factoryapi.FactoryEve
 	return response
 }
 
-func assertDashboardInferenceProjection(t *testing.T, dashboard DashboardResponse, dispatchID, traceID string) {
+func assertInferenceTraceReachedPublicWork(t *testing.T, work factoryapi.ListWorkResponse, traceID string) {
 	t.Helper()
 
-	if !dashboardDispatchHistoryContainsTrace(dashboard, dispatchID, traceID) {
-		t.Fatalf("dashboard dispatch history missing dispatch %s for trace %s", dispatchID, traceID)
-	}
-	attemptsByDispatch := mapValue(dashboard.Runtime.InferenceAttemptsByDispatchId)
-	attempts := attemptsByDispatch[dispatchID]
-	if len(attempts) != 3 {
-		t.Fatalf("dashboard inference attempts for dispatch %s = %#v, want three retry attempts", dispatchID, attempts)
-	}
-	for _, attempt := range attempts {
-		if attempt.DispatchId != dispatchID || attempt.InferenceRequestId == "" || attempt.Prompt == "" || attempt.RequestTime == "" {
-			t.Fatalf("dashboard inference attempt missing request details: %#v", attempt)
-		}
-		if attempt.Attempt < 1 || attempt.Attempt > 3 {
-			t.Fatalf("dashboard inference attempt number = %d, want 1..3", attempt.Attempt)
-		}
-		if attempt.Attempt < 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeFailed) || attempt.FailureDetail == nil) {
-			t.Fatalf("dashboard failed retry attempt = %#v, want FAILED with errorClass", attempt)
-		}
-		if attempt.Attempt == 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeSucceeded) || attempt.Response != "Step one recovered. COMPLETE" || attempt.ResponseTime == "") {
-			t.Fatalf("dashboard successful retry attempt = %#v, want final response details", attempt)
+	for _, item := range work.Results {
+		if stringValueFromFunctionalPtr(item.TraceId) == traceID {
+			return
 		}
 	}
+	t.Fatalf("public Work listing = %#v, want trace %q", work.Results, traceID)
 }
 
 func assertRawInferenceEventUsesContextDispatchIdentity(t *testing.T, event factoryapi.FactoryEvent, inferenceRequestID string) {
@@ -486,20 +456,6 @@ func indexOfFunctionalInferenceResponseForRequest(events []factoryapi.FactoryEve
 	return -1
 }
 
-func dashboardDispatchHistoryContainsTrace(dashboard DashboardResponse, dispatchID, traceID string) bool {
-	for _, dispatch := range sliceValue(dashboard.Runtime.Session.DispatchHistory) {
-		if dispatch.DispatchId != dispatchID {
-			continue
-		}
-		for _, workItem := range sliceValue(dispatch.WorkItems) {
-			if stringValueFromFunctionalPtr(workItem.TraceId) == traceID {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func assertInferenceEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
 	t.Helper()
 
@@ -525,259 +481,7 @@ func hasFunctionalEventType(events []factoryapi.FactoryEvent, eventType factorya
 	return indexOfFunctionalEventType(events, eventType, 0) >= 0
 }
 
-type DashboardResponse struct {
-	Runtime DashboardRuntime `json:"runtime"`
-}
-
-type DashboardRuntime struct {
-	ActiveThrottlePauses          *[]DashboardThrottlePause               `json:"active_throttle_pauses,omitempty"`
-	ActiveWorkstationNodeIds      *[]string                               `json:"active_workstation_node_ids,omitempty"`
-	InFlightDispatchCount         int                                     `json:"in_flight_dispatch_count"`
-	InferenceAttemptsByDispatchId *map[string]map[string]InferenceAttempt `json:"inference_attempts_by_dispatch_id,omitempty"`
-	Session                       DashboardSessionRuntime                 `json:"session"`
-}
-
-type DashboardThrottlePause struct {
-	AffectedTransitionIds    *[]string  `json:"affected_transition_ids,omitempty"`
-	AffectedWorkTypeIds      *[]string  `json:"affected_work_type_ids,omitempty"`
-	AffectedWorkerTypes      *[]string  `json:"affected_worker_types,omitempty"`
-	AffectedWorkstationNames *[]string  `json:"affected_workstation_names,omitempty"`
-	LaneId                   string     `json:"lane_id"`
-	Model                    string     `json:"model"`
-	PausedAt                 *time.Time `json:"paused_at,omitempty"`
-	PausedUntil              time.Time  `json:"paused_until"`
-	Provider                 string     `json:"provider"`
-	RecoverAt                time.Time  `json:"recover_at"`
-}
-
-type InferenceAttempt struct {
-	Attempt            int                            `json:"attempt"`
-	DispatchId         string                         `json:"dispatch_id"`
-	DurationMillis     int64                          `json:"duration_millis,omitempty"`
-	FailureDetail      *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
-	ExitCode           *int                           `json:"exit_code,omitempty"`
-	InferenceRequestId string                         `json:"inference_request_id"`
-	Outcome            string                         `json:"outcome,omitempty"`
-	Prompt             string                         `json:"prompt"`
-	RequestTime        string                         `json:"request_time"`
-	Response           string                         `json:"response,omitempty"`
-	ResponseTime       string                         `json:"response_time,omitempty"`
-	TransitionId       string                         `json:"transition_id"`
-	WorkingDirectory   string                         `json:"working_directory,omitempty"`
-	Worktree           string                         `json:"worktree,omitempty"`
-}
-
-type DashboardSessionRuntime struct {
-	CompletedCount      int                       `json:"completed_count"`
-	CompletedWorkLabels *[]string                 `json:"completed_work_labels,omitempty"`
-	DispatchHistory     *[]DashboardDispatchView  `json:"dispatch_history,omitempty"`
-	ProviderSessions    *[]ProviderSessionAttempt `json:"provider_sessions,omitempty"`
-}
-
-type DashboardDispatchView struct {
-	DispatchId string                  `json:"dispatch_id"`
-	WorkItems  *[]DashboardWorkItemRef `json:"work_items,omitempty"`
-}
-
-type DashboardWorkItemRef struct {
-	TraceId *string `json:"trace_id,omitempty"`
-}
-
-type ProviderSessionAttempt struct {
-	DispatchId string `json:"dispatch_id"`
-}
-
-func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
-	t.Helper()
-
-	snapshot := fs.GetEngineStateSnapshot(t)
-	events := fs.GetFactoryEvents(t)
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
-	if err != nil {
-		t.Fatalf("reconstruct world state: %v", err)
-	}
-	worldView := projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, snapshot.ActiveThrottlePauses)
-	return dashboardResponseFromWorldView(worldView)
-}
-
 func (fs *functionalAPIServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
 	return getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(fs.URL(), "/work"))
-}
-
-func dashboardResponseFromWorldView(worldView interfaces.FactoryWorldView) DashboardResponse {
-	return DashboardResponse{
-		Runtime: DashboardRuntime{
-			ActiveThrottlePauses:          dashboardThrottlePauses(worldView.Runtime.ActiveThrottlePauses),
-			ActiveWorkstationNodeIds:      stringSlicePtr(worldView.Runtime.ActiveWorkstationNodeIDs),
-			InFlightDispatchCount:         worldView.Runtime.InFlightDispatchCount,
-			InferenceAttemptsByDispatchId: dashboardInferenceAttemptsByDispatchID(worldView.Runtime.InferenceAttemptsByDispatchID),
-			Session: DashboardSessionRuntime{
-				CompletedCount:      worldView.Runtime.Session.CompletedCount,
-				CompletedWorkLabels: dashboardCompletedWorkLabels(worldView),
-				DispatchHistory:     dashboardDispatchHistory(worldView.Runtime.Session.DispatchHistory),
-				ProviderSessions:    dashboardProviderSessions(worldView.Runtime.Session.ProviderSessions),
-			},
-		},
-	}
-}
-
-func dashboardThrottlePauses(input []interfaces.FactoryWorldThrottlePause) *[]DashboardThrottlePause {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]DashboardThrottlePause, 0, len(input))
-	for _, pause := range input {
-		out = append(out, DashboardThrottlePause{
-			AffectedTransitionIds:    stringSlicePtr(pause.AffectedTransitionIDs),
-			AffectedWorkTypeIds:      stringSlicePtr(pause.AffectedWorkTypeIDs),
-			AffectedWorkerTypes:      stringSlicePtr(pause.AffectedWorkerTypes),
-			AffectedWorkstationNames: stringSlicePtr(pause.AffectedWorkstationNames),
-			LaneId:                   pause.LaneID,
-			Model:                    pause.Model,
-			PausedAt:                 dashboardOptionalTimePtr(pause.PausedAt),
-			PausedUntil:              pause.PausedUntil,
-			Provider:                 pause.Provider,
-			RecoverAt:                pause.RecoverAt,
-		})
-	}
-	return &out
-}
-
-func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfaces.FactoryWorldInferenceAttempt) *map[string]map[string]InferenceAttempt {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make(map[string]map[string]InferenceAttempt, len(input))
-	for dispatchID, attempts := range input {
-		if len(attempts) == 0 {
-			continue
-		}
-		converted := make(map[string]InferenceAttempt, len(attempts))
-		for requestID, attempt := range attempts {
-			converted[requestID] = InferenceAttempt{
-				Attempt:            attempt.Attempt,
-				DispatchId:         attempt.DispatchID,
-				DurationMillis:     attempt.DurationMillis,
-				FailureDetail:      workerexecution.CloneFailureDetail(attempt.FailureDetail),
-				ExitCode:           copyIntPointer(attempt.ExitCode),
-				InferenceRequestId: attempt.InferenceRequestID,
-				Outcome:            attempt.Outcome,
-				Prompt:             attempt.Prompt,
-				RequestTime:        dashboardTimeString(attempt.RequestTime),
-				Response:           attempt.Response,
-				ResponseTime:       dashboardTimeString(attempt.ResponseTime),
-				TransitionId:       attempt.TransitionID,
-				WorkingDirectory:   attempt.WorkingDirectory,
-				Worktree:           attempt.Worktree,
-			}
-		}
-		out[dispatchID] = converted
-	}
-	return &out
-}
-
-func dashboardDispatchHistory(input []interfaces.FactoryWorldDispatchCompletion) *[]DashboardDispatchView {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]DashboardDispatchView, 0, len(input))
-	for _, dispatch := range input {
-		out = append(out, DashboardDispatchView{
-			DispatchId: dispatch.DispatchID,
-			WorkItems:  dashboardDispatchWorkItems(dispatch),
-		})
-	}
-	return &out
-}
-
-func dashboardDispatchWorkItems(dispatch interfaces.FactoryWorldDispatchCompletion) *[]DashboardWorkItemRef {
-	workItems := make([]DashboardWorkItemRef, 0, len(dispatch.TraceIDs))
-	for _, traceID := range dispatch.TraceIDs {
-		traceID := traceID
-		workItems = append(workItems, DashboardWorkItemRef{TraceId: &traceID})
-	}
-	if len(workItems) == 0 {
-		return nil
-	}
-	return &workItems
-}
-
-func dashboardProviderSessions(input []interfaces.FactoryWorldProviderSessionRecord) *[]ProviderSessionAttempt {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]ProviderSessionAttempt, 0, len(input))
-	for _, session := range input {
-		out = append(out, ProviderSessionAttempt{DispatchId: session.DispatchID})
-	}
-	return &out
-}
-
-func dashboardCompletedWorkLabels(worldView interfaces.FactoryWorldView) *[]string {
-	labels := make([]string, 0)
-	for _, dispatch := range worldView.Runtime.Session.DispatchHistory {
-		for _, workItem := range dispatch.OutputWorkItems {
-			label := workItem.DisplayName
-			if label == "" {
-				label = workItem.ID
-			}
-			if label != "" {
-				labels = append(labels, label)
-			}
-		}
-		if dispatch.TerminalWork != nil {
-			label := dispatch.TerminalWork.WorkItem.DisplayName
-			if label == "" {
-				label = dispatch.TerminalWork.WorkItem.ID
-			}
-			if label != "" {
-				labels = append(labels, label)
-			}
-		}
-		for _, workItem := range dispatch.InputWorkItems {
-			label := workItem.DisplayName
-			if label == "" {
-				label = workItem.ID
-			}
-			if label != "" {
-				labels = append(labels, label)
-			}
-		}
-	}
-	if len(labels) == 0 {
-		return nil
-	}
-	return &labels
-}
-
-func stringSlicePtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := append([]string(nil), values...)
-	return &out
-}
-
-func dashboardTimeString(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.Format(time.RFC3339Nano)
-}
-
-func copyIntPointer(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
-}
-
-func dashboardOptionalTimePtr(value time.Time) *time.Time {
-	if value.IsZero() {
-		return nil
-	}
-	copy := value
-	return &copy
 }

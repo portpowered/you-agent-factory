@@ -50,10 +50,7 @@ func TestGeneratedManifestHashesEveryStagedArtifact(t *testing.T) {
 	t.Parallel()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 	manifest := decodeManifestPayload(t, artifacts[manifestTarget])
 	exports := manifestExports(t, manifest)
 
@@ -87,14 +84,8 @@ func TestManifestDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
 	t.Parallel()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	first, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("first Artifacts() error = %v", err)
-	}
-	second, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("second Artifacts() error = %v", err)
-	}
+	first := testArtifactsForRepository(t, repositoryRoot)
+	second := testArtifactsForRepository(t, repositoryRoot)
 	if !reflect.DeepEqual(first[manifestTarget], second[manifestTarget]) {
 		t.Fatal("repeated Artifacts() changed manifest bytes")
 	}
@@ -102,10 +93,7 @@ func TestManifestDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
 
 func TestManifestDigestChangesWhenStagedArtifactSourceChanges(t *testing.T) {
 	root := checkFixture(t)
-	before, err := contractstaging.Artifacts(root)
-	if err != nil {
-		t.Fatalf("before Artifacts() error = %v", err)
-	}
+	before := testArtifactsForRepository(t, root)
 	beforeDigest := exportDigestForPath(t, decodeManifestPayload(t, before[manifestTarget]), "generated/cli/commands.json")
 
 	writeCheckFixture(t, root, "contracts/testdata/baseline/cli-commands.json", `{"changed":true}`)
@@ -123,6 +111,8 @@ func TestManifestDigestChangesWhenStagedArtifactSourceChanges(t *testing.T) {
 }
 
 func TestShallowGitHistoryRejectsFalseSourceCommit(t *testing.T) {
+	t.Parallel()
+
 	origin := t.TempDir()
 	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
@@ -155,6 +145,8 @@ func TestShallowGitHistoryRejectsFalseSourceCommit(t *testing.T) {
 }
 
 func TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure(t *testing.T) {
+	t.Parallel()
+
 	origin := t.TempDir()
 	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
@@ -176,10 +168,7 @@ func TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure(t *testing
 
 	runGit(t, origin, "merge", "--no-ff", "side", "-m", "merge package source identity paths unchanged")
 
-	artifacts, err := contractstaging.Artifacts(origin)
-	if err != nil {
-		t.Fatalf("Artifacts() on merge tip error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, origin)
 	manifest := decodeManifestPayload(t, artifacts[manifestTarget])
 	sourceCommit, ok := manifest["sourceCommit"].(string)
 	if !ok || sourceCommit == "" {
@@ -197,6 +186,8 @@ func TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure(t *testing
 }
 
 func TestMergeCommitInRevListWithoutPathChangesResolvesSourceCommit(t *testing.T) {
+	t.Parallel()
+
 	origin := t.TempDir()
 	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
@@ -229,10 +220,7 @@ func TestMergeCommitInRevListWithoutPathChangesResolvesSourceCommit(t *testing.T
 		t.Fatalf("fixture merge diff-tree = %q, want empty source identity diff", diff)
 	}
 
-	artifacts, err := contractstaging.Artifacts(origin)
-	if err != nil {
-		t.Fatalf("Artifacts() on merge-in-rev-list tip error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, origin)
 	manifest := decodeManifestPayload(t, artifacts[manifestTarget])
 	sourceCommit, ok := manifest["sourceCommit"].(string)
 	if !ok || sourceCommit != head {
@@ -262,10 +250,7 @@ func TestMalformedManifestArtifactHashFailsJoinedManifestContract(t *testing.T) 
 	t.Parallel()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 	manifestSchema := compileArtifactSchema(t, artifacts["packages/api/generated/joined/contracts/manifest.schema.json"])
 	assertArtifactValid(t, manifestSchema, artifacts[manifestTarget], true)
 
@@ -294,10 +279,7 @@ func TestMalformedManifestArtifactHashFailsJoinedManifestContract(t *testing.T) 
 func decodeRepositoryManifest(t *testing.T) map[string]any {
 	t.Helper()
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 	return decodeManifestPayload(t, artifacts[manifestTarget])
 }
 

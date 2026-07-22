@@ -2,9 +2,77 @@ package submit
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io/fs"
 	"strings"
 	"testing"
+	"time"
+
+	workservice "github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+type factoryRequestBatchPreparationFunc func(context.Context, []byte) (workservice.PreparedFactoryRequestBatch, error)
+
+func (prepare factoryRequestBatchPreparationFunc) PrepareFactoryRequestBatch(
+	ctx context.Context,
+	data []byte,
+) (workservice.PreparedFactoryRequestBatch, error) {
+	return prepare(ctx, data)
+}
+
+type testFactoryRequestBatchPreparation struct{}
+
+func (testFactoryRequestBatchPreparation) PrepareFactoryRequestBatch(
+	_ context.Context,
+	data []byte,
+) (workservice.PreparedFactoryRequestBatch, error) {
+	var request workservice.WorkRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return workservice.PreparedFactoryRequestBatch{}, err
+	}
+	return workservice.PreparedFactoryRequestBatch{
+		Request:       request,
+		CanonicalJSON: append([]byte(nil), data...),
+	}, nil
+}
+
+type batchInputFileSystemFake struct {
+	files     map[string][]byte
+	statError map[string]error
+	readError map[string]error
+}
+
+func (f batchInputFileSystemFake) Stat(path string) (fs.FileInfo, error) {
+	if err := f.statError[path]; err != nil {
+		return nil, err
+	}
+	if _, ok := f.files[path]; !ok {
+		return nil, fs.ErrNotExist
+	}
+	return batchInputFileInfo{name: path}, nil
+}
+
+func (f batchInputFileSystemFake) ReadFile(path string) ([]byte, error) {
+	if err := f.readError[path]; err != nil {
+		return nil, err
+	}
+	data, ok := f.files[path]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return append([]byte(nil), data...), nil
+}
+
+type batchInputFileInfo struct{ name string }
+
+func (i batchInputFileInfo) Name() string     { return i.name }
+func (batchInputFileInfo) Size() int64        { return 0 }
+func (batchInputFileInfo) Mode() fs.FileMode  { return 0 }
+func (batchInputFileInfo) ModTime() time.Time { return time.Time{} }
+func (batchInputFileInfo) IsDir() bool        { return false }
+func (batchInputFileInfo) Sys() any           { return nil }
 
 func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 	t.Parallel()
@@ -16,29 +84,31 @@ func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 	}{
 		{
 			name: "no args interactive tty",
-			cfg: BatchConfig{
+			cfg: BatchConfig{Context: context.Background(),
 				StdinIsTTY: func() bool { return true },
 			},
 			want: "batch input required",
 		},
 		{
 			name: "nonexistent path without json prefix",
-			cfg:  BatchConfig{Args: []string{"/no/such/batch.json"}},
+			cfg: BatchConfig{Context: context.Background(),
+				Args: []string{"missing.json"}, FileSystem: batchInputFileSystemFake{},
+			},
 			want: "batch file not found",
 		},
 		{
 			name: "file flag missing path",
-			cfg:  BatchConfig{FileFlag: "/no/such/batch.json"},
+			cfg:  BatchConfig{Context: context.Background(), FileFlag: "missing.json", FileSystem: batchInputFileSystemFake{}},
 			want: "batch file not found",
 		},
 		{
 			name: "too many args",
-			cfg:  BatchConfig{Args: []string{"a.json", "b.json"}},
+			cfg:  BatchConfig{Context: context.Background(), Args: []string{"a.json", "b.json"}},
 			want: "at most one positional",
 		},
 		{
 			name: "empty piped stdin",
-			cfg: BatchConfig{
+			cfg: BatchConfig{Context: context.Background(),
 				Stdin:      strings.NewReader("   \n"),
 				StdinIsTTY: func() bool { return false },
 			},
@@ -46,7 +116,7 @@ func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 		},
 		{
 			name: "empty explicit stdin dash",
-			cfg: BatchConfig{
+			cfg: BatchConfig{Context: context.Background(),
 				Args:  []string{"-"},
 				Stdin: strings.NewReader(""),
 			},
@@ -69,11 +139,56 @@ func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 	}
 }
 
+func TestResolveBatchInput_RequiresInjectedFileSystemForFileSource(t *testing.T) {
+	t.Parallel()
+
+	_, err := resolveBatchInput(BatchConfig{Context: context.Background(), Args: []string{"batch.json"}})
+	if err == nil || !strings.Contains(err.Error(), "batch input file system is required") {
+		t.Fatalf("error = %v, want required injected file system", err)
+	}
+}
+
+func TestResolveBatchInput_RequiresProcessStdinForStdinSource(t *testing.T) {
+	t.Parallel()
+
+	_, err := resolveBatchInput(BatchConfig{Context: context.Background(), Args: []string{"-"}})
+	if err == nil || !strings.Contains(err.Error(), "process stdin reader is required") {
+		t.Fatalf("error = %v, want required process stdin", err)
+	}
+}
+
+func TestResolveBatchInput_PreservesStatAndReadFailureStages(t *testing.T) {
+	t.Parallel()
+
+	statFailure := errors.New("stat denied")
+	_, err := resolveBatchInput(BatchConfig{Context: context.Background(),
+		Args: []string{"batch.json"},
+		FileSystem: batchInputFileSystemFake{
+			statError: map[string]error{"batch.json": statFailure},
+		},
+	})
+	if !errors.Is(err, statFailure) || !strings.Contains(err.Error(), "batch file batch.json") {
+		t.Fatalf("stat error = %v, want staged batch-file failure", err)
+	}
+
+	readFailure := errors.New("read denied")
+	_, err = resolveBatchInput(BatchConfig{Context: context.Background(),
+		FileFlag: "batch.json",
+		FileSystem: batchInputFileSystemFake{
+			files:     map[string][]byte{"batch.json": []byte(`{}`)},
+			readError: map[string]error{"batch.json": readFailure},
+		},
+	})
+	if !errors.Is(err, readFailure) || !strings.Contains(err.Error(), "read batch.json") {
+		t.Fatalf("read error = %v, want staged read failure", err)
+	}
+}
+
 func TestResolveBatchInput_ReadsPipedStdinWithNoArgs(t *testing.T) {
 	t.Parallel()
 
 	json := validBatchJSON("batch-stdin-pipe", "alpha")
-	cfg := BatchConfig{
+	cfg := BatchConfig{Context: context.Background(),
 		Stdin:      strings.NewReader(json),
 		StdinIsTTY: func() bool { return false },
 	}
@@ -94,7 +209,7 @@ func TestResolveBatchInput_ReadsExplicitStdinDash(t *testing.T) {
 	t.Parallel()
 
 	json := validBatchJSON("batch-stdin-dash", "alpha")
-	cfg := BatchConfig{
+	cfg := BatchConfig{Context: context.Background(),
 		Args:  []string{"-"},
 		Stdin: strings.NewReader(json),
 	}
@@ -112,7 +227,7 @@ func TestResolveBatchInput_ReadsInlineJSONPositional(t *testing.T) {
 	t.Parallel()
 
 	json := validBatchJSON("batch-inline", "alpha")
-	cfg := BatchConfig{Args: []string{json}}
+	cfg := BatchConfig{Context: context.Background(), Args: []string{json}}
 
 	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
@@ -133,7 +248,7 @@ func TestResolveBatchInput_InlineJSONIgnoresLeadingWhitespace(t *testing.T) {
 	t.Parallel()
 
 	json := "  \t\n" + validBatchJSON("batch-inline-ws", "alpha")
-	cfg := BatchConfig{Args: []string{json}}
+	cfg := BatchConfig{Context: context.Background(), Args: []string{json}}
 
 	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
@@ -148,7 +263,7 @@ func TestResolveBatchInput_NonexistentJSONLookingPathParsesInlineNotFile(t *test
 	t.Parallel()
 
 	json := validBatchJSON("batch-inline-not-a-file", "alpha")
-	cfg := BatchConfig{Args: []string{json}}
+	cfg := BatchConfig{Context: context.Background(), Args: []string{json}}
 
 	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
@@ -162,8 +277,13 @@ func TestResolveBatchInput_NonexistentJSONLookingPathParsesInlineNotFile(t *test
 func TestResolveBatchInput_ReadsFileFlag(t *testing.T) {
 	t.Parallel()
 
-	path := writeBatchFile(t, validBatchJSON("batch-file-flag", "alpha"))
-	cfg := BatchConfig{FileFlag: path}
+	path := "batch-file-flag.json"
+	cfg := BatchConfig{Context: context.Background(),
+		FileFlag: path,
+		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
+			path: []byte(validBatchJSON("batch-file-flag", "alpha")),
+		}},
+	}
 
 	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
@@ -184,7 +304,7 @@ func TestResolveBatchInput_FileFlagStdinDash(t *testing.T) {
 	t.Parallel()
 
 	json := validBatchJSON("batch-file-stdin", "alpha")
-	cfg := BatchConfig{
+	cfg := BatchConfig{Context: context.Background(),
 		FileFlag: "-",
 		Stdin:    strings.NewReader(json),
 	}
@@ -201,11 +321,15 @@ func TestResolveBatchInput_FileFlagStdinDash(t *testing.T) {
 func TestResolveBatchInput_FileFlagWinsOverPositional(t *testing.T) {
 	t.Parallel()
 
-	flagPath := writeBatchFile(t, validBatchJSON("batch-flag-wins", "alpha"))
-	posPath := writeBatchFile(t, validBatchJSON("batch-pos-loses", "beta"))
-	cfg := BatchConfig{
+	flagPath := "batch-flag-wins.json"
+	posPath := "batch-pos-loses.json"
+	cfg := BatchConfig{Context: context.Background(),
 		FileFlag: flagPath,
 		Args:     []string{posPath},
+		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
+			flagPath: []byte(validBatchJSON("batch-flag-wins", "alpha")),
+			posPath:  []byte(validBatchJSON("batch-pos-loses", "beta")),
+		}},
 	}
 
 	resolved, err := resolveBatchInput(cfg)
@@ -226,10 +350,13 @@ func TestResolveBatchInput_FileFlagWinsOverPositional(t *testing.T) {
 func TestResolveBatchInput_FileFlagIgnoresStdin(t *testing.T) {
 	t.Parallel()
 
-	path := writeBatchFile(t, validBatchJSON("batch-file-flag-ignores-stdin", "alpha"))
-	cfg := BatchConfig{
+	path := "batch-file-flag-ignores-stdin.json"
+	cfg := BatchConfig{Context: context.Background(),
 		FileFlag: path,
 		Stdin:    strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`),
+		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
+			path: []byte(validBatchJSON("batch-file-flag-ignores-stdin", "alpha")),
+		}},
 	}
 
 	resolved, err := resolveBatchInput(cfg)
@@ -247,10 +374,13 @@ func TestResolveBatchInput_FileFlagIgnoresStdin(t *testing.T) {
 func TestResolveBatchInput_FilePathIgnoresStdin(t *testing.T) {
 	t.Parallel()
 
-	path := writeBatchFile(t, validBatchJSON("batch-file-wins", "alpha"))
-	cfg := BatchConfig{
+	path := "batch-file-wins.json"
+	cfg := BatchConfig{Context: context.Background(),
 		Args:  []string{path},
 		Stdin: strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`),
+		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
+			path: []byte(validBatchJSON("batch-file-wins", "alpha")),
+		}},
 	}
 
 	resolved, err := resolveBatchInput(cfg)

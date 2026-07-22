@@ -11,7 +11,7 @@ import (
 
 func TestLoadProduction_ProductionManifest(t *testing.T) {
 	path := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
-	manifest, err := climanifest.LoadProduction(path)
+	manifest, err := climanifest.LoadProduction(sourceStore(), path)
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -33,7 +33,7 @@ func TestLoadProduction_ProductionManifest(t *testing.T) {
 
 func TestLoadProduction_Errors(t *testing.T) {
 	t.Run("missing file", func(t *testing.T) {
-		_, err := climanifest.LoadProduction(filepath.Join(t.TempDir(), "missing.json"))
+		_, err := climanifest.LoadProduction(sourceStore(), filepath.Join(t.TempDir(), "missing.json"))
 		if err == nil {
 			t.Fatal("LoadProduction() error = nil, want read failure")
 		}
@@ -44,7 +44,7 @@ func TestLoadProduction_Errors(t *testing.T) {
 		if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
-		_, err := climanifest.LoadProduction(path)
+		_, err := climanifest.LoadProduction(sourceStore(), path)
 		if err == nil {
 			t.Fatal("LoadProduction() error = nil, want decode failure")
 		}
@@ -55,7 +55,7 @@ func TestLoadProduction_Errors(t *testing.T) {
 		if err := os.WriteFile(path, []byte(`{"commands":{"you":{"id":"you"}}}`), 0o644); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
-		_, err := climanifest.LoadProduction(path)
+		_, err := climanifest.LoadProduction(sourceStore(), path)
 		if err == nil {
 			t.Fatal("LoadProduction() error = nil, want rootPath failure")
 		}
@@ -66,7 +66,7 @@ func TestLoadProduction_Errors(t *testing.T) {
 		if err := os.WriteFile(path, []byte(`{"rootPath":"you"}`), 0o644); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
-		_, err := climanifest.LoadProduction(path)
+		_, err := climanifest.LoadProduction(sourceStore(), path)
 		if err == nil {
 			t.Fatal("LoadProduction() error = nil, want commands failure")
 		}

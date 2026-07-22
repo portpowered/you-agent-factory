@@ -12,9 +12,8 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -131,24 +130,24 @@ func TestNamedSubagentResponseStream_APISSEMatchesCLIResponseEventNDJSON(t *test
 func materializeNamedSubagentFactoryForSmoke(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), subagent.PackagedFactoryName, subagent.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
-	}
-	return dir
+	return support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedSubagentFactoryName,
+	)
 }
 
 func collectLiveAPISessionResponseEventsDuringInvocation(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
 	goalText string,
-) []responseevents.FactoryResponseEvent {
+) []factorysessions.FactoryResponseEvent {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	eventsCh := make(chan []responseevents.FactoryResponseEvent, 1)
+	eventsCh := make(chan []factorysessions.FactoryResponseEvent, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		events, err := drainLiveSessionResponseEventsFromSSE(ctx, server.URL())
@@ -179,7 +178,7 @@ func collectLiveAPISessionResponseEventsDuringInvocation(
 func drainLiveSessionResponseEventsFromSSE(
 	ctx context.Context,
 	serverURL string,
-) ([]responseevents.FactoryResponseEvent, error) {
+) ([]factorysessions.FactoryResponseEvent, error) {
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
@@ -203,7 +202,7 @@ func drainLiveSessionResponseEventsFromSSE(
 	}
 
 	reader := bufio.NewReader(response.Body)
-	events := make([]responseevents.FactoryResponseEvent, 0, 8)
+	events := make([]factorysessions.FactoryResponseEvent, 0, 8)
 	for {
 		event, err := readSessionResponseEventSSE(reader)
 		if err != nil {
@@ -224,8 +223,8 @@ func errorsIsContextDone(err error) bool {
 
 func extractResponseEventsFromCLIRecords(
 	records []namedGoalResponseStreamParsedRecord,
-) []responseevents.FactoryResponseEvent {
-	events := make([]responseevents.FactoryResponseEvent, 0, len(records))
+) []factorysessions.FactoryResponseEvent {
+	events := make([]factorysessions.FactoryResponseEvent, 0, len(records))
 	for _, record := range records {
 		if record.RecordType != namedGoalResponseStreamJSONRecordResponseEvent {
 			continue
@@ -237,8 +236,8 @@ func extractResponseEventsFromCLIRecords(
 
 func assertCLIResponseEventsMatchLiveAPISessionSSE(
 	t *testing.T,
-	cliEvents []responseevents.FactoryResponseEvent,
-	apiEvents []responseevents.FactoryResponseEvent,
+	cliEvents []factorysessions.FactoryResponseEvent,
+	apiEvents []factorysessions.FactoryResponseEvent,
 ) {
 	t.Helper()
 
@@ -261,7 +260,7 @@ func assertCLIResponseEventsMatchLiveAPISessionSSE(
 func assertAPIResponseEventMatchesSSEFrameContract(
 	t *testing.T,
 	index int,
-	event responseevents.FactoryResponseEvent,
+	event factorysessions.FactoryResponseEvent,
 ) {
 	t.Helper()
 
@@ -296,8 +295,8 @@ func assertAPIResponseEventMatchesSSEFrameContract(
 
 func assertAPIResponseEventMatchesCLIResponseEventSemantics(
 	t *testing.T,
-	apiEvent responseevents.FactoryResponseEvent,
-	cliEvents []responseevents.FactoryResponseEvent,
+	apiEvent factorysessions.FactoryResponseEvent,
+	cliEvents []factorysessions.FactoryResponseEvent,
 ) {
 	t.Helper()
 
@@ -315,16 +314,16 @@ func assertAPIResponseEventMatchesCLIResponseEventSemantics(
 	)
 }
 
-func responseEventSemanticsFingerprint(event responseevents.FactoryResponseEvent) string {
+func responseEventSemanticsFingerprint(event factorysessions.FactoryResponseEvent) string {
 	return string(event.Kind) + "/" + string(event.Phase) + "/" + normalizedResponseEventPayload(event.Payload)
 }
 
-func readSessionResponseEventSSE(reader *bufio.Reader) (responseevents.FactoryResponseEvent, error) {
+func readSessionResponseEventSSE(reader *bufio.Reader) (factorysessions.FactoryResponseEvent, error) {
 	var idLine, dataLine string
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			return responseevents.FactoryResponseEvent{}, err
+			return factorysessions.FactoryResponseEvent{}, err
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
@@ -333,31 +332,31 @@ func readSessionResponseEventSSE(reader *bufio.Reader) (responseevents.FactoryRe
 		switch {
 		case strings.HasPrefix(line, "id: "):
 			if idLine != "" {
-				return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE message has multiple id lines")
+				return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE message has multiple id lines")
 			}
 			idLine = strings.TrimPrefix(line, "id: ")
 		case strings.HasPrefix(line, "data: "):
 			if dataLine != "" {
-				return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE message has multiple data lines")
+				return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE message has multiple data lines")
 			}
 			dataLine = strings.TrimPrefix(line, "data: ")
 		default:
-			return responseevents.FactoryResponseEvent{}, fmt.Errorf("unexpected response-event SSE line %q", line)
+			return factorysessions.FactoryResponseEvent{}, fmt.Errorf("unexpected response-event SSE line %q", line)
 		}
 	}
 	if idLine == "" || dataLine == "" {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
 	}
 
-	var event responseevents.FactoryResponseEvent
+	var event factorysessions.FactoryResponseEvent
 	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("decode response-event SSE data: %w", err)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("decode response-event SSE data: %w", err)
 	}
 	if idLine != fmt.Sprint(event.Sequence) {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
 	}
-	if err := responseevents.ValidateEvent(event); err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("validate SSE response event: %w", err)
+	if err := factorysessions.ValidateFactoryResponseEvent(event); err != nil {
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("validate SSE response event: %w", err)
 	}
 	return event, nil
 }

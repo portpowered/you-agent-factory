@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -44,7 +43,7 @@ func runBoundaryBatchSmokeThroughWatchedFile(t *testing.T, batchJSON []byte, req
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	testutil.WriteSeedFile(t, dir, "task", batchJSON)
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
@@ -58,7 +57,7 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req, err := http.NewRequest(http.MethodPut, support.DefaultSessionWorkURL(server.URL(), "/work-requests/"+requestID), bytes.NewReader(batchJSON))
 	if err != nil {

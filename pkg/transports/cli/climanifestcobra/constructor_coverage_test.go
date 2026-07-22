@@ -1,12 +1,12 @@
 package climanifestcobra_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -71,8 +71,8 @@ func TestNewSessionFamilyCommandAppliesCreateFlagContracts(t *testing.T) {
 
 func testSessionBindings() climanifestcobra.SessionFamilyBindings {
 	return climanifestcobra.SessionFamilyBindings{
-		Create: &sessioncli.CreateConfig{}, List: &sessioncli.ListConfig{}, Delete: &sessioncli.DeleteConfig{},
-		Dispatches: &sessioncli.DispatchesConfig{}, Pause: &sessioncli.LifecycleControlConfig{}, Resume: &sessioncli.LifecycleControlConfig{},
+		Create: &sessioncli.CreateConfig{}, List: &sessioncli.ListConfig{Context: context.Background()}, Delete: &sessioncli.DeleteConfig{},
+		Dispatches: &sessioncli.DispatchesConfig{Context: context.Background()}, Pause: &sessioncli.LifecycleControlConfig{Context: context.Background()}, Resume: &sessioncli.LifecycleControlConfig{Context: context.Background()},
 	}
 }
 
@@ -99,7 +99,7 @@ func TestNewRepresentativeFamilyComponentsReturnsDetachedCommands(t *testing.T) 
 
 func TestRejectDeprecatedPortFlagRejectsChangedPort(t *testing.T) {
 	root, _ := mustRepresentativeFamilyTree(t)
-	show, err := climanifestparity.FindCommandByPath(root, "you session show")
+	show, err := findCommandByPath(root, "you session show")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(you session show) error = %v", err)
 	}
@@ -213,7 +213,7 @@ func TestNewRepresentativeFamilyCommandFromManifestBuildsDetachedTree(t *testing
 	if err != nil {
 		t.Fatalf("NewRepresentativeFamilyCommandFromManifest() error = %v", err)
 	}
-	if _, err := climanifestparity.FindCommandByPath(root, "you session show"); err != nil {
+	if _, err := findCommandByPath(root, "you session show"); err != nil {
 		t.Fatalf("generated from-manifest tree missing session show: %v", err)
 	}
 }
@@ -332,7 +332,7 @@ func testRunSubmitBindings() climanifestcobra.RunSubmitFlagBindings {
 	return climanifestcobra.RunSubmitFlagBindings{
 		Run:                 runConfig,
 		RunInvocationOutput: &output,
-		Submit:              &submitcli.SubmitConfig{},
-		SubmitBatch:         &submitcli.BatchConfig{},
+		Submit:              &submitcli.SubmitConfig{Context: context.Background()},
+		SubmitBatch:         &submitcli.BatchConfig{Context: context.Background()},
 	}
 }

@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
-	support.SetWorkingDirectory(t, dir)
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "story",
@@ -38,12 +37,8 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProvider(provider),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"story:complete": 1})
 
 	if provider.CallCount("executor-worker") != 2 {
 		t.Fatalf("expected at least 2 executor dispatches, got %d", provider.CallCount("executor-worker"))

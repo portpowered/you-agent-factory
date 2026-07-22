@@ -3,21 +3,14 @@ package batchload
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // LoadFromFile reads and validates a canonical FACTORY_REQUEST_BATCH from path.
-func LoadFromFile(path string) (work.WorkRequest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return work.WorkRequest{}, fmt.Errorf("read %s: %w", path, err)
+func LoadFromFile(load work.RequestFileLoader, path string) (work.WorkRequest, error) {
+	if load == nil {
+		return work.WorkRequest{}, fmt.Errorf("Work request file loader is required")
 	}
-	req, err := requests.ParseCanonicalWorkRequestJSON(data)
-	if err != nil {
-		return work.WorkRequest{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return req, nil
+	return load(path)
 }

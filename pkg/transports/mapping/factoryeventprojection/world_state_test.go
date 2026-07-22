@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
@@ -23,9 +24,16 @@ func TestReconstructFactoryWorldState_MapsGeneratedEventsToCanonicalReducer(t *t
 		t.Fatalf("decode generated event fixture: %v", err)
 	}
 
-	state, err := factoryeventprojection.ReconstructFactoryWorldState([]factoryapi.FactoryEvent{event}, 1)
+	var reduced []interfaces.FactoryEvent
+	state, err := factoryeventprojection.ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+		reduced = append(reduced, events...)
+		return interfaces.FactoryWorldState{Tick: selectedTick, EventTime: events[0].Context.EventTime}, nil
+	}, []factoryapi.FactoryEvent{event}, 1)
 	if err != nil {
 		t.Fatalf("reconstruct mapped world state: %v", err)
+	}
+	if len(reduced) != 1 || reduced[0].Type != interfaces.FactoryEventTypeRunResponse {
+		t.Fatalf("canonical reducer input = %#v, want one RUN_RESPONSE", reduced)
 	}
 	if !state.EventTime.Equal(eventTime) {
 		t.Fatalf("event time = %s, want %s", state.EventTime, eventTime)
@@ -36,7 +44,12 @@ func TestReconstructFactoryWorldState_MapsGeneratedEventsToCanonicalReducer(t *t
 }
 
 func TestReconstructFactoryWorldState_PreservesEmptyInput(t *testing.T) {
-	state, err := factoryeventprojection.ReconstructFactoryWorldState(nil, 4)
+	state, err := factoryeventprojection.ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+		if len(events) != 0 {
+			t.Fatalf("canonical reducer events = %#v, want empty", events)
+		}
+		return interfaces.FactoryWorldState{Tick: selectedTick}, nil
+	}, nil, 4)
 	if err != nil {
 		t.Fatalf("reconstruct empty world state: %v", err)
 	}

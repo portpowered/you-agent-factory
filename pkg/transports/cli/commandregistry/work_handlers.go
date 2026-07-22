@@ -5,10 +5,10 @@ import (
 	"io"
 	"sort"
 
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
@@ -118,12 +118,12 @@ type ListBinding struct {
 
 // ListRunE returns the handwritten work list RunE used by production wiring.
 func ListRunE(binding ListBinding) RunE {
-	listWork := binding.ListWork
-	if listWork == nil {
-		listWork = workcli.List
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.ListWork == nil {
+			return fmt.Errorf("work list service is required")
+		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -140,7 +140,7 @@ func ListRunE(binding ListBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return listWork(cfg)
+		return binding.ListWork(cfg)
 	}
 }
 
@@ -157,12 +157,12 @@ type ShowBinding struct {
 
 // ShowRunE returns the handwritten work show RunE used by production wiring.
 func ShowRunE(binding ShowBinding) RunE {
-	showWork := binding.ShowWork
-	if showWork == nil {
-		showWork = workcli.Show
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.ShowWork == nil {
+			return fmt.Errorf("work show service is required")
+		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -182,7 +182,7 @@ func ShowRunE(binding ShowBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return showWork(cfg)
+		return binding.ShowWork(cfg)
 	}
 }
 
@@ -199,12 +199,12 @@ type MoveBinding struct {
 
 // MoveRunE returns the handwritten work move RunE used by production wiring.
 func MoveRunE(binding MoveBinding) RunE {
-	moveWork := binding.MoveWork
-	if moveWork == nil {
-		moveWork = workcli.Move
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.MoveWork == nil {
+			return fmt.Errorf("work move service is required")
+		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -227,28 +227,27 @@ func MoveRunE(binding MoveBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return moveWork(cfg)
+		return binding.MoveWork(cfg)
 	}
 }
 
 // VisualizeBinding supplies handwritten work visualize execution dependencies.
 type VisualizeBinding struct {
-	Format     *string
-	Visualize  func(workcli.VisualizeConfig) error
+	Format    *string
+	Visualize func(workcli.VisualizeConfig) error
 }
 
 // VisualizeRunE returns the handwritten work visualize RunE used by production wiring.
 func VisualizeRunE(binding VisualizeBinding) RunE {
-	visualizeWork := binding.Visualize
-	if visualizeWork == nil {
-		visualizeWork = workcli.Visualize
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.Visualize == nil {
+			return fmt.Errorf("work visualize service is required")
+		}
 		format := ""
 		if binding.Format != nil {
 			format = *binding.Format
 		}
-		return visualizeWork(workcli.VisualizeConfig{
+		return binding.Visualize(workcli.VisualizeConfig{
 			BatchFile: args[0],
 			Format:    format,
 			Output:    cmd.OutOrStdout(),

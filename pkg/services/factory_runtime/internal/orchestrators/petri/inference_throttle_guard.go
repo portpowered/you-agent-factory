@@ -1,0 +1,113 @@
+package petri
+
+import (
+	"strings"
+	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorythrottle "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+type RuntimeGuardContext struct {
+	Now                 time.Time
+	CurrentTransitionID string
+	DispatchHistory     []interfaces.CompletedDispatch
+	RuntimeConfig       interfaces.RuntimeDefinitionLookup
+	TransitionWorkers   map[string]string
+}
+
+type RuntimeGuard interface {
+	Guard
+	EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) (matched []factorytoken.Token, ok bool)
+}
+
+type ActivePauseProvider interface {
+	ActivePauses(ctx RuntimeGuardContext) []interfaces.ActiveThrottlePause
+}
+
+// InferenceThrottleGuard blocks a transition while throttle failures remain
+// active for the authored provider/model lane derived from dispatch history.
+type InferenceThrottleGuard struct {
+	Provider      string
+	Model         string
+	WorkerName    string
+	RefreshWindow time.Duration
+}
+
+var _ RuntimeGuard = (*InferenceThrottleGuard)(nil)
+var _ ActivePauseProvider = (*InferenceThrottleGuard)(nil)
+
+func (g *InferenceThrottleGuard) Evaluate(_ []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	return nil, false
+}
+
+func (g *InferenceThrottleGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	if !g.appliesToCurrentTransition(ctx) {
+		return candidates, len(candidates) > 0
+	}
+	if len(g.ActivePauses(ctx)) > 0 {
+		return nil, false
+	}
+	return candidates, len(candidates) > 0
+}
+
+func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfaces.ActiveThrottlePause {
+	if g == nil || g.Provider == "" || g.RefreshWindow <= 0 || ctx.Now.IsZero() {
+		return nil
+	}
+	history := make([]factorythrottle.FailureRecord, 0, len(ctx.DispatchHistory))
+	for i := range ctx.DispatchHistory {
+		record := ctx.DispatchHistory[i]
+		failureMetadata := record.FailureMetadata
+		if failureMetadata == nil || failureMetadata.Family != workerexecution.WorkFailureFamilyThrottle {
+			continue
+		}
+		if !g.historyDispatchMatchesLane(ctx, record.TransitionID) {
+			continue
+		}
+		history = append(history, factorythrottle.FailureRecord{
+			Provider:        g.Provider,
+			Model:           g.Model,
+			OccurredAt:      record.EndTime,
+			FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
+		})
+	}
+	return factorythrottle.DeriveActiveThrottlePauses(history, g.RefreshWindow, ctx.Now)
+}
+
+func (g *InferenceThrottleGuard) appliesToCurrentTransition(ctx RuntimeGuardContext) bool {
+	if g == nil {
+		return false
+	}
+	if g.WorkerName == "" {
+		return true
+	}
+	if ctx.RuntimeConfig == nil {
+		return false
+	}
+	worker, ok := ctx.RuntimeConfig.Worker(g.WorkerName)
+	if !ok || worker == nil {
+		return false
+	}
+	return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
+}
+
+func (g *InferenceThrottleGuard) historyDispatchMatchesLane(ctx RuntimeGuardContext, transitionID string) bool {
+	if g == nil {
+		return false
+	}
+	if ctx.RuntimeConfig == nil || len(ctx.TransitionWorkers) == 0 {
+		return false
+	}
+	workerName, ok := ctx.TransitionWorkers[transitionID]
+	if !ok || workerName == "" {
+		return false
+	}
+	worker, ok := ctx.RuntimeConfig.Worker(workerName)
+	if !ok || worker == nil {
+		return false
+	}
+	return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
+}

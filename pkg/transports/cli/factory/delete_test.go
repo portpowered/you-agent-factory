@@ -8,20 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestDelete_WritesHumanReadableConfirmation(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "beta", saveTestNamedFactoryPayload(t, "beta")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
 
 	var out strings.Builder
-	if err := Delete(DeleteConfig{
+	if err := testDelete(DeleteConfig{
 		Name:   "alpha",
 		Dir:    rootDir,
 		Output: &out,
@@ -35,15 +29,9 @@ func TestDelete_WritesHumanReadableConfirmation(t *testing.T) {
 
 func TestDelete_JSONEmitsStructuredConfirmation(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "beta", saveTestNamedFactoryPayload(t, "beta")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
 
 	var out bytes.Buffer
-	if err := Delete(DeleteConfig{
+	if err := testDelete(DeleteConfig{
 		Name:   "alpha",
 		Dir:    rootDir,
 		JSON:   true,
@@ -63,14 +51,13 @@ func TestDelete_JSONEmitsStructuredConfirmation(t *testing.T) {
 
 func TestDelete_RejectsCurrentFactory(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
-	}
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		delete: func(string, string) error {
+			return factorydefinitions.ErrNamedFactoryIsCurrent
+		},
+	})
 
-	err := Delete(DeleteConfig{
+	err := testDelete(DeleteConfig{
 		Name:   "alpha",
 		Dir:    rootDir,
 		Output: ioDiscard(t),
@@ -85,8 +72,13 @@ func TestDelete_RejectsCurrentFactory(t *testing.T) {
 
 func TestDelete_RejectsMissingFactory(t *testing.T) {
 	rootDir := t.TempDir()
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		delete: func(string, string) error {
+			return os.ErrNotExist
+		},
+	})
 
-	err := Delete(DeleteConfig{
+	err := testDelete(DeleteConfig{
 		Name:   "missing",
 		Dir:    rootDir,
 		Output: ioDiscard(t),
@@ -101,14 +93,8 @@ func TestDelete_RejectsMissingFactory(t *testing.T) {
 
 func TestDelete_ListNoLongerIncludesDeletedName(t *testing.T) {
 	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "beta", saveTestNamedFactoryPayload(t, "beta")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
 
-	if err := Delete(DeleteConfig{
+	if err := testDelete(DeleteConfig{
 		Name:   "alpha",
 		Dir:    rootDir,
 		Output: ioDiscard(t),
@@ -116,8 +102,16 @@ func TestDelete_ListNoLongerIncludesDeletedName(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
+	useNamedFactoryCatalogFake(t, namedFactoryCatalogFake{
+		list: func(string) ([]factorydefinitions.NamedFactoryListEntry, error) {
+			return []factorydefinitions.NamedFactoryListEntry{{
+				Name:       "beta",
+				FactoryDir: filepath.Join(rootDir, "beta"),
+			}}, nil
+		},
+	})
 	var out strings.Builder
-	if err := List(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if strings.Contains(out.String(), "alpha\t") {
@@ -127,55 +121,5 @@ func TestDelete_ListNoLongerIncludesDeletedName(t *testing.T) {
 	wantRow := "beta\t" + betaDir + "\t\n"
 	if !strings.Contains(out.String(), wantRow) {
 		t.Fatalf("list output = %q, want beta row %q", out.String(), wantRow)
-	}
-}
-
-func TestDelete_RemovesDirectoryFromDisk(t *testing.T) {
-	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
-
-	if err := Delete(DeleteConfig{
-		Name:   "alpha",
-		Dir:    rootDir,
-		Output: ioDiscard(t),
-	}); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(rootDir, "alpha")); !os.IsNotExist(err) {
-		t.Fatalf("alpha directory still exists: %v", err)
-	}
-}
-
-func TestDelete_ScopedNonCurrentFactoryLeavesCurrentPointerResolvableInExplicitDir(t *testing.T) {
-	rootDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "@you/tts", saveTestNamedFactoryPayload(t, "tts")); err != nil {
-		t.Fatalf("PersistNamedFactory(scoped): %v", err)
-	}
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
-	}
-
-	if err := Delete(DeleteConfig{
-		Name:   "@you/tts",
-		Dir:    rootDir,
-		Output: ioDiscard(t),
-	}); err != nil {
-		t.Fatalf("Delete(scoped): %v", err)
-	}
-
-	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(rootDir)
-	if err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
-	}
-	if want := filepath.Join(rootDir, "alpha"); resolvedDir != want {
-		t.Fatalf("resolved dir = %q, want %q", resolvedDir, want)
-	}
-	if _, err := os.Stat(filepath.Join(rootDir, "@you", "tts")); !os.IsNotExist(err) {
-		t.Fatalf("scoped factory directory still exists: %v", err)
 	}
 }

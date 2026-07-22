@@ -1,0 +1,28 @@
+{
+  "name": "factory",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "resources": [
+    { "name": "agent-slot", "capacity": 1 }
+  ],
+  "workers": [
+    { "name": "processor" }
+  ],
+  "workstations": [
+    {
+      "name": "process",
+      "worker": "processor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }]
+    }
+  ]
+}

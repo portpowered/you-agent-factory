@@ -7,20 +7,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const dispatchesRequestTimeout = 10 * time.Second
-
 // DispatchesConfig holds parameters for the session dispatches command.
 type DispatchesConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	JSON        bool
@@ -30,12 +28,23 @@ type DispatchesConfig struct {
 	Diagnostics io.Writer
 	Phase       string
 	Status      string
+	HTTP        clihttp.Protocol
+}
+
+func NewDispatches(transport clihttp.Protocol) func(DispatchesConfig) error {
+	return func(cfg DispatchesConfig) error { cfg.HTTP = transport; return Dispatches(cfg) }
 }
 
 // Dispatches requests one durable Factory Session dispatch list from a running host via HTTP.
 func Dispatches(cfg DispatchesConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 	if !isDurableExecutionSessionID(cfg.SessionID) {
 		return fmt.Errorf(
@@ -49,32 +58,28 @@ func Dispatches(cfg DispatchesConfig) error {
 		return err
 	}
 
-	client := &http.Client{Timeout: dispatchesRequestTimeout}
 	var listed factoryapi.ListFactorySessionDispatchesResponse
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&listed,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "session dispatches",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session dispatches response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session dispatches response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("factory session %q not found: %s", strings.TrimSpace(cfg.SessionID), errResp.Message)
 		}
 		return fmt.Errorf("factory session %q not found", strings.TrimSpace(cfg.SessionID))
 	}
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session dispatches response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("list factory session dispatches failed (%d): %s", resp.StatusCode, errResp.Message)
 		}

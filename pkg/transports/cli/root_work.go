@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -17,110 +17,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// useGeneratedRepresentativeFamily toggles production root wiring between the
-// generated representative-family constructor and the legacy handwritten path.
-// Flip this constant to false for a one-localized-change rollback.
-const useGeneratedRepresentativeFamily = true
-
-// useGeneratedSessionFamily toggles only the production session subtree between
-// the generated metadata constructor and the retained handwritten rollback path.
-// Flip this constant to false for a one-localized-change rollback.
-const useGeneratedSessionFamily = true
-
-// useGeneratedWorkFamily toggles production work wiring between the generated
-// metadata constructor and the legacy handwritten path.
-// Flip this constant to false for a one-localized-change rollback.
-const useGeneratedWorkFamily = true
-
-// useGeneratedRunSubmitFamily toggles production run/submit wiring between the
-// generated metadata constructor and the legacy handwritten path.
-// Flip this constant to false for a one-localized-change rollback.
-const useGeneratedRunSubmitFamily = true
-
-func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
-	options = normalizeRootCommandOptions(options)
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
-	docsCmd := newDocsCommand(diagnostics)
-	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
-	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, factoryConfigInit, docsCmd, modelsCmd, b12)...)
-	return root
-}
-
-// NewLegacyRepresentativeFamilyCommand builds the isolated handwritten
-// you → session → show tree used by the generator-vs-legacy parity matrix.
-func NewLegacyRepresentativeFamilyCommand() *cobra.Command {
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(newLegacyRepresentativeSessionCommand(globals, diagnostics))
-	return root
-}
-
-func newLegacyRootCommandShell(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
-) *cobra.Command {
-	root := &cobra.Command{
-		Use:          cliBinaryName,
-		Short:        "Run and manage CPN-based workflow factories",
-		SilenceUsage: true,
-		Long: "Run and manage CPN-based workflow factories.\n\n" +
-			"What:\n" +
-			"CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\n" +
-			"How to use:\n" +
-			"Run " + cliBinaryName + " run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\n" +
-			"Use " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
-			"Agents:\n" +
-			"Start with " + cliBinaryName + " docs agents for orientation, " + cliBinaryName + " submit or " + cliBinaryName + " submit batch to enqueue work, and " + cliBinaryName + " session list to confirm a live factory.\n" +
-			"Run " + cliBinaryName + " docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in " + cliBinaryName + " docs.",
-		Example: "  # Start the default Codex-backed Factory with explicit Work.\n" +
-			"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
-			"  # Agent orientation and command matrix.\n" +
-			"  " + cliBinaryName + " docs agents",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			policy := diagnostics.resolvePolicy(false)
-			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options, true)
-		},
-	}
-	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
-	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
-	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port")
-	root.PersistentFlags().BoolVar(&globals.json, "json", false, "emit structured JSON on stdout for supported commands; diagnostics remain on stderr")
-	root.PersistentFlags().StringVar(
-		&operatorDefaults.defaultWorkerModelProvider,
-		"default-worker-model-provider",
-		"",
-		fmt.Sprintf(
-			"default worker model provider for model workers with omitted modelProvider (%s; DEFAULT resolves through lower-precedence concrete provider)",
-			interfaces.AcceptedPublicWorkerModelProviderSummary(),
-		),
-	)
-	root.PersistentFlags().StringVar(
-		&operatorDefaults.defaultWorkerModel,
-		"default-worker-model",
-		"",
-		"default worker model for model workers with omitted model",
-	)
-	return root
-}
-
-func newLegacyRepresentativeSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	sessionCmd := legacySessionParentCommand()
-	sessionCmd.AddCommand(newSessionShowCommand(globals, diagnostics))
-	return sessionCmd
-}
-
-func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions) *cobra.Command {
-	options = normalizeRootCommandOptions(options)
+func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
@@ -138,14 +35,33 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	}
 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
-	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
+	docsCmd, err := newProductionDocsCommand(diagnostics)
 	if err != nil {
-		panic(fmt.Sprintf("build models/docs family command: %v", err))
+		panic(fmt.Sprintf("build docs command: %v", err))
+	}
+	modelsCmd, err := newProductionModelsCommand(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		panic(fmt.Sprintf("build models command: %v", err))
 	}
 	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, factoryConfigInit, docsCmd, modelsCmd, b12)...)
+	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
+		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, b12,
+	)})
+}
+
+// RootSubcommands contains the already-constructed top-level command families
+// injected into the root command constructor.
+type RootSubcommands struct {
+	Commands []*cobra.Command
+}
+
+// NewRootCommandFromSubcommands is the root command constructor boundary. The
+// root owns only its persistent behavior and receives its top-level commands
+// from the command composition graph.
+func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcommands) *cobra.Command {
+	root.AddCommand(subcommands.Commands...)
 	return root
 }
 
@@ -153,38 +69,32 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 // session, workflow/MCP, and run/submit migrations. Each field is constructed
 // once through its family-local generated/legacy cutover seam.
 type b12ProductionFamilies struct {
-	Session  *cobra.Command
-	MCP      *cobra.Command
-	Workflow *cobra.Command
-	Run      *cobra.Command
-	Submit   *cobra.Command
+	Session *cobra.Command
+	MCP     *cobra.Command
+	Run     *cobra.Command
+	Submit  *cobra.Command
 }
 
 func newB12ProductionFamilies(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
+	options CommandFactory,
 ) b12ProductionFamilies {
-	mcp, workflow := newProductionWorkflowMCPCommands(globals, diagnostics, options)
 	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
 	return b12ProductionFamilies{
-		Session:  productionSessionCommand(globals, diagnostics, options),
-		MCP:      mcp,
-		Workflow: workflow,
-		Run:      runSubmit.Run,
-		Submit:   runSubmit.Submit,
+		Session: productionSessionCommand(globals, diagnostics, options),
+		MCP:     newMCPCommand(options),
+		Run:     runSubmit.Run,
+		Submit:  runSubmit.Submit,
 	}
 }
 
 func productionSessionCommand(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
-	options RootCommandOptions,
+	options CommandFactory,
 ) *cobra.Command {
-	if !useGeneratedSessionFamily {
-		return newSessionCommand(globals, diagnostics, options)
-	}
 	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
 	if err != nil {
 		panic(fmt.Sprintf("build session handler registry: %v", err))
@@ -199,6 +109,7 @@ func productionSessionCommand(
 func productionRootSubcommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
+	options CommandFactory,
 	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
@@ -214,8 +125,7 @@ func productionRootSubcommands(
 		b12.Run,
 		b12.Submit,
 		b12.Session,
-		productionWorkCommand(globals, diagnostics),
-		b12.Workflow,
+		productionWorkCommand(globals, diagnostics, options),
 	}
 }
 
@@ -228,10 +138,10 @@ func productionRunSubmitCommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
+	options CommandFactory,
 ) runSubmitProductionCommands {
 	commands, err := buildRunSubmitProductionCommands(
-		globals, diagnostics, operatorDefaults, options, useGeneratedRunSubmitFamily,
+		globals, diagnostics, operatorDefaults, options,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("build run/submit family commands: %v", err))
@@ -243,16 +153,8 @@ func buildRunSubmitProductionCommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
-	generatedFamily bool,
+	options CommandFactory,
 ) (runSubmitProductionCommands, error) {
-	if !generatedFamily {
-		return runSubmitProductionCommands{
-			Run:    newRunCommand(globals, diagnostics, operatorDefaults, options),
-			Submit: newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
-		}, nil
-	}
-
 	registry, bindings, err := newRunSubmitHandlerRegistry(
 		globals, diagnostics, operatorDefaults, options,
 	)
@@ -295,22 +197,22 @@ func representativePersistentFlagBindings(
 func handwrittenSessionSubcommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
-	options RootCommandOptions,
+	options CommandFactory,
 	generatedShow *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
 		newSessionListCommand(globals, diagnostics, options),
 		generatedShow,
-		newSessionDispatchesCommand(globals, diagnostics),
-		newSessionPauseCommand(globals, diagnostics),
-		newSessionResumeCommand(globals, diagnostics),
-		newSessionCreateCommand(diagnostics),
-		newSessionDeleteCommand(diagnostics),
+		newSessionDispatchesCommand(globals, diagnostics, options),
+		newSessionPauseCommand(globals, diagnostics, options),
+		newSessionResumeCommand(globals, diagnostics, options),
+		newSessionCreateCommand(diagnostics, options),
+		newSessionDeleteCommand(diagnostics, options),
 	}
 }
 
-func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
-	cfg := defaultcmd.ExplicitRunConfig()
+func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) *cobra.Command {
+	cfg := defaultcmd.ExplicitRunConfig(rootOptions.runDefaults)
 	var invocationOutputMode string
 	cmd := &cobra.Command{
 		Use:                "run",
@@ -330,7 +232,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	return cmd
 }
 
-func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) error {
+func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) error {
 	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(cmd, args, cfg)
 	if err != nil {
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
@@ -345,7 +247,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
-		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
+		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
 		var ambiguousInputErr *runcli.AmbiguousInvocationInputError
 		if errors.As(err, &ambiguousInputErr) {
@@ -402,13 +304,23 @@ func helpRequested(cmd *cobra.Command) bool {
 	return helpFlag != nil && helpFlag.Changed
 }
 
-func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions RootCommandOptions) error {
-	homeDir, err := rootOptions.HomeDir()
+func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory) error {
+	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
+	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
+	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
+	homeDir, err := resolveProcessHomeDir(rootOptions)
 	if err != nil {
-		return fmt.Errorf("resolve process home directory: %w", err)
+		return err
 	}
 	cfg.HomeDir = homeDir
-	if err := resolveRunFactorySelection(cmd, cfg, homeDir); err != nil {
+	if err := resolveRunFactorySelection(
+		cmd,
+		cfg,
+		homeDir,
+		rootOptions.namedFactoryCatalog,
+		rootOptions.resolveNamedFactoryRoots,
+		rootOptions.resolveNamedFactoryCandidatePaths,
+	); err != nil {
 		return err
 	}
 	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, *cfg)
@@ -465,7 +377,7 @@ func runCommandLongHelp() string {
 		"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
 		"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 		"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
-		"Supported run factory selectors are --dir, --named, and --factory; dynamic workflow source selection stays under " + cliBinaryName + " workflow. " +
+		"Supported run factory selectors are --dir, --named, and --factory. " +
 		"Selected factories can define custom invocation arguments; run " + cliBinaryName + " run --named <factory> --help or " + cliBinaryName + " run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. " +
 		"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
 		"Named-Factory selection and materialization live in " + cliBinaryName + " docs authoring-factories; invocation inputs and output modes live in " + cliBinaryName + " docs run and " + cliBinaryName + " docs sessions. " +
@@ -491,68 +403,18 @@ func runCommandExamples() string {
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
 }
 
-// NewGeneratedRunSubmitFamilyCommandForParity builds an isolated you root with
-// generated run/submit metadata and the retained production handler paths.
-// Production registration uses the same generated constructor and handler bindings.
-func NewGeneratedRunSubmitFamilyCommandForParity() (*cobra.Command, error) {
-	return newRunSubmitFamilyRootForParity(RootCommandOptions{}, true)
-}
-
-// NewRunSubmitFamilyParityRoots builds independent handwritten and generated
-// run/submit roots with the same process-owned dependencies. Keeping the roots
-// independent prevents Cobra flag state from leaking between parity executions.
-func NewRunSubmitFamilyParityRoots(options RootCommandOptions) (legacyRoot, generatedRoot *cobra.Command, err error) {
-	legacyRoot, err = newRunSubmitFamilyRootForParity(options, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	generatedRoot, err = newRunSubmitFamilyRootForParity(options, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	return legacyRoot, generatedRoot, nil
-}
-
-func newRunSubmitFamilyRootForParity(options RootCommandOptions, generatedFamily bool) (*cobra.Command, error) {
-	options = normalizeRootCommandOptions(options)
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	if !generatedFamily {
-		root.AddCommand(
-			newRunCommand(globals, diagnostics, operatorDefaults, options),
-			newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
-		)
-		return root, nil
-	}
-	registry, bindings, err := newRunSubmitHandlerRegistry(
-		globals,
-		diagnostics,
-		operatorDefaults,
-		options,
-	)
-	if err != nil {
-		return nil, err
-	}
-	components, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings)
-	if err != nil {
-		return nil, err
-	}
-	root.AddCommand(components.Run, components.Submit)
-	return root, nil
-}
-
 func newRunSubmitHandlerRegistry(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	rootOptions RootCommandOptions,
+	rootOptions CommandFactory,
 ) (*commandregistry.Registry, climanifestcobra.RunSubmitFlagBindings, error) {
-	runCfg := defaultcmd.ExplicitRunConfig()
+	runCfg := defaultcmd.ExplicitRunConfig(rootOptions.runDefaults)
 	var invocationOutputMode string
 	submitCfg := submitcli.SubmitConfig{Server: globals.server}
-	batchCfg := submitcli.BatchConfig{Server: globals.server}
+	batchCfg := submitcli.BatchConfig{
+		Server: globals.server, FileSystem: rootOptions.batchInputFileSystem,
+	}
 	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
@@ -591,10 +453,10 @@ func runSubmitFlagUsages(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	rootOptions RootCommandOptions,
+	rootOptions CommandFactory,
 ) map[string]string {
 	run := newRunCommand(globals, diagnostics, operatorDefaults, rootOptions)
-	submit := newSubmitCommand(globals, diagnostics)
+	submit := newSubmitCommand(globals, diagnostics, rootOptions)
 	commands := []*cobra.Command{run, submit}
 	commands = append(commands, submit.Commands()...)
 	usages := make(map[string]string)
@@ -608,12 +470,12 @@ func runSubmitFlagUsages(
 	return usages
 }
 
-func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	if !useGeneratedWorkFamily {
-		return newWorkCommand(globals, diagnostics)
+func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
+	dependencies := CommandFactory{}
+	if len(injected) > 0 {
+		dependencies = injected[0]
 	}
-
-	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics)
+	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics, dependencies)
 	if err != nil {
 		panic(fmt.Sprintf("build work handler registry: %v", err))
 	}
@@ -624,77 +486,11 @@ func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	return work
 }
 
-// NewLegacyWorkFamilyCommand builds the isolated handwritten
-// you work → list/show/move/visualize tree used by generator-vs-legacy parity.
-func NewLegacyWorkFamilyCommand() *cobra.Command {
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	return newWorkCommand(globals, diagnostics)
-}
-
-// NewLegacyWorkFamilyRootForParity builds an isolated you → work tree with shared
-// persistent globals for generator-vs-legacy parity tests.
-func NewLegacyWorkFamilyRootForParity() *cobra.Command {
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(newWorkCommand(globals, diagnostics))
-	return root
-}
-
-// NewWorkFamilyParityRoots builds matching legacy and generated you → work parity
-// roots that share one persistent globals shell.
-func NewWorkFamilyParityRoots(
-	registry *commandregistry.Registry,
-	bindings climanifestcobra.WorkFamilyBindings,
-) (legacyRoot, generatedRoot *cobra.Command, err error) {
-	if registry == nil {
-		return nil, nil, fmt.Errorf("build work family parity roots: registry is required")
+func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
+	dependencies := CommandFactory{}
+	if len(injected) > 0 {
+		dependencies = injected[0]
 	}
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-
-	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
-
-	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build work family parity roots: %w", err)
-	}
-	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	generatedRoot.AddCommand(generatedWork)
-	return legacyRoot, generatedRoot, nil
-}
-
-// NewWorkFamilyParityRootsWithProductionHandlers builds legacy and generated
-// parity roots wired with production work handler bindings.
-func NewWorkFamilyParityRootsWithProductionHandlers() (legacyRoot, generatedRoot *cobra.Command, err error) {
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-
-	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
-
-	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics)
-	if err != nil {
-		return nil, nil, err
-	}
-	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
-	if err != nil {
-		return nil, nil, err
-	}
-	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	generatedRoot.AddCommand(generatedWork)
-	return legacyRoot, generatedRoot, nil
-}
-
-func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
 		Short: "Inspect work from a running factory",
@@ -713,14 +509,14 @@ func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 			"  # Render a local batch dependency graph.\n" +
 			"  " + cliBinaryName + " work visualize batch.json > graph.mermaid",
 	}
-	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
-	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics))
-	workCmd.AddCommand(newWorkMoveCommand(globals, diagnostics))
-	workCmd.AddCommand(newWorkVisualizeCommand())
+	workCmd.AddCommand(newWorkListCommand(globals, diagnostics, dependencies))
+	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics, dependencies))
+	workCmd.AddCommand(newWorkMoveCommand(globals, diagnostics, dependencies))
+	workCmd.AddCommand(newWorkVisualizeCommand(dependencies))
 	return workCmd
 }
 
-func newWorkVisualizeCommand() *cobra.Command {
+func newWorkVisualizeCommand(dependencies CommandFactory) *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
 		Use:   "visualize <batch-file.json>",
@@ -742,7 +538,7 @@ func newWorkVisualizeCommand() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return visualizeWork(workcli.VisualizeConfig{
+			return dependencies.VisualizeWork(workcli.VisualizeConfig{
 				BatchFile: args[0],
 				Format:    format,
 				Output:    cmd.OutOrStdout(),
@@ -755,7 +551,7 @@ func newWorkVisualizeCommand() *cobra.Command {
 	return cmd
 }
 
-func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, dependencies CommandFactory) *cobra.Command {
 	cfg := workcli.ListConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -774,13 +570,14 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"  " + cliBinaryName + " work list --name startup --max-results 25",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Context = cmd.Context()
 			cfg.Server = globals.server
 			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return listWork(cfg)
+			return dependencies.ListWork(cfg)
 		},
 	}
 
@@ -797,7 +594,7 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	return cmd
 }
 
-func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, dependencies CommandFactory) *cobra.Command {
 	cfg := workcli.ShowConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -814,6 +611,7 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Context = cmd.Context()
 			cfg.Server = globals.server
 			cfg.WorkID = args[0]
 			cfg.JSON = globals.json
@@ -821,7 +619,7 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return showWork(cfg)
+			return dependencies.ShowWork(cfg)
 		},
 	}
 
@@ -830,7 +628,7 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	return cmd
 }
 
-func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, dependencies CommandFactory) *cobra.Command {
 	cfg := workcli.MoveConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -847,6 +645,7 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 		Args:    cobra.ExactArgs(2),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Context = cmd.Context()
 			cfg.Server = globals.server
 			cfg.WorkID = args[0]
 			cfg.StateName = args[1]
@@ -855,7 +654,7 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return moveWork(cfg)
+			return dependencies.MoveWork(cfg)
 		},
 	}
 
@@ -898,6 +697,7 @@ func workFamilyFlagUsages() map[string]string {
 func newWorkHandlerRegistry(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
+	dependencies CommandFactory,
 ) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
 	bindings, visualizeFormatPtr := newWorkFamilyBindings(globals)
 	listCfg := bindings.ListConfig
@@ -911,7 +711,7 @@ func newWorkHandlerRegistry(
 			Verbose:           diagnostics.verboseEnabled,
 			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
-			ListWork:          listWork,
+			ListWork:          dependencies.ListWork,
 		}),
 		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
 			Config:            showCfg,
@@ -920,7 +720,7 @@ func newWorkHandlerRegistry(
 			Verbose:           diagnostics.verboseEnabled,
 			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
-			ShowWork:          showWork,
+			ShowWork:          dependencies.ShowWork,
 		}),
 		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
 			Config:            moveCfg,
@@ -929,11 +729,11 @@ func newWorkHandlerRegistry(
 			Verbose:           diagnostics.verboseEnabled,
 			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
-			MoveWork:          moveWork,
+			MoveWork:          dependencies.MoveWork,
 		}),
 		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
 			Format:    visualizeFormatPtr,
-			Visualize: visualizeWork,
+			Visualize: dependencies.VisualizeWork,
 		}),
 	})
 	if err != nil {
@@ -946,7 +746,7 @@ func newRepresentativeHandlerRegistry(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
-	rootOptions RootCommandOptions,
+	rootOptions CommandFactory,
 ) (*commandregistry.Registry, error) {
 	if operatorDefaults == nil {
 		operatorDefaults = &cliOperatorDefaultsOptions{}
@@ -954,7 +754,7 @@ func newRepresentativeHandlerRegistry(
 	return commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
 		RootRunE: func(cmd *cobra.Command, args []string) error {
 			policy := diagnostics.resolvePolicy(false)
-			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, rootOptions, true)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(rootOptions.runDefaults), nil, globals, operatorDefaults, policy, rootOptions, true)
 		},
 		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
 			Server:            &globals.server,
@@ -962,7 +762,7 @@ func newRepresentativeHandlerRegistry(
 			Verbose:           diagnostics.verboseEnabled,
 			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
-			ShowSession:       showSession,
+			ShowSession:       rootOptions.ShowSession,
 		}),
 	})
 }

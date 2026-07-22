@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

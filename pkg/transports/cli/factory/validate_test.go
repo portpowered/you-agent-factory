@@ -2,179 +2,62 @@ package factory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range portableLayoutBoundaryCases() {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			factory := test.factory
-			if factory == "" {
-				factory = portableLayoutFactoryJSON(
-					test.data,
-					test.width,
-					test.alt,
-					test.positionExtra,
-					test.sourceExtra,
-				)
+func TestValidateUsesInjectedAuthoredSourceLoader(t *testing.T) {
+	wantErr := errors.New("injected source failure")
+	calls := 0
+	err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: "customer/factory", Output: &strings.Builder{}},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		func(path string) ([]byte, error) {
+			calls++
+			if path != "customer/factory" {
+				t.Fatalf("source path = %q, want customer/factory", path)
 			}
-			path := writeValidateFixture(t, factory)
-
-			var out strings.Builder
-			err := Validate(ValidateConfig{Path: path, Output: &out})
-			if test.wantPath == "" {
-				if err != nil {
-					t.Fatalf("Validate valid annotated factory: %v", err)
-				}
-				if !strings.Contains(out.String(), "Factory validation passed.") {
-					t.Fatalf("output = %q, want validation success", out.String())
-				}
-				return
-			}
-			if err == nil {
-				t.Fatalf("Validate invalid annotated factory error = nil, want path %q", test.wantPath)
-			}
-			if !strings.Contains(err.Error(), test.wantPath) {
-				t.Fatalf("Validate error = %q, want field path %q", err, test.wantPath)
-			}
-		})
+			return nil, wantErr
+		},
+	)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("ValidateWithServices() error = %v, want %v", err, wantErr)
+	}
+	if calls != 1 {
+		t.Fatalf("source loader calls = %d, want 1", calls)
 	}
 }
 
-type portableLayoutBoundaryCase struct {
-	name          string
-	factory       string
-	data          string
-	width         int
-	alt           string
-	positionExtra string
-	sourceExtra   string
-	wantPath      string
-}
-
-func portableLayoutBoundaryCases() []portableLayoutBoundaryCase {
-	return []portableLayoutBoundaryCase{
-		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
-		{name: "valid note annotation", factory: portableLayoutNoteFactoryJSON("note-1", "safe")},
-		{
-			name:     "note rejects null image field",
-			factory:  strings.Replace(portableLayoutNoteFactoryJSON("note-1", "safe"), `"note":`, `"image":null,"note":`, 1),
-			wantPath: "layout.annotations[0].image",
-		},
-		{
-			name:     "image rejects null note field",
-			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"image":`, `"note":null,"image":`, 1),
-			wantPath: "layout.annotations[0].note",
-		},
-		{
-			name:     "non-strict base64",
-			data:     "AQI=\n",
-			width:    120,
-			alt:      "diagram",
-			wantPath: "layout.annotations[0].image.source.data",
-		},
-		{
-			name:     "empty alternative text",
-			data:     "AQID",
-			width:    120,
-			wantPath: "layout.annotations[0].image.alternativeText",
-		},
-		{
-			name:     "whitespace-only alternative text",
-			data:     "AQID",
-			width:    120,
-			alt:      " \t ",
-			wantPath: "layout.annotations[0].image.alternativeText",
-		},
-		{
-			name:     "whitespace-only note body",
-			factory:  portableLayoutNoteFactoryJSON("note-1", " \n\t "),
-			wantPath: "layout.annotations[0].note.body",
-		},
-		{
-			name:     "whitespace-only empty-state text",
-			factory:  portableLayoutNodeFactoryJSON("workstation:review", " \n\t "),
-			wantPath: "layout.nodes[0].emptyState.text",
-		},
-		{
-			name:     "blank annotation id",
-			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"id":"image-1"`, `"id":""`, 1),
-			wantPath: "layout.annotations[0].id",
-		},
-		{
-			name:     "whitespace-only canonical node id",
-			factory:  portableLayoutNodeFactoryJSON("   ", "Nothing here"),
-			wantPath: "layout.nodes[0].id",
-		},
-		{
-			name:     "zero image width",
-			data:     "AQID",
-			width:    0,
-			alt:      "diagram",
-			wantPath: "layout.annotations[0].size.width",
-		},
-		{
-			name:        "remote URL source field",
-			data:        "AQID",
-			width:       120,
-			alt:         "diagram",
-			sourceExtra: `,"url":"https://example.invalid/image.png"`,
-			wantPath:    "layout.annotations[0].image.source.url",
-		},
-		{
-			name:          "nested connection reference",
-			data:          "AQID",
-			width:         120,
-			alt:           "diagram",
-			positionExtra: `,"connection":{"nodeId":"workstation:review"}`,
-			wantPath:      "layout.annotations[0].position.connection",
-		},
+func TestValidateRequiresInjectedAuthoredSourceLoader(t *testing.T) {
+	err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: "customer/factory", Output: &strings.Builder{}},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "source loader is required") {
+		t.Fatalf("ValidateWithServices() error = %v", err)
 	}
-}
-
-func portableLayoutFactoryJSON(data string, width int, alternativeText, positionExtra, sourceExtra string) string {
-	return fmt.Sprintf(`{
-		"name":"layout-cli",
-		"layout":{"schemaVersion":1,"annotations":[{
-			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0%s},"size":{"width":%d,"height":80},
-			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q%s}}
-		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
-	}`, positionExtra, width, alternativeText, data, sourceExtra)
-}
-
-func portableLayoutNoteFactoryJSON(id, body string) string {
-	return fmt.Sprintf(`{
-		"name":"layout-cli",
-		"layout":{"schemaVersion":1,"annotations":[{
-			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
-			"note":{"body":%q,"tone":"NEUTRAL"}
-		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
-	}`, id, body)
-}
-
-func portableLayoutNodeFactoryJSON(id, text string) string {
-	return fmt.Sprintf(`{
-		"name":"layout-cli",
-		"layout":{"schemaVersion":1,"nodes":[{
-			"id":%q,"position":{"x":0,"y":0},"emptyState":{"text":%q}
-		}]}
-	}`, id, text)
 }
 
 func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.T) {
-	path := writeValidateFixture(t, newTaxonomyFactoryJSON())
+	path, loadSource := validateFixture(newTaxonomyFactoryJSON())
 
 	var out strings.Builder
-	err := Validate(ValidateConfig{Path: path, Output: &out})
+	err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, Output: &out},
+		testTopologyFactoryDefinitionValidator(testFactoryDefinitionValidationFailure(
+			factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+			`workstation "agent-with-infer" uses agent-run behavior with incompatible worker type INFERENCE_WORKER`,
+			"agent-with-infer",
+		)),
+		loadSource,
+	)
 	if err == nil {
 		t.Fatal("expected incompatible taxonomy validation to fail")
 	}
@@ -197,10 +80,14 @@ func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.
 }
 
 func TestValidate_HumanOutputPreservesLegacyTaxonomyValues(t *testing.T) {
-	path := writeValidateFixture(t, legacyTaxonomyFactoryJSON())
+	path, loadSource := validateFixture(legacyTaxonomyFactoryJSON())
 
 	var out strings.Builder
-	if err := Validate(ValidateConfig{Path: path, Output: &out}); err != nil {
+	if err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, Output: &out},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	); err != nil {
 		t.Fatalf("Validate legacy factory: %v", err)
 	}
 
@@ -217,10 +104,14 @@ func TestValidate_HumanOutputPreservesLegacyTaxonomyValues(t *testing.T) {
 }
 
 func TestValidate_HumanOutputLabelsLegacyPollerBehaviorWithoutType(t *testing.T) {
-	path := writeValidateFixture(t, legacyPollerTaxonomyFactoryJSON())
+	path, loadSource := validateFixture(legacyPollerTaxonomyFactoryJSON())
 
 	var out strings.Builder
-	if err := Validate(ValidateConfig{Path: path, Output: &out}); err != nil {
+	if err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, Output: &out},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	); err != nil {
 		t.Fatalf("Validate legacy poller factory: %v", err)
 	}
 
@@ -236,10 +127,18 @@ func TestValidate_HumanOutputLabelsLegacyPollerBehaviorWithoutType(t *testing.T)
 }
 
 func TestValidate_JSONIncludesTaxonomySummary(t *testing.T) {
-	path := writeValidateFixture(t, newTaxonomyFactoryJSON())
+	path, loadSource := validateFixture(newTaxonomyFactoryJSON())
 
 	var out bytes.Buffer
-	err := Validate(ValidateConfig{Path: path, JSON: true, Output: &out})
+	err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, JSON: true, Output: &out},
+		testTopologyFactoryDefinitionValidator(testFactoryDefinitionValidationFailure(
+			factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+			`workstation "agent-with-infer" uses agent-run behavior with incompatible worker type INFERENCE_WORKER`,
+			"agent-with-infer",
+		)),
+		loadSource,
+	)
 	if err == nil {
 		t.Fatal("expected incompatible taxonomy validation to fail")
 	}
@@ -271,15 +170,16 @@ func TestValidate_JSONIncludesTaxonomySummary(t *testing.T) {
 	}
 }
 
-func writeValidateFixture(t *testing.T, body string) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "factory.json")
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
+func validateFixture(
+	body string,
+) (string, factorydefinitions.AuthoredFactorySourceLoader) {
+	const path = "injected/factory.json"
+	return path, func(gotPath string) ([]byte, error) {
+		if gotPath != path {
+			return nil, fmt.Errorf("source path = %q, want %q", gotPath, path)
+		}
+		return []byte(body), nil
 	}
-	return path
 }
 
 func newTaxonomyFactoryJSON() string {

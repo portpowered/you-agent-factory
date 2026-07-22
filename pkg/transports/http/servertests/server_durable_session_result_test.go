@@ -8,16 +8,30 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-result-001"
+	final := finalAPIResult(sessionID)
+	final.PrimaryResult = json.RawMessage(`[{"type":"JSON","json":{"echo":"you:api"}}]`)
+	service := apiExecutionScript{
+		startSync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.SyncStartResult, error) {
+			return factorysessionexecution.SyncStartResult{
+				AsyncStartResult: factorysessionexecution.AsyncStartResult{
+					SessionID: sessionID,
+					Status:    string(factorysessionexecution.LifecycleStatusSucceeded),
+				},
+				SyncOutcome: factorysessionexecution.SyncOutcome("COMPLETED"),
+			}, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return final, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -65,9 +79,23 @@ func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *te
 }
 
 func TestGetFactorySessionResults_RuntimeBackedAPIShapingMatchesServiceProjection(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-result-projection-001"
+	serviceResult := finalAPIResult(sessionID)
+	service := apiExecutionScript{
+		startSync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.SyncStartResult, error) {
+			return factorysessionexecution.SyncStartResult{
+				AsyncStartResult: factorysessionexecution.AsyncStartResult{
+					SessionID: sessionID,
+					Status:    string(factorysessionexecution.LifecycleStatusSucceeded),
+				},
+				SyncOutcome: factorysessionexecution.SyncOutcome("COMPLETED"),
+			}, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return serviceResult, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -91,12 +119,6 @@ func TestGetFactorySessionResults_RuntimeBackedAPIShapingMatchesServiceProjectio
 		t.Fatalf("decode sync response: %v", err)
 	}
 
-	serviceResult, err := service.GetResult(context.Background(), syncResult.SessionId, factorysessionexecution.ResultRequest{
-		Mode: factorysessionexecution.ResultModeFinal,
-	})
-	if err != nil {
-		t.Fatalf("service GetResult: %v", err)
-	}
 	want := factorysession.ResultResponseToAPI(serviceResult)
 
 	apiResult := getDurableFactorySessionResult(t, server.URL, syncResult.SessionId, "")
@@ -104,9 +126,19 @@ func TestGetFactorySessionResults_RuntimeBackedAPIShapingMatchesServiceProjectio
 }
 
 func TestGetFactorySessionResults_RuntimeBackedRunningReturnsNotReady(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "busy-loop.workflow.js", "busy-loop")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-result-running-001"
+	service := apiExecutionScript{
+		startAsync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
+			return factorysessionexecution.AsyncStartResult{
+				SessionID: sessionID,
+				Status:    string(factorysessionexecution.LifecycleStatusRunning),
+			}, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatusRunning), nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -128,9 +160,25 @@ func TestGetFactorySessionResults_RuntimeBackedRunningReturnsNotReady(t *testing
 }
 
 func TestGetFactorySessionResults_RuntimeBackedSyncTimeoutReturnsAvailability(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "busy-loop.workflow.js", "busy-loop")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-result-timeout-001"
+	service := apiExecutionScript{
+		startSync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.SyncStartResult, error) {
+			return factorysessionexecution.SyncStartResult{
+				AsyncStartResult: factorysessionexecution.AsyncStartResult{
+					SessionID: sessionID,
+					Status:    string(factorysessionexecution.LifecycleStatusRunning),
+				},
+				SyncOutcome: factorysessionexecution.SyncOutcome("TIMED_OUT"),
+				TimedOut:    true,
+			}, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			result := notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatusRunning)
+			result.Availability.Reason = "SYNC_WAIT_TIMED_OUT"
+			return result, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -168,9 +216,12 @@ func TestGetFactorySessionResults_RuntimeBackedSyncTimeoutReturnsAvailability(t 
 }
 
 func TestGetFactorySessionResults_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	service := apiExecutionScript{
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return factorysessionexecution.ResultReadResult{}, factorysessionexecution.ErrDurableSessionNotFound
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -192,14 +243,7 @@ func TestGetFactorySessionResults_RuntimeBackedMissingSessionReturnsNotFound(t *
 }
 
 func TestGetFactorySessionResults_LivePetriSessionReturnsNotFound(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{
-		FactorySession: factoryapi.FactorySession{
-			Id:         "session-beta",
-			FactoryDir: "/workspace/root/beta",
-			FolderPath: "/workspace/root",
-			Project:    "beta",
-		},
-	})
+	srv := newDurableAPITestServer(nil)
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/results", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

@@ -22,10 +22,10 @@ const (
 type executorReviewPlannerDisposition string
 
 const (
-	executorReviewDispositionComplete             executorReviewPlannerDisposition = "complete"
-	executorReviewDispositionSafeManualRepair     executorReviewPlannerDisposition = "safe_manual_repair"
-	executorReviewDispositionSupersededQueueNoise   executorReviewPlannerDisposition = "superseded_queue_noise"
-	executorReviewDispositionNeedsRuntimeReconcile  executorReviewPlannerDisposition = "needs_runtime_reconcile"
+	executorReviewDispositionComplete              executorReviewPlannerDisposition = "complete"
+	executorReviewDispositionSafeManualRepair      executorReviewPlannerDisposition = "safe_manual_repair"
+	executorReviewDispositionSupersededQueueNoise  executorReviewPlannerDisposition = "superseded_queue_noise"
+	executorReviewDispositionNeedsRuntimeReconcile executorReviewPlannerDisposition = "needs_runtime_reconcile"
 )
 
 // queueWorkSnapshot is one durable queue row from `you work list --json`.

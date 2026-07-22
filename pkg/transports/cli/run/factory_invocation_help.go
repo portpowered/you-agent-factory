@@ -7,20 +7,20 @@ import (
 	"slices"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryrun "github.com/portpowered/infinite-you/pkg/config/factoryrun"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func ResolveFactoryInvocationSignature(dir string) (*interfaces.InvocationSignatureConfig, error) {
+func ResolveFactoryInvocationSignature(
+	load interfaces.FactoryConfigFileLoader,
+	dir string,
+) (*interfaces.InvocationSignatureConfig, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, nil
 	}
-	authored, err := factoryconfig.LoadAuthoredFactoryAPIFromPath(filepath.Join(dir, interfaces.FactoryConfigFile))
-	if err != nil {
-		return nil, err
+	if load == nil {
+		return nil, fmt.Errorf("Factory Definitions config file loader is required")
 	}
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(authored)
+	cfg, err := load(filepath.Join(dir, interfaces.FactoryConfigFile))
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +57,13 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 	if strings.TrimSpace(cfg.NamedFactoryName) == "" && strings.TrimSpace(cfg.FactoryConfigPath) == "" {
 		return nil, nil
 	}
-
 	switch {
 	case strings.TrimSpace(cfg.NamedFactoryName) != "":
+		if cfg.LoadFactoryConfigFile == nil {
+			return nil, fmt.Errorf("Factory Definitions config file loader is required")
+		}
 		configPath := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
-		loaded, err := factoryrun.LoadFactoryConfigFromConfigFile(configPath)
+		loaded, err := cfg.LoadFactoryConfigFile(configPath)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +77,10 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 		if javascriptWorkflowPath(cfg.FactoryConfigPath) {
 			return nil, nil
 		}
-		loaded, err := factoryrun.LoadFactoryConfigFromConfigFile(cfg.FactoryConfigPath)
+		if cfg.LoadFactoryConfigFile == nil {
+			return nil, fmt.Errorf("Factory Definitions config file loader is required")
+		}
+		loaded, err := cfg.LoadFactoryConfigFile(cfg.FactoryConfigPath)
 		if err != nil {
 			return nil, err
 		}

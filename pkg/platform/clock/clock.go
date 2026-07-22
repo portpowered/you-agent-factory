@@ -27,6 +27,11 @@ func (Real) Now() time.Time {
 	return time.Now()
 }
 
+// After reports the passage of a duration using the host wall clock.
+func (Real) After(duration time.Duration) <-chan time.Time {
+	return time.After(duration)
+}
+
 // Ensure returns a real clock when the supplied source is nil.
 func Ensure(source Source) Source {
 	if source == nil {

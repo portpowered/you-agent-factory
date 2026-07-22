@@ -6,145 +6,32 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-const (
-	InvocationErrorCodeFailed    = "RUN_INVOCATION_FAILED"
-	InvocationErrorCodeCancelled = "RUN_INVOCATION_CANCELLED"
-	InvocationErrorCodeTimeout   = "RUN_INVOCATION_TIMEOUT"
-)
-
-type InvocationError struct {
-	Code    string
-	Message string
-	Cause   error
-}
-
-func (e *InvocationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if strings.TrimSpace(e.Message) == "" {
-		return e.Code
-	}
-	return fmt.Sprintf("%s: %s", e.Code, e.Message)
-}
-
-func (e *InvocationError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
-
-type invocationErrorPayload struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// WriteInvocationError renders the stable clean-invocation failure contract to
-// stderr. It returns true when err matched an invocation contract error.
-func WriteInvocationError(w io.Writer, err error, jsonOutput bool) bool {
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
-		return false
-	}
-	if w == nil {
-		return true
-	}
-	if jsonOutput {
-		data, marshalErr := json.Marshal(invocationErrorPayload{
-			Code:    invocationErr.Code,
-			Message: invocationErr.Message,
-		})
-		if marshalErr == nil {
-			_, _ = fmt.Fprintln(w, string(data))
-			return true
-		}
-	}
-	_, _ = fmt.Fprintln(w, invocationErr.Error())
-	return true
-}
-
-const (
-	// InvocationOutputPrimaryResult is the default one-shot invocation stdout
-	// contract: primary-result-only output with no live progress rendering.
-	InvocationOutputPrimaryResult = ""
-	// invocationOutputPrimaryLiteral is the documented spelling for the default
-	// primary-result-only output mode.
-	invocationOutputPrimaryLiteral = "primary"
-	// InvocationOutputResponseStream enables live internal SessionResponseStream
-	// progress rendering for supported one-shot factory invocations.
-	InvocationOutputResponseStream = "response-stream"
-)
-
-func NormalizeInvocationOutputMode(raw string) (string, error) {
-	return normalizeInvocationOutputMode(raw)
-}
-
-func normalizeInvocationOutputMode(raw string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	switch trimmed {
-	case InvocationOutputPrimaryResult, invocationOutputPrimaryLiteral:
-		return InvocationOutputPrimaryResult, nil
-	case InvocationOutputResponseStream:
-		return InvocationOutputResponseStream, nil
-	default:
-		return "", fmt.Errorf(
-			"unsupported --output value %q; supported values are primary (default) and response-stream",
-			trimmed,
-		)
-	}
-}
-
-func isResponseStreamOutputMode(mode string) bool {
-	return strings.TrimSpace(mode) == InvocationOutputResponseStream
-}
-
-func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
-	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		return nil
-	}
-	if strings.TrimSpace(cfg.ReplayPath) != "" {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
-			Message: "response-stream output requires a live runtime owned by this CLI invocation; replay mode has no internal response stream",
-		}
-	}
-	if cfg.Continuously {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
-			Message: "response-stream output is not supported with --continuously",
-		}
-	}
-	if !invocationMode {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
-			Message: "response-stream output requires a one-shot factory invocation such as you run --named or you run --factory with positional text or piped stdin",
-		}
-	}
-	return nil
-}
-
-func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
+func emitCleanInvocationOutcome(
+	ctx context.Context,
+	cfg RunConfig,
+	runner factoryServiceRunner,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	runErr error,
+	duration time.Duration,
+) error {
 	logger := cleanInvocationLogger(cfg.Logger)
 	provider, ok := runner.(engineStateSnapshotProvider)
 	if !ok {
@@ -154,15 +41,15 @@ func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner facto
 				Message: "clean invocation result snapshot is unavailable",
 			}
 			recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-				StartedAt: startedAt,
-				Err:       err,
+				Duration: duration,
+				Err:      err,
 			})
 			return err
 		}
 		err := newInvocationErrorForRunFailure(runErr, nil)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Err:       err,
+			Duration: duration,
+			Err:      err,
 		})
 		return err
 	}
@@ -175,33 +62,37 @@ func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner facto
 				Cause:   err,
 			}
 			recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-				StartedAt: startedAt,
-				Err:       invocationErr,
+				Duration: duration,
+				Err:      invocationErr,
 			})
 			return invocationErr
 		}
 		invocationErr := newInvocationErrorForRunFailure(runErr, nil)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Err:       invocationErr,
+			Duration: duration,
+			Err:      invocationErr,
 		})
 		return invocationErr
 	}
 	if runErr != nil {
 		invocationErr := newInvocationErrorForRunFailure(runErr, snapshot)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Snapshot:  snapshot,
-			Err:       invocationErr,
+			Duration: duration,
+			Snapshot: snapshot,
+			Err:      invocationErr,
 		})
 		return invocationErr
 	}
-	target, err := cleanInvocationWorkTargetFromFile(cfg.WorkFile)
+	target, err := cleanInvocationWorkTargetFromFile(
+		cfg.WorkRequestFileLoader,
+		prepareWorkTarget,
+		cfg.WorkFile,
+	)
 	if err != nil {
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Snapshot:  snapshot,
-			Err:       err,
+			Duration: duration,
+			Snapshot: snapshot,
+			Err:      err,
 		})
 		return err
 	}
@@ -209,34 +100,34 @@ func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner facto
 	if !ok {
 		invocationErr := cleanInvocationFailureFromSnapshot(snapshot, target)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Snapshot:  snapshot,
-			Target:    &target,
-			Err:       invocationErr,
+			Duration: duration,
+			Snapshot: snapshot,
+			Target:   &target,
+			Err:      invocationErr,
 		})
 		return invocationErr
 	}
 	if err := writeCleanInvocationSuccess(cfg, result); err != nil {
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-			StartedAt: startedAt,
-			Snapshot:  snapshot,
-			Target:    &target,
-			Err:       err,
+			Duration: duration,
+			Snapshot: snapshot,
+			Target:   &target,
+			Err:      err,
 		})
 		return err
 	}
 	recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
-		StartedAt: startedAt,
-		Snapshot:  snapshot,
-		Target:    &target,
-		Success:   &result,
+		Duration: duration,
+		Snapshot: snapshot,
+		Target:   &target,
+		Success:  &result,
 	})
 	return nil
 }
 
 func newInvocationErrorForRunFailure(
 	runErr error,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 ) error {
 	switch {
 	case errors.Is(runErr, context.DeadlineExceeded):
@@ -264,7 +155,7 @@ func newInvocationErrorForRunFailure(
 }
 
 func cleanInvocationFailureFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) error {
 	if timeoutFailure, ok := cleanInvocationTimeoutForTarget(snapshot, target); ok {
@@ -287,7 +178,7 @@ func cleanInvocationFailureFromSnapshot(
 }
 
 func cleanInvocationTimeoutFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 ) (*InvocationError, bool) {
 	if snapshot == nil {
 		return nil, false
@@ -305,7 +196,7 @@ func cleanInvocationTimeoutFromSnapshot(
 }
 
 func cleanInvocationTimeoutForTarget(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (*InvocationError, bool) {
 	if snapshot == nil {
@@ -327,7 +218,7 @@ func cleanInvocationTimeoutForTarget(
 }
 
 func cleanInvocationFailedForTarget(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (string, bool) {
 	if snapshot == nil {
@@ -360,26 +251,30 @@ func cleanInvocationFailedForTarget(
 	return "", false
 }
 
-func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarget, error) {
-	request, err := LoadWorkFile(workFile)
+func cleanInvocationWorkTargetFromFile(
+	load work.RequestFileLoader,
+	prepare work.SingleWorkTargetPreparation,
+	workFile string,
+) (cleanInvocationWorkTarget, error) {
+	request, err := batchload.LoadFromFile(load, workFile)
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
 	}
-	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
+	if prepare == nil {
+		return cleanInvocationWorkTarget{}, fmt.Errorf("clean invocation Work target preparation is required")
+	}
+	target, err := prepare(request)
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
-	}
-	if len(normalized) != 1 {
-		return cleanInvocationWorkTarget{}, fmt.Errorf("clean invocation requires exactly one work item, got %d", len(normalized))
 	}
 	return cleanInvocationWorkTarget{
-		WorkID:       normalized[0].WorkID,
-		WorkTypeName: normalized[0].WorkTypeID,
+		WorkID:       target.WorkID,
+		WorkTypeName: target.WorkTypeID,
 	}, nil
 }
 
 func cleanInvocationSuccessFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
 	if snapshot == nil || snapshot.Topology == nil {
@@ -392,7 +287,7 @@ func cleanInvocationSuccessFromSnapshot(
 }
 
 func cleanInvocationSuccessFromTerminalTokens(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
 	tokens := make([]*factorytoken.Token, 0, len(snapshot.Marking.Tokens))
@@ -413,7 +308,7 @@ func cleanInvocationSuccessFromTerminalTokens(
 }
 
 func cleanInvocationSuccessFromDispatchHistory(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
@@ -456,7 +351,7 @@ func cleanInvocationSuccessFromToken(token *factorytoken.Token) cleanInvocationS
 func writeCleanInvocationSuccess(cfg RunConfig, result cleanInvocationSuccess) error {
 	output := cfg.Output
 	if output == nil {
-		output = os.Stdout
+		return fmt.Errorf("clean invocation output is required")
 	}
 	if cfg.JSON {
 		data, err := json.Marshal(result)
@@ -509,32 +404,37 @@ type responseStreamRenderer interface {
 // humanResponseStreamRenderer prints canonical response-event progress to
 // stdout and keeps the final invocation result separate from transient output.
 type humanResponseStreamRenderer struct {
-	mu                   sync.Mutex
-	output               io.Writer
-	progress             *responseStreamProgressWriter
-	finalOnce            sync.Once
-	finalErr             error
-	lastResponseSequence int64
-	progressLines        int
-	progressSeen         bool
-	backlogNotified      bool
+	stream factoryvisualization.ResponseStream
 }
 
-func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRenderer {
+func newHumanResponseStreamRenderer(
+	output io.Writer,
+	presentation factoryvisualization.ResponsePresentation,
+	responseEvents factorysessions.ResponseEventValidator,
+) *humanResponseStreamRenderer {
 	if output == nil {
-		output = os.Stdout
+		panic("response-stream output is nil")
 	}
-	return &humanResponseStreamRenderer{
-		output:   output,
-		progress: newResponseStreamProgressWriter(output),
+	if presentation == nil {
+		panic("response presentation service is nil")
 	}
+	if responseEvents == nil {
+		panic("Factory response-event validator is nil")
+	}
+	return &humanResponseStreamRenderer{stream: presentation.OpenBestEffortResponseStream(
+		output,
+		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
+			line, ok := formatHumanResponseEvent(responseEvents, event)
+			return []byte(line), ok
+		},
+	)}
 }
 
 func (r *humanResponseStreamRenderer) stopProgressRendering() {
 	if r == nil {
 		return
 	}
-	r.progress.stopAndDrain()
+	_ = r.stream.CloseAndDrain()
 }
 
 func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
@@ -543,48 +443,36 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
-	r.finalOnce.Do(func() {
-		r.finalErr = r.writeFinalInvocationResultOnce(result)
+	_, err := r.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
+		if result.Status == interfaces.InvocationTerminalStatusCompleted {
+			text, err := invocationPrimaryResultText(result.PrimaryResult)
+			if err != nil {
+				return err
+			}
+			return writeHumanPrimaryResult(writer, progressSeen, text)
+		}
+		return writeHumanInvocationOutcome(writer, progressSeen, result)
 	})
-	return r.finalErr
+	return err
 }
 
-func (r *humanResponseStreamRenderer) writeFinalInvocationResultOnce(
+func writeHumanInvocationOutcome(
+	output io.Writer,
+	progressSeen bool,
 	result apisurface.FactoryInvocationResult,
 ) error {
-	r.stopProgressRendering()
-	r.progress.acquireOutputExclusive()
-	defer r.progress.releaseOutputExclusive()
-	if result.Status == interfaces.InvocationTerminalStatusCompleted {
-		text, err := invocationPrimaryResultText(result.PrimaryResult)
-		if err != nil {
-			return err
-		}
-		return r.writePrimaryResult(text)
-	}
-	return r.writeInvocationOutcome(result)
-}
-
-func (r *humanResponseStreamRenderer) writeInvocationOutcome(
-	result apisurface.FactoryInvocationResult,
-) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
-	}
 	lines := formatHumanInvocationOutcomeLines(result)
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
-	if r.progressSeen {
-		if _, err := fmt.Fprintln(r.output); err != nil {
+	if progressSeen {
+		if _, err := fmt.Fprintln(output); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintln(r.output, responseStreamInvocationOutcomeHeader); err != nil {
+	if _, err := fmt.Fprintln(output, responseStreamInvocationOutcomeHeader); err != nil {
 		return err
 	}
 	for _, line := range lines {
-		if _, err := fmt.Fprintln(r.output, line); err != nil {
+		if _, err := fmt.Fprintln(output, line); err != nil {
 			return err
 		}
 	}
@@ -616,22 +504,16 @@ func formatHumanInvocationOutcomeLines(result apisurface.FactoryInvocationResult
 	return lines
 }
 
-func (r *humanResponseStreamRenderer) writePrimaryResult(text string) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.progressSeen {
-		if _, err := fmt.Fprintln(r.output); err != nil {
+func writeHumanPrimaryResult(output io.Writer, progressSeen bool, text string) error {
+	if progressSeen {
+		if _, err := fmt.Fprintln(output); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintln(r.output, responseStreamPrimaryResultHeader); err != nil {
+		if _, err := fmt.Fprintln(output, responseStreamPrimaryResultHeader); err != nil {
 			return err
 		}
 	}
-	_, err := fmt.Fprint(r.output, text)
+	_, err := fmt.Fprint(output, text)
 	return err
 }
 
@@ -669,59 +551,46 @@ func normalizeHumanProgressField(value string) string {
 	return strings.Join(strings.Fields(normalized), " ")
 }
 
-func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {
-	if strings.TrimSpace(payload) == "" {
-		return
-	}
-	if !r.progress.enqueue([]byte(payload)) {
-		r.emitTerminalBacklogNoticeLocked()
-		return
-	}
-	r.progressSeen = true
-	r.progressLines++
-}
-
-func (r *humanResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
-	if r.backlogNotified {
-		return
-	}
-	r.backlogNotified = true
-}
-
 // jsonResponseStreamRenderer emits canonical response-event NDJSON followed by
 // the shared invocation response.
 type jsonResponseStreamRenderer struct {
-	mu           sync.Mutex
-	writer       *canonicalResponseStreamWriter
-	finalWritten bool
+	stream factoryvisualization.ResponseStream
 }
 
-func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer {
+func newJSONResponseStreamRenderer(
+	output io.Writer,
+	presentation factoryvisualization.ResponsePresentation,
+) *jsonResponseStreamRenderer {
 	if output == nil {
-		output = os.Stdout
+		panic("response-stream output is nil")
 	}
-	return &jsonResponseStreamRenderer{
-		writer: newCanonicalResponseStreamWriter(output),
+	if presentation == nil {
+		panic("response presentation service is nil")
 	}
+	return &jsonResponseStreamRenderer{stream: presentation.OpenLosslessResponseStream(
+		output,
+		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
+			encoded, err := json.Marshal(responseStreamJSONResponseEventRecord{
+				RecordType: responseStreamJSONRecordResponseEvent,
+				Event:      event,
+			})
+			return encoded, err == nil
+		},
+	)}
 }
 
 func (r *jsonResponseStreamRenderer) stopProgressRendering() {
 	if r == nil {
 		return
 	}
-	_ = r.writer.closeAndDrain()
+	_ = r.stream.CloseAndDrain()
 }
 
-func (r *jsonResponseStreamRenderer) onResponseEvents(events []responseevents.FactoryResponseEvent) {
+func (r *jsonResponseStreamRenderer) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
 	if r == nil {
 		return
 	}
-	for _, event := range events {
-		r.writeRecord(responseStreamJSONResponseEventRecord{
-			RecordType: responseStreamJSONRecordResponseEvent,
-			Event:      event,
-		})
-	}
+	r.stream.PresentResponseEvents(events)
 }
 
 func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
@@ -730,42 +599,30 @@ func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
-	r.mu.Lock()
-	if r.finalWritten {
-		r.mu.Unlock()
+	first, err := r.stream.Finalize(func(writer io.Writer, _ bool) error {
+		encoded, encodeErr := json.Marshal(responseStreamJSONInvocationResultRecord{
+			RecordType: responseStreamJSONRecordInvocationResult,
+			Invocation: apisurface.InvocationResponseFromResult(result),
+		})
+		if encodeErr != nil {
+			return fmt.Errorf("marshal response-stream JSON record: %w", encodeErr)
+		}
+		encoded = append(encoded, '\n')
+		written, writeErr := writer.Write(encoded)
+		if writeErr == nil && written != len(encoded) {
+			writeErr = io.ErrShortWrite
+		}
+		return writeErr
+	})
+	if !first {
 		return fmt.Errorf("response-stream invocation result already written")
 	}
-	err := r.writeRecordLocked(responseStreamJSONInvocationResultRecord{
-		RecordType: responseStreamJSONRecordInvocationResult,
-		Invocation: apisurface.InvocationResponseFromResult(result),
-	})
-	if err == nil {
-		r.finalWritten = true
-	}
-	r.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	return r.writer.closeAndDrain()
-}
-
-func (r *jsonResponseStreamRenderer) writeRecord(record any) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.writeRecordLocked(record)
-}
-
-func (r *jsonResponseStreamRenderer) writeRecordLocked(record any) error {
-	encoded, err := json.Marshal(record)
-	if err != nil {
-		return fmt.Errorf("marshal response-stream JSON record: %w", err)
-	}
-	return r.writer.enqueue(encoded)
+	return err
 }
 
 type responseStreamJSONResponseEventRecord struct {
-	RecordType string                              `json:"recordType"`
-	Event      responseevents.FactoryResponseEvent `json:"event"`
+	RecordType string                               `json:"recordType"`
+	Event      factorysessions.FactoryResponseEvent `json:"event"`
 }
 
 type responseStreamJSONInvocationResultRecord struct {

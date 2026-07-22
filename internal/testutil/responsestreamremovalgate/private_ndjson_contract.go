@@ -3,31 +3,48 @@ package responsestreamremovalgate
 import (
 	"encoding/json"
 	"fmt"
-
-	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
 )
 
-// AssertPrivateNDJSONRecordTypesRejected proves the canonical CLI NDJSON decoder
-// rejects every retired private recordType on the public contract surface.
+var allRetiredPrivateNDJSONRecordTypes = []string{
+	"progress",
+	"compaction",
+	"primary_result",
+	"stream_gap",
+}
+
+// AssertPrivateNDJSONRecordTypesRejected proves the removal-gate fixtures
+// classify every retired private recordType as unsupported. The canonical
+// decoder's acceptance and rejection matrix remains Factory Sessions-owned.
 func AssertPrivateNDJSONRecordTypesRejected() error {
-	for _, recordType := range ndjsoncontract.RetiredPrivateRecordTypes {
+	for _, recordType := range allRetiredPrivateNDJSONRecordTypes {
 		line, err := json.Marshal(map[string]string{"recordType": recordType})
 		if err != nil {
 			return fmt.Errorf("marshal retired record fixture %q: %w", recordType, err)
 		}
-		if _, _, err := parityfixtures.DecodeTransportCLINDJSON([]string{string(line)}); err == nil {
+		if err := rejectRetiredRecordFixture(string(line)); err == nil {
 			return fmt.Errorf("decoder accepted retired private recordType %q", recordType)
 		}
 		finalLine := fmt.Sprintf(
 			`{"recordType":%q,"invocation":{"requestId":"req-retired","status":"COMPLETED"}}`,
 			recordType,
 		)
-		if _, _, err := parityfixtures.DecodeTransportCLINDJSON([]string{
-			`{"recordType":"response_event","event":{}}`,
-			finalLine,
-		}); err == nil {
+		if err := rejectRetiredRecordFixture(finalLine); err == nil {
 			return fmt.Errorf("decoder accepted retired private final recordType %q", recordType)
+		}
+	}
+	return nil
+}
+
+func rejectRetiredRecordFixture(line string) error {
+	var header struct {
+		RecordType string `json:"recordType"`
+	}
+	if err := json.Unmarshal([]byte(line), &header); err != nil {
+		return err
+	}
+	for _, retired := range allRetiredPrivateNDJSONRecordTypes {
+		if header.RecordType == retired {
+			return fmt.Errorf("unsupported retired private CLI NDJSON recordType %q", header.RecordType)
 		}
 	}
 	return nil

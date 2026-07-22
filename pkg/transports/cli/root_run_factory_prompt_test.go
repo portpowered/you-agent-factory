@@ -10,13 +10,22 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
+func defaultNamedFactoriesRootForTest() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"), nil
+}
+
 func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -30,7 +39,6 @@ func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T)
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
 		"primary-result-only stdout by default",
 		"--output response-stream",
-		"you workflow",
 	} {
 		if !strings.Contains(runCmd.Long, want) {
 			t.Fatalf("run command long help missing %q", want)
@@ -65,7 +73,7 @@ func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T)
 }
 
 func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -102,7 +110,7 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 }
 
 func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -153,15 +161,13 @@ func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
 	t.Setenv("HOME", homeDirectory)
 	t.Setenv("USERPROFILE", homeDirectory)
 
-	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(workingDirectory)
+	projectRoot := filepath.Join(workingDirectory, "factory")
+	factoryDir, err := factorydefinitionfixtures.SeedNamedFactory(filepath.Join(projectRoot, "alpha"), portableFactoryPayloadWithInvocationSignature())
 	if err != nil {
-		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
-	}
-	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", portableFactoryPayloadWithInvocationSignature()); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithCatalog(transportNamedFactoryCatalog{"alpha": factoryDir})
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
@@ -219,12 +225,12 @@ func TestRunCommand_NamedFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 	t.Setenv("HOME", homeDirectory)
 	t.Setenv("USERPROFILE", homeDirectory)
 
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	globalRoot, err := defaultNamedFactoriesRootForTest()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
 
-	wantRoot, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", portableFactoryPayloadWithDefaultHandling())
+	wantRoot, err := factorydefinitionfixtures.SeedNamedFactory(filepath.Join(globalRoot, "alpha"), portableFactoryPayloadWithDefaultHandling())
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
@@ -235,7 +241,17 @@ func TestRunCommand_NamedFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{
+		resolve: func(projectRoot, globalRoot, name string) (*interfaces.NamedFactoryResolution, error) {
+			return &interfaces.NamedFactoryResolution{
+				Name:        name,
+				FactoryDir:  wantRoot,
+				Source:      interfaces.NamedFactoryResolutionSourceGlobal,
+				ProjectRoot: projectRoot,
+				GlobalRoot:  globalRoot,
+			}, nil
+		},
+	})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--named", "alpha"})
@@ -274,20 +290,17 @@ func TestRunCommand_NamedFlagPrefersProjectFactoryOverGlobal(t *testing.T) {
 	t.Setenv("HOME", homeDirectory)
 	t.Setenv("USERPROFILE", homeDirectory)
 
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	globalRoot, err := defaultNamedFactoriesRootForTest()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
-	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(projectDirectory)
-	if err != nil {
-		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
-	}
+	projectRoot := filepath.Join(projectDirectory, "factory")
 
-	if _, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", portableFactoryPayloadWithDefaultHandling()); err != nil {
+	if _, err := factorydefinitionfixtures.SeedNamedFactory(filepath.Join(globalRoot, "alpha"), portableFactoryPayloadWithDefaultHandling()); err != nil {
 		t.Fatalf("PersistNamedFactory(global alpha): %v", err)
 	}
 
-	wantRoot, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", portableFactoryPayloadWithDefaultHandling())
+	wantRoot, err := factorydefinitionfixtures.SeedNamedFactory(filepath.Join(projectRoot, "alpha"), portableFactoryPayloadWithDefaultHandling())
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(local alpha): %v", err)
 	}
@@ -298,7 +311,18 @@ func TestRunCommand_NamedFlagPrefersProjectFactoryOverGlobal(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{
+		resolve: func(projectRoot, globalRoot, name string) (*interfaces.NamedFactoryResolution, error) {
+			return &interfaces.NamedFactoryResolution{
+				Name:               name,
+				FactoryDir:         wantRoot,
+				Source:             interfaces.NamedFactoryResolutionSourceProjectLocal,
+				ProjectRoot:        projectRoot,
+				GlobalRoot:         globalRoot,
+				PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal,
+			}, nil
+		},
+	})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--named", "alpha"})
@@ -406,7 +430,7 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 		runCLI = originalRunCLI
 	}()
 
-	restore := setupNamedFactoryInvocationTest(t)
+	factoryDir, restore := setupNamedFactoryInvocationTest(t)
 	defer restore()
 
 	var got runcli.RunConfig
@@ -415,7 +439,9 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithCatalogAndInvocationInput(transportNamedFactoryCatalog{"alpha": factoryDir}, programmedInvocationInput(work.PreparedInvocationInput{NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
+		"input": {Values: []string{"draft"}}, "mode": {Values: []string{"fast"}}, "confirm": {Values: []string{"true"}}, "output": {Values: []string{"result.md"}},
+	}}}, nil))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -437,6 +463,9 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 	if got.InvocationNormalizedArguments == nil {
 		t.Fatal("expected signature-backed invocation arguments to be normalized")
 	}
+	if got.Output == nil {
+		t.Fatal("signature-backed one-shot invocation output = nil, want process stdout")
+	}
 
 	wantValues := map[string]string{
 		"input":   "draft",
@@ -449,7 +478,7 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 	}
 }
 
-func setupNamedFactoryInvocationTest(t *testing.T) func() {
+func setupNamedFactoryInvocationTest(t *testing.T) (string, func()) {
 	t.Helper()
 
 	workingDirectory := t.TempDir()
@@ -464,7 +493,7 @@ func setupNamedFactoryInvocationTest(t *testing.T) func() {
 	t.Setenv("HOME", homeDirectory)
 	t.Setenv("USERPROFILE", homeDirectory)
 
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	globalRoot, err := defaultNamedFactoriesRootForTest()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
@@ -475,7 +504,7 @@ func setupNamedFactoryInvocationTest(t *testing.T) func() {
 	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	return func() {
+	return factoryDir, func() {
 		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
 			t.Fatalf("restore working directory: %v", chdirErr)
 		}
@@ -503,7 +532,7 @@ func TestRunCommand_NamedAndDirFlagsRejectConflict(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--named", "alpha", "--dir", "other-factory"})
@@ -534,11 +563,11 @@ func TestRunCommand_NamedAndFactoryFlagsRejectConflict(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(factoryPath, []byte(`{"id":"portable"}`), 0o644); err != nil {
+	if err := os.WriteFile(factoryPath, portableFactoryPayloadWithDefaultHandling(), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--named", "alpha", "--factory", factoryPath})
@@ -563,7 +592,7 @@ func TestRunCommand_FactoryFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
-	if err := os.WriteFile(factoryPath, []byte(`{"id":"portable"}`), 0o644); err != nil {
+	if err := os.WriteFile(factoryPath, portableFactoryPayloadWithDefaultHandling(), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	wantRoot, err := filepath.Abs(dir)
@@ -577,7 +606,7 @@ func TestRunCommand_FactoryFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath})
@@ -611,7 +640,7 @@ func TestRunCommand_FactoryAndDirFlagsRejectConflict(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "--dir", "other-factory"})
@@ -641,7 +670,7 @@ func TestRunCommand_FactoryFlagRejectsMissingConfigFileBeforeRun(t *testing.T) {
 	}
 
 	missingPath := filepath.Join(t.TempDir(), "missing-factory.json")
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", missingPath})
@@ -670,7 +699,7 @@ func TestRunCommand_FactoryFlagRejectsDirectoryPathBeforeRun(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", t.TempDir()})
@@ -728,7 +757,7 @@ func TestRunCommand_FactoryPromptCarriesInvocationText(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedTextInvocationInput(work.InputSourcePositionalText, "Fix the lint issues"))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix", "the", "lint", "issues"})
@@ -759,7 +788,7 @@ func TestRunCommand_FactoryStdinPromptCarriesInvocationText(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedTextInvocationInput(work.InputSourceStdinText, "Fix the stdin path\n"))
 	root.SetIn(strings.NewReader("Fix the stdin path\n"))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -797,7 +826,7 @@ func TestRunCommand_FactoryPromptSelectsSharedTextInvocationMode(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedTextInvocationInput(work.InputSourcePositionalText, "Fix the lint issues"))
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
@@ -842,7 +871,7 @@ func TestRunCommand_FactoryWorkFileSelectsCleanInvocationMode(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "--work", workPath})
@@ -876,7 +905,7 @@ func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T)
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "--continuously", "Fix the lint issues"})
@@ -910,7 +939,7 @@ func TestRunCommand_FactoryPromptRejectsEmptyPositionalWithStableCode(t *testing
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedInvocationInput(work.PreparedInvocationInput{}, &work.InputError{Code: work.InputErrorCodeEmpty, Message: "invocation input is empty", Source: work.InputSourcePositionalText}))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, ""})
@@ -942,7 +971,7 @@ func TestRunCommand_FactoryPromptRejectsWhitespaceOnlyPositionalWithStableCode(t
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedInvocationInput(work.PreparedInvocationInput{}, &work.InputError{Code: work.InputErrorCodeEmpty, Message: "invocation input is empty", Source: work.InputSourcePositionalText}))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "   "})

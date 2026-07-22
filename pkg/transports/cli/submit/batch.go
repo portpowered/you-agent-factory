@@ -6,23 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const batchErrorBodyPreviewLimit = 200
 
 // BatchConfig holds parameters for the submit batch command.
 type BatchConfig struct {
+	Context     context.Context
 	FilePath    string
 	FileFlag    string
 	DryRun      bool
@@ -36,12 +35,35 @@ type BatchConfig struct {
 	StdinIsTTY  func() bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	FileSystem  BatchInputFileSystem
+	HTTP        clihttp.Protocol
+}
+
+func NewSubmitBatch(
+	transport clihttp.Protocol,
+	prepare work.FactoryRequestBatchPreparation,
+) func(BatchConfig) error {
+	return func(cfg BatchConfig) error { cfg.HTTP = transport; return SubmitBatch(prepare, cfg) }
+}
+
+// BatchInputFileSystem is the exact local-file effect required by batch input
+// acquisition. Wire supplies the policy-free Platform adapter; CLI retains
+// only source selection and error presentation.
+type BatchInputFileSystem interface {
+	Stat(string) (fs.FileInfo, error)
+	ReadFile(string) ([]byte, error)
 }
 
 // SubmitBatch upserts a canonical FACTORY_REQUEST_BATCH to a running factory.
-func SubmitBatch(cfg BatchConfig) error {
+func SubmitBatch(prepare work.FactoryRequestBatchPreparation, cfg BatchConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if prepare == nil {
+		return fmt.Errorf("Factory Request Batch preparation is required")
 	}
 
 	resolved, err := resolveBatchInput(cfg)
@@ -49,13 +71,11 @@ func SubmitBatch(cfg BatchConfig) error {
 		return err
 	}
 
-	req, err := requests.ParseCanonicalWorkRequestJSON(resolved.data)
+	prepared, err := prepare.PrepareFactoryRequestBatch(cfg.Context, resolved.data)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", resolved.label, err)
 	}
-	if err := validateBatchRequest(req); err != nil {
-		return err
-	}
+	req := prepared.Request
 
 	batchSource := resolved.source
 	endpointPath := batchSubmitEndpointPath(cfg.SessionID, req.RequestID)
@@ -63,20 +83,7 @@ func SubmitBatch(cfg BatchConfig) error {
 		return printBatchDryRunSummary(cfg, req, batchSource, endpointPath)
 	}
 
-	return upsertBatchHTTP(cfg, req, resolved.data, batchSource)
-}
-
-func validateBatchRequest(req work.WorkRequest) error {
-	if req.Type != work.WorkRequestTypeFactoryRequestBatch {
-		return fmt.Errorf("batch type must be %q", work.WorkRequestTypeFactoryRequestBatch)
-	}
-	if strings.TrimSpace(req.RequestID) == "" {
-		return fmt.Errorf("batch requestId is required")
-	}
-	if len(req.Works) == 0 {
-		return fmt.Errorf("batch works must contain at least one item")
-	}
-	return nil
+	return upsertBatchHTTP(cfg, req, prepared.CanonicalJSON, batchSource)
 }
 
 func printBatchDryRunSummary(cfg BatchConfig, req work.WorkRequest, batchSource, endpointPath string) error {
@@ -110,6 +117,9 @@ func printBatchDryRunSummary(cfg BatchConfig, req work.WorkRequest, batchSource,
 }
 
 func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSource string) error {
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
+	}
 	requestID := req.RequestID
 	endpointPath := batchSubmitEndpointPath(cfg.SessionID, requestID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
@@ -131,28 +141,22 @@ func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSo
 		len(req.Works),
 	)
 
-	started := time.Now()
-	client := &http.Client{Timeout: submitRequestTimeout}
 	var result factoryapi.UpsertWorkRequestResponse
-	resp, err := clihttp.PutJSONCreated(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.PutJSONCreated(
+		cfg.Context,
 		endpointURL,
 		bytes.NewReader(body),
 		&result,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpointPath,
-			LogLabel:     "submit batch",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, response.Duration.Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d", endpointPath, resp.StatusCode, response.Duration.Milliseconds())
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
@@ -164,7 +168,7 @@ func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSo
 	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
 		responseBytes = len(encoded)
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d requestId=%s traceId=%s workCount=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), responseBytes, result.RequestId, result.TraceId, len(result.Works))
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d requestId=%s traceId=%s workCount=%d", endpointPath, resp.StatusCode, response.Duration.Milliseconds(), responseBytes, result.RequestId, result.TraceId, len(result.Works))
 
 	if cfg.JSON {
 		return printBatchSuccessJSON(cfg.Output, cfg.SessionID, endpointPath, batchSource, req, result)

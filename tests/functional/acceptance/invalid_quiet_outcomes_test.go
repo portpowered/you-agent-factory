@@ -7,12 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 )
 
 var quietLeakForbiddenMarkers = []string{
@@ -137,10 +136,8 @@ func TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrim
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "quiet-mode-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	_, initOutcome := initializeConfig(t, ctx, session, "quiet-mode-config-init")
+	configPath := initOutcome.ConfigPath
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",

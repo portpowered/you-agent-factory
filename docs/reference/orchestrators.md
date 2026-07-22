@@ -24,15 +24,14 @@ For live session discovery and CLI routing, see `you docs sessions`. For
 | `FactoryArtifact` | Shared session-owned output record such as a result, finding, log, or checkpoint ref. |
 | `FactoryEvent` | Canonical event-stream record for session lifecycle, dispatch lifecycle, marking, phase, checkpoint refs, and artifacts. |
 
-## Accepted Dynamic Workflow Aliases
+## JavaScript orchestrator terminology
 
 - **Dynamic workflow** is shorthand for a `JAVASCRIPT` orchestrator-backed factory.
 - A dynamic workflow **run** is a live `FactorySession` with
   `runtime.orchestratorKind = JAVASCRIPT`.
-- A durable JavaScript execution inspected through `you workflow status`,
-  `you workflow result`, `you workflow dispatches`, `you workflow artifacts`,
-  `you workflow events`, API durable session reads, or the dashboard Factory
-  Session detail surface is still that same `FactorySession`.
+- A durable JavaScript execution inspected through Factory Session CLI and API
+  reads or the dashboard Factory Session detail surface is still that same
+  `FactorySession`.
 - Do not introduce `DynamicWorkflowRun` as a separate canonical runtime noun in
   API, CLI, dashboard, or docs.
 
@@ -146,8 +145,9 @@ dynamically constructed argument object cannot bypass it.
 
 The current canonical operator story is intentionally bounded:
 
-- Source validation before execution belongs to `you workflow validate` and the
-  canonical Factory preview contract (`POST /factories/preview`).
+- Source validation before execution belongs to the canonical Factory preview
+  contract (`POST /factories/preview`) or MCP
+  `you.factory_session.validate_source`.
 - Durable JavaScript execution inspection belongs to `FactorySession`,
   `Dispatch`, `FactoryArtifact`, and `FactoryEvent` reads across CLI, API,
   dashboard, and MCP-compatible docs.

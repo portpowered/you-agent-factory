@@ -1,0 +1,54 @@
+{
+  "name": "factory-prompt-run-smoke",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "prompt-task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "mock-worker"
+    }
+  ],
+  "workstations": [
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "prompt-task"
+        }
+      ],
+      "name": "process-prompt",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "prompt-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "prompt-task"
+        }
+      ],
+      "worker": "mock-worker"
+    }
+  ]
+}

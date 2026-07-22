@@ -6249,12 +6249,6 @@ type WorkflowPolicyPreview struct {
 	ValidationIssues []WorkflowDiagnostic `json:"validationIssues"`
 }
 
-// WorkflowPreviewRequest defines model for WorkflowPreviewRequest.
-type WorkflowPreviewRequest = FactoryPreviewRequest
-
-// WorkflowPreviewResult defines model for WorkflowPreviewResult.
-type WorkflowPreviewResult = FactoryPreviewResult
-
 // WorkflowResultConstraints defines model for WorkflowResultConstraints.
 type WorkflowResultConstraints struct {
 	// ArtifactUriScheme URI scheme used for session-scoped artifact references.
@@ -6607,15 +6601,6 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
 
-// GetEventsParams defines parameters for GetEvents.
-type GetEventsParams struct {
-	// AfterEventId Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins.
-	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
-
-	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
-	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
-}
-
 // ListFactorySessionsParams defines parameters for ListFactorySessions.
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
@@ -6777,9 +6762,6 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
-
-// PreviewWorkflowJSONRequestBody defines body for PreviewWorkflow for application/json ContentType.
-type PreviewWorkflowJSONRequestBody = WorkflowPreviewRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -9054,9 +9036,6 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Stream process-global factory events (compatibility-only)
-	// (GET /events)
-	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
 	// Preview JavaScript orchestrator factory source
 	// (POST /factories/preview)
 	PreviewFactory(w http.ResponseWriter, r *http.Request)
@@ -9186,9 +9165,6 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
-	// Preview workflow validation and policy (obsolete)
-	// (POST /workflow-previews)
-	PreviewWorkflow(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -9199,41 +9175,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// GetEvents operation middleware
-func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetEventsParams
-
-	// ------------- Optional query parameter "after_event_id" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "after_sequence" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEvents(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // PreviewFactory operation middleware
 func (siw *ServerInterfaceWrapper) PreviewFactory(w http.ResponseWriter, r *http.Request) {
@@ -10523,20 +10464,6 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
-// PreviewWorkflow operation middleware
-func (siw *ServerInterfaceWrapper) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PreviewWorkflow(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -10650,8 +10577,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
-
 	r.HandleFunc(options.BaseURL+"/factories/preview", wrapper.PreviewFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
@@ -10737,8 +10662,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/workflow-previews", wrapper.PreviewWorkflow).Methods("POST")
 
 	return r
 }

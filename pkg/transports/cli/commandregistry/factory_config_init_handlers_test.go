@@ -6,11 +6,11 @@ import (
 	"io"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
@@ -79,7 +79,8 @@ func TestFactoryQueryRunEUsesHandwrittenServicePath(t *testing.T) {
 func TestConfigInitRunEUsesHandwrittenServicePath(t *testing.T) {
 	var called bool
 	runE := commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
-		JSON: func() bool { return true },
+		JSON:    func() bool { return true },
+		HomeDir: func() (string, error) { return t.TempDir(), nil },
 		Init: func(configinitcmd.InitConfig) error {
 			called = true
 			return nil
@@ -99,7 +100,7 @@ func TestConfigInitRunEUsesHandwrittenServicePath(t *testing.T) {
 func TestInitRunEUsesHandwrittenServicePath(t *testing.T) {
 	var called bool
 	runE := commandregistry.InitRunE(commandregistry.InitBinding{
-		Init: func(initcmd.InitConfig) error {
+		Init: func(factorydefinitions.ScaffoldConfig) error {
 			called = true
 			return nil
 		},
@@ -324,7 +325,7 @@ func TestInitRunEMapsBindings(t *testing.T) {
 		Executor: &executor,
 		Debug:    &debug,
 		Verbose:  func() bool { return true },
-		Init: func(cfg initcmd.InitConfig) error {
+		Init: func(cfg factorydefinitions.ScaffoldConfig) error {
 			if cfg.Dir != dir || cfg.Type != scaffoldType || cfg.Executor != executor || !cfg.Debug || !cfg.Verbose {
 				t.Fatalf("init config = %+v", cfg)
 			}

@@ -20,6 +20,8 @@ import (
 
 const testTimeout = 5 * time.Second
 
+const expectedProtocolVersion = "2025-11-25"
+
 func TestClientConnectsToRealServerThroughCallerSuppliedPipes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -40,8 +42,8 @@ func TestClientConnectsToRealServerThroughCallerSuppliedPipes(t *testing.T) {
 		t.Fatalf("Connect() error = %v", err)
 	}
 	result := client.InitializeResult()
-	if result.ProtocolVersion != "2024-11-05" {
-		t.Fatalf("protocol version = %q, want 2024-11-05", result.ProtocolVersion)
+	if result.ProtocolVersion != expectedProtocolVersion {
+		t.Fatalf("protocol version = %q, want %s", result.ProtocolVersion, expectedProtocolVersion)
 	}
 	if result.ServerInfo == nil || result.ServerInfo.Name != "pipe-test-server" {
 		t.Fatalf("server info = %#v, want pipe-test-server", result.ServerInfo)
@@ -107,8 +109,8 @@ func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameR
 
 func assertInitializeResult(t *testing.T, initialize *mcp.InitializeResult) {
 	t.Helper()
-	if initialize.ProtocolVersion != "2024-11-05" {
-		t.Fatalf("protocol version = %q, want 2024-11-05", initialize.ProtocolVersion)
+	if initialize.ProtocolVersion != expectedProtocolVersion {
+		t.Fatalf("protocol version = %q, want %s", initialize.ProtocolVersion, expectedProtocolVersion)
 	}
 	if initialize.ServerInfo == nil || initialize.ServerInfo.Name != "pipe-test-server" || initialize.ServerInfo.Version != "1.0.0" {
 		t.Fatalf("server info = %#v, want pipe-test-server 1.0.0", initialize.ServerInfo)
@@ -187,7 +189,7 @@ func TestConnectClassifiesInitializationEOFAsProtocolExchange(t *testing.T) {
 func newRealServer(t *testing.T) *mcpserver.Server {
 	t.Helper()
 	server, err := mcpserver.New(mcpserver.Options{
-		Client:        mcpfactorysession.NewClient(),
+		ToolOperation: protocolTestToolOperation,
 		ServerName:    "pipe-test-server",
 		ServerVersion: "1.0.0",
 	})
@@ -195,6 +197,20 @@ func newRealServer(t *testing.T) *mcpserver.Server {
 		t.Fatalf("server.New() error = %v", err)
 	}
 	return server
+}
+
+func protocolTestToolOperation(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+	if name != mcpfactorysession.ToolListSessions {
+		return nil, fmt.Errorf("unsupported tool %q", name)
+	}
+	var arguments map[string]any
+	if err := json.Unmarshal(input, &arguments); err != nil {
+		return nil, fmt.Errorf("decode list sessions input: %w", err)
+	}
+	if forceError, _ := arguments["forceError"].(bool); forceError {
+		return nil, errors.New("injected tool operation failure")
+	}
+	return json.RawMessage(`{"error":{"code":"SERVICE_UNAVAILABLE","message":"Factory Session execution service is unavailable","retryable":false}}`), nil
 }
 
 func assertErrorStage(t *testing.T, err error, want Stage) {

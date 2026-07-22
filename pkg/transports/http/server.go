@@ -4,19 +4,21 @@
 package http
 
 import (
-	"context"
-	"fmt"
 	"io"
 	"io/fs"
-	"net"
 	"net/http"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	dashboardui "github.com/portpowered/infinite-you/ui"
@@ -29,104 +31,83 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	runtime            apisurface.APISurface
-	sessionRuntime     apisurface.SessionAPISurface
+	runtime            apisurface.RuntimeAPI
+	factoryStatus      apisurface.FactoryStatusAPI
+	sessions           apisurface.LiveSessionAPI
+	work               apisurface.WorkAPI
+	workRead           apisurface.WorkReadAPI
+	invocation         apisurface.InvocationAPI
+	modelsHTTP         *modelshttp.Handler
+	factoryDefinitions apisurface.FactorySaveAPI
+	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
+	workflowPreview    factoryruntime.WorkflowPreviewOperation
+	durableExecution   apisurface.DurableSessionExecutionAPI
+	durableLifecycle   apisurface.DurableSessionLifecycleAPI
+	durableListing     apisurface.DurableSessionListingAPI
+	durableProjection  apisurface.DurableSessionProjectionAPI
+	durableLister      DurableExecutionSessionLister
+	liveSessionLister  factorysessionexecution.LiveSessionListReader
+	providerSessions   providersessions.Service
+	workerPrompts      workers.PromptTemplates
+	contentStaging     work.ContentStagingService
+	requestPreparation work.RequestPreparationService
+	sessionRequests    factorysessionexecution.RequestPreparation
 	logger             *zap.Logger
 	router             *mux.Router
-	port               int
-	codexSessionsRoot  string
-	cursorSessionsRoot cursorstorage.AgentStorageRoot
 }
 
-var noModTime = time.Time{}
-
-// NewServer creates a new API server.
-func NewServer(runtime apisurface.APISurface, port int, logger *zap.Logger) *Server {
-	return NewServerWithOptions(runtime, port, logger, ServerOptions{})
-}
-
-// ServerOptions configures optional API server boundaries.
-type ServerOptions struct {
-	CodexSessionsRoot  string
-	CursorSessionsRoot string
-}
-
-// NewServerWithOptions creates a new API server with explicit runtime
-// boundaries for tests and embedding processes.
-func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.Logger, opts ServerOptions) *Server {
-	cursorRoot, err := normalizeCursorSessionsRoot(opts.CursorSessionsRoot)
-	if err != nil {
-		logger.Warn("cursor sessions root unavailable; cursor provider-session detail disabled", zap.Error(err))
-		cursorRoot = ""
+// NewServer composes an immutable generated HTTP server from dependencies
+// selected by Wire and the opened Factory Session. It performs no dependency
+// construction or service lookup.
+func NewServer(
+	runtime apisurface.RuntimeAPI,
+	factoryStatus apisurface.FactoryStatusAPI,
+	sessions apisurface.LiveSessionAPI,
+	workAPI apisurface.WorkAPI,
+	workRead apisurface.WorkReadAPI,
+	invocation apisurface.InvocationAPI,
+	modelsHTTP *modelshttp.Handler,
+	factoryDefinitions apisurface.FactorySaveAPI,
+	factoryValidation factorydefinitions.SubmittedDefinitionValidationOperation,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
+	durableExecution apisurface.DurableSessionExecutionAPI,
+	durableLifecycle apisurface.DurableSessionLifecycleAPI,
+	durableListing apisurface.DurableSessionListingAPI,
+	durableProjection apisurface.DurableSessionProjectionAPI,
+	durableLister DurableExecutionSessionLister,
+	liveSessionLister factorysessionexecution.LiveSessionListReader,
+	providerSessions providersessions.Service,
+	workerPrompts workers.PromptTemplates,
+	contentStaging work.ContentStagingService,
+	requestPreparation work.RequestPreparationService,
+	sessionRequests factorysessionexecution.RequestPreparation,
+	logger *zap.Logger,
+) *Server {
+	if logger == nil {
+		logger = zap.NewNop()
 	}
 	srv := &Server{
-		runtime:            runtime,
-		logger:             logger,
-		port:               port,
-		codexSessionsRoot:  normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
-		cursorSessionsRoot: cursorRoot,
-	}
-	if sessionRuntime, ok := runtime.(apisurface.SessionAPISurface); ok {
-		srv.sessionRuntime = sessionRuntime
+		runtime: runtime, factoryStatus: factoryStatus,
+		sessions: sessions, work: workAPI, workRead: workRead,
+		invocation: invocation, modelsHTTP: modelsHTTP,
+		factoryDefinitions: factoryDefinitions, factoryValidation: factoryValidation,
+		workflowPreview:  workflowPreview,
+		durableExecution: durableExecution, durableLifecycle: durableLifecycle,
+		durableListing: durableListing, durableProjection: durableProjection,
+		durableLister: durableLister, liveSessionLister: liveSessionLister,
+		providerSessions: providerSessions, workerPrompts: workerPrompts,
+		contentStaging: contentStaging, requestPreparation: requestPreparation,
+		sessionRequests: sessionRequests, logger: logger,
 	}
 	srv.router = srv.buildRouter()
 	return srv
 }
 
-func normalizeCodexSessionsRoot(root string) string {
-	if root != "" {
-		return filepath.Clean(root)
-	}
-	return defaultCodexSessionsRoot()
-}
-
-func normalizeCursorSessionsRoot(root string) (cursorstorage.AgentStorageRoot, error) {
-	if root != "" {
-		normalized, err := cursorstorage.NormalizeAgentStorageRoot(root)
-		if err != nil {
-			return "", err
-		}
-		return normalized, nil
-	}
-	return cursorstorage.DefaultAgentStorageRoot()
-}
+var noModTime = time.Time{}
 
 // Handler returns the http.Handler for testing and composition.
 func (s *Server) Handler() http.Handler {
 	return s.router
-}
-
-// ListenAndServe starts the HTTP server. Blocks until ctx is cancelled.
-func (s *Server) ListenAndServe(ctx context.Context) error {
-	addr := fmt.Sprintf(":%d", s.port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	return s.Serve(ctx, listener)
-}
-
-// Serve starts the HTTP server on an already-bound listener. Blocks until ctx
-// is cancelled or the server fails.
-func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
-	httpSrv := &http.Server{
-		Handler: s.router,
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("API server starting", zap.String("addr", listener.Addr().String()))
-		if err := httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return httpSrv.Close()
-	case err := <-errCh:
-		return err
-	}
 }
 
 func (s *Server) buildRouter() *mux.Router {

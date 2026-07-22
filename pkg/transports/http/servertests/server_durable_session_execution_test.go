@@ -8,26 +8,34 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSession(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-runtime-async-001"
+	service := apiExecutionScript{
+		startAsync: func(_ context.Context, request factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
+			if request.RequestID != "req-api-runtime-async-001" {
+				t.Fatalf("requestId = %q", request.RequestID)
+			}
+			return factorysessionexecution.AsyncStartResult{
+				SessionID:        sessionID,
+				Status:           string(factorysessionexecution.LifecycleStatusRunning),
+				OrchestratorKind: "JAVASCRIPT",
+				ResolvedSource: factorysessionexecution.ResolvedSource{
+					SourceRef: factory.WorkflowSourceProjectClaudeWorkflowsDir + "/simple-final.js",
+				},
+				Links: apiInspectionLinks(sessionID),
+			}, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -45,7 +53,7 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 	if first.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", first.OrchestratorKind)
 	}
-	if first.ResolvedSource.SourceRef == nil || *first.ResolvedSource.SourceRef != workflowsource.ProjectClaudeWorkflowsDir+"/simple-final.js" {
+	if first.ResolvedSource.SourceRef == nil || *first.ResolvedSource.SourceRef != factory.WorkflowSourceProjectClaudeWorkflowsDir+"/simple-final.js" {
 		t.Fatalf("resolved source ref = %#v", first.ResolvedSource.SourceRef)
 	}
 	if first.Links == nil || first.Links.Session == nil || *first.Links.Session != "/factory-sessions/"+first.SessionId {
@@ -59,18 +67,29 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 	if replay.Status != first.Status {
 		t.Fatalf("replay status = %q, want %q", replay.Status, first.Status)
 	}
-	waitForRuntimeSessionTerminal(t, service, first.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-runtime-conflict-001"
+	call := 0
+	service := apiExecutionScript{
+		startAsync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
+			call++
+			if call == 1 {
+				return factorysessionexecution.AsyncStartResult{
+					SessionID: sessionID,
+					Status:    string(factorysessionexecution.LifecycleStatusRunning),
+				}, nil
+			}
+			return factorysessionexecution.AsyncStartResult{}, factorysessionexecution.ErrExecutionRequestIDConflict
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
 	first := runtimeBackedAsyncStartRequest("req-api-runtime-conflict-001")
-	firstResponse, err := postDurableAsyncStartRaw(t, server.URL, first)
+	_, err := postDurableAsyncStartRaw(t, server.URL, first)
 	if err != nil {
 		t.Fatalf("first start: %v", err)
 	}
@@ -88,13 +107,25 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 	if errResp.Code != factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT {
 		t.Fatalf("code = %q, want EXECUTION_REQUEST_ID_CONFLICT", errResp.Code)
 	}
-	waitForRuntimeSessionTerminal(t, service, firstResponse.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-api-runtime-valid-001"
+	call := 0
+	service := apiExecutionScript{
+		startAsync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
+			call++
+			if call == 1 {
+				return factorysessionexecution.AsyncStartResult{},
+					&factorysessionexecution.ExecutionValidationError{Field: "source", Message: "missing workflow"}
+			}
+			return factorysessionexecution.AsyncStartResult{
+				SessionID: sessionID,
+				Status:    string(factorysessionexecution.LifecycleStatusRunning),
+			}, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -113,13 +144,11 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 	if started.SessionId == "" {
 		t.Fatal("expected valid start to create a session")
 	}
-	waitForRuntimeSessionTerminal(t, service, started.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	service := apiExecutionScript{}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -213,135 +242,107 @@ func postDurableAsyncStartExpectError(
 	return resp.StatusCode, errResp
 }
 
-func setupAPIRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
-	t.Helper()
-	projectRoot := t.TempDir()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", fixtureName, err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, workflowName+".js"), raw, 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return projectRoot
-}
-
-func newAPIJavaScriptExecutionService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) factorysessionexecution.Service {
-	t.Helper()
-	service, err := testharness.New(testharness.Config{
-		Mode:              testharness.ModeJavaScript,
-		ProjectRoot:       projectRoot,
-		Clock:             platformclock.Real{},
-		Provider:          provider,
-		Persistence:       runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
-		ChildExecutorMode: childExecutorMode,
-	})
-	if err != nil {
-		t.Fatalf("compose API JavaScript execution service: %v", err)
-	}
-	t.Cleanup(func() {
-		drainAPILifecycleRuntimeSessions(t, service)
-		removeAPILifecycleProjectState(t, projectRoot)
-	})
-	return service
-}
-
-func newAPIJavaScriptRuntimeService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) *factorysessionexecution.JavaScriptRuntimeService {
-	t.Helper()
-	service := newAPIJavaScriptExecutionService(t, projectRoot, childExecutorMode, provider)
-	runtimeService, ok := service.(*factorysessionexecution.JavaScriptRuntimeService)
-	if !ok {
-		t.Fatalf("API JavaScript harness returned %T", service)
-	}
-	return runtimeService
-}
-
-func newAPIFakeExecutionService(t *testing.T, options ...factorysessionexecution.FakeServiceOption) *factorysessionexecution.FakeService {
-	t.Helper()
-	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeOptions: options})
-	if err != nil {
-		t.Fatalf("compose API fake execution service: %v", err)
-	}
-	fakeService, ok := service.(*factorysessionexecution.FakeService)
-	if !ok {
-		t.Fatalf("API fake harness returned %T", service)
-	}
-	return fakeService
-}
-
-func newAPIFixtureExecutionService(t *testing.T, fixturePath string) *factorysessionexecution.FakeService {
-	t.Helper()
-	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeFixturePath: fixturePath})
-	if err != nil {
-		t.Fatalf("compose API fixture execution service: %v", err)
-	}
-	fakeService, ok := service.(*factorysessionexecution.FakeService)
-	if !ok {
-		t.Fatalf("API fixture harness returned %T", service)
-	}
-	return fakeService
-}
-
 func strPtr(value string) *string {
 	return &value
 }
 
 func TestLifecycleControls_PreserveRunningSessionReadParity(t *testing.T) {
-	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-	started := startRuntimeBackedDurableSession(t, service)
+	const sessionID = "dur-sess-running-parity-001"
+	status := factorysessionexecution.LifecycleStatusRunning
+	events := apiTerminalEvents(sessionID)
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			read.Status = status
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatusRunning), nil
+		},
+		listSessions: func(context.Context, factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsResult, error) {
+			return factorysessionexecution.ListSessionsResult{
+				Scope: factorysessionexecution.SessionListScopeAll,
+				DurableSessions: []factorysessionexecution.DurableSessionListSummary{{
+					SessionID: sessionID, Status: status,
+				}},
+			}, nil
+		},
+		pause: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			status = factorysessionexecution.LifecycleStatusPaused
+			return apiControlResult(sessionID, "PAUSE", factorysessionexecution.LifecycleControlOutcomeAccepted, status), nil
+		},
+		resume: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			status = factorysessionexecution.LifecycleStatusRunning
+			return apiControlResult(sessionID, "RESUME", factorysessionexecution.LifecycleControlOutcomeAccepted, status), nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			if request.AfterEventID != "" {
+				result := events
+				result.Events = result.Events[1:]
+				return result, nil
+			}
+			return events, nil
+		},
+	}
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newDurableAndLiveAPITestServer(service, apiLiveSessionScript{
+		list: func(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+			return factoryapi.ListFactorySessionsResponse{}, nil
+		},
+	})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	beforeRead := getDurableFactorySession(t, server.URL, started.SessionID)
-	assertDurableSessionInspectionLinks(t, started.SessionID, beforeRead.Links)
-	beforeResult := getDurableFactorySessionResult(t, server.URL, started.SessionID, "")
-	beforeEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	beforeRead := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, beforeRead.Links)
+	beforeResult := getDurableFactorySessionResult(t, server.URL, sessionID, "")
+	beforeEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 	beforeList := getFactorySessionList(t, server.URL, "all")
 
-	pauseResp, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil)
+	pauseResp, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "pause", nil)
 	if pauseStatus != http.StatusOK {
 		t.Fatalf("pause status = %d, want 200", pauseStatus)
 	}
-	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, pauseResp.Links)
-	assertReadSurfacesReachableAfterLifecycle(t, server.URL, started.SessionID)
-	currentEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
-	assertEventReconnectStillWorks(t, server.URL, started.SessionID, currentEvents)
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, pauseResp.Links)
+	assertReadSurfacesReachableAfterLifecycle(t, server.URL, sessionID)
+	currentEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
+	assertEventReconnectStillWorks(t, server.URL, sessionID, currentEvents)
 
-	pausedRead := getDurableFactorySession(t, server.URL, started.SessionID)
+	pausedRead := getDurableFactorySession(t, server.URL, sessionID)
 	if pausedRead.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf("status after pause = %q, want PAUSED", pausedRead.Status)
 	}
-	assertDurableSessionInspectionLinks(t, started.SessionID, pausedRead.Links)
+	assertDurableSessionInspectionLinks(t, sessionID, pausedRead.Links)
 
-	resumeResp, resumeStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "resume", nil)
+	resumeResp, resumeStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "resume", nil)
 	if resumeStatus != http.StatusOK {
 		t.Fatalf("resume status = %d, want 200", resumeStatus)
 	}
-	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, resumeResp.Links)
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, resumeResp.Links)
 
-	afterRead := getDurableFactorySession(t, server.URL, started.SessionID)
+	afterRead := getDurableFactorySession(t, server.URL, sessionID)
 	if afterRead.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("status after resume = %q, want RUNNING", afterRead.Status)
 	}
-	assertDurableSessionInspectionLinks(t, started.SessionID, afterRead.Links)
+	assertDurableSessionInspectionLinks(t, sessionID, afterRead.Links)
 
-	afterResult := getDurableFactorySessionResult(t, server.URL, started.SessionID, "")
+	afterResult := getDurableFactorySessionResult(t, server.URL, sessionID, "")
 	assertDurableSessionResultUnchanged(t, beforeResult, afterResult)
 
-	afterEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	afterEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 	if len(afterEvents) < len(beforeEvents) {
 		t.Fatalf("event count after lifecycle = %d, want at least %d", len(afterEvents), len(beforeEvents))
 	}
 
 	afterList := getFactorySessionList(t, server.URL, "all")
-	if !containsSessionInListResponse(afterList, started.SessionID) {
-		t.Fatalf("all-scope list = %#v, want session %q", afterList, started.SessionID)
+	if !containsSessionInListResponse(afterList, sessionID) {
+		t.Fatalf("all-scope list = %#v, want session %q", afterList, sessionID)
 	}
 	if len(afterList.Sessions) < len(beforeList.Sessions) {
 		t.Fatalf("all-scope session count = %d, want at least %d",
@@ -366,148 +367,208 @@ func containsSessionInListResponse(response factoryapi.ListFactorySessionsRespon
 }
 
 func TestLifecycleControls_PreserveCompletedSessionReadParity(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	const sessionID = "dur-sess-completed-parity-001"
+	events := apiTerminalEvents(sessionID)
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			return terminalAPIReadResult(sessionID), nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return finalAPIResult(sessionID), nil
+		},
+		pause: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return factorysessionexecution.LifecycleControlResult{},
+				apiControlError("PAUSE", factorysessionexecution.LifecycleControlOutcomeTerminalSession, factorysessionexecution.LifecycleStatusSucceeded)
+		},
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			if request.AfterEventID != "" {
+				result := events
+				result.Events = result.Events[1:]
+				return result, nil
+			}
+			return events, nil
+		},
+	}
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	started := postDurableAsyncStart(t, server.URL, runtimeBackedAsyncStartRequest("req-api-lifecycle-read-parity-001"))
-	waitForRuntimeSessionTerminal(t, service, started.SessionId)
+	beforeRead := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, beforeRead.Links)
+	beforeResult := getDurableFactorySessionResult(t, server.URL, sessionID, "")
+	beforeEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 
-	beforeRead := getDurableFactorySession(t, server.URL, started.SessionId)
-	assertDurableSessionInspectionLinks(t, started.SessionId, beforeRead.Links)
-	beforeResult := getDurableFactorySessionResult(t, server.URL, started.SessionId, "")
-	beforeEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionId, "")
-
-	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionId, "pause", nil)
+	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "pause", nil)
 	if pauseStatus != http.StatusConflict {
 		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
 	}
 
-	afterRead := getDurableFactorySession(t, server.URL, started.SessionId)
+	afterRead := getDurableFactorySession(t, server.URL, sessionID)
 	assertDurableSessionReadUnchanged(t, beforeRead, afterRead)
-	assertDurableSessionInspectionLinks(t, started.SessionId, afterRead.Links)
+	assertDurableSessionInspectionLinks(t, sessionID, afterRead.Links)
 
-	afterResult := getDurableFactorySessionResult(t, server.URL, started.SessionId, "")
+	afterResult := getDurableFactorySessionResult(t, server.URL, sessionID, "")
 	assertDurableSessionResultUnchanged(t, beforeResult, afterResult)
 
-	afterEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionId, "")
+	afterEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 	if len(afterEvents) != len(beforeEvents) {
 		t.Fatalf("event count = %d, want %d after rejected lifecycle control", len(afterEvents), len(beforeEvents))
 	}
-	assertEventReconnectStillWorks(t, server.URL, started.SessionId, beforeEvents)
+	assertEventReconnectStillWorks(t, server.URL, sessionID, beforeEvents)
 }
 
 func TestLifecycleControls_PreserveDispatchArtifactReadParity(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
-	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-api-lifecycle-dispatch-parity-001",
-		Source: factorysessionexecution.Source{
-			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "agent-run-fake-child",
-		},
-		Args: map[string]any{"subject": "workflows"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
+	const sessionID = interruptSessionID
+	service := completedProviderScript("fake", "fake-provider-session-1", "fake")
+	service.pause = func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+		return factorysessionexecution.LifecycleControlResult{},
+			apiControlError("PAUSE", factorysessionexecution.LifecycleControlOutcomeTerminalSession, factorysessionexecution.LifecycleStatusSucceeded)
 	}
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	beforeRead := getDurableFactorySession(t, server.URL, completed.SessionID)
-	assertDurableSessionInspectionLinks(t, completed.SessionID, beforeRead.Links)
-	beforeDispatchList := getDurableDispatchList(t, server.URL, completed.SessionID)
-	beforeDispatchDetail := getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
-	beforeArtifactList := getDurableArtifactList(t, server.URL, completed.SessionID)
+	beforeRead := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, beforeRead.Links)
+	beforeDispatchList := getDurableDispatchList(t, server.URL, sessionID)
+	beforeDispatchDetail := getDurableDispatchDetail(t, server.URL, sessionID, "dispatch-1")
+	beforeArtifactList := getDurableArtifactList(t, server.URL, sessionID)
 
-	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
+	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "pause", nil)
 	if pauseStatus != http.StatusConflict {
 		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
 	}
 
-	afterRead := getDurableFactorySession(t, server.URL, completed.SessionID)
+	afterRead := getDurableFactorySession(t, server.URL, sessionID)
 	assertDurableSessionReadUnchanged(t, beforeRead, afterRead)
-	assertDurableSessionInspectionLinks(t, completed.SessionID, afterRead.Links)
+	assertDurableSessionInspectionLinks(t, sessionID, afterRead.Links)
 
-	afterDispatchList := getDurableDispatchList(t, server.URL, completed.SessionID)
+	afterDispatchList := getDurableDispatchList(t, server.URL, sessionID)
 	assertDispatchListUnchanged(t, beforeDispatchList, afterDispatchList)
-	afterDispatchDetail := getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
+	afterDispatchDetail := getDurableDispatchDetail(t, server.URL, sessionID, "dispatch-1")
 	assertDispatchDetailUnchanged(t, beforeDispatchDetail, afterDispatchDetail)
-	afterArtifactList := getDurableArtifactList(t, server.URL, completed.SessionID)
+	afterArtifactList := getDurableArtifactList(t, server.URL, sessionID)
 	assertArtifactListUnchanged(t, beforeArtifactList, afterArtifactList)
 }
 
 func TestLifecycleControls_CancelPreservesReadSurfaces(t *testing.T) {
-	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-	started := startRuntimeBackedDurableSession(t, service)
+	const sessionID = "dur-sess-cancel-surfaces-001"
+	events := apiTerminalEvents(sessionID)
+	service := apiExecutionScript{
+		cancel: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return apiControlResult(sessionID, "CANCEL", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatusCanceling), nil
+		},
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			read.Status = factorysessionexecution.LifecycleStatus("CANCELED")
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatus("CANCELED")), nil
+		},
+		listSessions: func(context.Context, factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsResult, error) {
+			return factorysessionexecution.ListSessionsResult{
+				Scope:           factorysessionexecution.SessionListScopeAll,
+				DurableSessions: []factorysessionexecution.DurableSessionListSummary{{SessionID: sessionID, Status: factorysessionexecution.LifecycleStatus("CANCELED")}},
+			}, nil
+		},
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return events, nil
+		},
+	}
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	beforeEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	beforeEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 
-	_, cancelStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "cancel", nil)
+	_, cancelStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "cancel", nil)
 	if cancelStatus != http.StatusAccepted {
 		t.Fatalf("cancel status = %d, want 202", cancelStatus)
 	}
 
-	read := getDurableFactorySession(t, server.URL, started.SessionID)
-	assertDurableSessionInspectionLinks(t, started.SessionID, read.Links)
+	read := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, read.Links)
 	if read.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling &&
 		read.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
 		t.Fatalf("status after cancel = %q, want CANCELING or CANCELED", read.Status)
 	}
 
-	getDurableFactorySessionResult(t, server.URL, started.SessionID, "")
+	getDurableFactorySessionResult(t, server.URL, sessionID, "")
 	getFactorySessionList(t, server.URL, "persisted")
 
-	afterEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	afterEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 	if len(afterEvents) < len(beforeEvents) {
 		t.Fatalf("event count after cancel = %d, want at least %d", len(afterEvents), len(beforeEvents))
 	}
 }
 
 func TestLifecycleControls_TerminatePreservesReadSurfaces(t *testing.T) {
-	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-	started := startRuntimeBackedDurableSession(t, service)
+	const sessionID = "dur-sess-terminate-surfaces-001"
+	events := apiTerminalEvents(sessionID)
+	service := apiExecutionScript{
+		terminate: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return apiControlResult(sessionID, "TERMINATE", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatus("TERMINATED")), nil
+		},
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			read.Status = factorysessionexecution.LifecycleStatus("TERMINATED")
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatus("TERMINATED")), nil
+		},
+		listSessions: func(context.Context, factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsResult, error) {
+			return factorysessionexecution.ListSessionsResult{
+				Scope:           factorysessionexecution.SessionListScopeAll,
+				DurableSessions: []factorysessionexecution.DurableSessionListSummary{{SessionID: sessionID, Status: "TERMINATED"}},
+			}, nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return events, nil
+		},
+	}
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	beforeRead := getDurableFactorySession(t, server.URL, started.SessionID)
-	assertDurableSessionInspectionLinks(t, started.SessionID, beforeRead.Links)
-	beforeEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	beforeRead := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, beforeRead.Links)
+	beforeEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 
-	terminateResp, terminateStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "terminate", nil)
+	terminateResp, terminateStatus := postFactorySessionLifecycleControl(t, server.URL, sessionID, "terminate", nil)
 	if terminateStatus != http.StatusOK {
 		t.Fatalf("terminate status = %d, want 200", terminateStatus)
 	}
 	if terminateResp.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated {
 		t.Fatalf("control status = %q, want TERMINATED", terminateResp.Status)
 	}
-	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, terminateResp.Links)
-	assertReadSurfacesReachableAfterLifecycle(t, server.URL, started.SessionID)
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, terminateResp.Links)
+	assertReadSurfacesReachableAfterLifecycle(t, server.URL, sessionID)
 
-	read := getDurableFactorySession(t, server.URL, started.SessionID)
-	assertDurableSessionInspectionLinks(t, started.SessionID, read.Links)
+	read := getDurableFactorySession(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, read.Links)
 	if read.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated &&
 		read.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
 		t.Fatalf("status after terminate = %q, want TERMINATED or CANCELED", read.Status)
 	}
-	if read.SessionId != started.SessionID {
-		t.Fatalf("session id after terminate = %q, want %q", read.SessionId, started.SessionID)
+	if read.SessionId != sessionID {
+		t.Fatalf("session id after terminate = %q, want %q", read.SessionId, sessionID)
 	}
 
-	getDurableFactorySessionResult(t, server.URL, started.SessionID, "")
+	getDurableFactorySessionResult(t, server.URL, sessionID, "")
 	getFactorySessionList(t, server.URL, "persisted")
 
-	afterEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	afterEvents := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
 	if len(afterEvents) < len(beforeEvents) {
 		t.Fatalf("event count after terminate = %d, want at least %d", len(afterEvents), len(beforeEvents))
 	}
@@ -839,18 +900,51 @@ func assertDurableSessionPartialResultStillInspectable(
 	}
 }
 
-func startBusyLoopRuntimeBackedLifecycleServer(t *testing.T) (serverURL, sessionID string) {
-	t.Helper()
-	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-	started := startRuntimeBackedDurableSession(t, service)
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-	server := httptest.NewServer(srv.Handler())
-	t.Cleanup(server.Close)
-	return server.URL, started.SessionID
-}
-
 func TestLifecycleControls_PauseResumePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+	const sessionID = "dur-sess-partial-pause-resume-001"
+	status := factorysessionexecution.LifecycleStatusRunning
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			read.Status = status
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, status), nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		pause: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			status = factorysessionexecution.LifecycleStatusPaused
+			return apiControlResult(sessionID, "PAUSE", factorysessionexecution.LifecycleControlOutcomeAccepted, status), nil
+		},
+		resume: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			status = factorysessionexecution.LifecycleStatusRunning
+			return apiControlResult(sessionID, "RESUME", factorysessionexecution.LifecycleControlOutcomeAccepted, status), nil
+		},
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			eventType := "SESSION_RESUMED"
+			if status == factorysessionexecution.LifecycleStatusPaused {
+				eventType = "SESSION_PAUSED"
+			}
+			result := factorysessionexecution.EventReadResult{
+				SessionID: sessionID,
+				Events: []json.RawMessage{
+					apiCanonicalEvent("session-started/"+sessionID, "SESSION_STARTED", sessionID, 1),
+					apiCanonicalEvent("session-control/"+sessionID, eventType, sessionID, 2),
+				},
+			}
+			if request.AfterEventID != "" {
+				result.Events = result.Events[1:]
+			}
+			return result, nil
+		},
+	}
+	serverURL := durableRoleHTTPServer(t, service)
 
 	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 	assertDurableSessionInspectionLinks(t, sessionID, before.read.Links)
@@ -901,10 +995,25 @@ func TestLifecycleControls_PauseResumePreservesInspectablePartialStateAcrossRead
 }
 
 func TestLifecycleControls_RetryDispatchPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	service := newAPILifecycleFailingChildRuntimeService(t)
-	sessionID, dispatchID := startRuntimeBackedFailedSessionWithDispatch(t, service)
+	const sessionID = interruptSessionID
+	const dispatchID = interruptDispatchID
+	retried := false
+	service := failedProviderScript()
+	service.retryDispatch = func(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
+		retried = true
+		result := apiControlResult(sessionID, "RETRY_DISPATCH", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatusRunning)
+		result.RetryDispatchID = dispatchID
+		return result, nil
+	}
+	originalRead := service.getSession
+	service.getSession = func(ctx context.Context, id string) (factorysessionexecution.SessionReadResult, error) {
+		if retried {
+			return runningAPIReadResult(sessionID), nil
+		}
+		return originalRead(ctx, id)
+	}
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -937,7 +1046,29 @@ func TestLifecycleControls_RetryDispatchPreservesInspectablePartialStateAcrossRe
 }
 
 func TestLifecycleControls_ApproveInvalidStatePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+	const sessionID = "dur-sess-approve-partial-001"
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			return runningAPIReadResult(sessionID), nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			return notReadyAPIResult(sessionID, factorysessionexecution.LifecycleStatusRunning), nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		readEvents: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			return apiTerminalEvents(sessionID), nil
+		},
+		approve: func(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			return factorysessionexecution.LifecycleControlResult{},
+				apiControlError("APPROVE", factorysessionexecution.LifecycleControlOutcomeInvalidState, factorysessionexecution.LifecycleStatusRunning)
+		},
+	}
+	serverURL := durableRoleHTTPServer(t, service)
 
 	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 
@@ -955,7 +1086,42 @@ func TestLifecycleControls_ApproveInvalidStatePreservesInspectablePartialStateAc
 }
 
 func TestLifecycleControls_CancelPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+	const sessionID = "dur-sess-cancel-partial-001"
+	canceled := false
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			if canceled {
+				read.Status = factorysessionexecution.LifecycleStatus("CANCELED")
+			}
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			status := factorysessionexecution.LifecycleStatusRunning
+			if canceled {
+				status = factorysessionexecution.LifecycleStatus("CANCELED")
+			}
+			return notReadyAPIResult(sessionID, status), nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			result := apiTerminalEvents(sessionID)
+			if request.AfterEventID != "" {
+				result.Events = result.Events[1:]
+			}
+			return result, nil
+		},
+		cancel: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			canceled = true
+			return apiControlResult(sessionID, "CANCEL", factorysessionexecution.LifecycleControlOutcomeAccepted, factorysessionexecution.LifecycleStatusCanceling), nil
+		},
+	}
+	serverURL := durableRoleHTTPServer(t, service)
 
 	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 
@@ -974,7 +1140,42 @@ func TestLifecycleControls_CancelPreservesInspectablePartialStateAcrossReadSurfa
 }
 
 func TestLifecycleControls_TerminatePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+	const sessionID = "dur-sess-terminate-partial-001"
+	terminated := false
+	service := apiExecutionScript{
+		getSession: func(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+			read := runningAPIReadResult(sessionID)
+			if terminated {
+				read.Status = "TERMINATED"
+			}
+			return read, nil
+		},
+		getResult: func(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+			status := factorysessionexecution.LifecycleStatusRunning
+			if terminated {
+				status = "TERMINATED"
+			}
+			return notReadyAPIResult(sessionID, status), nil
+		},
+		listDispatches: func(context.Context, string) (factorysessionexecution.ListDispatchesResult, error) {
+			return factorysessionexecution.ListDispatchesResult{SessionID: sessionID, Dispatches: []factorysessionexecution.DispatchSummary{}}, nil
+		},
+		listArtifacts: func(context.Context, string) (factorysessionexecution.ListArtifactsResult, error) {
+			return factorysessionexecution.ListArtifactsResult{SessionID: sessionID, Artifacts: []factorysessionexecution.ArtifactSummary{}}, nil
+		},
+		readEvents: func(_ context.Context, _ string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+			result := apiTerminalEvents(sessionID)
+			if request.AfterEventID != "" {
+				result.Events = result.Events[1:]
+			}
+			return result, nil
+		},
+		terminate: func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+			terminated = true
+			return apiControlResult(sessionID, "TERMINATE", factorysessionexecution.LifecycleControlOutcomeAccepted, "TERMINATED"), nil
+		},
+	}
+	serverURL := durableRoleHTTPServer(t, service)
 
 	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 

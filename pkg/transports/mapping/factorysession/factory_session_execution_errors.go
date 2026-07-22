@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -26,7 +26,7 @@ func ExecutionErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		}, true
 	}
 
-	var validationErr *factorysessionexecution.ValidationError
+	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: validationErr.Message,

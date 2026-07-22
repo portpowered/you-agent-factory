@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -24,33 +24,34 @@ type DurableLifecycleAPI interface {
 	ApproveDurableFactorySession(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error)
 	RetryDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
 	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+	ProbeDurableFactorySessionEvents(context.Context, string, factorysessionexecution.EventReconnectRequest) error
 }
 
 // DurableAPI owns public durable-session request/result translation over the
 // execution service and the bounded lifecycle router. Compatibility facades
 // and composed transports both delegate to this adapter.
 type DurableAPI struct {
-	execution factorysessionexecution.Service
+	execution factorysessionexecution.ExecutionService
 	lifecycle DurableLifecycleAPI
 }
 
 // NewDurableAPI composes the canonical durable HTTP collaborator.
-func NewDurableAPI(execution factorysessionexecution.Service, lifecycle DurableLifecycleAPI) *DurableAPI {
+func NewDurableAPI(
+	execution factorysessionexecution.ExecutionService,
+	lifecycle DurableLifecycleAPI,
+) *DurableAPI {
 	return &DurableAPI{execution: execution, lifecycle: lifecycle}
 }
 
-func (api *DurableAPI) executionService() (factorysessionexecution.Service, error) {
+func (api *DurableAPI) executionService() (factorysessionexecution.ExecutionService, error) {
 	if api == nil || api.execution == nil {
-		return nil, factorysessionexecution.ErrServiceNotConfigured
+		return nil, factorysessionexecution.ErrExecutionServiceNotConfigured
 	}
 	return api.execution, nil
 }
 
-func (api *DurableAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
-	startReq, err := StartRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionExecutionResponse{}, err
-	}
+func (api *DurableAPI) StartDurableFactorySessionAsync(ctx context.Context, startReq factorysessionexecution.StartRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 	execution, err := api.executionService()
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
@@ -62,11 +63,7 @@ func (api *DurableAPI) StartDurableFactorySessionAsync(ctx context.Context, requ
 	return AsyncStartResponseToAPI(result), nil
 }
 
-func (api *DurableAPI) StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error) {
-	startReq, err := StartRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionSyncExecutionResponse{}, err
-	}
+func (api *DurableAPI) StartDurableFactorySessionSync(ctx context.Context, startReq factorysessionexecution.StartRequest) (factoryapi.FactorySessionSyncExecutionResponse, error) {
 	execution, err := api.executionService()
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
@@ -78,11 +75,7 @@ func (api *DurableAPI) StartDurableFactorySessionSync(ctx context.Context, reque
 	return SyncStartResponseToAPI(result), nil
 }
 
-func (api *DurableAPI) ListDurableFactorySessions(ctx context.Context, params factoryapi.ListFactorySessionsParams) (factoryapi.ListFactorySessionsResponse, error) {
-	req, err := ListSessionsRequestFromAPI(params)
-	if err != nil {
-		return factoryapi.ListFactorySessionsResponse{}, err
-	}
+func (api *DurableAPI) ListDurableFactorySessions(ctx context.Context, req factorysessionexecution.ListSessionsRequest) (factoryapi.ListFactorySessionsResponse, error) {
 	execution, err := api.executionService()
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
@@ -106,11 +99,7 @@ func (api *DurableAPI) GetDurableFactorySession(ctx context.Context, sessionID s
 	return SessionReadResponseToAPI(result), nil
 }
 
-func (api *DurableAPI) GetDurableFactorySessionResult(ctx context.Context, sessionID string, params factoryapi.GetFactorySessionResultsParams) (factoryapi.FactorySessionResult, error) {
-	req, err := ResultRequestFromAPI(params)
-	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
-	}
+func (api *DurableAPI) GetDurableFactorySessionResult(ctx context.Context, sessionID string, req factorysessionexecution.ResultRequest) (factoryapi.FactorySessionResult, error) {
 	execution, err := api.executionService()
 	if err != nil {
 		return factoryapi.FactorySessionResult{}, err
@@ -122,18 +111,13 @@ func (api *DurableAPI) GetDurableFactorySessionResult(ctx context.Context, sessi
 	return ResultResponseToAPI(result), nil
 }
 
-func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*interfaces.FactoryEventStream, error) {
-	reconnect, err := EventReconnectRequestFromAPI(params)
-	if err != nil {
-		return nil, err
+func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, reconnect factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+	if api == nil || api.lifecycle == nil {
+		return nil, factorysessionexecution.ErrExecutionServiceNotConfigured
 	}
-	execution, err := api.executionService()
+	stream, err := api.lifecycle.ReadDurableFactorySessionEventStream(ctx, sessionID, reconnect)
 	if err != nil {
-		return nil, err
-	}
-	result, err := execution.ReadEvents(ctx, sessionID, reconnect)
-	if err != nil {
-		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 			return nil, apisurface.ErrFactorySessionNotFound
 		}
 		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
@@ -141,7 +125,21 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 		}
 		return nil, err
 	}
-	return FactoryEventStreamFromReadResult(result), nil
+	return stream, nil
+}
+
+func (api *DurableAPI) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, reconnect factorysessionexecution.EventReconnectRequest) error {
+	if api == nil || api.lifecycle == nil {
+		return factorysessionexecution.ErrExecutionServiceNotConfigured
+	}
+	err := api.lifecycle.ProbeDurableFactorySessionEvents(ctx, sessionID, reconnect)
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
+		return apisurface.ErrFactorySessionNotFound
+	}
+	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+		return fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
+	}
+	return err
 }
 
 func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string, params factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
@@ -156,7 +154,9 @@ func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, 
 	if params.Status != nil {
 		filters.Status = factorysessionexecution.DispatchStatus(*params.Status)
 	}
-	result, err := factorysessionexecution.QueryDispatches(ctx, execution, sessionID, filters)
+	result, err := execution.QueryDispatches(ctx, factorysessionexecution.DispatchQueryRequest{
+		SessionID: sessionID, Filters: filters,
+	})
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
@@ -199,65 +199,37 @@ func (api *DurableAPI) GetDurableFactorySessionArtifact(ctx context.Context, ses
 	return ArtifactDetailResponseToAPI(result), nil
 }
 
-func (api *DurableAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.PauseDurableFactorySession(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) ResumeDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) ResumeDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.ResumeDurableFactorySession(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) CancelDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) CancelDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.CancelDurableFactorySession(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) TerminateDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) TerminateDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.TerminateDurableFactorySession(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) ApproveDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	approve, err := ApproveRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) ApproveDurableFactorySession(ctx context.Context, sessionID string, approve factorysessionexecution.ApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.ApproveDurableFactorySession(ctx, sessionID, approve)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	retry, err := RetryDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, retry factorysessionexecution.RetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.RetryDurableFactorySessionDispatch(ctx, sessionID, retry)
 	return lifecycleResultToAPI(result, err)
 }
 
-func (api *DurableAPI) InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	interrupt, err := InterruptDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
+func (api *DurableAPI) InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, interrupt factorysessionexecution.InterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	result, err := api.lifecycle.InterruptDurableFactorySessionDispatch(ctx, sessionID, interrupt)
 	return lifecycleResultToAPI(result, err)
 }
@@ -271,14 +243,16 @@ func lifecycleResultToAPI(result factorysessionexecution.LifecycleControlResult,
 
 // StartRequestFromAPI maps one public durable execution request into the shared
 // service contract.
-func StartRequestFromAPI(req factoryapi.FactorySessionExecutionRequest) (factorysessionexecution.StartRequest, error) {
+func StartRequestFromAPI(
+	req factoryapi.FactorySessionExecutionRequest,
+) (factorysessionexecution.StartRequest, error) {
 	source, err := executionSourceFromAPI(req.Source)
 	if err != nil {
 		return factorysessionexecution.StartRequest{}, err
 	}
 
 	startReq := factorysessionexecution.StartRequest{
-		RequestID: strings.TrimSpace(req.RequestId),
+		RequestID: req.RequestId,
 		Source:    source,
 	}
 	if req.Args != nil {
@@ -304,7 +278,7 @@ func StartRequestFromAPI(req factoryapi.FactorySessionExecutionRequest) (factory
 			CancelOnTimeout: cancelOnTimeout,
 		}
 	}
-	return factorysessionexecution.NormalizeStartRequest(startReq)
+	return startReq, nil
 }
 
 // AsyncStartResponseToAPI maps one async service result to the public response shape.
@@ -375,12 +349,12 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 		return factorysessionexecution.Source{}, err
 	}
 	switch kind {
-	case workflowsource.KindFactoryID:
+	case workflowsource.WorkflowSourceKindFactoryID:
 		return factorysessionexecution.Source{
 			Kind:      kind,
 			FactoryID: derefString(source.FactoryId),
 		}, nil
-	case workflowsource.KindFactoryInline:
+	case workflowsource.WorkflowSourceKindFactoryInline:
 		if source.FactoryInline == nil {
 			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.factoryInline is required when source.kind is FACTORY_INLINE"}
 		}
@@ -392,28 +366,26 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 			Kind:          kind,
 			FactoryInline: encoded,
 		}, nil
-	case workflowsource.KindWorkflowFile:
+	case workflowsource.WorkflowSourceKindWorkflowFile:
 		return factorysessionexecution.Source{
 			Kind:         kind,
 			WorkflowFile: derefString(source.WorkflowFile),
 		}, nil
-	case workflowsource.KindWorkflowName:
+	case workflowsource.WorkflowSourceKindWorkflowName:
 		return factorysessionexecution.Source{
 			Kind:         kind,
 			WorkflowName: derefString(source.WorkflowName),
 		}, nil
-	case workflowsource.KindInlineWorkflow:
+	case workflowsource.WorkflowSourceKindInlineWorkflow:
 		if source.InlineWorkflow == nil {
 			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.inlineWorkflow is required when source.kind is INLINE_WORKFLOW"}
 		}
-		inline := &factorysessionexecution.InlineWorkflowSource{
-			InlineSource: strings.TrimSpace(source.InlineWorkflow.InlineSource.Inline),
-		}
+		inline := &factorysessionexecution.InlineWorkflowSource{InlineSource: source.InlineWorkflow.InlineSource.Inline}
 		if source.InlineWorkflow.Dialect != nil {
-			inline.Dialect = strings.TrimSpace(*source.InlineWorkflow.Dialect)
+			inline.Dialect = *source.InlineWorkflow.Dialect
 		}
 		if source.InlineWorkflow.Entrypoint != nil {
-			inline.Entrypoint = strings.TrimSpace(*source.InlineWorkflow.Entrypoint)
+			inline.Entrypoint = *source.InlineWorkflow.Entrypoint
 		}
 		if source.InlineWorkflow.Metadata != nil {
 			inline.Metadata = cloneStringMap(*source.InlineWorkflow.Metadata)
@@ -427,14 +399,14 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 	}
 }
 
-func executionSourceKindFromAPI(kind factoryapi.FactorySessionExecutionSourceKind) (workflowsource.Kind, error) {
-	switch workflowsource.Kind(strings.TrimSpace(string(kind))) {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
-		return workflowsource.Kind(strings.TrimSpace(string(kind))), nil
+func executionSourceKindFromAPI(kind factoryapi.FactorySessionExecutionSourceKind) (workflowsource.WorkflowSourceKind, error) {
+	switch workflowsource.WorkflowSourceKind(strings.TrimSpace(string(kind))) {
+	case workflowsource.WorkflowSourceKindFactoryID,
+		workflowsource.WorkflowSourceKindFactoryInline,
+		workflowsource.WorkflowSourceKindWorkflowFile,
+		workflowsource.WorkflowSourceKindWorkflowName,
+		workflowsource.WorkflowSourceKindInlineWorkflow:
+		return workflowsource.WorkflowSourceKind(strings.TrimSpace(string(kind))), nil
 	default:
 		return "", &apisurface.RequestValidationError{Message: "source.kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW"}
 	}

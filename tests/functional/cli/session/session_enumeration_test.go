@@ -1,115 +1,85 @@
 package session
 
 import (
-	"bytes"
 	"encoding/json"
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-
-	"go.uber.org/zap"
 )
 
-func BasicCliInputWithArgs(t *testing.T, args []string) root.Input {
-	return root.Input{
-		Args:    args,
-		Env:     os.Environ(),
-		Stdin:   os.Stdin,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		Context: t.Context(),
-	}
-}
-
-func basicServer(t *testing.T, dir string) *support.FunctionalAPIServer {
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-		},
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-			cfg.Logger = zap.NewNop()
-		},
-	})
-}
-
 func TestSessionEnumeration(t *testing.T) {
-	// Arrange
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
-
 	support.SetWorkingDirectory(t, dir)
 
-	// Act
+	process, server, daemon := startSessionProcess(t, dir)
+	defer daemon.Stop(t)
 
-	// Instantiate the server
-	server := basicServer(t, dir)
-
-	// Enumerate the server configs
-	output := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-	fakeEnv := BasicCliInputWithArgs(t, []string{"you", "session", "list", "--server", server.URL()})
-	fakeEnv.Stdout = &output
-	fakeEnv.Stderr = &stderr
-	exitCode := root.Run(fakeEnv, root.Dependencies{})
-
-	// Assert
-
-	if !bytes.Contains(output.Bytes(), []byte(dir)) {
-		t.Errorf("expected output to contain copied fixture directory %q, got: %s", dir, output.String())
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "session", "list", "--server", server.WaitForURL(t),
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(session list) error = %v; stderr=%s", err, inputs.Stderr())
 	}
-
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
+	if got := inputs.Stdout(); !contains(got, dir) {
+		t.Errorf("session list output = %q, want copied fixture directory %q", got, dir)
 	}
 }
 
-func TestSessionEnumerationJson(t *testing.T) {
-	// Arrange
+func TestSessionEnumerationJSON(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
-
 	support.SetWorkingDirectory(t, dir)
 
-	// Act
+	process, server, daemon := startSessionProcess(t, dir)
+	defer daemon.Stop(t)
 
-	// Instantiate the server
-	server := basicServer(t, dir)
-
-	// Enumerate the server configs
-	output := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-	fakeEnv := BasicCliInputWithArgs(t, []string{"you", "session", "list", "--json", "--server", server.URL()})
-	fakeEnv.Stdout = &output
-	fakeEnv.Stderr = &stderr
-	exitCode := root.Run(fakeEnv, root.Dependencies{})
-
-	// Assert
-
-	var session factoryapi.ListFactorySessionsResponse
-	err := json.Unmarshal(output.Bytes(), &session)
-	if err != nil {
-		t.Fatalf("failed to unmarshal session output: %v", err)
-	}
-	if len(session.Sessions) != 1 {
-		t.Fatalf("expected at least one session, got 0")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "session", "list", "--json", "--server", server.WaitForURL(t),
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(session list --json) error = %v; stderr=%s", err, inputs.Stderr())
 	}
 
-	if (session.Sessions[0].Id == "") || (session.Sessions[0].Runtime == nil) {
-		t.Fatalf("expected session to have id and runtime, got: %#v", session.Sessions[0])
+	var sessions factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &sessions); err != nil {
+		t.Fatalf("unmarshal session output %q: %v", inputs.Stdout(), err)
 	}
+	if len(sessions.Sessions) != 1 {
+		t.Fatalf("session count = %d, want 1", len(sessions.Sessions))
+	}
+	if sessions.Sessions[0].Id == "" || sessions.Sessions[0].Runtime == nil {
+		t.Fatalf("session missing id or runtime: %#v", sessions.Sessions[0])
+	}
+	if sessions.Sessions[0].FolderPath != dir {
+		t.Fatalf("session folder path = %q, want %q", sessions.Sessions[0].FolderPath, dir)
+	}
+}
 
-	if session.Sessions[0].FolderPath != dir {
-		t.Fatalf("expected session folder path to be %q, got: %q", dir, session.Sessions[0].FolderPath)
-	}
+func startSessionProcess(
+	t *testing.T,
+	dir string,
+) (support.Process, *support.ProcessAPIServer, *support.ProcessCommand) {
+	t.Helper()
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter:      server.Start,
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("primary result COMPLETE"),
+	})
+	daemonInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	daemon := support.StartProcessCommand(t, process, daemonInputs.Input)
+	return process, server, daemon
+}
 
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
-	}
+func contains(value, substring string) bool {
+	return strings.Contains(value, substring)
 }

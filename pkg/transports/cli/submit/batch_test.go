@@ -2,6 +2,7 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,7 +22,7 @@ func TestSubmitBatch_DryRunPipedStdinWithNoArgs(t *testing.T) {
 	json := validBatchJSON("batch-stdin-pipe", "alpha")
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Stdin:      strings.NewReader(json),
 		StdinIsTTY: func() bool { return false },
 		DryRun:     true,
@@ -47,7 +49,7 @@ func TestSubmitBatch_DryRunExplicitStdinDash(t *testing.T) {
 	json := validBatchJSON("batch-stdin-dash", "alpha")
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{"-"},
 		Stdin:  strings.NewReader(json),
 		DryRun: true,
@@ -67,7 +69,7 @@ func TestSubmitBatch_DryRunFileFlag(t *testing.T) {
 	path := writeBatchFile(t, validBatchJSON("batch-file-flag-dry", "alpha"))
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		FileFlag: path,
 		DryRun:   true,
 		Server:   "http://127.0.0.1:1",
@@ -93,7 +95,7 @@ func TestSubmitBatch_DryRunFileFlagStdinDash(t *testing.T) {
 	json := validBatchJSON("batch-file-flag-stdin", "alpha")
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		FileFlag: "-",
 		Stdin:    strings.NewReader(json),
 		DryRun:   true,
@@ -110,7 +112,7 @@ func TestSubmitBatch_DryRunFileFlagStdinDash(t *testing.T) {
 }
 
 func TestSubmitBatch_NoArgsInteractiveTTYFailsWithUsageGuidance(t *testing.T) {
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		StdinIsTTY: func() bool { return true },
 		Server:     "http://127.0.0.1:1",
 		Output:     io.Discard,
@@ -133,7 +135,7 @@ func TestSubmitBatch_EmptyPipedStdinFailsBeforeHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Stdin:      strings.NewReader("\n"),
 		StdinIsTTY: func() bool { return false },
 		Server:     mustServerBase(t, srv.URL),
@@ -164,7 +166,7 @@ func TestSubmitBatch_PUTFromPipedStdinUsesSessionScopedPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Stdin:      strings.NewReader(validBatchJSON("batch-stdin-put", "alpha")),
 		StdinIsTTY: func() bool { return false },
 		Server:     mustServerBase(t, srv.URL),
@@ -194,7 +196,7 @@ func TestSubmitBatch_FilePathIgnoresStdinContent(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-file-wins", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Stdin:  strings.NewReader(validBatchJSON("batch-wrong", "wrong")),
 		Server: mustServerBase(t, srv.URL),
@@ -215,7 +217,7 @@ func TestSubmitBatch_DryRunInlineJSONPositional(t *testing.T) {
 	json := validBatchJSON("batch-inline-dry", "alpha")
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{json},
 		DryRun: true,
 		Server: "http://127.0.0.1:1",
@@ -244,7 +246,7 @@ func TestSubmitBatch_NonexistentPathWithoutJSONPrefixFailsAsMissingFile(t *testi
 	}))
 	defer srv.Close()
 
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{"/no/such/batch-file.json"},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -279,7 +281,7 @@ func TestSubmitBatch_PUTFromInlineJSONUsesRequestIdFromBody(t *testing.T) {
 	defer srv.Close()
 
 	inline := validBatchJSON("batch-inline-put", "alpha")
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{inline},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -301,7 +303,7 @@ func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
 	}`)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		Server: "http://127.0.0.1:1",
@@ -329,7 +331,7 @@ func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
 func TestSubmitBatch_DryRunSucceedsWhenFactoryUnreachable(t *testing.T) {
 	path := writeBatchFile(t, validBatchJSON("batch-offline", "task-a"))
 
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		Server: "http://127.0.0.1:1",
@@ -361,7 +363,7 @@ func TestSubmitBatch_PUTUsesSessionScopedWorkRequestsPath(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-put-1", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:      []string{path},
 		Server:    mustServerBase(t, srv.URL),
 		SessionID: "session-beta",
@@ -396,7 +398,7 @@ func TestSubmitBatch_DefaultSessionUsesCompatibilitySession(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-default", "alpha"))
-	if err := SubmitBatch(BatchConfig{
+	if err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -416,11 +418,11 @@ func TestSubmitBatch_ValidationFailsBeforeHTTP(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, `{"requestId":"batch-empty","type":"FACTORY_REQUEST_BATCH","works":[]}`)
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTestWithPreparation(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
-	})
+	}, batchPreparationFailure("batch works must contain at least one item"))
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -441,7 +443,7 @@ func TestSubmitBatch_HTTPErrorSurfacesAPIMessage(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-put-1", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -463,7 +465,7 @@ func TestSubmitBatch_HTTP404SurfacesAPIMessage(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-404", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -485,7 +487,7 @@ func TestSubmitBatch_HTTPErrorUsesBoundedNonJSONBodyPreview(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, validBatchJSON("batch-bounded", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
@@ -509,11 +511,11 @@ func TestSubmitBatch_InvalidJSONFailsBeforeHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTestWithPreparation(t, BatchConfig{Context: context.Background(),
 		Args:   []string{`{not-json`},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
-	})
+	}, batchPreparationFailure("invalid character 'n' looking for beginning of object key string"))
 	if err == nil {
 		t.Fatal("expected JSON parse error")
 	}
@@ -536,11 +538,11 @@ func TestSubmitBatch_EmptyRequestIDFailsBeforeHTTP(t *testing.T) {
 	defer srv.Close()
 
 	path := writeBatchFile(t, `{"requestId":"","type":"FACTORY_REQUEST_BATCH","works":[{"name":"alpha","workTypeName":"task","payload":{"title":"A"}}]}`)
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTestWithPreparation(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
-	})
+	}, batchPreparationFailure("batch requestId is required"))
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -564,11 +566,11 @@ func TestSubmitBatch_RetiredFieldFailsWithGuidanceBeforeHTTP(t *testing.T) {
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [{"name": "alpha", "work_type_id": "task", "payload": {"title": "A"}}]
 	}`)
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTestWithPreparation(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: io.Discard,
-	})
+	}, batchPreparationFailure("works[0].work_type_id is not supported; use workTypeName"))
 	if err == nil {
 		t.Fatal("expected retired-field validation error")
 	}
@@ -591,7 +593,7 @@ func TestSubmitBatch_HTTPErrorDoesNotEmitSuccessJSON(t *testing.T) {
 
 	path := writeBatchFile(t, validBatchJSON("batch-json-err", "alpha"))
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		JSON:   true,
@@ -607,7 +609,7 @@ func TestSubmitBatch_HTTPErrorDoesNotEmitSuccessJSON(t *testing.T) {
 
 func TestSubmitBatch_UnreachableFactoryMatchesUnaryStyle(t *testing.T) {
 	path := writeBatchFile(t, validBatchJSON("batch-offline", "alpha"))
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: "http://127.0.0.1:1",
 		Output: io.Discard,
@@ -639,7 +641,7 @@ func TestSubmitBatch_VerboseLogsMetadataWithoutPayload(t *testing.T) {
 	}`)
 
 	var diagnostics bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:        []string{path},
 		Server:      mustServerBase(t, srv.URL),
 		Verbose:     true,
@@ -696,7 +698,7 @@ func TestSubmitBatch_HumanSuccessOutputIncludesWorkDetailsAndHints(t *testing.T)
 	}`)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: &out,
@@ -754,7 +756,7 @@ func TestSubmitBatch_HumanSuccessOutputTruncatesLongWorkLists(t *testing.T) {
 	}`)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		Server: mustServerBase(t, srv.URL),
 		Output: &out,
@@ -783,7 +785,7 @@ func TestSubmitBatch_HumanSuccessOutputTruncatesLongWorkLists(t *testing.T) {
 
 func TestSubmitBatch_UsesDocsExampleStartupWorkFile(t *testing.T) {
 	path := testutil.MustRepoPath(t, "docs/examples/startup-work.json")
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		Server: "http://127.0.0.1:1",
@@ -801,7 +803,7 @@ func TestSubmitBatch_DryRunLocalAgentCliRuntimeBatchExample(t *testing.T) {
 	)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		Server: "http://127.0.0.1:1",
@@ -829,7 +831,7 @@ func TestSubmitBatch_DryRunFactoryDocsBatchInputExample(t *testing.T) {
 	path := testutil.MustRepoPath(t, "factory/docs/batch-input-example.json")
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:      []string{path},
 		DryRun:    true,
 		SessionID: "c803e7f7-1361-4ba6-bb2b-b5c9cfeb2754",
@@ -852,6 +854,44 @@ func TestSubmitBatch_DryRunFactoryDocsBatchInputExample(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
+}
+
+func submitBatchForTest(t *testing.T, cfg BatchConfig) error {
+	return submitBatchForTestWithPreparation(t, cfg, testFactoryRequestBatchPreparation{})
+}
+
+func submitBatchForTestWithPreparation(
+	t *testing.T,
+	cfg BatchConfig,
+	prepare work.FactoryRequestBatchPreparation,
+) error {
+	t.Helper()
+	path := strings.TrimSpace(cfg.FileFlag)
+	if path == "" && len(cfg.Args) == 1 {
+		candidate := strings.TrimSpace(cfg.Args[0])
+		if candidate != "-" && !looksLikeInlineJSON(candidate) {
+			path = candidate
+		}
+	}
+	if path != "" && path != "-" {
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatalf("read explicit batch test fixture %q: %v", path, err)
+		}
+		files := map[string][]byte{}
+		if err == nil {
+			files[path] = data
+		}
+		cfg.FileSystem = batchInputFileSystemFake{files: files}
+	}
+	cfg.HTTP = testHTTPProtocol(t)
+	return SubmitBatch(prepare, cfg)
+}
+
+func batchPreparationFailure(message string) work.FactoryRequestBatchPreparation {
+	return factoryRequestBatchPreparationFunc(func(context.Context, []byte) (work.PreparedFactoryRequestBatch, error) {
+		return work.PreparedFactoryRequestBatch{}, fmt.Errorf("%s", message)
+	})
 }
 
 func writeBatchFile(t *testing.T, content string) string {

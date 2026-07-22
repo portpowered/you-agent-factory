@@ -36,10 +36,10 @@ func TestFactorySessionSSEFixture_RetainedHistoryIsStableAndOrdered(t *testing.T
 
 func TestFactorySessionSSEHarness_ReadsRetainedThenLiveEventsWithinTimeout(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -71,11 +71,11 @@ func TestFactorySessionSSEHarness_ReadsRetainedThenLiveEventsWithinTimeout(t *te
 
 func TestFactorySessionSSEHarness_FailsClosedWhenTimeoutElapses(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
 	readTimeout := 200 * time.Millisecond
-	harness := NewFactorySessionSSEHarness(t, readTimeout)
+	harness := newFactorySessionSSEHarness(t, readTimeout)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -91,10 +91,10 @@ func TestFactorySessionSSEHarness_FailsClosedWhenTimeoutElapses(t *testing.T) {
 
 func TestFactorySessionSSEHarness_DecodesPublicFactoryEventRecords(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 

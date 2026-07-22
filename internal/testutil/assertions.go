@@ -3,17 +3,17 @@ package testutil
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	petri "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 // MarkingAssert provides fluent assertions on a MarkingSnapshot.
 type MarkingAssert struct {
 	t       *testing.T
-	marking *petri.MarkingSnapshot
+	marking *petri.PetriMarkingSnapshot
 }
 
 // AssertMarking creates a new MarkingAssert for fluent assertion chaining.
-func AssertMarking(t *testing.T, marking *petri.MarkingSnapshot) *MarkingAssert {
+func AssertMarking(t *testing.T, marking *petri.PetriMarkingSnapshot) *MarkingAssert {
 	t.Helper()
 	return &MarkingAssert{t: t, marking: marking}
 }
@@ -151,11 +151,11 @@ type PetriTransitionAssertOptions struct {
 }
 
 // AssertNoTransitionExhaustion fails when any non-nil transition has type TransitionExhaustion.
-func AssertNoTransitionExhaustion(t *testing.T, transitions map[string]*petri.Transition, opts PetriTransitionAssertOptions) {
+func AssertNoTransitionExhaustion(t *testing.T, transitions map[string]*petri.PetriTransition, opts PetriTransitionAssertOptions) {
 	t.Helper()
 
 	for name, transition := range transitions {
-		if transition != nil && transition.Type == petri.TransitionType("EXHAUSTION") {
+		if transition != nil && transition.Type == petri.PetriTransitionType("EXHAUSTION") {
 			t.Fatalf("unexpected TransitionExhaustion transition %q in %s", name, opts.ExhaustionContext)
 		}
 	}
@@ -165,7 +165,7 @@ func AssertNoTransitionExhaustion(t *testing.T, transitions map[string]*petri.Tr
 // VisitCountGuard input arc and a single output arc to the expected places.
 func AssertGuardedLoopBreakerTransition(
 	t *testing.T,
-	transition *petri.Transition,
+	transition *petri.PetriTransition,
 	inputPlace string,
 	outputPlace string,
 	watchedTransitionID string,
@@ -176,8 +176,8 @@ func AssertGuardedLoopBreakerTransition(
 	if transition == nil {
 		t.Fatal("expected guarded loop-breaker transition to exist")
 	}
-	if transition.Type != petri.TransitionNormal {
-		t.Fatalf("guarded loop-breaker type = %s, want %s", transition.Type, petri.TransitionNormal)
+	if transition.Type != petri.PetriTransitionNormal {
+		t.Fatalf("guarded loop-breaker type = %s, want %s", transition.Type, petri.PetriTransitionNormal)
 	}
 	if len(transition.InputArcs) != 1 {
 		t.Fatalf("guarded loop-breaker input arcs = %d, want 1", len(transition.InputArcs))
@@ -185,7 +185,7 @@ func AssertGuardedLoopBreakerTransition(
 	if transition.InputArcs[0].PlaceID != inputPlace {
 		t.Fatalf("guarded loop-breaker input place = %q, want %q", transition.InputArcs[0].PlaceID, inputPlace)
 	}
-	guard, ok := transition.InputArcs[0].Guard.(*petri.VisitCountGuard)
+	guard, ok := transition.InputArcs[0].Guard.(*petri.PetriVisitCountGuard)
 	if !ok {
 		t.Fatalf("expected VisitCountGuard on guarded loop breaker, got %T", transition.InputArcs[0].Guard)
 	}

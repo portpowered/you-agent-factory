@@ -41,12 +41,6 @@ func ExtractMCPFamily(manifest climanifest.Manifest) (climanifest.Manifest, erro
 	return extractFamily(manifest, "canonical MCP", MCPFamilyCommandIDs)
 }
 
-// ExtractWorkflowCompatibilityFamily returns the approved callable workflow
-// records from the separately classified compatibility manifest.
-func ExtractWorkflowCompatibilityFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, "workflow compatibility", WorkflowCompatibilityFamilyCommandIDs)
-}
-
 func extractFamily(
 	manifest climanifest.Manifest,
 	familyLabel string,

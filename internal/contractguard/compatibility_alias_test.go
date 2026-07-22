@@ -8,35 +8,14 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
-func TestLoadCompatibilityAliasTerms_IncludesDerivedMCPAndCLIForms(t *testing.T) {
+func TestLoadCompatibilityAliasTerms_ProductionInventoriesContainNoWorkflowAliases(t *testing.T) {
 	root := repositoryRoot(t)
 	terms, err := contractguard.LoadCompatibilityAliasTerms(root)
 	if err != nil {
 		t.Fatalf("LoadCompatibilityAliasTerms() error = %v", err)
 	}
-	if len(terms) == 0 {
-		t.Fatal("expected inventoried compatibility alias terms")
-	}
-
-	termByItemID := make(map[string]contractguard.CompatibilityAliasTerm, len(terms))
-	for _, term := range terms {
-		termByItemID[term.ItemID] = term
-	}
-
-	mcpTerm, ok := termByItemID["mcp.alias.you.workflow.validate"]
-	if !ok {
-		t.Fatal("missing MCP workflow validate inventory term")
-	}
-	if !containsString(mcpTerm.MatchValues, "you.workflow.validate") {
-		t.Fatalf("MCP match values = %#v, want you.workflow.validate", mcpTerm.MatchValues)
-	}
-
-	cliTerm, ok := termByItemID["cli.command.workflow.preview"]
-	if !ok {
-		t.Fatal("missing CLI workflow preview inventory term")
-	}
-	if !containsString(cliTerm.MatchValues, "you.workflow.preview") || !containsString(cliTerm.MatchValues, "you workflow preview") {
-		t.Fatalf("CLI match values = %#v, want dotted and spaced workflow preview forms", cliTerm.MatchValues)
+	if len(terms) != 0 {
+		t.Fatalf("production workflow alias terms = %#v, want none", terms)
 	}
 }
 
@@ -54,7 +33,7 @@ func TestScanCompatibilityAliasViolations_RejectsDeliberateAdoption(t *testing.T
   }
 }`,
 		"contracts/cli/deprecated.json": `{"formatVersion":"1.0.0","family":"cli","records":{}}`,
-		"contracts/api/deprecated.json":   `{"formatVersion":"1.0.0","family":"api","records":{}}`,
+		"contracts/api/deprecated.json": `{"formatVersion":"1.0.0","family":"api","records":{}}`,
 		"pkg/work/adopter.go": `package work
 
 const adoptedAlias = "you.workflow.validate"
@@ -91,7 +70,7 @@ func TestScanCompatibilityAliasViolations_AllowsApprovedBoundary(t *testing.T) {
   }
 }`,
 		"contracts/cli/deprecated.json": `{"formatVersion":"1.0.0","family":"cli","records":{}}`,
-		"contracts/api/deprecated.json":   `{"formatVersion":"1.0.0","family":"api","records":{}}`,
+		"contracts/api/deprecated.json": `{"formatVersion":"1.0.0","family":"api","records":{}}`,
 		"pkg/transports/mcp/factorysession/tool.go": `package factorysession
 
 const ToolWorkflowValidate = "you.workflow.validate"

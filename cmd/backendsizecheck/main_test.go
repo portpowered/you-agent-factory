@@ -208,8 +208,8 @@ func TestRunRejectsAllUnregisteredDirectivesInDeterministicOrder(t *testing.T) {
 		t.Fatalf("run() error = %v, want two budget violations", err)
 	}
 	want := strings.Join([]string{
-		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
-		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
+		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted docs/internal/baselines/backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
+		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted docs/internal/baselines/backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
 		"",
 	}, "\n")
 	if got := stderr.String(); got != want {
@@ -343,7 +343,11 @@ func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionb
 	if err != nil {
 		t.Fatalf("marshal exemption baseline: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoRoot, exemptionbudget.BaselinePath), data, 0o644); err != nil {
+	baselinePath := filepath.Join(repoRoot, exemptionbudget.BaselinePath)
+	if err := os.MkdirAll(filepath.Dir(baselinePath), 0o755); err != nil {
+		t.Fatalf("create exemption baseline directory: %v", err)
+	}
+	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
 		t.Fatalf("write exemption baseline: %v", err)
 	}
 }

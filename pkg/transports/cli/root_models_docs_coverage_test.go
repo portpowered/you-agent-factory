@@ -8,176 +8,69 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
-func TestNewModelsDocsHandlerRegistryWiresHandwrittenCommands(t *testing.T) {
-	globals := &cliGlobalOptions{}
-	diagnostics := &cliDiagnosticsOptions{}
-	registry, _, err := newModelsDocsHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, RootCommandOptions{})
-	if err != nil {
-		t.Fatalf("newModelsDocsHandlerRegistry() error = %v", err)
+type modelsCLIServiceFunctions struct {
+	list    func(modelscli.ListConfig) error
+	inspect func(modelscli.InspectConfig) error
+	invoke  func(modelscli.InvokeConfig) error
+	pull    func(modelscli.PullConfig) error
+}
+
+func (service modelsCLIServiceFunctions) List(cfg modelscli.ListConfig) error {
+	if service.list != nil {
+		return service.list(cfg)
 	}
-	for _, commandID := range []string{
-		"you.docs",
-		"you.models.list",
-		"you.models.inspect",
-		"you.models.invoke",
-		"you.models.pull",
-	} {
-		if _, err := registry.Lookup(commandID); err != nil {
-			t.Fatalf("Lookup(%s) error = %v", commandID, err)
+	return nil
+}
+func (service modelsCLIServiceFunctions) Inspect(cfg modelscli.InspectConfig) error {
+	if service.inspect != nil {
+		return service.inspect(cfg)
+	}
+	return nil
+}
+func (service modelsCLIServiceFunctions) Invoke(cfg modelscli.InvokeConfig) error {
+	if service.invoke != nil {
+		return service.invoke(cfg)
+	}
+	return nil
+}
+func (service modelsCLIServiceFunctions) Pull(cfg modelscli.PullConfig) error {
+	if service.pull != nil {
+		return service.pull(cfg)
+	}
+	return nil
+}
+
+func TestProductionModelsCommandWiresInjectedHandlers(t *testing.T) {
+	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
+	if err != nil {
+		t.Fatalf("newProductionModelsCommand() error = %v", err)
+	}
+	for _, name := range []string{"list", "inspect", "invoke", "pull"} {
+		command, _, findErr := models.Find([]string{name})
+		if findErr != nil || command.RunE == nil {
+			t.Fatalf("models %s handler = %v, %v", name, command, findErr)
 		}
 	}
 }
 
-func TestNewLegacyModelsFamilyCommandBuildsHandwrittenTree(t *testing.T) {
-	root := NewLegacyModelsFamilyCommand()
-	models, _, err := root.Find([]string{"models"})
-	if err != nil {
-		t.Fatalf("Find(models) error = %v", err)
-	}
-	if models.RunE != nil {
-		t.Fatal("legacy you models must remain non-runnable")
-	}
-	list, _, err := root.Find([]string{"models", "list"})
-	if err != nil {
-		t.Fatalf("Find(models list) error = %v", err)
-	}
-	if list.RunE == nil {
-		t.Fatal("legacy models list must keep handwritten RunE")
-	}
-}
-
-func TestNewGeneratedModelsFamilyParityCommandBuildsDetachedTree(t *testing.T) {
-	registry, invokeFlags, err := newModelsDocsHandlerRegistry(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, RootCommandOptions{})
-	if err != nil {
-		t.Fatalf("newModelsDocsHandlerRegistry() error = %v", err)
-	}
-	root, err := NewGeneratedModelsFamilyParityCommand(registry, invokeFlags)
-	if err != nil {
-		t.Fatalf("NewGeneratedModelsFamilyParityCommand() error = %v", err)
-	}
-	if _, _, err := root.Find([]string{"models", "invoke"}); err != nil {
-		t.Fatalf("Find(models invoke) error = %v", err)
-	}
-}
-
-func TestNewLegacyDocsFamilyCommandBuildsHandwrittenTree(t *testing.T) {
-	root := NewLegacyDocsFamilyCommand()
-	docs, _, err := root.Find([]string{"docs"})
-	if err != nil {
-		t.Fatalf("Find(docs) error = %v", err)
-	}
-	if docs.RunE == nil {
-		t.Fatal("legacy you docs must keep handwritten RunE")
-	}
-}
-
-func TestNewGeneratedDocsFamilyParityCommandBuildsDetachedTree(t *testing.T) {
-	registry, invokeFlags, err := newModelsDocsHandlerRegistry(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, RootCommandOptions{})
-	if err != nil {
-		t.Fatalf("newModelsDocsHandlerRegistry() error = %v", err)
-	}
-	root, err := NewGeneratedDocsFamilyParityCommand(registry, invokeFlags)
-	if err != nil {
-		t.Fatalf("NewGeneratedDocsFamilyParityCommand() error = %v", err)
-	}
-	docs, _, err := root.Find([]string{"docs"})
-	if err != nil {
-		t.Fatalf("Find(docs) error = %v", err)
-	}
-	if docs.RunE == nil {
-		t.Fatal("generated docs parity command must attach handwritten RunE")
-	}
-}
-
-func TestLegacyDocsFamilyExecutesHandwrittenIndexAndTopicPaths(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	root := NewLegacyDocsFamilyCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{"docs"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute legacy docs index: %v", err)
-	}
-	if !strings.Contains(stdout.String(), "# Docs") {
-		t.Fatalf("stdout = %q, want packaged docs index", stdout.String())
-	}
-
-	stdout.Reset()
-	stderr.Reset()
-	root.SetArgs([]string{"--verbose", "docs", "models"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute legacy docs topic: %v", err)
-	}
-	if !strings.Contains(stderr.String(), "docs request topic=models") {
-		t.Fatalf("stderr = %q, want verbose docs diagnostics", stderr.String())
-	}
-}
-
-func TestLegacyModelsFamilyExecutesHandwrittenLeafCommands(t *testing.T) {
-	originalList := listModels
-	originalInspect := inspectModel
-	originalPull := pullModel
-	originalInvoke := invokeModel
-	defer func() {
-		listModels = originalList
-		inspectModel = originalInspect
-		pullModel = originalPull
-		invokeModel = originalInvoke
-	}()
-
-	var listed bool
-	var inspected, pulled string
-	var invocations []modelscli.InvokeConfig
-	listModels = func(modelscli.ListConfig) error { listed = true; return nil }
-	inspectModel = func(cfg modelscli.InspectConfig) error {
-		inspected = cfg.ModelName
-		return nil
-	}
-	pullModel = func(cfg modelscli.PullConfig) error {
-		pulled = cfg.ModelName
-		return nil
-	}
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		invocations = append(invocations, cfg)
-		return nil
-	}
-
-	root := NewLegacyModelsFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	for _, args := range [][]string{
-		{"models", "list"},
-		{"models", "inspect", "OMNIVOICE_Q4_K_M"},
-		{"models", "pull", "OMNIVOICE_Q4_K_M"},
-		{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello", "--output", "./speech.wav"},
-	} {
-		root.SetArgs(args)
-		if err := root.Execute(); err != nil {
-			t.Fatalf("execute legacy %v: %v", args, err)
-		}
-	}
-	if !listed || inspected != "OMNIVOICE_Q4_K_M" || pulled != "OMNIVOICE_Q4_K_M" || len(invocations) != 1 {
-		t.Fatalf("legacy routing = listed %t inspected %q pulled %q invocations %d", listed, inspected, pulled, len(invocations))
-	}
-	if invocations[0].Operation != "TTS" || invocations[0].Text != "hello" || invocations[0].OutputPath != "./speech.wav" {
-		t.Fatalf("legacy invoke config = %#v, want operation/text/output bindings", invocations[0])
-	}
-}
-
-func TestNewProductionModelsDocsCommandsBuildsGeneratedCommands(t *testing.T) {
+func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
-	docs, models, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, RootCommandOptions{})
+	docs, err := newProductionDocsCommand(diagnostics)
 	if err != nil {
-		t.Fatalf("newProductionModelsDocsCommands() error = %v", err)
+		t.Fatalf("newProductionDocsCommand() error = %v", err)
+	}
+	models, err := newProductionModelsCommand(globals, diagnostics, operatorDefaults, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
+	if err != nil {
+		t.Fatalf("newProductionModelsCommand() error = %v", err)
 	}
 	if docs == nil || docs.RunE == nil {
 		t.Fatal("generated docs command must attach handwritten RunE")
@@ -190,31 +83,18 @@ func TestNewProductionModelsDocsCommandsBuildsGeneratedCommands(t *testing.T) {
 	}
 }
 
-func TestRemainingModelsAccessorGettersReturnDelegates(t *testing.T) {
-	if InspectModelAccessor() == nil || PullModelAccessor() == nil || InvokeModelAccessor() == nil {
-		t.Fatal("models accessor getters must return non-nil delegates")
-	}
-}
-
 func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
-	originalInspect := InspectModelAccessor()
-	originalPull := PullModelAccessor()
-	defer func() {
-		SetInspectModelAccessor(originalInspect)
-		SetPullModelAccessor(originalPull)
-	}()
-
 	var inspectJSON, pullJSON bool
-	SetInspectModelAccessor(func(cfg modelscli.InspectConfig) error {
-		inspectJSON = cfg.JSON
-		return nil
-	})
-	SetPullModelAccessor(func(cfg modelscli.PullConfig) error {
-		pullJSON = cfg.JSON
-		return nil
-	})
-
-	root := NewRootCommand()
+	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		inspect: func(cfg modelscli.InspectConfig) error {
+			inspectJSON = cfg.JSON
+			return nil
+		},
+		pull: func(cfg modelscli.PullConfig) error {
+			pullJSON = cfg.JSON
+			return nil
+		},
+	}}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "models", "inspect", "OMNIVOICE_Q4_K_M"})
@@ -230,22 +110,24 @@ func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	}
 }
 
-func TestNewModelsDocsHandlerRegistryDefaultsNilOperatorDefaults(t *testing.T) {
-	registry, invokeFlags, err := newModelsDocsHandlerRegistry(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, nil, RootCommandOptions{})
+func TestProductionModelsCommandDefaultsNilOperatorDefaults(t *testing.T) {
+	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, nil, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
 	if err != nil {
-		t.Fatalf("newModelsDocsHandlerRegistry(nil operator defaults) error = %v", err)
+		t.Fatalf("newProductionModelsCommand(nil operator defaults) error = %v", err)
 	}
-	if _, err := registry.Lookup("you.models.invoke"); err != nil {
-		t.Fatalf("Lookup(you.models.invoke) error = %v", err)
+	invoke, _, err := models.Find([]string{"invoke"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if invokeFlags.Operation == nil || *invokeFlags.Operation != "TTS" {
-		t.Fatalf("invoke operation binding = %#v, want default TTS", invokeFlags.Operation)
+	operation, err := invoke.Flags().GetString("operation")
+	if err != nil || operation != "TTS" {
+		t.Fatalf("invoke operation = %q, %v; want TTS", operation, err)
 	}
 }
 
 func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"--verbose", "docs", "models"})
@@ -257,20 +139,14 @@ func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 	}
 }
 
-func TestModelsDelegateAccessorsRoundTrip(t *testing.T) {
-	originalList := ListModelsAccessor()
-	defer SetListModelsAccessor(originalList)
-
+func TestModelsListUsesInjectedService(t *testing.T) {
 	called := false
-	SetListModelsAccessor(func(modelscli.ListConfig) error {
-		called = true
-		return nil
-	})
-	if ListModelsAccessor() == nil {
-		t.Fatal("ListModelsAccessor() = nil after setter")
-	}
-
-	root := NewRootCommand()
+	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		list: func(modelscli.ListConfig) error {
+			called = true
+			return nil
+		},
+	}}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "list"})
@@ -278,40 +154,34 @@ func TestModelsDelegateAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("execute models list: %v", err)
 	}
 	if !called {
-		t.Fatal("ListModelsAccessor replacement was not invoked")
+		t.Fatal("injected models list service was not invoked")
 	}
 }
 
-func TestModelsDelegateAccessorsRouteGeneratedCutoverCommands(t *testing.T) {
-	originalList := ListModelsAccessor()
-	originalInspect := InspectModelAccessor()
-	originalPull := PullModelAccessor()
-	originalInvoke := InvokeModelAccessor()
-	defer func() {
-		SetListModelsAccessor(originalList)
-		SetInspectModelAccessor(originalInspect)
-		SetPullModelAccessor(originalPull)
-		SetInvokeModelAccessor(originalInvoke)
-	}()
-
+func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	SetListModelsAccessor(func(modelscli.ListConfig) error { listed = true; return nil })
-	SetInspectModelAccessor(func(cfg modelscli.InspectConfig) error {
-		inspected = cfg.ModelName
-		return nil
-	})
-	SetPullModelAccessor(func(cfg modelscli.PullConfig) error {
-		pulled = cfg.ModelName
-		return nil
-	})
-	SetInvokeModelAccessor(func(cfg modelscli.InvokeConfig) error {
-		invocations = append(invocations, cfg)
-		return nil
-	})
-
-	root := NewRootCommand()
+	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		list: func(modelscli.ListConfig) error { listed = true; return nil },
+		inspect: func(cfg modelscli.InspectConfig) error {
+			inspected = cfg.ModelName
+			return nil
+		},
+		pull: func(cfg modelscli.PullConfig) error {
+			pulled = cfg.ModelName
+			return nil
+		},
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			invocations = append(invocations, cfg)
+			return nil
+		},
+	}})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	for _, args := range [][]string{
@@ -334,11 +204,7 @@ func TestModelsDelegateAccessorsRouteGeneratedCutoverCommands(t *testing.T) {
 }
 
 func TestProductionRootUsesGeneratedModelsDocsFamilyCutover(t *testing.T) {
-	if !useGeneratedModelsDocsFamily {
-		t.Fatal("useGeneratedModelsDocsFamily = false, want production cutover enabled")
-	}
-
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	docs, _, err := root.Find([]string{"docs"})
 	if err != nil {
 		t.Fatalf("Find(docs) error = %v", err)
@@ -365,7 +231,7 @@ func TestProductionRootUsesGeneratedModelsDocsFamilyCutover(t *testing.T) {
 
 func TestRootCommand_HelpDocumentsGlobalJSONFlag(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--help"})
@@ -383,7 +249,7 @@ func TestRootCommand_HelpDocumentsGlobalJSONFlag(t *testing.T) {
 
 func TestRootCommand_HelpDocumentsGlobalServerFlag(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--help"})
@@ -407,7 +273,7 @@ func TestRootCommand_HelpDocumentsGlobalServerFlag(t *testing.T) {
 
 func TestFactoryQueryCommand_HelpUsesGlobalFlags(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "query", "--help"})
@@ -432,7 +298,7 @@ func TestFactoryQueryCommand_HelpUsesGlobalFlags(t *testing.T) {
 }
 
 func TestSupportedCommands_DoNotRegisterLocalJSONFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	for _, path := range [][]string{
 		{"factory", "query"},
 		{"work", "list"},
@@ -463,7 +329,7 @@ func TestFactoryQueryCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "factory", "query"})
@@ -488,7 +354,7 @@ func TestFactoryReplaceCurrentCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "factory", "replace-current"})
@@ -513,7 +379,7 @@ func TestModelsInspectCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "models", "inspect", "OMNIVOICE_Q4_K_M"})
@@ -538,7 +404,7 @@ func TestWorkListCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "work", "list"})
@@ -563,7 +429,7 @@ func TestSubmitCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -594,7 +460,7 @@ func TestFactoryDeleteCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "factory", "delete", "staging"})
@@ -613,13 +479,13 @@ func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		initFactory = originalInitFactory
 	}()
 
-	var got initcmd.InitConfig
-	initFactory = func(cfg initcmd.InitConfig) error {
+	var got factorydefinitions.ScaffoldConfig
+	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
 		got = cfg
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "init"})
@@ -644,7 +510,7 @@ func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "models", "list"})
@@ -682,7 +548,7 @@ func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"--json", "models", "list", "--verbose"})
@@ -715,7 +581,7 @@ func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "inspect", "OMNIVOICE_Q4_K_M", "--server", "http://127.0.0.1:9090"})
@@ -743,7 +609,7 @@ func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello", "--output", "speech.wav", "--server", "http://127.0.0.1:9090"})
@@ -768,7 +634,7 @@ func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "models", "pull", "OMNIVOICE_Q4_K_M"})
@@ -783,7 +649,7 @@ func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
 
 func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "--help"})

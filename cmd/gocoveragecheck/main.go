@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 var (
@@ -24,20 +26,44 @@ var (
 	coveragePackageListPattern = regexp.MustCompile(`(?m)(coverage:\s+[0-9.]+% of statements)\s+in\s+.+$`)
 )
 
+type commandInvocation struct {
+	name string
+	args []string
+	env  []string
+	dir  string
+}
+
+type commandRunnerFunc func(commandInvocation) (string, string, error)
+
 const modulePath = "github.com/portpowered/infinite-you"
-const defaultPackageCoverageBaselinePath = "docs/internal/development/go-coverage-package-baseline.txt"
-const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/development/go-functional-coverage-package-baseline.txt"
+const defaultPackageCoverageBaselinePath = "docs/internal/baselines/go-coverage-package-baseline.txt"
+const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
 const defaultCoverageJobs = 2
 
 var (
-	defaultCoveragePatterns           = []string{"./cmd/factory", "./pkg/..."}
-	unitTestPatterns                  = []string{"./cmd/factory", "./pkg/..."}
-	functionalTestPatterns            = []string{"./tests/functional/..."}
-	execCommand                       = exec.Command
-	stdoutWriter            io.Writer = os.Stdout
-	stderrWriter            io.Writer = os.Stderr
-	exitFunc                          = os.Exit
+	defaultCoveragePatterns                   = []string{"./pkg/..."}
+	unitTestPatterns                          = []string{"./pkg/..."}
+	functionalTestPatterns                    = []string{"./tests/functional/..."}
+	execCommand                               = exec.Command
+	commandRunner           commandRunnerFunc = func(invocation commandInvocation) (string, string, error) {
+		cmd := execCommand(invocation.name, invocation.args...)
+		if invocation.env != nil {
+			cmd.Env = invocation.env
+		}
+		if invocation.dir != "" {
+			cmd.Dir = invocation.dir
+		}
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	}
+	stdoutWriter io.Writer = os.Stdout
+	stderrWriter io.Writer = os.Stderr
+	exitFunc               = os.Exit
 )
 
 type config struct {
@@ -232,16 +258,18 @@ func run(cfg config) (coverageResult, error) {
 		return coverageResult{}, err
 	}
 
-	coverCmd := execCommand("go", "tool", "cover", "-func", profilePath)
-	coverCmd.Env = os.Environ()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	coverCmd.Stdout = &stdout
-	coverCmd.Stderr = &stderr
-	if err := coverCmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
+	coverStdout, coverStderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: []string{"tool", "cover", "-func", profilePath},
+		env:  os.Environ(),
+	})
+	// Print for utility
+	fmt.Println(formatCommandLine("go", "tool", "cover", "-func", profilePath))
+
+	if err != nil {
+		detail := strings.TrimSpace(coverStderr)
 		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
+			detail = strings.TrimSpace(coverStdout)
 		}
 		if detail != "" {
 			return coverageResult{}, fmt.Errorf("summarize go coverage: %w\n%s", err, detail)
@@ -258,7 +286,7 @@ func run(cfg config) (coverageResult, error) {
 		}
 	}
 
-	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
+	result, totalLine, err := evaluateCoverage(coverStdout, "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
 	if err != nil {
 		return coverageResult{}, err
 	}
@@ -293,20 +321,30 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 }
 
 func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
-	testCmd := execCommand("go", args...)
-	testCmd.Env = os.Environ()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	testCmd.Stdout = &stdout
-	testCmd.Stderr = &stderr
-	if err := testCmd.Run(); err != nil {
-		detail := mergeGoTestFailureDetail(stderr.String(), stdout.String())
+	stdout, stderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: args,
+		env:  os.Environ(),
+	})
+	if err != nil {
+		detail := mergeGoTestFailureDetail(stderr, stdout)
 		if detail != "" {
 			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
 		}
 		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
 	}
-	return stdout.String(), stderr.String(), nil
+	return stdout, stderr, nil
+}
+
+func runCommand(invocation commandInvocation) (string, string, error) {
+	return commandRunner(invocation)
+}
+
+func formatCommandLine(name string, args ...string) string {
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, name)
+	parts = append(parts, args...)
+	return strings.Join(parts, " ")
 }
 
 func runGoTestCoverageShards(baseArgs []string, testPackages []string, jobs int, profilePath string, repoRoot string, coverPackages []string) error {
@@ -401,23 +439,21 @@ func resolveTestPackages(cfg config) ([]string, error) {
 }
 
 func listGoPackages(patterns []string, include func(string) bool, requireNonTestGoFiles bool) ([]string, error) {
-	args := append([]string{"list", "-f", "{{.ImportPath}}\t{{len .GoFiles}}"}, patterns...)
-	cmd := execCommand("go", args...)
-	cmd.Env = os.Environ()
+	args := append([]string{"list", "-f", "{{.ImportPath}}	{{len .GoFiles}}"}, patterns...)
 	rootDir, err := repoRootDir()
 	if err != nil {
 		return nil, err
 	}
-	cmd.Dir = rootDir
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
+	stdout, stderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: args,
+		env:  os.Environ(),
+		dir:  rootDir,
+	})
+	if err != nil {
+		detail := strings.TrimSpace(stderr)
 		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
+			detail = strings.TrimSpace(stdout)
 		}
 		if detail != "" {
 			return nil, fmt.Errorf("list go packages: %w\n%s", err, detail)
@@ -427,7 +463,7 @@ func listGoPackages(patterns []string, include func(string) bool, requireNonTest
 
 	seen := make(map[string]struct{})
 	var packages []string
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for _, line := range strings.Split(stdout, "\n") {
 		importPath, goFiles, hasGoFiles := parseGoListPackageLine(line)
 		if importPath == "" || !include(importPath) {
 			continue
@@ -449,7 +485,7 @@ func listGoPackages(patterns []string, include func(string) bool, requireNonTest
 }
 
 func parseGoListPackageLine(line string) (string, int, bool) {
-	fields := strings.Split(strings.TrimSpace(line), "\t")
+	fields := strings.Fields(strings.TrimSpace(line))
 	if len(fields) < 2 {
 		return strings.TrimSpace(line), 0, false
 	}
@@ -479,8 +515,6 @@ func repoRootDir() (string, error) {
 
 func isBackendCoveragePackage(importPath string) bool {
 	switch {
-	case importPath == modulePath+"/cmd/factory":
-		return true
 	case !strings.HasPrefix(importPath, modulePath+"/pkg/"):
 		return false
 	case importPath == modulePath+"/pkg/transports/http/generated":
@@ -489,7 +523,7 @@ func isBackendCoveragePackage(importPath string) bool {
 		return false
 	case importPath == modulePath+"/pkg/transports/mcp/generated":
 		return false
-	case strings.HasPrefix(importPath, modulePath+"/internal/testutil"):
+	case !testlanes.IsUnitPackage(importPath):
 		return false
 	default:
 		return true

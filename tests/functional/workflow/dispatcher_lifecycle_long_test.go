@@ -25,15 +25,8 @@ func TestDispatcherLifecycle_ExecutorFailure(t *testing.T) {
 		"executor": {{Content: "failed", Error: errors.New("failed executors")}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 1000*time.Second)
-
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasTokenInPlace("prd:failed").
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:archived")
+	session := support.RunFactoryToCompletion(t, dir, provider, 30*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:init": 0, "prd:failed": 1, "code-change:init": 0, "code-change:archived": 0,
+	})
 }

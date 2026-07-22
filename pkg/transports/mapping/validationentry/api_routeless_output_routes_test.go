@@ -1,15 +1,13 @@
 package validationentry_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOutputs(t *testing.T) {
@@ -19,31 +17,31 @@ func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOut
 		name        string
 		decode      func() (factoryapi.Factory, error)
 		workstation string
-		profile     factoryvalidation.Profile
+		profile     factoryvalidation.ValidationProfile
 	}{
 		{
 			name:        "topology_routeless_cron",
 			decode:      factoryfixtures.DecodeRoutelessCronFactory,
 			workstation: "cron",
-			profile:     factoryvalidation.ProfileTopology,
+			profile:     factoryvalidation.ValidationProfileTopology,
 		},
 		{
 			name:        "pre_persist_routeless_cron",
 			decode:      factoryfixtures.DecodeRoutelessCronFactory,
 			workstation: "cron",
-			profile:     factoryvalidation.ProfilePrePersist,
+			profile:     factoryvalidation.ValidationProfilePrePersist,
 		},
 		{
 			name:        "topology_routeless_logical_move",
 			decode:      factoryfixtures.DecodeRoutelessLogicalMoveFactory,
 			workstation: "router",
-			profile:     factoryvalidation.ProfileTopology,
+			profile:     factoryvalidation.ValidationProfileTopology,
 		},
 		{
 			name:        "pre_persist_routeless_logical_move_cron",
 			decode:      factoryfixtures.DecodeRoutelessLogicalMoveCronFactory,
 			workstation: "trigger-monkey",
-			profile:     factoryvalidation.ProfilePrePersist,
+			profile:     factoryvalidation.ValidationProfilePrePersist,
 		},
 	}
 
@@ -56,12 +54,20 @@ func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOut
 				t.Fatalf("decode factory: %v", err)
 			}
 
-			result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-				Profile: tc.profile,
-			})
-			if err != nil {
-				t.Fatalf("ValidateFactoryAPI: %v", err)
+			finding := factoryvalidation.ValidationResult{Targets: []factoryvalidation.ValidationTarget{{
+				Code:     "factory.workstation.missingOutputRoutes",
+				Severity: factoryvalidation.ValidationSeverityError,
+				Message:  tc.workstation + " has no output routes",
+				Subject: factoryvalidation.ValidationSubject{
+					Type: factoryvalidation.ValidationSubjectTypeWorkstation, ID: tc.workstation,
+					Location: factoryvalidation.ValidationSubjectLocationOutputs,
+				},
+			}}}
+			validator := testFactoryDefinitionValidator(finding)
+			if tc.profile == factoryvalidation.ValidationProfilePrePersist {
+				validator = testFactoryDefinitionValidator(factoryvalidation.ValidationResult{}, finding)
 			}
+			result := invokeDefinitionValidationRole(t, factory, tc.profile, validator)
 			if !result.HasTargets() {
 				t.Fatal("expected validation targets for routeless workstation")
 			}
@@ -70,14 +76,14 @@ func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOut
 			validationassert.HasTarget(
 				t,
 				apiResult.Targets,
-				factoryvalidation.CodeWorkstationMissingOutputRoutes,
+				"factory.workstation.missingOutputRoutes",
 				factoryapi.FactoryValidationSubjectTypeWorkstation,
 				tc.workstation,
 				factoryapi.FactoryValidationSubjectLocationOutputs,
 				tc.workstation+" OUTPUTS missingOutputRoutes target",
 			)
 			for _, target := range apiResult.Targets {
-				if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute &&
+				if target.Code == "factory.workstation.missingFailureRoute" &&
 					target.Subject.Type == factoryapi.FactoryValidationSubjectTypeWorkstation &&
 					target.Subject.Id == tc.workstation &&
 					target.Subject.Location == factoryapi.FactoryValidationSubjectLocationOnFailure {

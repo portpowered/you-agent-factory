@@ -5,18 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-const packagedDeepResearchFactoryName = "@you/deep-research"
 
 func TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis(t *testing.T) {
 	if testing.Short() {
@@ -65,10 +62,8 @@ func TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags(
 func runNamedDeepResearchCLI(t *testing.T, invocationArgs ...string) factoryapi.InvocationResponse {
 	t.Helper()
 	homeDir := t.TempDir()
-	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	if _, err := factoryconfig.PersistNamedFactory(globalRoot, packagedDeepResearchFactoryName, deepresearch.BuiltInFactoryJSON); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/deep-research): %v", err)
-	}
+	binaryPath := buildYouCLIBinary(t)
+	initializeCLISystemConfig(t, binaryPath, homeDir)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -76,20 +71,20 @@ func runNamedDeepResearchCLI(t *testing.T, invocationArgs ...string) factoryapi.
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, buildYouCLIBinary(t),
-		"--json", "run", "--named", packagedDeepResearchFactoryName,
+	cmd := exec.CommandContext(ctx, binaryPath,
+		"--json", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
 		"--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port),
 		writeDefaultMockWorkersConfig(t),
 		"--",
 	)
 	cmd.Args = append(cmd.Args, invocationArgs...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", packagedDeepResearchFactoryName, err, stdout.String(), stderr.String())
+		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", factorydefinitions.PackagedDeepResearchFactoryName, err, stdout.String(), stderr.String())
 	}
 
 	var response factoryapi.InvocationResponse

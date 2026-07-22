@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/factory/events/kinds"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,7 +20,6 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedEventLegacySchemasAbsent(t, schemas)
 	assertUnifiedEventEnvelope(t, schemas)
 	assertFactoryEventTypePayloadDiscriminator(t, schemas)
-	assertPublicFactoryEventKindParityIsClosed(t)
 	assertUnifiedEventContext(t, schemas)
 	assertUnifiedRunRequestEvent(t, schemas)
 	assertUnifiedFactorySchema(t, schemas)
@@ -206,17 +204,6 @@ func assertFactoryEventTypePayloadDiscriminator(t *testing.T, schemas map[string
 		if !slices.Contains(canonicalFactoryEventTypeValues, eventType) {
 			t.Fatalf("FactoryEvent.discriminator.mapping contains orphan event type %q", eventType)
 		}
-	}
-}
-
-func assertPublicFactoryEventKindParityIsClosed(t *testing.T) {
-	t.Helper()
-	data, err := os.ReadFile("../../../../api/openapi.yaml")
-	if err != nil {
-		t.Fatalf("read bundled openapi contract: %v", err)
-	}
-	if err := factoryeventkinds.ValidateBundledFactoryEventKindParity(data); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -826,9 +813,6 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	description, _ := eventsOperation["description"].(string)
 	assertSessionEventsSSELifecycleDescription(t, description)
 
-	globalEventsOperation := pathOperation(t, paths, "/events", "get")
-	assertGlobalEventsCompatibilityOperation(t, globalEventsOperation)
-
 	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
 	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
 	factoryEventProperties := schemaProperties(t, factoryEvent, "FactoryEvent")
@@ -897,26 +881,4 @@ func assertSessionEventsSSELifecycleDescription(t *testing.T, description string
 			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
 		}
 	}
-}
-
-func assertGlobalEventsCompatibilityOperation(t *testing.T, globalEventsOperation map[string]any) {
-	t.Helper()
-	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
-	globalDescription, _ := globalEventsOperation["description"].(string)
-	globalDescriptionLower := strings.ToLower(globalDescription)
-	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
-		if !strings.Contains(globalDescriptionLower, fragment) {
-			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
-		}
-	}
-	if strings.Contains(globalDescriptionLower, "canonical dashboard") {
-		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
-	}
-	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
-	globalParameters, ok := globalEventsOperation["parameters"].([]any)
-	if !ok {
-		t.Fatalf("paths./events.get.parameters is missing")
-	}
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
 }

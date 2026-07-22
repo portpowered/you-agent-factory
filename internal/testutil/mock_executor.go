@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // MockExecutor returns predetermined WorkResults in sequence.

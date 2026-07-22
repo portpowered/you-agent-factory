@@ -15,23 +15,477 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/configinit"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/initializer"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
+// Legacy mutable delegates remain test-only while older command tests migrate
+// to CommandFactory. Production command construction has no mutable
+// package-level service bindings.
+var runCLI = func(context.Context, runcli.RunConfig) error {
+	return fmt.Errorf("run service initializer is required")
+}
+var flattenFactoryConfig = func(configcli.FactoryConfigFlattenConfig) error {
+	return fmt.Errorf("Factory config flatten operation is required")
+}
+var expandFactoryConfig = func(configcli.FactoryConfigExpandConfig) error {
+	return fmt.Errorf("Factory config expand operation is required")
+}
+var initFactory interfaces.ScaffoldInitializer = func(interfaces.ScaffoldConfig) error {
+	return fmt.Errorf("Factory scaffold initializer is required")
+}
+var submitWork = submitcli.NewSubmit(work.PayloadFileReader(os.ReadFile), rootTestHTTPProtocol())
+var submitBatch = submitcli.NewSubmitBatch(rootTestHTTPProtocol(), rootTestBatchPreparation{})
+var listWork = workcli.NewList(rootTestHTTPProtocol(), rootTestWorkListPreparation{})
+var showWork = workcli.NewShow(rootTestHTTPProtocol())
+var moveWork = workcli.NewMove(rootTestHTTPProtocol())
+var visualizeWork = func(workcli.VisualizeConfig) error {
+	return fmt.Errorf("Work visualization operation is required")
+}
+var listSessions = sessioncli.NewList(rootTestHTTPProtocol(), rootRequestPreparation{})
+var showSession = sessioncli.NewShow(rootTestHTTPProtocol())
+var pauseSession = sessioncli.NewPause(rootTestHTTPProtocol())
+var resumeSession = sessioncli.NewResume(rootTestHTTPProtocol())
+var listSessionDispatches = sessioncli.NewDispatches(rootTestHTTPProtocol())
+var createSession = sessioncli.NewCreate(rootTestHTTPProtocol())
+var deleteSession = sessioncli.NewDelete(rootTestHTTPProtocol())
+var queryFactory = factorycli.NewQuery(rootTestHTTPProtocol())
+
+type rootTestBatchPreparation struct{}
+
+func (rootTestBatchPreparation) PrepareFactoryRequestBatch(
+	_ context.Context,
+	data []byte,
+) (work.PreparedFactoryRequestBatch, error) {
+	var request work.WorkRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return work.PreparedFactoryRequestBatch{}, err
+	}
+	return work.PreparedFactoryRequestBatch{Request: request, CanonicalJSON: append([]byte(nil), data...)}, nil
+}
+
+type rootTestWorkListPreparation struct{}
+
+func (rootTestWorkListPreparation) PrepareListRequest(
+	_ context.Context,
+	options work.ListOptions,
+) (work.PreparedListRequest, error) {
+	return work.PreparedListRequest{Options: options, FilterSummary: "test"}, nil
+}
+
+type rootRequestPreparation struct{}
+
+func (rootRequestPreparation) PrepareStart(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareControl(request factorysessions.ControlRequest) (factorysessions.ControlRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareApprove(request factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareRetryDispatch(request factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareInterruptDispatch(request factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareResult(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
+	return request, nil
+}
+func (rootRequestPreparation) PrepareEventReconnect(request factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error) {
+	return request, nil
+}
+
+type rootNamedFactoryCatalogFake struct {
+	resolve func(string, string, string) (*interfaces.NamedFactoryResolution, error)
+}
+
+func (rootNamedFactoryCatalogFake) ListNamedFactories(string) ([]interfaces.NamedFactoryListEntry, error) {
+	return nil, nil
+}
+func (rootNamedFactoryCatalogFake) DeleteNamedFactory(string, string) error { return nil }
+func (catalog rootNamedFactoryCatalogFake) ResolveNamedFactoryAcrossRoots(
+	projectRoot,
+	globalRoot,
+	name string,
+) (*interfaces.NamedFactoryResolution, error) {
+	if catalog.resolve == nil {
+		return nil, fmt.Errorf("%w: %s", interfaces.ErrNamedFactoryNotFound, name)
+	}
+	return catalog.resolve(projectRoot, globalRoot, name)
+}
+
+var listFactories = factorycli.NewList(rootNamedFactoryCatalogFake{})
+var validateFactory = func(config factorycli.ValidateConfig) error {
+	return fmt.Errorf("Factory Definition validator is required")
+}
+var createFactoryFromFile = factorycli.CreateFromFile
+var replaceFactoryCurrent = factorycli.NewReplaceCurrent(rootTestHTTPProtocol())
+var updateFactoryFromFile = factorycli.UpdateFromFile
+var deleteFactory = factorycli.NewDelete(rootNamedFactoryCatalogFake{})
+
+type rootModelInvocationOperation struct{}
+
+func (rootModelInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
+	return dir, nil
+}
+func (rootModelInvocationOperation) ExportModelInvocationArtifact(string, string) error { return nil }
+func (rootModelInvocationOperation) InvokeModel(context.Context, factorysessions.InvocationTarget, string, modelcontract.Request) (modelcontract.Result, error) {
+	return modelcontract.Result{}, fmt.Errorf("model invocation test operation is not configured")
+}
+
+var rootModelsCLI = modelscli.New(rootTestHTTPProtocol(), rootModelInvocationOperation{})
+var listModels = rootModelsCLI.List
+var inspectModel = rootModelsCLI.Inspect
+var invokeModel = rootModelsCLI.Invoke
+var pullModel = rootModelsCLI.Pull
+
+type legacyModelsCLIService struct{}
+
+func (legacyModelsCLIService) List(cfg modelscli.ListConfig) error       { return listModels(cfg) }
+func (legacyModelsCLIService) Inspect(cfg modelscli.InspectConfig) error { return inspectModel(cfg) }
+func (legacyModelsCLIService) Invoke(cfg modelscli.InvokeConfig) error   { return invokeModel(cfg) }
+func (legacyModelsCLIService) Pull(cfg modelscli.PullConfig) error       { return pullModel(cfg) }
+
+func ShowSessionAccessor() func(sessioncli.ShowConfig) error         { return showSession }
+func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error)    { showSession = fn }
+func ListModelsAccessor() func(modelscli.ListConfig) error           { return listModels }
+func SetListModelsAccessor(fn func(modelscli.ListConfig) error)      { listModels = fn }
+func InspectModelAccessor() func(modelscli.InspectConfig) error      { return inspectModel }
+func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) { inspectModel = fn }
+func InvokeModelAccessor() func(modelscli.InvokeConfig) error        { return invokeModel }
+func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error)   { invokeModel = fn }
+func PullModelAccessor() func(modelscli.PullConfig) error            { return pullModel }
+func SetPullModelAccessor(fn func(modelscli.PullConfig) error)       { pullModel = fn }
+
+func newLegacyTestRootCommand() *cobra.Command {
+	return newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{})
+}
+
+func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
+	if factory.ModelsCLI == nil {
+		factory.ModelsCLI = legacyModelsCLIService{}
+	}
+	factory.prepareInvocationInput = rootInvocationInputScript{prepare: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+		return work.PreparedInvocationInput{}, nil
+	}}
+	factory.resolveOperatorDefaults = func(string, operatorconfig.Defaults, operatorconfig.FlagOverrides) (operatorconfig.ResolvedDefaults, error) {
+		return operatorconfig.ResolvedDefaults{}, nil
+	}
+	factory.resolveNamedFactoryRoots = func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error) {
+		return interfaces.NamedFactoryRoots{Project: workingDir, Global: homeDir}, nil
+	}
+	factory.resolveNamedFactoryCandidatePaths = func(projectRoot, globalRoot, _ string) (interfaces.NamedFactoryCandidatePaths, error) {
+		return interfaces.NamedFactoryCandidatePaths{Project: projectRoot, Global: globalRoot}, nil
+	}
+	factory.buildTerminalLogger = func(terminalpolicy.Mode, bool) (*zap.Logger, error) {
+		return zap.NewNop(), nil
+	}
+	factory.resolveCurrentFactoryDir = func(rootDir string) (string, error) {
+		return rootDir, nil
+	}
+	factory.resolveFactoryConfigRoot = resolveTestFactoryConfigRoot
+	factory.loadFactoryConfigFile = loadTestFactoryConfigFile
+	factory.workRequestFileLoader = loadTestWorkRequestFile
+	factory.openRunSelection = func(cfg runcli.RunConfig) startupcli.RunSelection {
+		return testRunSelection{cfg: cfg}
+	}
+	factory.runDefaults = runcli.RunConfig{
+		RuntimeLogConfig: logging.RuntimeLogConfig{
+			MaxSize: 100, MaxBackups: 20, MaxAge: 30,
+		},
+		RuntimeMetricsConfig: platformmetrics.RuntimeMetricsConfig{
+			MaxSize: 100, MaxBackups: 20, MaxAge: 30,
+		},
+	}
+	factory.runDirectoryCreator = testRunDirectoryCreator{}
+	factory.browserOpener = func(context.Context, string) error { return nil }
+	return factory
+}
+
+// rootInvocationInputScript supplies detached Work-role responses to legacy
+// command-boundary tests. Work policy invariants are covered in the owner
+// package; these tests exercise only how the CLI maps the returned values.
+type rootInvocationInputScript struct {
+	prepare func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error)
+}
+
+func (root rootInvocationInputScript) PrepareInvocationInput(
+	ctx context.Context,
+	request work.InvocationInputPreparationRequest,
+) (work.PreparedInvocationInput, error) {
+	return root.prepare(ctx, request)
+}
+
+type testRunSelection struct{ cfg runcli.RunConfig }
+
+func (selection testRunSelection) Open(context.Context, startupcli.RunIntent) (initializer.RunApplication, error) {
+	return runApplicationFuncForCLITest(func(context.Context) error { return nil }), nil
+}
+
+type runApplicationFuncForCLITest func(context.Context) error
+
+func (run runApplicationFuncForCLITest) Run(ctx context.Context) error { return run(ctx) }
+
+func TestResolveRunNamedFactorySelectionForwardsFailureToInjectedCandidatePaths(t *testing.T) {
+	t.Parallel()
+
+	const (
+		homeDir     = "customer-home"
+		workingDir  = "customer-repo"
+		projectRoot = "detached-project-root"
+		globalRoot  = "detached-global-root"
+		name        = "@you/goal"
+		projectPath = "detached-project-candidate"
+		globalPath  = "detached-global-candidate"
+	)
+	blocking := interfaces.NewBlockingFactoryLoadError(interfaces.ValidationResult{
+		Targets: []interfaces.ValidationTarget{{Code: "RULE", Message: "broken"}},
+	})
+	catalog := rootNamedFactoryCatalogFake{resolve: func(gotProject, gotGlobal, gotName string) (*interfaces.NamedFactoryResolution, error) {
+		if gotProject != projectRoot || gotGlobal != globalRoot || gotName != name {
+			t.Fatalf("catalog request = (%q, %q, %q), want (%q, %q, %q)", gotProject, gotGlobal, gotName, projectRoot, globalRoot, name)
+		}
+		return nil, blocking
+	}}
+	candidateCalls := 0
+	resolveCandidates := interfaces.NamedFactoryCandidatePathsResolver(func(gotProject, gotGlobal, gotName string) (interfaces.NamedFactoryCandidatePaths, error) {
+		candidateCalls++
+		if gotProject != projectRoot || gotGlobal != globalRoot || gotName != name {
+			t.Fatalf("candidate request = (%q, %q, %q), want (%q, %q, %q)", gotProject, gotGlobal, gotName, projectRoot, globalRoot, name)
+		}
+		return interfaces.NamedFactoryCandidatePaths{Project: projectPath, Global: globalPath}, nil
+	})
+	ctx := startupcli.WithWorkingDirectory(context.Background(), workingDir)
+	cfg := &runcli.RunConfig{NamedFactoryName: name}
+
+	err := resolveRunNamedFactorySelection(
+		ctx,
+		cfg,
+		homeDir,
+		catalog,
+		func(gotHome, gotWorking string) (interfaces.NamedFactoryRoots, error) {
+			if gotHome != homeDir || gotWorking != workingDir {
+				t.Fatalf("root request = (%q, %q), want (%q, %q)", gotHome, gotWorking, homeDir, workingDir)
+			}
+			return interfaces.NamedFactoryRoots{Project: projectRoot, Global: globalRoot}, nil
+		},
+		resolveCandidates,
+	)
+	operatorErr, ok := factoryload.AsOperatorError(err)
+	if !ok {
+		t.Fatalf("selection error = %T %v, want OperatorError", err, err)
+	}
+	if operatorErr.FactoryPath != projectPath {
+		t.Fatalf("operator FactoryPath = %q, want detached project candidate %q", operatorErr.FactoryPath, projectPath)
+	}
+	if candidateCalls != 1 {
+		t.Fatalf("candidate resolver calls = %d, want 1", candidateCalls)
+	}
+}
+
+func testRunConfig(selection startupcli.RunSelection) runcli.RunConfig {
+	return selection.(testRunSelection).cfg
+}
+
+func resolveTestFactoryConfigRoot(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", fmt.Errorf("factory config path is required")
+	}
+	resolved, err := filepath.Abs(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("resolve factory config path %s: %w", trimmed, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("factory config file not found: %s", trimmed)
+		}
+		return "", fmt.Errorf("find factory config file %s: %w", trimmed, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("factory config path must be a file: %s", trimmed)
+	}
+	return filepath.Dir(resolved), nil
+}
+
+func loadTestFactoryConfigFile(path string) (*interfaces.FactoryConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("factory config file not found: %s", path)
+		}
+		return nil, fmt.Errorf("read factory config file %s: %w", path, err)
+	}
+	cfg, err := factorymapping.NewFactoryConfigMapper().Expand(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse factory config %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+func loadTestWorkRequestFile(path string) (work.WorkRequest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return work.WorkRequest{}, err
+	}
+	var request work.WorkRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return work.WorkRequest{}, err
+	}
+	return request, nil
+}
+
+type testRunDirectoryCreator struct{}
+
+func (testRunDirectoryCreator) MkdirAll(string, os.FileMode) error { return nil }
+
+func newLegacyTestRootCommandWithCatalog(
+	catalog interfaces.NamedFactoryCatalog,
+) *cobra.Command {
+	return newLegacyTestRootCommandWithCatalogAndOperatorDefaults(catalog, nil)
+}
+
+func newLegacyTestRootCommandWithOperatorDefaults(
+	resolve operatorconfig.DefaultsResolver,
+) *cobra.Command {
+	return newLegacyTestRootCommandWithCatalogAndOperatorDefaults(rootNamedFactoryCatalogFake{}, resolve)
+}
+
+func expectOperatorDefaultsResolution(
+	t *testing.T,
+	wantEnvironment operatorconfig.Defaults,
+	wantFlags operatorconfig.FlagOverrides,
+	result operatorconfig.ResolvedDefaults,
+	resultErr error,
+) operatorconfig.DefaultsResolver {
+	t.Helper()
+	return func(_ string, environment operatorconfig.Defaults, flags operatorconfig.FlagOverrides) (operatorconfig.ResolvedDefaults, error) {
+		if environment != wantEnvironment {
+			t.Fatalf("operator defaults environment = %+v, want %+v", environment, wantEnvironment)
+		}
+		if flags != wantFlags {
+			t.Fatalf("operator defaults flags = %+v, want %+v", flags, wantFlags)
+		}
+		return result, resultErr
+	}
+}
+
+func newLegacyTestRootCommandWithCatalogAndOperatorDefaults(
+	catalog interfaces.NamedFactoryCatalog,
+	resolve operatorconfig.DefaultsResolver,
+) *cobra.Command {
+	return newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(catalog, resolve, rootInvocationInputScript{})
+}
+
+func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
+	catalog interfaces.NamedFactoryCatalog,
+	resolve operatorconfig.DefaultsResolver,
+	prepare rootInvocationInputScript,
+) *cobra.Command {
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		namedFactoryCatalog: catalog,
+		SubmitWork:          submitWork, SubmitBatch: submitBatch,
+		ListSessions: listSessions, ShowSession: showSession,
+		PauseSession: pauseSession, ResumeSession: resumeSession,
+		ListSessionDispatches: listSessionDispatches,
+		CreateSession:         createSession, DeleteSession: deleteSession,
+		ModelsCLI:            legacyModelsCLIService{},
+		FlattenFactoryConfig: flattenFactoryConfig,
+		ExpandFactoryConfig:  expandFactoryConfig, InitFactory: initFactory,
+		QueryFactory: queryFactory, ListFactories: listFactories,
+		ValidateFactory: validateFactory, CreateFactoryFromFile: createFactoryFromFile,
+		ReplaceFactoryCurrent: replaceFactoryCurrent, UpdateFactoryFromFile: updateFactoryFromFile,
+		DeleteFactory: deleteFactory,
+		ListWork:      listWork, ShowWork: showWork,
+		MoveWork: moveWork, VisualizeWork: visualizeWork,
+	})
+	if resolve != nil {
+		factory.resolveOperatorDefaults = resolve
+	}
+	if prepare.prepare != nil {
+		factory.prepareInvocationInput = prepare
+	}
+	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+			return runCLI(ctx, testRunConfig(selection))
+		},
+	})
+	if workingDirectory, err := os.Getwd(); err == nil {
+		root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	}
+	return root
+}
+
+func newLegacyTestRootCommandWithInvocationInput(prepare rootInvocationInputScript) *cobra.Command {
+	return newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(rootNamedFactoryCatalogFake{}, nil, prepare)
+}
+
+func newLegacyTestRootCommandWithCatalogAndInvocationInput(catalog interfaces.NamedFactoryCatalog, prepare rootInvocationInputScript) *cobra.Command {
+	return newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(catalog, nil, prepare)
+}
+
+func programmedInvocationInput(result work.PreparedInvocationInput, err error) rootInvocationInputScript {
+	return rootInvocationInputScript{prepare: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+		return result, err
+	}}
+}
+
+func programmedTextInvocationInput(source work.InputSourceLabel, text string) rootInvocationInputScript {
+	resolved := &work.ResolvedInput{Source: source, Text: text, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}}}
+	return programmedInvocationInput(work.PreparedInvocationInput{Source: source, ResolvedInput: resolved}, nil)
+}
+
+func TestNewRootCommandFromSubcommandsAttachesInjectedCommands(t *testing.T) {
+	root := &cobra.Command{Use: "you"}
+	docs := &cobra.Command{Use: "docs"}
+	run := &cobra.Command{Use: "run"}
+
+	got := NewRootCommandFromSubcommands(root, RootSubcommands{
+		Commands: []*cobra.Command{docs, run},
+	})
+
+	if got != root {
+		t.Fatal("root constructor replaced the injected root command")
+	}
+	if found, _, err := got.Find([]string{"docs"}); err != nil || found != docs {
+		t.Fatalf("injected docs command = (%v, %v), want supplied command", found, err)
+	}
+	if found, _, err := got.Find([]string{"run"}); err != nil || found != run {
+		t.Fatalf("injected run command = (%v, %v), want supplied command", found, err)
+	}
+}
+
 func TestMain(m *testing.M) {
+	// Cobra's Windows mousetrap check enumerates processes on every Execute.
+	// These tests invoke commands in-process and never exercise Explorer launch
+	// behavior, so avoid paying that external-system cost for each command tree.
+	cobra.MousetrapHelpText = ""
+
 	homeDir, err := os.MkdirTemp("", "you-cli-test-home-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create cli test home: %v\n", err)
@@ -49,35 +503,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestGeneratedRunSubmitFamilyForParityUsesProductionHandlerBindings(t *testing.T) {
-	root, err := NewGeneratedRunSubmitFamilyCommandForParity()
-	if err != nil {
-		t.Fatalf("NewGeneratedRunSubmitFamilyCommandForParity() error = %v", err)
-	}
-	for _, path := range []struct {
-		args []string
-		name string
-	}{
-		{args: []string{"run"}, name: "run"},
-		{args: []string{"submit"}, name: "submit"},
-		{args: []string{"submit", "batch"}, name: "batch"},
-	} {
-		cmd, _, findErr := root.Find(path.args)
-		if findErr != nil {
-			t.Fatalf("Find(%v) error = %v", path.args, findErr)
-		}
-		if cmd.Name() != path.name || cmd.PreRunE == nil || cmd.RunE == nil {
-			t.Fatalf("Find(%v) = %q lifecycle=(%t,%t)", path.args, cmd.Name(), cmd.PreRunE != nil, cmd.RunE != nil)
-		}
-	}
-}
-
 func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
-	if !useGeneratedRunSubmitFamily {
-		t.Fatal("useGeneratedRunSubmitFamily = false, want production cutover enabled")
-	}
-
-	root := NewRootCommandWithOptions(RootCommandOptions{})
+	root := (CommandFactory{ModelsCLI: legacyModelsCLIService{}}).NewCommand(nil, nil, nil)
 	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil {
@@ -100,27 +527,6 @@ func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
 	assertDirectCommandCount(t, submitCmd, "batch", 1)
 }
 
-func TestRunSubmitFamilyRollbackBuildsRetainedCommands(t *testing.T) {
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-
-	commands, err := buildRunSubmitProductionCommands(
-		globals, diagnostics, operatorDefaults, options, false,
-	)
-	if err != nil {
-		t.Fatalf("buildRunSubmitProductionCommands(legacy) error = %v", err)
-	}
-	if commands.Run.Name() != "run" || commands.Submit.Name() != "submit" {
-		t.Fatalf("legacy commands = (%q, %q), want (run, submit)", commands.Run.Name(), commands.Submit.Name())
-	}
-	if commands.Run.PreRunE == nil || commands.Run.RunE == nil || commands.Submit.PreRunE == nil || commands.Submit.RunE == nil {
-		t.Fatal("legacy rollback commands must retain handwritten lifecycles")
-	}
-	assertDirectCommandCount(t, commands.Submit, "batch", 1)
-}
-
 func assertDirectCommandCount(t *testing.T, parent *cobra.Command, name string, want int) {
 	t.Helper()
 	count := 0
@@ -136,39 +542,31 @@ func assertDirectCommandCount(t *testing.T, parent *cobra.Command, name string, 
 
 func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 	t.Helper()
-	return NewRootCommandWithOptions(RootCommandOptions{
-		RunFactory: func(ctx context.Context, cfg runcli.RunConfig) error {
-			application, err := runcli.BuildApplication(ctx, cfg, nil, func(
-				buildCtx context.Context,
-				serviceCfg *service.FactoryServiceConfig,
-			) (runcli.InvocationRunner, error) {
-				svc, err := service.BuildFactoryService(buildCtx, service.NormalizeInvocationBootstrapConfig(serviceCfg))
-				if err != nil {
-					return nil, err
-				}
-				return service.NewInvocationBootstrap(svc)
-			})
-			if err != nil {
-				return err
-			}
-			return application.Run(ctx)
-		},
-		BuildSessionExecution: func(_ context.Context, _ sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
-			catalogPath := filepath.Join("..", "..", "..", filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath))
-			service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
-			return rootRunExecutionOwner{Service: service}, err
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+		RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+			err := interfaces.NewBlockingFactoryLoadError(
+				interfaces.ValidationResult{
+					Targets: []interfaces.ValidationTarget{{
+						Code:     "factory.topology.unknownReference",
+						Severity: interfaces.ValidationSeverityError,
+						Message:  "referenced Factory graph node does not exist",
+						Subject: interfaces.ValidationSubject{
+							Type: interfaces.ValidationSubjectTypeWorkstation,
+							ID:   "missing-workstation",
+						},
+					}},
+				},
+			)
+			return factoryload.MaybeFormatOperatorError(err, testRunConfig(selection).FactoryConfigPath)
 		},
 	})
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), t.TempDir()))
+	return root
 }
-
-type rootRunExecutionOwner struct {
-	factorysessionexecution.Service
-}
-
-func (rootRunExecutionOwner) Close() error { return nil }
 
 func TestRunCommand_VerboseFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -187,7 +585,7 @@ func TestRunCommand_VerboseFlag(t *testing.T) {
 }
 
 func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	commands := [][]string{
 		{},
 		{"run"},
@@ -235,7 +633,7 @@ func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing
 }
 
 func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -293,7 +691,14 @@ func TestRunCommand_FactoryPromptRejectsEmptyStdinWithStableCode(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedInvocationInput(
+		work.PreparedInvocationInput{},
+		&work.InputError{
+			Code:    work.InputErrorCodeEmpty,
+			Message: "invocation stdin input is empty",
+			Source:  work.InputSourceStdinText,
+		},
+	))
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -342,7 +747,14 @@ func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedInvocationInput(
+		work.PreparedInvocationInput{},
+		&work.InputError{
+			Code:               work.InputErrorCodeSourceConflict,
+			Message:            "invocation input sources conflict: positional_text, stdin_text",
+			ConflictingSources: []work.InputSourceLabel{work.InputSourcePositionalText, work.InputSourceStdinText},
+		},
+	))
 	root.SetIn(strings.NewReader("Fix from stdin\n"))
 	root.SetOut(io.Discard)
 	var stderr bytes.Buffer
@@ -383,7 +795,10 @@ func TestRunCommand_FactoryPromptRejectsWorkFlagConflict(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedTextInvocationInput(
+		work.InputSourcePositionalText,
+		"Fix the lint issues",
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "--work", "work.json", "Fix the lint issues"})
@@ -412,7 +827,10 @@ func TestRunCommand_PositionalPromptRequiresFactoryFlag(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithInvocationInput(programmedTextInvocationInput(
+		work.InputSourcePositionalText,
+		"Fix the lint issues",
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--dir", "factory", "Fix the lint issues"})
@@ -446,7 +864,7 @@ func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) 
 		}
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
@@ -480,7 +898,7 @@ func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t 
 		}
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
@@ -518,7 +936,7 @@ func TestRootCommand_NoArgsStartsContinuousRun(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{})
@@ -576,7 +994,7 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 	}
 
 	var rootOut bytes.Buffer
-	rootDefault := NewRootCommand()
+	rootDefault := newLegacyTestRootCommand()
 	rootDefault.SetOut(&rootOut)
 	rootDefault.SetErr(io.Discard)
 	rootDefault.SetArgs([]string{})
@@ -585,7 +1003,7 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 	}
 
 	var explicitOut bytes.Buffer
-	explicitRun := NewRootCommand()
+	explicitRun := newLegacyTestRootCommand()
 	explicitRun.SetOut(&explicitOut)
 	explicitRun.SetErr(io.Discard)
 	explicitRun.SetArgs([]string{"run"})
@@ -618,16 +1036,34 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 	noArgs.Logger = nil
 	noArgs.StartupOutput = nil
 	noArgs.Output = nil
+	noArgs.FactoryScaffoldInitializer = nil
+	noArgs.ResolveCurrentFactoryDir = nil
+	noArgs.ResolveFactoryConfigRoot = nil
+	noArgs.LoadFactoryConfigFile = nil
+	noArgs.WorkRequestFileLoader = nil
+	noArgs.DirectoryCreator = nil
+	noArgs.BrowserOpener = nil
+	noArgs.Stdin = nil
+	noArgs.StdinIsTTY = nil
 	explicit.Logger = nil
 	explicit.StartupOutput = nil
 	explicit.Output = nil
+	explicit.FactoryScaffoldInitializer = nil
+	explicit.ResolveCurrentFactoryDir = nil
+	explicit.ResolveFactoryConfigRoot = nil
+	explicit.LoadFactoryConfigFile = nil
+	explicit.WorkRequestFileLoader = nil
+	explicit.DirectoryCreator = nil
+	explicit.BrowserOpener = nil
+	explicit.Stdin = nil
+	explicit.StdinIsTTY = nil
 	if !reflect.DeepEqual(noArgs, explicit) {
 		t.Fatalf("no-args and explicit run configs diverge outside documented defaults:\nno-args: %#v\nrun:     %#v", noArgs, explicit)
 	}
 }
 
 func TestRunCommand_DebugFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -657,7 +1093,7 @@ func TestRunCommand_DebugImpliesVerboseRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--debug"})
@@ -687,7 +1123,7 @@ func TestWorkListCommand_SharedDiagnosticsFlagsMapToConfig(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"work", "list", "--debug"})
@@ -732,7 +1168,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"--json", "factory", "query", "--verbose"})
@@ -754,7 +1190,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 }
 
 func TestRunCommand_ContinuouslyFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -785,7 +1221,7 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 }
 
 func TestRunCommand_RecordAndReplayFlags(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -803,7 +1239,7 @@ func TestRunCommand_RecordAndReplayFlags(t *testing.T) {
 }
 
 func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -828,7 +1264,7 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 }
 
 func TestRunCommand_SkipPermissionsFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -861,7 +1297,7 @@ func TestRunCommand_SkipPermissionsFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--skip-permissions"})
@@ -889,7 +1325,7 @@ func TestRunCommand_WithoutSkipPermissionsLeavesInvocationOverrideUnset(t *testi
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run"})
@@ -914,7 +1350,7 @@ func TestRunCommand_WorkflowFlagRejected(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--workflow", "workflow-1"})
@@ -943,7 +1379,7 @@ func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	retiredFlag := "--" + strings.Join([]string{"dry", "run"}, "-")
@@ -962,7 +1398,7 @@ func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 }
 
 func TestRunCommand_QuietFlag(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -995,7 +1431,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1052,7 +1488,7 @@ func TestWorkListCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"work", "list"})
@@ -1067,7 +1503,7 @@ func TestWorkListCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 }
 
 func TestRunCommand_RuntimeLogFlags(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -1124,7 +1560,7 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1183,7 +1619,7 @@ func TestRunCommand_RecordAndNoRecordFlagsCanBePassedTogetherForDeterministicVal
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1215,7 +1651,7 @@ func TestRunCommand_RuntimeLogFlagsMapToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1252,8 +1688,7 @@ func TestRunCommand_OutputResponseStreamFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	env := setupNamedGoalCLIEnv(t)
-	root := env.root
+	root := newTransportNamedFactoryRoot(t, packagedGoalFactoryName)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1283,7 +1718,7 @@ func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--with-mock-workers", "mock-workers.json"})
@@ -1312,7 +1747,7 @@ func TestRunCommand_WithMockWorkersFlagWithoutPathMapsToDefaultConfig(t *testing
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--with-mock-workers"})
@@ -1341,7 +1776,7 @@ func TestRunCommand_VerboseFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--verbose"})
@@ -1377,7 +1812,7 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"run", "--verbose"})
@@ -1394,108 +1829,20 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 }
 
-func TestRunCommand_NamedFactoryResolutionMetadataFlowsForInstalledGoal(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	env := setupNamedGoalCLIEnv(t)
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	executeNamedGoalRun(t, env.root)
-	assertInstalledGoalResolution(t, got, env.homeDir)
-}
-
-func TestRunCommand_RepeatedInstalledGoalRunReusesDiskCopy(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	env := setupNamedGoalCLIEnv(t)
-
-	var runs []runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		runs = append(runs, cfg)
-		return nil
-	}
-
-	for range 2 {
-		executeNamedGoalRun(t, env.root)
-	}
-	if len(runs) != 2 {
-		t.Fatalf("run count = %d, want 2", len(runs))
-	}
-	assertGoalResolutionReusesInstalledCopy(t, runs[0], runs[1])
-
-	wantMaterializedDir := materializedGoalDir(env.homeDir)
-	workerPath := filepath.Join(wantMaterializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
-	editedBody := "You are the customer-edited @you/goal built-in.\n"
-	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
-		t.Fatalf("WriteFile(materialized goal worker body): %v", err)
-	}
-
-	executeNamedGoalRun(t, env.root)
-	if len(runs) != 3 {
-		t.Fatalf("run count = %d, want 3", len(runs))
-	}
-	if runs[2].NamedFactoryResolution.FactoryDir != wantMaterializedDir {
-		t.Fatalf("third factory dir = %q, want %q", runs[2].NamedFactoryResolution.FactoryDir, wantMaterializedDir)
-	}
-	assertLoadedGoalWorkerBody(t, runs[2].NamedFactoryResolution.FactoryDir, editedBody)
-}
-
 func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
 	}()
 
-	workingDirectory := t.TempDir()
-	homeDir := t.TempDir()
-	projectRoot := filepath.Join(workingDirectory, "factory")
-	projectPayload := []byte(`{
-	  "name": "project-alpha",
-	  "id": "project-alpha",
-	  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-	  "workers": [{"name":"executor","type":"MODEL_WORKER","body":"You are the executor."}],
-	  "workstations": [{"name":"execute-project-alpha","worker":"executor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"type":"MODEL_WORKSTATION","body":"Implement {{ .WorkID }}."}]
-	}`)
-	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", projectPayload); err != nil {
-		t.Fatalf("PersistNamedFactory(project alpha): %v", err)
+	projectFactoryDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(projectFactoryDir, interfaces.FactoryConfigFile),
+		portableFactoryPayloadWithDefaultHandling(),
+		0o600,
+	); err != nil {
+		t.Fatalf("write detached Factory fixture: %v", err)
 	}
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
-	globalPayload := []byte(`{
-	  "name": "global-alpha",
-	  "id": "global-alpha",
-	  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-	  "workers": [{"name":"executor","type":"MODEL_WORKER","body":"You are the executor."}],
-	  "workstations": [{"name":"execute-global-alpha","worker":"executor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"type":"MODEL_WORKSTATION","body":"Implement {{ .WorkID }}."}]
-	}`)
-	if _, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", globalPayload); err != nil {
-		t.Fatalf("PersistNamedFactory(global alpha): %v", err)
-	}
-
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -1503,7 +1850,18 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{
+		resolve: func(projectRoot, globalRoot, name string) (*interfaces.NamedFactoryResolution, error) {
+			return &interfaces.NamedFactoryResolution{
+				Name:               name,
+				FactoryDir:         projectFactoryDir,
+				Source:             interfaces.NamedFactoryResolutionSourceProjectLocal,
+				ProjectRoot:        projectRoot,
+				GlobalRoot:         globalRoot,
+				PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal,
+			}, nil
+		},
+	})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--named", "alpha", "--no-record"})
@@ -1517,16 +1875,16 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.
 	if got.Dir != got.NamedFactoryResolution.FactoryDir {
 		t.Fatalf("run dir = %q, want resolved named-factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
 	}
-	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceProjectLocal {
-		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceProjectLocal)
+	if got.NamedFactoryResolution.Source != interfaces.NamedFactoryResolutionSourceProjectLocal {
+		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, interfaces.NamedFactoryResolutionSourceProjectLocal)
 	}
-	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal {
-		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal)
+	if got.NamedFactoryResolution.PrecedenceDecision != interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal)
 	}
 }
 
 func TestRunCommand_UnknownRunnerFlagReturnsCobraError(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--runner", "codex"})
@@ -1541,7 +1899,7 @@ func TestRunCommand_UnknownRunnerFlagReturnsCobraError(t *testing.T) {
 }
 
 func TestRootAndRunHelp_ShowDefaultWorkerModelFlagsAndHideRunner(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -1572,7 +1930,16 @@ func TestRootCommand_DefaultWorkerModelProviderFlagMapsToRunConfig(t *testing.T)
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "codex"},
+		operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+		},
+		nil,
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--default-worker-model-provider", "codex", "run", "--no-record"})
@@ -1590,13 +1957,6 @@ func TestRootCommand_DefaultWorkerModelProviderFlagMapsToRunConfig(t *testing.T)
 
 func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *testing.T) {
 	homeDir := t.TempDir()
-	configPath := operatorconfig.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{"defaults":{"workerModelProvider":"claude"}}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
 
 	originalRunCLI := runCLI
 	defer func() { runCLI = originalRunCLI }()
@@ -1606,17 +1966,34 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 		return nil
 	}
 
-	newCommand := func(environment map[string]string) *cobra.Command {
-		return NewRootCommandWithOptions(RootCommandOptions{
-			HomeDir: func() (string, error) { return homeDir, nil },
-			LookupEnv: func(name string) (string, bool) {
+	newCommand := func(
+		environment map[string]string,
+		wantEnvironment operatorconfig.Defaults,
+		wantFlags operatorconfig.FlagOverrides,
+		result operatorconfig.ResolvedDefaults,
+	) *cobra.Command {
+		factory := withTestInjectedPlatformRoles(CommandFactory{})
+		factory.resolveOperatorDefaults = expectOperatorDefaultsResolution(t, wantEnvironment, wantFlags, result, nil)
+		return factory.NewCommand(
+			func() (string, error) { return homeDir, nil },
+			func(name string) (string, bool) {
 				value, ok := environment[name]
 				return value, ok
 			},
-		})
+			startupcli.Functions{
+				RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+					return runCLI(ctx, testRunConfig(selection))
+				},
+			},
+		)
 	}
 
-	first := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	first := newCommand(
+		map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"},
+		operatorconfig.Defaults{WorkerModelProvider: "codex"},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "gemini"},
+		operatorconfig.ResolvedDefaults{WorkerModelProvider: "GEMINI", WorkerModelProviderSource: operatorconfig.SourceFlag},
+	)
 	first.SetOut(io.Discard)
 	first.SetErr(io.Discard)
 	first.SetArgs([]string{"run", "--default-worker-model-provider", "gemini", "--no-record"})
@@ -1624,7 +2001,15 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 		t.Fatalf("first Execute() error = %v", err)
 	}
 
-	second := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	second := newCommand(
+		map[string]string{
+			operatorconfig.EnvDefaultWorkerModelProvider: "codex",
+			runcli.ModelCacheDirEnvironment:              "/customer/model-cache",
+		},
+		operatorconfig.Defaults{WorkerModelProvider: "codex"},
+		operatorconfig.FlagOverrides{},
+		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModelProviderSource: operatorconfig.SourceEnv},
+	)
 	second.SetOut(io.Discard)
 	second.SetErr(io.Discard)
 	second.SetArgs(nil)
@@ -1632,7 +2017,12 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 		t.Fatalf("second Execute() error = %v", err)
 	}
 
-	third := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: ""})
+	third := newCommand(
+		map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: ""},
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{},
+		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CLAUDE", WorkerModelProviderSource: operatorconfig.SourceFile},
+	)
 	third.SetOut(io.Discard)
 	third.SetErr(io.Discard)
 	third.SetArgs(nil)
@@ -1648,6 +2038,12 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 	}
 	if got[1].OperatorDefaults.WorkerModelProvider != "CODEX" || got[1].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceEnv {
 		t.Fatalf("second defaults = %+v, want CODEX from environment", got[1].OperatorDefaults)
+	}
+	if got[1].ModelCacheDir != "/customer/model-cache" {
+		t.Fatalf("second model cache dir = %q, want environment value", got[1].ModelCacheDir)
+	}
+	if got[2].ModelCacheDir != "" {
+		t.Fatalf("third model cache dir = %q, want isolated empty value", got[2].ModelCacheDir)
 	}
 	if got[2].OperatorDefaults.WorkerModelProvider != "CLAUDE" || got[2].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFile {
 		t.Fatalf("third defaults = %+v, want CLAUDE from file", got[2].OperatorDefaults)
@@ -1666,7 +2062,13 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModel: "gpt-5-codex"},
+		operatorconfig.ResolvedDefaults{WorkerModel: "gpt-5-codex", WorkerModelSource: operatorconfig.SourceFlag},
+		nil,
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--default-worker-model", "gpt-5-codex", "--no-record"})
@@ -1698,7 +2100,18 @@ func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "codex", WorkerModel: "gpt-5-codex"},
+		operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+		},
+		nil,
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--default-worker-model-provider", "codex", "--default-worker-model", "gpt-5-codex"})
@@ -1719,7 +2132,13 @@ func TestRootCommand_DefaultProviderFlagRejectsUnresolvedSymbolicDefault(t *test
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "DEFAULT"},
+		operatorconfig.ResolvedDefaults{},
+		fmt.Errorf("DEFAULT requires a concrete provider"),
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT", "--no-record"})
@@ -1737,17 +2156,6 @@ func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testi
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
-	configPath := operatorconfig.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "codex"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
 
 	originalRunCLI := runCLI
 	defer func() {
@@ -1760,7 +2168,16 @@ func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testi
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "DEFAULT"},
+		operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+		},
+		nil,
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT", "--no-record"})
@@ -1776,12 +2193,48 @@ func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testi
 	}
 }
 
-type namedGoalCLIEnv struct {
-	homeDir string
-	root    *cobra.Command
+type transportNamedFactoryCatalog map[string]string
+
+func (catalog transportNamedFactoryCatalog) ListNamedFactories(string) ([]interfaces.NamedFactoryListEntry, error) {
+	entries := make([]interfaces.NamedFactoryListEntry, 0, len(catalog))
+	for name, factoryDir := range catalog {
+		entries = append(entries, interfaces.NamedFactoryListEntry{Name: name, FactoryDir: factoryDir})
+	}
+	return entries, nil
 }
 
-func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
+func (transportNamedFactoryCatalog) DeleteNamedFactory(string, string) error {
+	return nil
+}
+
+func (catalog transportNamedFactoryCatalog) ResolveNamedFactoryAcrossRoots(
+	projectRoot string,
+	globalRoot string,
+	name string,
+) (*interfaces.NamedFactoryResolution, error) {
+	factoryDir, ok := catalog[name]
+	if !ok {
+		return nil, fmt.Errorf("named factory %q not found", name)
+	}
+	return &interfaces.NamedFactoryResolution{
+		Name:               name,
+		FactoryDir:         factoryDir,
+		Source:             interfaces.NamedFactoryResolutionSourceGlobal,
+		ProjectRoot:        projectRoot,
+		GlobalRoot:         globalRoot,
+		PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionNone,
+	}, nil
+}
+
+func newTransportNamedFactoryRoot(t *testing.T, names ...string) *cobra.Command {
+	return newTransportNamedFactoryRootWithInvocation(t, rootInvocationInputScript{}, names...)
+}
+
+func newTransportNamedFactoryRootWithInvocation(
+	t *testing.T,
+	prepare rootInvocationInputScript,
+	names ...string,
+) *cobra.Command {
 	t.Helper()
 
 	workingDirectory := t.TempDir()
@@ -1800,109 +2253,21 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 	})
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
 
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	return namedGoalCLIEnv{homeDir: homeDir, root: root}
-}
-
-func materializedGoalDir(homeDir string) string {
-	return filepath.Join(homeDir, ".you-agent-factory", "factories", "@you", "goal")
-}
-
-func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
-	t.Helper()
-
-	root.SetArgs([]string{"run", "--named", "@you/goal", "--no-record"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named @you/goal: %v", err)
-	}
-}
-
-func assertInstalledGoalResolution(t *testing.T, got runcli.RunConfig, homeDir string) {
-	t.Helper()
-
-	if got.NamedFactoryName != "@you/goal" {
-		t.Fatalf("named factory = %q, want @you/goal", got.NamedFactoryName)
-	}
-	if got.NamedFactoryResolution == nil {
-		t.Fatal("expected named-factory resolution metadata")
-	}
-	if got.Dir != got.NamedFactoryResolution.FactoryDir {
-		t.Fatalf("run dir = %q, want resolved named-factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
-	}
-	if got.NamedFactoryResolution.Name != "@you/goal" {
-		t.Fatalf("resolution name = %q, want @you/goal", got.NamedFactoryResolution.Name)
-	}
-	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
-		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
-	}
-	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionNone {
-		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionNone)
-	}
-
-	wantInstalledDir := materializedGoalDir(homeDir)
-	if got.NamedFactoryResolution.FactoryDir != wantInstalledDir {
-		t.Fatalf("installed factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantInstalledDir)
-	}
-	assertMaterializedGoalSplitLayout(t, wantInstalledDir)
-}
-
-func assertMaterializedGoalSplitLayout(t *testing.T, materializedDir string) {
-	t.Helper()
-
-	for _, path := range []string{
-		filepath.Join(materializedDir, interfaces.FactoryConfigFile),
-		filepath.Join(materializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(materializedDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName),
-	} {
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("expected first-use materialized goal path %s: %v", path, err)
+	catalog := make(transportNamedFactoryCatalog, len(names))
+	for _, name := range names {
+		factoryDir := t.TempDir()
+		payload := strings.Replace(goalFailureBaselineNamedFactoryJSON, "@you/goal", name, 1)
+		if err := os.WriteFile(
+			filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+			[]byte(payload),
+			0o644,
+		); err != nil {
+			t.Fatalf("write named Factory fixture: %v", err)
 		}
+		catalog[name] = factoryDir
 	}
-	for _, dirName := range []string{interfaces.WorkersDir, interfaces.WorkstationsDir} {
-		info, err := os.Stat(filepath.Join(materializedDir, dirName))
-		if err != nil {
-			t.Fatalf("stat materialized goal %s: %v", dirName, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("materialized goal %s is not a directory", dirName)
-		}
-	}
-}
-
-func assertGoalResolutionReusesInstalledCopy(t *testing.T, first, second runcli.RunConfig) {
-	t.Helper()
-
-	if first.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
-		t.Fatalf("first resolution source = %q, want %q", first.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
-	}
-	if second.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
-		t.Fatalf("second resolution source = %q, want %q", second.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
-	}
-	if second.NamedFactoryResolution.FactoryDir != first.NamedFactoryResolution.FactoryDir {
-		t.Fatalf("second factory dir = %q, want stable %q", second.NamedFactoryResolution.FactoryDir, first.NamedFactoryResolution.FactoryDir)
-	}
-}
-
-func assertLoadedGoalWorkerBody(t *testing.T, factoryDir, editedBody string) {
-	t.Helper()
-
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited goal): %v", err)
-	}
-	worker, ok := loaded.Worker("goal-executor")
-	if !ok {
-		t.Fatal("expected materialized goal worker")
-	}
-	if worker.Body != editedBody {
-		t.Fatalf("edited goal worker body = %q, want exact edited content %q", worker.Body, editedBody)
-	}
+	return newLegacyTestRootCommandWithCatalogAndInvocationInput(catalog, prepare)
 }
 
 func TestRunCommand_VerboseDiagnosticsIncludeOperatorDefaultPrecedence(t *testing.T) {
@@ -1924,7 +2289,18 @@ func TestRunCommand_VerboseDiagnosticsIncludeOperatorDefaultPrecedence(t *testin
 		return err
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{WorkerModelProvider: "codex", WorkerModel: "gpt-5-codex"},
+		operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+		},
+		nil,
+	))
 	root.SetOut(io.Discard)
 	root.SetErr(&diagnostics)
 	root.SetArgs([]string{"run", "--verbose", "--default-worker-model-provider", "codex", "--default-worker-model", "gpt-5-codex", "--no-record"})

@@ -8,9 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -19,10 +17,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const showRequestTimeout = 10 * time.Second
-
 // ShowConfig holds parameters for the work show command.
 type ShowConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	WorkID      string
@@ -31,12 +28,23 @@ type ShowConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewShow(transport clihttp.Protocol) func(ShowConfig) error {
+	return func(cfg ShowConfig) error { cfg.HTTP = transport; return Show(cfg) }
 }
 
 // Show requests one work item from a running factory via HTTP.
 func Show(cfg ShowConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 	workID := strings.TrimSpace(cfg.WorkID)
 	if workID == "" {
@@ -59,33 +67,28 @@ func Show(cfg ShowConfig) error {
 		cfg.WorkID,
 	)
 
-	client := &http.Client{Timeout: showRequestTimeout}
-	started := time.Now()
 	var work factoryapi.Work
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&work,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "work show",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
 		}
 		return fmt.Errorf("work %q not found", cfg.WorkID)
 	}
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
@@ -97,7 +100,7 @@ func Show(cfg ShowConfig) error {
 		"work show response endpointPath=%s status=%d durationMillis=%d workId=%s",
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		stringValue(work.WorkId),
 	)
 	if cfg.JSON {

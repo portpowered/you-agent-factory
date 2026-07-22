@@ -139,22 +139,64 @@ Repository package-size policy:
 Repository package-boundary policy:
 
 - Direct children of `pkg/` are package families. New root `pkg/` package families are **blocking** unless a maintainer deliberately updates the approved family allowlist with the owning domain and rationale.
-- The durable product-owned root package families are: `pkg/config`, `pkg/factory`, `pkg/initializer`, `pkg/internal`, `pkg/models`, `pkg/orchestrators`, `pkg/root`, `pkg/transports`, `pkg/platform`, `pkg/wire`, `pkg/work`, and `pkg/workers`.
-- Repository-only cross-package fixtures, mocks, assertions, and harnesses **MUST** live under `internal/testutil`; helpers coupled to one package's behavior **SHOULD** remain package-local. Production packages **MUST NOT** import repository-only test support.
-- Startup ownership is non-overlapping. `pkg/root` normalizes process arguments and environment input and selects process mode, but **MUST NOT** construct domain dependencies or execute component lifecycle. `pkg/wire` constructs the concrete typed application graph and returns construction failures before startup, but **MUST NOT** choose process mode or start long-lived components. `pkg/initializer` starts, stops, cancels, joins, and unwinds already-built transports and sidecars, but **MUST NOT** lazily construct core domain services or rebuild Factory Session runtimes.
+- The durable product-owned root package families are: `pkg/initializer`, `pkg/internal`, `pkg/platform`, `pkg/root`, `pkg/services`, `pkg/transports`, and `pkg/wire`. Product services live below `pkg/services`; the retired `pkg/config`, `pkg/factory`, `pkg/models`, `pkg/orchestrators`, `pkg/work`, and `pkg/workers` roots **MUST NOT** be recreated.
+- Every `pkg/services/<service>` root and every nested
+  `pkg/services/<service>/services/<subservice>` root **MUST** declare exactly
+  one named service interface. Direct production files in that root **MUST NOT**
+  add exported package-level functions; public behavior is exposed through the
+  singular interface, with mostly plain request/result structs at the root.
+- Direct child directories of every service and subservice root are restricted
+  to `wire`, `internal`, and `services`. `internal` owns the private
+  implementation, `wire` exposes the focused construction providers consumed
+  by canonical root `pkg/wire`, and `services/<subservice>` recursively follows
+  the same package shape. Go files **MUST NOT** live directly in the `services`
+  container.
+- `make pkg-structure` mechanically enforces the service-root interface,
+  exported-function, recursive directory-shape, and functional-test layout
+  rules. Existing violations are exact deletion-only entries in
+  `docs/internal/baselines/package-structure-baseline.json`: new entries and stale entries are blocking,
+  and the baseline **MUST** converge to zero.
+- Repository-only cross-package fixtures, mocks, assertions, and harnesses **MUST** live under `internal/testutil`; functional process helpers may live under `tests/functional/internal/support`; helpers coupled to one package's behavior **SHOULD** remain package-local. Neither reusable support root is an application composition root, and production packages **MUST NOT** import repository-only test support.
+- A service implementation subpackage under `pkg/services/<service>/...` is private to its owning service even when Go's `internal` visibility does not enforce that boundary. Production code and tests outside that service **MUST NOT** import or construct it. Cross-service consumers use the owning service-root contract; customer-scale functional tests enter through `root.BuildProcess` and supply typed overrides only at process edges. `pkg/wire/**` tests may exercise concrete construction because Wire is the composition root, and exact leaf external-effect contract packages approved by the package-boundary policy may be imported solely as injection ports. Existing cross-owner test imports are recorded in `test-service-import-baseline.json` as deletion-only migration debt: new entries and stale entries are blocking, and the baseline **MUST** converge to zero. Reusable non-test Go support under `internal/testutil` and `tests/functional/internal/support` follows the same ownership rule and is not a composition root. Existing implementation imports are recorded separately in `support-service-import-baseline.json`; new and stale reusable-support entries are blocking, and moving a dependency from a `_test.go` file into shared support does not satisfy either deletion gate.
+- Startup ownership is non-overlapping. `cmd/factory` supplies process input and translates the terminal error to an exit code. The single `pkg/root.BuildProcess` construction entrypoint calls the single `pkg/wire.InjectBundle` composition entrypoint and returns one reusable `application.Process`, but **MUST NOT** predict the selected command or execute component lifecycle. Production supplies empty process edges and functional tests supply explicit external replacements through that same root and Wire path. `pkg/wire.InjectBundle` constructs the complete inert process dependency graph once; it **MUST NOT** delegate application construction to run, invocation, API, MCP, stdio, Factory Runtime, test, or other child injectors or to a callback that manually assembles a secondary graph. Wire constructs the Factory Runtime assembly service and its product-policy dependencies directly; a bundle-owned `FactoryRuntimeAssemblyFactory` or equivalent deferred constructor callback is prohibited. Opened Factory Sessions and initializer runtime scopes expose exact typed service roles and **MUST NOT** pass a `bundle.Bundle`, service locator, or equivalent broad dependency bag into Initializer or transports. Each `application.Process.Execute` call normalizes its invocation-local arguments, environment, streams, and context, then constructs a fresh CLI command tree over the same injected roles. CLI parsing selects a customer operation and lifecycle activation, not another construction entrypoint. Initial injection starts no listener, daemon, watcher, subprocess, model host, or Factory Session. Factory Session and per-session runtime creation are operations owned by the already-injected Factory Session and Factory Runtime services rather than new application-injection passes. `pkg/initializer` starts, stops, cancels, joins, and unwinds already-constructed inert lifecycle handles, but **MUST NOT** construct product services, transports, or Factory Session runtimes.
 - `pkg/transports` owns HTTP, CLI, MCP, generated transport contracts and clients, and boundary mapping. It **MUST NOT** own domain policy or canonical runtime state.
-- `pkg/work` owns Work and Work Request content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts. Factory Session orchestration, worker/provider execution, and generic platform clocks are excluded.
-- `pkg/platform` owns cross-cutting logging, replay and artifact infrastructure, metrics, cursor storage, and non-domain clock infrastructure. It may implement domain-owned interfaces, but **MUST NOT** choose Factory, Factory Session, worker, model, or Work policy.
-- Migration-only root-family exceptions are not durable owners. The policy **MUST** record a target owner and a specific active work item for every exception: Batch 006 Transport family move covers `pkg/api`, `pkg/apisurface`, `pkg/cli`, and `pkg/mcp` targeting `pkg/transports`; Batch 007 Service and Factory Session ownership convergence plus Batch 008 Legacy composition-root deletion cover `pkg/service` targeting `pkg/wire` after its domain behavior reaches narrow owners; and Batch 008 Legacy composition-root deletion covers `pkg/runtimehost` targeting `pkg/wire`. The completed platform family move is canonical at `pkg/platform/logging`, `pkg/platform/replay`, `pkg/platform/metrics`, `pkg/platform/cursors`, and `pkg/platform/clock`; Factory-event replay policy remains canonical in `pkg/factory/replay`. Each remaining exception **MUST** be removed when its named deletion gate is satisfied, and new behavior **MUST NOT** use an exception as a permanent owner.
+- `pkg/services/work` owns Work and Work Request content, query/selection, graph/lineage, pure invocation input and return policy, and materialization. `pkg/services/automations` owns cron/time-work orchestration. Factory Session orchestration, worker/provider execution, and generic platform clocks are excluded.
+- `pkg/platform` owns cross-cutting logging, replay and artifact infrastructure, metrics, Factory Session reconnect-cursor persistence, and non-domain clock infrastructure. Provider-specific session discovery and transcript storage belong under `pkg/services/provider_sessions`; platform packages **MUST NOT** own provider-specific session formats. Platform packages may implement domain-owned interfaces, but **MUST NOT** choose Factory, Factory Session, worker, model, or Work policy.
+- Migration-only root-family exceptions are not durable owners. The policy **MUST** record a target owner and a specific active work item for every exception. The former `pkg/service`, `pkg/runtimehost`, `pkg/factory`, `pkg/models`, `pkg/work`, and `pkg/workers` roots are retired: the package-boundary guard **MUST** reject recreating or importing them and direct construction to `pkg/wire`, service contracts and implementations to `pkg/services`, and lifecycle work to `pkg/initializer`. The completed platform family move is canonical at `pkg/platform/logging`, `pkg/platform/replay`, `pkg/platform/metrics`, `pkg/platform/cursors/persistence`, `pkg/platform/cursors/session`, and `pkg/platform/clock`; provider-session Cursor storage is canonical at `pkg/services/provider_sessions/cursor`, and Factory-event replay policy is canonical in `pkg/services/recordings/replay`. Each remaining exception **MUST** be removed when its named deletion gate is satisfied, and new behavior **MUST NOT** use an exception as a permanent owner.
 - Generated-code exceptions are documented separately from product-owned package families: `pkg/generatedclient`, `pkg/api/generated`, and generated Go files marked with the standard `Code generated ... DO NOT EDIT.` header when a scanner evaluates files. The package-boundary guard keeps these exceptions visible in its diagnostics instead of treating them as product-owned target package families. Generated-code exceptions **MUST NOT** become homes for handwritten product behavior.
-- Batch 001 migration-only compatibility shim roots such as `pkg/workflowpolicy`, `pkg/workflowpreview`, `pkg/workflowresult`, `pkg/workflowsource`, and `pkg/workflowvalidation` have been removed and **MUST NOT** be recreated. Core runtime, API, CLI, and UI code **MUST** import the canonical owner under `pkg/orchestrators/javascript/*`.
+- Batch 001 migration-only compatibility shim roots such as `pkg/workflowpolicy`, `pkg/workflowpreview`, `pkg/workflowresult`, `pkg/workflowsource`, and `pkg/workflowvalidation` have been removed and **MUST NOT** be recreated. Orchestrator contracts are exposed by `pkg/services/factory_runtime`; Petri and JavaScript implementations live under `pkg/services/factory_runtime/internal/orchestrators` and **MUST NOT** be imported by external consumers.
 - The package-boundary guard blocks Batch 001 migration-only shim markers by default, including in otherwise approved root package families, and reports the shim package, marker, canonical target when detectable, and remediation to import the canonical owner directly. These findings were advisory only during the initial guard lane before the migration-shim removal lane landed.
-- The historical `pkg/modelhost`, `pkg/localmodels`, and `pkg/hostedworkers` roots are retired. The package-boundary guard **MUST** reject recreating those roots or importing them or their subpackages, and **MUST** direct maintainers to `pkg/models/host`, `pkg/models/local` or `pkg/models/assets`, and `pkg/workers/hosted`, respectively. Canonical nested packages and package-local identifiers or test doubles remain allowed.
+- The historical `pkg/modelhost`, `pkg/localmodels`, and `pkg/hostedworkers` roots are retired. The package-boundary guard **MUST** reject recreating those roots or importing them or their subpackages, and **MUST** direct maintainers to the `pkg/services/models` root service contract, its internal implementation, and `pkg/services/workers/services/hosted_logic`, respectively. Canonical nested packages and package-local identifiers or test doubles remain allowed.
 - The historical `pkg/workcontent`, `pkg/materialize`, `pkg/workquery`, `pkg/workgraph`, `pkg/timework`, and `pkg/invocations` roots are retired. The package-boundary guard **MUST** reject recreating those roots or importing them or their subpackages and direct maintainers to the canonical Work, Factory Session invocation, or worker execution owner named by the diagnostic; forwarding packages are prohibited.
 - The historical `pkg/logging`, `pkg/replay`, `pkg/interfaces`, and `pkg/testutil` roots are retired. The package-boundary guard **MUST** reject their recreation and imports, direct maintainers to the platform or defining domain owner, and direct repository-only test support to `internal/testutil` or package-local helpers.
-- The package-boundary guard blocks imports of `pkg/wire` from domain and transport packages. `pkg/wire` may import inward owners, and only `pkg/root`, `pkg/initializer`, and `pkg/wire` itself may import the typed application graph.
+- The package-boundary guard blocks imports of `pkg/wire` from domain and
+  transport packages. `pkg/wire` is the unrestricted composition root and may
+  import any repository package that Go permits it to import, including
+  concrete service implementations, transports, adapters, and platform
+  providers. Root-only service-consumer rules never apply to `pkg/wire/**`;
+  they constrain services, Initializer, transports, platform code, and reusable
+  support. This import privilege does not authorize Wire to own business policy
+  or lifecycle behavior. `pkg/root` is the only startup consumer of the Wire
+  injector; all other packages consume the typed roles Wire supplies and never
+  reconstruct providers.
+- `pkg/services/edges` is the process-edge aggregator, not an owner of external
+  effect contracts. Each typed process, HTTP, filesystem, or time port **MUST**
+  be declared by the leaf package that directly performs that effect.
+  `pkg/services/edges` may import the exact model effect owners
+  the `pkg/services/models` root solely to aggregate its published external-effect contracts unchanged.
+  It **MUST NOT** import a composed Models service or runtime, redefine or alias
+  those contracts, or receive a general peer-service subpackage exemption.
+- External provider inference follows the same leaf-effect rule:
+  `pkg/services/workers/provider/inferencecontract` owns the single provider
+  inference port consumed by Worker adapters, composition, replay, and
+  `pkg/services/edges`. The Workers service root **MUST NOT** redeclare or alias
+  that port. The package-boundary guard permits only this exact contract
+  package across peer services; it does not exempt provider implementations or
+  other Worker subpackages.
 - Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
-- Run `make pkg-boundary` for the focused package-boundary guard independent of `make lint`; `make lint` also runs the blocking root-package-family portion for normal verification.
+- Run `make pkg-boundary` for dependency and ownership boundaries and
+  `make pkg-structure` for recursive service and functional-test package shape;
+  `make lint` runs both during normal verification.
 
 ### 5. Error Handling and Contracts
 
@@ -185,6 +227,21 @@ Rules:
 
 - Most confidence **SHOULD** come from fast unit and package-level integration tests.
 - Functional tests **SHOULD** focus on high-value end-to-end behavior, not every branch.
+- Functional application tests **MUST** construct the reusable customer process
+  through `root.BuildProcess`, provide product configuration through the same
+  CLI arguments, environment, working directory, and streams available to a
+  customer, and replace only exact external effects through `edges.Edges`.
+  They **MUST NOT** import or mutate `runtimeinput.Config`, expose a runtime
+  configuration callback, construct a second application graph, or expose an
+  internal engine-state snapshot through functional support. Assertions
+  **MUST** use public CLI, HTTP, MCP, Factory Session, Work, and Factory Event
+  contracts or observations made by the injected external-effect edge.
+- Functional test sources **MUST** live under
+  `tests/functional/<feature>/<subsection>`. `tests/functional/internal` is the
+  explicit support-code exception. The migration-only
+  `tests/functional/runtime_api` package is deprecated and **MUST NOT** receive
+  new files or scenarios; its exact file and `Test*` inventory is deletion-only
+  debt enforced by `make pkg-structure`.
 - Stress tests **SHOULD** exist where concurrency, queues, retries, watchers, or scheduler behavior create risk.
 - Contract tests **SHOULD** protect generated surfaces, schema completeness, and compatibility boundaries.
 - Slow tests **MUST** justify their cost by protecting a real regression class.

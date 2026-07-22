@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -29,19 +31,10 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:failed").
-		TokenCount(8)
+	session := runIdeaPlanReviewWithLimits(t, dir, provider)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
+	})
 
 	// Verify the provider was called twice (once per worker in the pipeline).
 	if provider.CallCount("planner") != 1 {
@@ -64,19 +57,10 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:failed").
-		TokenCount(8)
+	session := runIdeaPlanReviewWithLimits(t, dir, provider)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
+	})
 
 	// Verify the provider was called twice (once per worker in the pipeline).
 	if provider.CallCount("planner") != 1 {
@@ -102,20 +86,11 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:failed").
-		PlaceTokenCount("executor-slot:available", 5).
-		TokenCount(8)
+	session := runIdeaPlanReviewWithLimits(t, dir, provider)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
+		"executor-slot:available": 5,
+	})
 
 	// Verify the provider was called twice (once per worker in the pipeline).
 	if provider.CallCount("planner") != 1 {
@@ -143,19 +118,10 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:complete").
-		TokenCount(8)
+	session := runIdeaPlanReviewWithLimits(t, dir, provider)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "plan:complete": 1, "task:complete": 1,
+	})
 
 	// Verify the provider was called twice (once per worker in the pipeline).
 	if provider.CallCount("planner") != 1 {
@@ -187,19 +153,13 @@ func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	snap := h.Marking()
+	session := runIdeaPlanReviewWithLimits(t, dir, provider)
 	tracePlaces := make(map[string]int)
-	for _, tok := range snap.Tokens {
-		if tok.Color.TraceID == originTraceID {
-			tracePlaces[tok.PlaceID]++
+	if session.Runtime.Petri != nil {
+		for _, token := range session.Runtime.Petri.Marking {
+			if token.TraceId == originTraceID {
+				tracePlaces[token.PlaceId]++
+			}
 		}
 	}
 
@@ -211,18 +171,13 @@ func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
 		if tracePlaces[placeID] != 1 {
 			t.Errorf("expected trace %q to appear once in %q, got %d", originTraceID, placeID, tracePlaces[placeID])
 		}
-		h.Assert().TokenHasTraceID(placeID, originTraceID)
 	}
 
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("plan:complete").
-		HasTokenInPlace("task:failed").
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("plan:init").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:in-review").
-		HasNoTokenInPlace("task:complete")
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
+		"idea:init": 0, "plan:init": 0, "task:init": 0,
+		"task:in-review": 0, "task:complete": 0,
+	})
 
 	if provider.CallCount("planner") != 1 {
 		t.Errorf("expected planner called 1 time, got %d", provider.CallCount("planner"))
@@ -233,4 +188,16 @@ func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
 	if provider.CallCount("reviewer") != 0 {
 		t.Errorf("expected reviewer not to be called after processor failure, got %d", provider.CallCount("reviewer"))
 	}
+}
+
+func runIdeaPlanReviewWithLimits(
+	t *testing.T,
+	dir string,
+	provider *testutil.MockWorkerMapProvider,
+) factoryapi.FactorySession {
+	t.Helper()
+	return support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderOverride:    provider,
+		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+	}, 10*time.Second)
 }

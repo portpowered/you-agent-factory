@@ -5,13 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/work"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -99,7 +94,7 @@ func assertRuntimeConfigAlignmentRejectsGeneratedFactoryAlias(t *testing.T, muta
 	dir := support.ScaffoldFactory(t, cfg)
 	writeRuntimeConfigAlignmentAgentConfigs(t, dir)
 
-	_, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	_, err := support.LoadedFactory(t, dir)
 	assertRuntimeConfigAlignmentBoundaryErrorContains(t, err,
 		runtimeConfigAlignmentGeneratedBoundaryContext,
 		want,
@@ -120,7 +115,7 @@ stopToken: COMPLETE
 You are the review worker.
 `)
 
-	_, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	_, err := support.LoadedFactory(t, dir)
 	assertRuntimeConfigAlignmentBoundaryErrorContains(t, err,
 		`load worker "reviewer" config`,
 		"frontmatter.model_provider is not supported; use modelProvider",
@@ -159,7 +154,7 @@ func assertRuntimeConfigAlignmentRejectsSplitWorkstationAlias(t *testing.T, work
 	dir := setupRuntimeConfigAlignmentFactory(t)
 	writeWorkstationConfig(t, dir, workstationName, frontmatter)
 
-	_, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	_, err := support.LoadedFactory(t, dir)
 	assertRuntimeConfigAlignmentBoundaryErrorContains(t, err,
 		`load workstation "`+workstationName+`" config`,
 		want,
@@ -204,9 +199,8 @@ func startRuntimeConfigAlignmentSmokeServer(
 	})
 	providerRunner := newRuntimeConfigAlignmentProviderRunner()
 	scriptRunner := newRuntimeConfigAlignmentScriptRunner()
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		support.ConfigureWorkerCommands(t, cfg, providerRunner, scriptRunner)
-	}, factory.WithScheduler(scheduler.NewWorkInQueueScheduler(1)))
+	server := startFunctionalServerWithArgs(t, dir, false, nil,
+		withWorkerCommands(providerRunner, scriptRunner))
 
 	return server, providerRunner, scriptRunner
 }
@@ -236,18 +230,18 @@ func assertRuntimeConfigAlignmentFinalState(
 ) {
 	t.Helper()
 
-	engineState := server.GetEngineStateSnapshot(t)
-	if len(engineState.Marking.PlaceTokens["task:complete"]) != 1 {
-		t.Fatalf("completed task token count = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["task:complete"]), engineState.Marking.PlaceTokens)
+	session := support.GetDefaultSession(t, server.URL())
+	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
+		t.Fatalf("completed task token count = %d, want 1; marking=%#v", got, session.Runtime.Petri)
 	}
-	if len(engineState.Marking.PlaceTokens["task:failed"]) != 0 {
-		t.Fatalf("failed task token count = %d, want 0; places=%#v", len(engineState.Marking.PlaceTokens["task:failed"]), engineState.Marking.PlaceTokens)
+	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 0 {
+		t.Fatalf("failed task token count = %d, want 0; marking=%#v", got, session.Runtime.Petri)
 	}
-	if len(engineState.Marking.PlaceTokens["scheduled:complete"]) != 1 {
-		t.Fatalf("completed scheduled token count = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["scheduled:complete"]), engineState.Marking.PlaceTokens)
+	if got := support.SessionPlaceTokenCount(session, "scheduled:complete"); got != 1 {
+		t.Fatalf("completed scheduled token count = %d, want 1; marking=%#v", got, session.Runtime.Petri)
 	}
-	if len(engineState.Marking.PlaceTokens["agent-slot:available"]) != 1 {
-		t.Fatalf("agent-slot availability after completion = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["agent-slot:available"]), engineState.Marking.PlaceTokens)
+	if available, total, ok := runtimeConfigAlignmentResourceUsage(session, "agent-slot"); !ok || available != 1 || total != 1 {
+		t.Fatalf("agent-slot usage after completion = available:%d total:%d found:%t, want 1/1", available, total, ok)
 	}
 	if providerRunner.CallCount() != 2 {
 		t.Fatalf("provider runner call count = %d, want 2", providerRunner.CallCount())
@@ -255,36 +249,11 @@ func assertRuntimeConfigAlignmentFinalState(
 	if scriptRunner.CallCount() != 2 {
 		t.Fatalf("script runner call count = %d, want 2", scriptRunner.CallCount())
 	}
-	assertRuntimeConfigAlignmentDispatchHistory(t, engineState.DispatchHistory)
-	assertRuntimeConfigAlignmentCompleteTokenPayload(t, engineState.Marking.Tokens)
+	assertRuntimeConfigAlignmentDispatchHistory(
+		t,
+		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
+	)
+	assertRuntimeConfigAlignmentCompleteWorkPayload(t, support.ListDefaultSessionWork(t, server.URL()))
 	assertRuntimeConfigAlignmentEventHistory(t, server)
-	assertRuntimeConfigAlignmentTopologyProjection(t, dir)
-}
-
-type runtimeConfigAlignmentSummary struct {
-	Workers      map[string]runtimeConfigAlignmentWorkerSummary
-	Workstations map[string]runtimeConfigAlignmentWorkstationSummary
-}
-
-type runtimeConfigAlignmentWorkerSummary struct {
-	Type      string
-	Resources []factoryresource.Config
-	StopToken string
-}
-
-type runtimeConfigAlignmentWorkstationSummary struct {
-	WorkerTypeName string
-	Kind           interfaces.WorkstationKind
-	Type           string
-	Cron           *runtimeConfigAlignmentCronSummary
-	Limits         interfaces.WorkstationLimits
-	Resources      []factoryresource.Config
-	StopWords      []string
-}
-
-type runtimeConfigAlignmentCronSummary struct {
-	Schedule       string
-	TriggerAtStart bool
-	Jitter         string
-	ExpiryWindow   string
+	assertRuntimeConfigAlignmentTopologyProjection(t, server)
 }

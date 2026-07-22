@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,19 +20,10 @@ func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
 		[]workerexecution.InferenceResponse{{}},
 		[]error{errors.New("build error")},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:failed").
-		PlaceTokenCount("code-change:failed", 1).
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review").
-		HasNoTokenInPlace("code-change:complete")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{
+		"code-change:failed": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
+	})
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 1 {
 		t.Errorf("expected swe called once, got %d", got)
@@ -56,16 +47,8 @@ func TestFailedImmutability_ReviewerFailure(t *testing.T) {
 			errors.New("critical security issue"),
 		},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:failed").
-		PlaceTokenCount("code-change:failed", 1).
-		HasNoTokenInPlace("code-change:complete")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"code-change:failed": 1, "code-change:complete": 0})
 
 	if got := len(support.ProviderCallsForWorker(provider, "reviewer")); got != 1 {
 		t.Errorf("expected reviewer called once, got %d", got)
@@ -84,15 +67,8 @@ func TestFailedImmutability_NoDuplicateTokens(t *testing.T) {
 			errors.New("crash"),
 		},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("code-change:failed", 2).
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review").
-		HasNoTokenInPlace("code-change:complete")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{
+		"code-change:failed": 2, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
+	})
 }

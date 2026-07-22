@@ -188,6 +188,6 @@ When changing factory-local planner docs or the checked-in batch example, also
 run the narrow verification recipe documented in `factory/docs/batch-inputs.md`:
 
 ```sh
-go test ./pkg/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
+go test ./pkg/services/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
 go test ./pkg/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
 ```

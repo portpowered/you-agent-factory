@@ -1,0 +1,252 @@
+package state
+
+import (
+	"testing"
+	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+)
+
+func TestPlaceID(t *testing.T) {
+	tests := []struct {
+		workTypeID string
+		stateValue string
+		want       string
+	}{
+		{"code-change", "init", "code-change:init"},
+		{"code-change", "complete", "code-change:complete"},
+		{"design-doc", "in-review", "design-doc:in-review"},
+		{"gpu", "available", "gpu:available"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			got := PlaceID(tt.workTypeID, tt.stateValue)
+			if got != tt.want {
+				t.Errorf("PlaceID(%q, %q) = %q, want %q", tt.workTypeID, tt.stateValue, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkTypeGeneratePlaces(t *testing.T) {
+	wt := &WorkType{
+		ID:   "code-change",
+		Name: "Code Change",
+		States: []StateDefinition{
+			{Value: "init", Category: StateCategoryInitial},
+			{Value: "in-progress", Category: StateCategoryProcessing},
+			{Value: "complete", Category: StateCategoryTerminal},
+			{Value: "failed", Category: StateCategoryFailed},
+		},
+	}
+
+	places := wt.GeneratePlaces()
+
+	if len(places) != 4 {
+		t.Fatalf("expected 4 places, got %d", len(places))
+	}
+
+	expected := []struct {
+		id     string
+		typeID string
+		state  string
+	}{
+		{"code-change:init", "code-change", "init"},
+		{"code-change:in-progress", "code-change", "in-progress"},
+		{"code-change:complete", "code-change", "complete"},
+		{"code-change:failed", "code-change", "failed"},
+	}
+
+	for i, e := range expected {
+		p := places[i]
+		if p.ID != e.id {
+			t.Errorf("place[%d].ID = %q, want %q", i, p.ID, e.id)
+		}
+		if p.TypeID != e.typeID {
+			t.Errorf("place[%d].TypeID = %q, want %q", i, p.TypeID, e.typeID)
+		}
+		if p.State != e.state {
+			t.Errorf("place[%d].State = %q, want %q", i, p.State, e.state)
+		}
+	}
+}
+
+func TestGenerateResourcePlaces(t *testing.T) {
+	def := &ResourceDef{
+		ID:       "gpu",
+		Name:     "GPU",
+		Capacity: 3,
+	}
+
+	place, tokens := GenerateResourcePlaces(def, time.Unix(1, 0))
+
+	// Verify place
+	if place.ID != "gpu:available" {
+		t.Errorf("place.ID = %q, want %q", place.ID, "gpu:available")
+	}
+	if place.TypeID != "gpu" {
+		t.Errorf("place.TypeID = %q, want %q", place.TypeID, "gpu")
+	}
+	if place.State != "available" {
+		t.Errorf("place.State = %q, want %q", place.State, "available")
+	}
+
+	// Verify tokens
+	if len(tokens) != 3 {
+		t.Fatalf("expected 3 tokens, got %d", len(tokens))
+	}
+
+	for i, tok := range tokens {
+		if tok.PlaceID != "gpu:available" {
+			t.Errorf("token[%d].PlaceID = %q, want %q", i, tok.PlaceID, "gpu:available")
+		}
+		if tok.Color.WorkTypeID != "gpu" {
+			t.Errorf("token[%d].Color.WorkTypeID = %q, want %q", i, tok.Color.WorkTypeID, "gpu")
+		}
+		if tok.Color.DataType != factorytoken.DataTypeResource {
+			t.Errorf("token[%d].Color.DataType = %q, want %q", i, tok.Color.DataType, factorytoken.DataTypeResource)
+		}
+		if tok.CreatedAt.IsZero() {
+			t.Errorf("token[%d].CreatedAt should not be zero", i)
+		}
+	}
+}
+
+func TestGenerateResourcePlacesZeroCapacity(t *testing.T) {
+	def := &ResourceDef{
+		ID:       "scanner",
+		Name:     "Scanner",
+		Capacity: 0,
+	}
+
+	place, tokens := GenerateResourcePlaces(def, time.Unix(1, 0))
+
+	if place.ID != "scanner:available" {
+		t.Errorf("place.ID = %q, want %q", place.ID, "scanner:available")
+	}
+	if len(tokens) != 0 {
+		t.Errorf("expected 0 tokens for zero capacity, got %d", len(tokens))
+	}
+}
+
+func TestNormalizeTransitionTopology_AddsRepeaterDefaultRejectionArcs(t *testing.T) {
+	net := normalizeTransitionTopologyFixture()
+
+	NormalizeTransitionTopology(net, map[string]interfaces.WorkstationKind{
+		"repeat": interfaces.WorkstationKindRepeater,
+	})
+
+	transition := net.Transitions["repeat"]
+	if len(transition.RejectionArcs) != 1 {
+		t.Fatalf("expected 1 rejection arc, got %d", len(transition.RejectionArcs))
+	}
+	if transition.RejectionArcs[0].PlaceID != "task:init" {
+		t.Fatalf("rejection arc PlaceID = %q, want %q", transition.RejectionArcs[0].PlaceID, "task:init")
+	}
+	if len(transition.FailureArcs) != 1 {
+		t.Fatalf("expected 1 failure arc, got %d", len(transition.FailureArcs))
+	}
+	if transition.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
+	}
+}
+
+func TestNormalizeTransitionTopology_ClonesDefaultFailureArcsIntoRejectionArcs(t *testing.T) {
+	net := normalizeTransitionTopologyFixture()
+
+	NormalizeTransitionTopology(net, nil)
+
+	fanIn := net.Transitions["fan-in"]
+	if len(fanIn.FailureArcs) != 2 {
+		t.Fatalf("fan-in failure arc count = %d, want 2", len(fanIn.FailureArcs))
+	}
+	failurePlaces := map[string]struct{}{}
+	for _, arc := range fanIn.FailureArcs {
+		failurePlaces[arc.PlaceID] = struct{}{}
+	}
+	if _, ok := failurePlaces["task:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want task:failed destination", fanIn.FailureArcs)
+	}
+	if _, ok := failurePlaces["page:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want page:failed destination", fanIn.FailureArcs)
+	}
+	if len(fanIn.RejectionArcs) != 2 {
+		t.Fatalf("fan-in rejection arc count = %d, want 2", len(fanIn.RejectionArcs))
+	}
+	assertArcPlaces(t, fanIn.RejectionArcs, "task:failed", "page:failed")
+}
+
+func normalizeTransitionTopologyFixture() *Net {
+	return &Net{
+		Places: map[string]*petri.Place{
+			"task:init":        {ID: "task:init", TypeID: "task", State: "init"},
+			"task:complete":    {ID: "task:complete", TypeID: "task", State: "complete"},
+			"task:failed":      {ID: "task:failed", TypeID: "task", State: "failed"},
+			"page:ready":       {ID: "page:ready", TypeID: "page", State: "ready"},
+			"page:complete":    {ID: "page:complete", TypeID: "page", State: "complete"},
+			"page:failed":      {ID: "page:failed", TypeID: "page", State: "failed"},
+			"worker:available": {ID: "worker:available", TypeID: "worker", State: "available"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"repeat": {
+				ID: "repeat",
+				InputArcs: []petri.Arc{
+					{PlaceID: "task:init", Direction: petri.ArcInput},
+					{PlaceID: "worker:available", Direction: petri.ArcInput},
+				},
+				OutputArcs: []petri.Arc{
+					{PlaceID: "task:complete", Direction: petri.ArcOutput},
+					{PlaceID: "worker:available", Direction: petri.ArcOutput},
+				},
+			},
+			"fan-in": {
+				ID: "fan-in",
+				InputArcs: []petri.Arc{
+					{PlaceID: "task:init", Direction: petri.ArcInput},
+					{PlaceID: "page:ready", Direction: petri.ArcInput},
+					{PlaceID: "worker:available", Direction: petri.ArcInput},
+				},
+				OutputArcs: []petri.Arc{
+					{PlaceID: "task:complete", Direction: petri.ArcOutput},
+					{PlaceID: "page:complete", Direction: petri.ArcOutput},
+					{PlaceID: "worker:available", Direction: petri.ArcOutput},
+				},
+			},
+		},
+		WorkTypes: map[string]*WorkType{
+			"task": {
+				ID: "task",
+				States: []StateDefinition{
+					{Value: "init", Category: StateCategoryInitial},
+					{Value: "complete", Category: StateCategoryTerminal},
+					{Value: "failed", Category: StateCategoryFailed},
+				},
+			},
+			"page": {
+				ID: "page",
+				States: []StateDefinition{
+					{Value: "ready", Category: StateCategoryInitial},
+					{Value: "complete", Category: StateCategoryTerminal},
+					{Value: "failed", Category: StateCategoryFailed},
+				},
+			},
+		},
+	}
+}
+
+func assertArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...string) {
+	t.Helper()
+
+	places := map[string]struct{}{}
+	for _, arc := range arcs {
+		places[arc.PlaceID] = struct{}{}
+	}
+	for _, want := range wantPlaces {
+		if _, ok := places[want]; !ok {
+			t.Fatalf("arc places = %+v, want %s destination", arcs, want)
+		}
+	}
+}

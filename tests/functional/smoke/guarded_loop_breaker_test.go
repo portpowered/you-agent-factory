@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -29,7 +28,7 @@ func TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRules
 		},
 	}})
 
-	_, err := config.LoadRuntimeConfig(dir, nil)
+	_, err := support.LoadedFactory(t, dir)
 	assertRetiredExhaustionRulesBoundaryError(t, err)
 }
 

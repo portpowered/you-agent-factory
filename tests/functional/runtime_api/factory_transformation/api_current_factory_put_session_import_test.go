@@ -8,17 +8,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-	if _, err := config.PersistNamedFactory(rootDir, "beta", functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
+	createNamedFactoryFixture(
+		t,
+		rootDir,
+		"beta",
+		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
+	)
 
 	server := startFactoryTransformationServer(t, rootDir)
 	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")
@@ -53,8 +55,6 @@ func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMater
 		t.Fatalf("default current factory name = %q, want %q", defaultAfter.Name, defaultBefore.Name)
 	}
 	assertFactoryWorkType(t, defaultAfter, "alpha-task", "default session after non-default import")
-	assertCurrentFactoryPointer(t, rootDir, "alpha")
-
 	alphaConfigAfter, err := os.ReadFile(alphaConfigPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", alphaConfigPath, err)

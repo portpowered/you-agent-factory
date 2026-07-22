@@ -6,10 +6,28 @@ import (
 	"os"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+func buildTestLogger(mode Mode, debug bool) (*zap.Logger, error) {
+	level := zapcore.InfoLevel
+	switch mode {
+	case ModeQuiet:
+		return zap.NewNop(), nil
+	case ModeNormal:
+		level = zapcore.WarnLevel
+	case ModeVerbose:
+		if debug {
+			level = zapcore.DebugLevel
+		}
+	}
+	return zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(io.Discard),
+		level,
+	)), nil
+}
 
 func TestResolve_QuietWinsOverVerboseAndDebug(t *testing.T) {
 	policy := Resolve(Options{Quiet: true, Verbose: true, Debug: true})
@@ -102,7 +120,7 @@ func TestDiagnosticsEnabled_PrefersResolvedPolicy(t *testing.T) {
 }
 
 func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
-	quietLogger, err := Resolve(Options{Quiet: true}).BuildLogger(logging.BuildLogger)
+	quietLogger, err := Resolve(Options{Quiet: true}).BuildLogger(buildTestLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger quiet: %v", err)
 	}
@@ -110,7 +128,7 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 		t.Fatal("expected quiet logger to discard info level output")
 	}
 
-	normalLogger, err := Resolve(Options{}).BuildLogger(logging.BuildLogger)
+	normalLogger, err := Resolve(Options{}).BuildLogger(buildTestLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger normal: %v", err)
 	}
@@ -121,12 +139,41 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 		t.Fatal("expected normal logger to enable warn level")
 	}
 
-	verboseLogger, err := Resolve(Options{Verbose: true}).BuildLogger(logging.BuildLogger)
+	verboseLogger, err := Resolve(Options{Verbose: true}).BuildLogger(buildTestLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger verbose: %v", err)
 	}
 	if !verboseLogger.Core().Enabled(zapcore.InfoLevel) {
 		t.Fatal("expected verbose logger to enable info level")
+	}
+}
+
+func TestBuildLogger_DelegatesEveryResolvedModeToInjectedBuilder(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		opts  Options
+		mode  Mode
+		debug bool
+	}{
+		{name: "quiet", opts: Options{Quiet: true, Debug: true}, mode: ModeQuiet},
+		{name: "normal", opts: Options{}, mode: ModeNormal},
+		{name: "verbose", opts: Options{Verbose: true}, mode: ModeVerbose},
+		{name: "debug", opts: Options{Debug: true}, mode: ModeVerbose, debug: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotMode Mode
+			var gotDebug bool
+			logger, err := Resolve(tc.opts).BuildLogger(func(mode Mode, debug bool) (*zap.Logger, error) {
+				gotMode, gotDebug = mode, debug
+				return zap.NewNop(), nil
+			})
+			if err != nil || logger == nil {
+				t.Fatalf("BuildLogger = %#v, %v", logger, err)
+			}
+			if gotMode != tc.mode || gotDebug != tc.debug {
+				t.Fatalf("builder request = (%q, %t), want (%q, %t)", gotMode, gotDebug, tc.mode, tc.debug)
+			}
+		})
 	}
 }
 
@@ -145,7 +192,7 @@ func TestBuildLogger_NormalModeDoesNotWriteStructuredLogsToStderr(t *testing.T) 
 	}
 	os.Stderr = writePipe
 
-	logger, err := Resolve(Options{}).BuildLogger(logging.BuildLogger)
+	logger, err := Resolve(Options{}).BuildLogger(buildTestLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger normal: %v", err)
 	}

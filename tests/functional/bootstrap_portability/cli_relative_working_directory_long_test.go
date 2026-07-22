@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -57,29 +58,29 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 	})
 
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 	)
 
-	h := testutil.NewServiceTestHarness(t, factoryDir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	session := support.RunFactoryToCompletionWithEdges(t, factoryDir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	for placeID, want := range map[string]int{
+		"task:complete": 1,
+		"task:init":     0,
+		"task:failed":   0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(modelprovider.Codex) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Codex)
+	if req.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCodex)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "-"})
 	if req.WorkDir != expectedWorkDir {

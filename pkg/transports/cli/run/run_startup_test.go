@@ -3,12 +3,7 @@ package run
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,15 +13,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	service "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -59,13 +52,10 @@ func TestAPIServerStarterWithListenerOwnsOneListenerInvocation(t *testing.T) {
 
 func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
 	var out bytes.Buffer
-	dashboardReady := make(chan struct{})
-	close(dashboardReady)
 	openAttempted := make(chan struct{})
-	wait := openDashboardWhenServerReady(
+	openDashboardAtBoundEndpoint(
 		context.Background(),
 		RunConfig{Port: 7437, StartupOutput: &out},
-		dashboardReady,
 		func(_ context.Context, _ string) error {
 			close(openAttempted)
 			return errors.New("browser unavailable")
@@ -76,8 +66,6 @@ func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for dashboard open fallback")
 	}
-	wait()
-
 	output := out.String()
 	if !strings.Contains(output, "Dashboard auto-open unavailable: browser unavailable") {
 		t.Fatalf("startup output = %q, want unavailable fallback", output)
@@ -88,30 +76,19 @@ func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
 }
 
 func TestRun_StartupOutputReportsDashboardWhenAutoOpenDisabled(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalOpener := dashboardOpener
-	originalInteractive := interactiveOutput
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		dashboardOpener = originalOpener
-		interactiveOutput = originalInteractive
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error {
+				notifyTestHTTPBinding(cfg, cfg.Port)
 				return nil
 			},
 		}, nil
 	}
-	dashboardOpener = func(_ context.Context, _ string) error {
-		t.Fatal("dashboard opener should not be called when auto-open is disabled")
-		return nil
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return true
-	}
-
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
 		Dir:           "factory",
@@ -132,19 +109,15 @@ func TestRun_StartupOutputReportsDashboardWhenAutoOpenDisabled(t *testing.T) {
 }
 
 func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalOpener := dashboardOpener
-	originalInteractive := interactiveOutput
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		dashboardOpener = originalOpener
-		interactiveOutput = originalInteractive
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	startedAt := time.Date(2026, 5, 29, 4, 45, 3, 0, time.UTC)
 	runtimeLogPath := "/tmp/runtime-logs/2026/05/29/044503.000000000-runtime-log-runtime-1-abc123.log"
 	runtimeMetricsPath := "/tmp/runtime-metrics/2026/05/29/044503.000000000-runtime-metrics-session-1-runtime-1-def456.log"
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
 				Path:                runtimeLogPath,
@@ -155,18 +128,11 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 				MetricsStartTimeUTC: startedAt,
 			},
 			run: func(context.Context) error {
+				notifyTestHTTPBinding(cfg, cfg.Port)
 				return nil
 			},
 		}, nil
 	}
-	dashboardOpener = func(_ context.Context, _ string) error {
-		t.Fatal("dashboard opener should not be called when auto-open is disabled")
-		return nil
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return true
-	}
-
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
 		Dir:           "factory",
@@ -197,9 +163,9 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 }
 
 func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	dir := t.TempDir()
@@ -214,32 +180,34 @@ func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T)
 	metricsDir := filepath.Join(t.TempDir(), "runtime-metrics")
 	before := time.Now().UTC()
 
-	var builtService *service.FactoryService
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		svc, err := service.BuildFactoryService(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		builtService = svc
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
+		startedAt := time.Now().UTC()
+		datePath := filepath.Join(
+			startedAt.Format("2006"),
+			startedAt.Format("01"),
+			startedAt.Format("02"),
+		)
+		timeToken := startedAt.Format("150405.000000000")
 		return stubFactoryService{
-			runtimeLogDiagnostics: svc.RuntimeLogDiagnostics(),
+			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
+				Path: filepath.Join(
+					logDir, datePath,
+					timeToken+"-runtime-log-runtime-test-log.log",
+				),
+				RootDir:      logDir,
+				StartTimeUTC: startedAt,
+				MetricsPath: filepath.Join(
+					metricsDir, datePath,
+					timeToken+"-runtime-metrics-session-test-runtime-test-metrics.log",
+				),
+				MetricsRootDir:      metricsDir,
+				MetricsStartTimeUTC: startedAt,
+			},
 			run: func(context.Context) error {
 				return nil
 			},
 		}, nil
 	}
-	t.Cleanup(func() {
-		if builtService == nil {
-			return
-		}
-		bundle := builtService.CurrentRuntimeBundle()
-		if bundle == nil {
-			return
-		}
-		if err := factoryservice.CloseBundleSinks(bundle.LogSink, bundle.MetricsSink); err != nil {
-			t.Errorf("close runtime bundle sinks: %v", err)
-		}
-	})
 
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
@@ -263,12 +231,12 @@ func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T)
 }
 
 func TestRun_StartupOutputUsesFallbackForMissingRuntimeLogStartTime(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
 				Path: "/tmp/runtime.log",
@@ -298,20 +266,24 @@ func TestRun_StartupOutputUsesFallbackForMissingRuntimeLogStartTime(t *testing.T
 	}
 }
 
-func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput(t *testing.T) {
-	originalBuilder := buildFactoryService
+func TestRun_AutoPortRequestIsPassedToHostAndResolvedBindingDrivesStartupOutput(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	busyListener, busyPort := listenOnBusyTCPPort(t)
 	defer busyListener.Close()
 
 	var capturedPort int
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedAutoPort bool
+	resolvedPort := busyPort + 1
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedPort = cfg.Port
+		capturedAutoPort = cfg.AutoPort
 		return stubFactoryService{
 			run: func(context.Context) error {
+				notifyTestHTTPBinding(cfg, resolvedPort)
 				return nil
 			},
 		}, nil
@@ -327,15 +299,12 @@ func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if capturedPort == busyPort {
-		t.Fatalf("service port = busy port %d, want auto-resolved fallback", busyPort)
-	}
-	if capturedPort <= 0 {
-		t.Fatalf("service port = %d, want positive resolved port", capturedPort)
+	if capturedPort != busyPort || !capturedAutoPort {
+		t.Fatalf("host request = (port=%d, auto=%t), want (%d, true)", capturedPort, capturedAutoPort, busyPort)
 	}
 
 	output := out.String()
-	wantURL := DashboardURL("localhost", capturedPort)
+	wantURL := DashboardURL("localhost", resolvedPort)
 	if !strings.Contains(output, "Dashboard URL: "+wantURL) {
 		t.Fatalf("startup output = %q, want resolved dashboard URL %q", output, wantURL)
 	}
@@ -345,9 +314,9 @@ func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput
 }
 
 func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	dir, _ := writeDashboardRunFixture(t)
@@ -355,10 +324,14 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 	defer busyListener.Close()
 
 	var capturedPort int
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedAutoPort bool
+	resolvedPort := busyPort + 1
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedPort = cfg.Port
+		capturedAutoPort = cfg.AutoPort
 		return stubFactoryService{
 			run: func(context.Context) error {
+				notifyTestHTTPBinding(cfg, resolvedPort)
 				return nil
 			},
 		}, nil
@@ -368,6 +341,9 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 	err := Run(context.Background(), RunConfig{
 		Dir:      dir,
 		Workflow: "workflow-1",
+		ResolveCurrentFactoryDir: func(rootDir string) (string, error) {
+			return rootDir, nil
+		},
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
 			WorkerModel:               "gpt-5-codex",
@@ -389,8 +365,8 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if capturedPort == busyPort {
-		t.Fatalf("service port = busy port %d, want auto-resolved fallback", busyPort)
+	if capturedPort != busyPort || !capturedAutoPort {
+		t.Fatalf("host request = (port=%d, auto=%t), want (%d, true)", capturedPort, capturedAutoPort, busyPort)
 	}
 
 	got := diagnostics.String()
@@ -422,12 +398,12 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 }
 
 func TestRun_StartupDiagnosticsStaySilentWhenVerboseDisabled(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
 
@@ -445,24 +421,24 @@ func TestRun_StartupDiagnosticsStaySilentWhenVerboseDisabled(t *testing.T) {
 }
 
 func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
 
 	core, observed := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
-	resolution := &factoryconfig.NamedFactoryResolution{
+	resolution := &interfaces.NamedFactoryResolution{
 		Name:               "alpha",
 		FactoryDir:         "/tmp/project/factory/alpha",
-		Source:             factoryconfig.NamedFactoryResolutionSourceProjectLocal,
+		Source:             interfaces.NamedFactoryResolutionSourceProjectLocal,
 		ProjectRoot:        "/tmp/project/factory",
 		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
-		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal,
+		PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal,
 	}
 
 	var diagnostics bytes.Buffer
@@ -511,30 +487,19 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 }
 
 func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalOpener := dashboardOpener
-	originalInteractive := interactiveOutput
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		dashboardOpener = originalOpener
-		interactiveOutput = originalInteractive
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error {
+				notifyTestHTTPBinding(cfg, cfg.Port)
 				return nil
 			},
 		}, nil
 	}
-	dashboardOpener = func(_ context.Context, _ string) error {
-		t.Fatal("dashboard opener should not be called for non-interactive output")
-		return nil
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return false
-	}
-
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
 		Dir:           "factory",
@@ -552,238 +517,39 @@ func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testin
 	}
 }
 
-func TestRun_ShutdownOutputReportsResolvedAutoGeneratedRecordingPath(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalDefaultRecordPath := defaultLiveRunRecordPath
-	defer func() {
-		buildFactoryService = originalBuilder
-		defaultLiveRunRecordPath = originalDefaultRecordPath
-	}()
-
-	defaultLiveRunRecordPath = func() (string, error) {
-		return "/tmp/.you-agent-factory/recordings/2026-05/2026-05-23/factory-session-" + defaultRecordPathSessionToken + "-184512-uuid-1.json", nil
+func notifyTestHTTPBinding(cfg *testRuntimeSelections, port int) {
+	if cfg != nil && cfg.RuntimeHostObserver != nil {
+		cfg.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: port})
 	}
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+}
+
+func TestRun_ShutdownOutputReportsResolvedAutoGeneratedRecordingPath(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
+	defer func() {
+		openTestRuntimeRunner = originalBuilder
+	}()
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
 
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
 		StartupOutput: &out,
+		HomeDir:       "/tmp",
+		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			if request.HomeDir != "/tmp" || request.ReportedSessionID != defaultFactorySessionID {
+				t.Fatalf("recording request = %#v", request)
+			}
+			return recordings.LiveRecordingTarget{ServicePath: "/tmp/template.json", ReportedPath: "/tmp/resolved.json"}, nil
+		}),
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if !strings.Contains(out.String(), "Recording saved: /tmp/.you-agent-factory/recordings/2026-05/2026-05-23/factory-session-~default-184512-uuid-1.json") {
+	if !strings.Contains(out.String(), "Recording saved: /tmp/resolved.json") {
 		t.Fatalf("shutdown output = %q, want resolved recording path", out.String())
 	}
-}
-
-func TestRun_ExplicitCompatibilityBuilderServesStatus(t *testing.T) {
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	writeRunWireTestWorkerAgentsMD(t, dir, "worker-a")
-	writeRunWireTestWorkstationAgentsMD(t, dir, "process")
-	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
-		t.Fatalf("create inputs dir: %v", err)
-	}
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("Close listener: %v", err)
-	}
-
-	originalStartAPIServer := startAPIServer
-	originalServeFactoryAPIServer := serveFactoryAPIServer
-	defer func() {
-		startAPIServer = originalStartAPIServer
-		serveFactoryAPIServer = originalServeFactoryAPIServer
-	}()
-	serveFactoryAPIServer = defaultServeFactoryAPIServer
-	startAPIServer = func(
-		ctx context.Context,
-		runtime apisurface.APISurface,
-		bindPort int,
-		logger *zap.Logger,
-		markReady func(),
-	) error {
-		apiListener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", bindPort))
-		if listenErr != nil {
-			return listenErr
-		}
-		return serveAPIServer(ctx, runtime, bindPort, logger, markReady, apiListener)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- runWithFactoryServiceBuilder(ctx, RunConfig{
-			Dir:                        dir,
-			ExecutionBaseDir:           dir,
-			Continuously:               true,
-			MockWorkersEnabled:         true,
-			DisableDefaultRecording:    true,
-			Port:                       port,
-			SuppressDashboardRendering: true,
-			Logger:                     zap.NewNop(),
-		}, FactoryServiceBuilderFromService(service.BuildFactoryService))
-	}()
-
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	var status factoryapi.StatusResponse
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(baseURL + "/status")
-		if err != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			t.Fatalf("read /status body: %v", readErr)
-		}
-		if resp.StatusCode != http.StatusOK {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if err := json.Unmarshal(body, &status); err != nil {
-			t.Fatalf("decode /status: %v", err)
-		}
-		break
-	}
-	if status.FactoryState == "" {
-		t.Fatalf("GET /status factory_state empty after polling %s/status", baseURL)
-	}
-
-	cancel()
-	if err := <-runErrCh; err != nil && err != context.Canceled {
-		t.Fatalf("Run: %v", err)
-	}
-}
-
-func TestRun_ExplicitModelServiceListsModels(t *testing.T) {
-	SetBuildFactoryService(FactoryServiceBuilderFromService(buildRunTestFactoryServiceWithModels))
-	defer SetBuildFactoryService(nil)
-
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	writeRunWireTestWorkerAgentsMD(t, dir, "worker-a")
-	writeRunWireTestWorkstationAgentsMD(t, dir, "process")
-	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
-		t.Fatalf("create inputs dir: %v", err)
-	}
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("Close listener: %v", err)
-	}
-
-	originalStartAPIServer := startAPIServer
-	originalServeFactoryAPIServer := serveFactoryAPIServer
-	defer func() {
-		startAPIServer = originalStartAPIServer
-		serveFactoryAPIServer = originalServeFactoryAPIServer
-	}()
-	serveFactoryAPIServer = defaultServeFactoryAPIServer
-	startAPIServer = func(
-		ctx context.Context,
-		runtime apisurface.APISurface,
-		bindPort int,
-		logger *zap.Logger,
-		markReady func(),
-	) error {
-		apiListener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", bindPort))
-		if listenErr != nil {
-			return listenErr
-		}
-		return serveAPIServer(ctx, runtime, bindPort, logger, markReady, apiListener)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- Run(ctx, RunConfig{
-			Dir:                        dir,
-			ExecutionBaseDir:           dir,
-			Continuously:               true,
-			MockWorkersEnabled:         true,
-			DisableDefaultRecording:    true,
-			Port:                       port,
-			SuppressDashboardRendering: true,
-			Logger:                     zap.NewNop(),
-		})
-	}()
-
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	var models factoryapi.ListModelsResponse
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(baseURL + "/models")
-		if err != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			t.Fatalf("read /models body: %v", readErr)
-		}
-		if resp.StatusCode != http.StatusOK {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if err := json.Unmarshal(body, &models); err != nil {
-			t.Fatalf("decode /models: %v", err)
-		}
-		break
-	}
-	if len(models.Results) == 0 {
-		t.Fatalf("models list empty after startup, want configured model summaries")
-	}
-
-	cancel()
-	select {
-	case err := <-runErrCh:
-		if err != nil && err != context.Canceled {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for Run to exit after cancel")
-	}
-}
-
-func buildRunTestFactoryServiceWithModels(
-	ctx context.Context,
-	cfg *service.FactoryServiceConfig,
-) (*service.FactoryService, error) {
-	svc, err := service.BuildFactoryService(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	shell := service.FactoryServiceShell{Service: svc}
-	deps, err := service.ModelServiceDependencies(shell)
-	if err != nil {
-		return nil, err
-	}
-	models, err := modelsservice.NewService(deps)
-	if err != nil {
-		return nil, err
-	}
-	return service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models)), nil
 }
 
 func writeRunWireTestWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {

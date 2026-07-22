@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBoundedReadiness(t *testing.T) {
@@ -52,22 +54,23 @@ func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBounde
 		authoredDir: authoredFactoryDir,
 	}
 	activateAutomatRequiredToolsOnPath(t)
-	harness := testutil.NewServiceTestHarness(t, expandedDir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-
-	harness.Assert().
-		PlaceTokenCount("chapter:ready", 1).
-		HasNoTokenInPlace("chapter:init").
-		HasNoTokenInPlace("chapter:staged").
-		HasNoTokenInPlace("chapter:failed")
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, expandedDir, serviceedges.Edges{
+		ScriptCommandRunner: runner,
+	}, 10*time.Second)
+	for placeID, want := range map[string]int{
+		"chapter:ready":  1,
+		"chapter:init":   0,
+		"chapter:staged": 0,
+		"chapter:failed": 0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 
 	if issues := runner.Issues(); len(issues) > 0 {
 		t.Fatalf("automat integration smoke issues:\n%s", strings.Join(issues, "\n"))
 	}
 
-	assertTokenPayload(t, harness.Marking(), "chapter:ready", "required-tools:"+automatExternalMangaka+","+automatExternalMagick)
+	assertListedWorkPayload(t, listed, "chapter", "ready", "required-tools:"+automatExternalMangaka+","+automatExternalMagick)
 }

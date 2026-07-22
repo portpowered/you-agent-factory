@@ -169,7 +169,7 @@
         }
       ],
       "name": "setup-workspace",
-      "type": "MODEL_WORKSTATION",
+      "type": "SCRIPT_RUN",
       "onFailure": [
         {
         "state": "failed",
@@ -221,8 +221,7 @@
           "name": "executor-slot"
         }
       ],
-      "worker": "processor",
-      "worktree": "{{ (index .Inputs 0).Name }}"
+      "worker": "processor"
     },
     {
       "inputs": [
@@ -256,8 +255,7 @@
           "name": "executor-slot"
         }
       ],
-      "worker": "reviewer",
-      "worktree": "{{ (index .Inputs 0).Name }}"
+      "worker": "reviewer"
     },
     {
       "guards": [
@@ -309,4 +307,3 @@
     }
   ]
 }
-

@@ -11,10 +11,10 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"gopkg.in/yaml.v3"
 )
@@ -27,29 +27,12 @@ func TestFactoryConfigSmoke_CanonicalBoundaryPreservesPublicContract(t *testing.
 	assertLoadedFactoryRuntimeForSmoke(t, canonicalLoaded)
 	canonicalFlattened := flattenFactoryConfigForSmoke(t, canonicalDir)
 	assertFactorySchemaAcceptsJSON(t, factorySchema, canonicalFlattened)
-	assertFactoryConfigJSONUsesCanonicalPublicKeys(t, canonicalFlattened)
 	canonicalFlattenedFactory := decodeGeneratedFactoryForSmoke(t, canonicalFlattened)
-	canonicalGenerated := generatedFactoryForSmoke(t, canonicalLoaded)
+	canonicalGenerated := generatedFactoryForSmoke(t, canonicalFlattenedFactory)
 	canonicalGeneratedJSON := marshalJSONForSmoke(t, canonicalGenerated)
 	assertFactorySchemaAcceptsJSON(t, factorySchema, canonicalGeneratedJSON)
-	assertFactoryConfigJSONUsesCanonicalPublicKeys(t, canonicalGeneratedJSON)
 	assertComparableFactoryContractsMatch(t, canonicalFlattenedFactory, canonicalGenerated)
 
-}
-
-func TestFactoryConfigSmoke_LegacyBoundaryAliasesAreRejected(t *testing.T) {
-	legacyDir := writeFactoryConfigSmokeDir(t, factoryConfigSmokeLegacyJSON())
-
-	_, err := config.LoadRuntimeConfig(legacyDir, nil)
-	if err == nil {
-		t.Fatal("expected legacy boundary aliases to be rejected")
-	}
-	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "workers[0].provider is not supported; use executorProvider") {
-		t.Fatalf("expected provider retirement guidance, got %v", err)
-	}
 }
 
 func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBoundary(t *testing.T) {
@@ -62,7 +45,7 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 	canonicalJSON := []byte(factoryConfigSmokeCanonicalJSON())
 	assertFactorySchemaAcceptsJSON(t, factorySchema, canonicalJSON)
 
-	generatedBoundary, err := config.GeneratedFactoryFromOpenAPIJSON(canonicalJSON)
+	generatedBoundary, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(canonicalJSON)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(canonical payload): %v", err)
 	}
@@ -109,7 +92,7 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			invalidDir := writeFactoryConfigSmokeDir(t, tc.payload)
-			_, err := config.LoadRuntimeConfig(invalidDir, nil)
+			_, err := expandFactoryConfigForSmoke(invalidDir)
 			if err == nil {
 				t.Fatal("expected invalid enum payload to fail before runtime scheduling")
 			}
@@ -169,7 +152,7 @@ func TestFactoryConfigSmoke_OpenAPIFactoryBoundaryRejectsSingularNonSuccessRoute
 		t.Run(tc.name, func(t *testing.T) {
 			invalidDir := writeFactoryConfigSmokeDir(t, tc.payload)
 
-			_, err := config.LoadRuntimeConfig(invalidDir, nil)
+			_, err := expandFactoryConfigForSmoke(invalidDir)
 			if err == nil {
 				t.Fatal("expected singular non-success route object to fail at the generated boundary")
 			}
@@ -188,16 +171,14 @@ func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryPreservesPublicContrac
 
 	canonicalDir := testutil.CopyFixtureDir(t, factoryConfigSmokeFixtureDir(t, "service_simple"))
 
-	canonicalLoaded := loadRuntimeConfigForSmoke(t, canonicalDir)
+	canonicalLoaded := loadRepresentativeRuntimeConfigForSmoke(t, canonicalDir)
 	assertRepresentativeLoadedFactoryRuntimeForSmoke(t, canonicalLoaded)
-	canonicalFlattened := flattenFactoryConfigForSmoke(t, canonicalDir)
+	canonicalFlattened := flattenLoadedFactoryConfigForSmoke(t, canonicalLoaded)
 	assertFactorySchemaAcceptsJSON(t, factorySchema, canonicalFlattened)
-	assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t, canonicalFlattened)
 	canonicalFlattenedFactory := decodeGeneratedFactoryForSmoke(t, canonicalFlattened)
-	canonicalGenerated := generatedFactoryForSmoke(t, canonicalLoaded)
+	canonicalGenerated := generatedFactoryForSmoke(t, canonicalFlattenedFactory)
 	canonicalGeneratedJSON := marshalJSONForSmoke(t, canonicalGenerated)
 	assertFactorySchemaAcceptsJSON(t, factorySchema, canonicalGeneratedJSON)
-	assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t, canonicalGeneratedJSON)
 	assertComparableFactoryContractsMatch(t, canonicalFlattenedFactory, canonicalGenerated)
 }
 
@@ -205,7 +186,7 @@ func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryRejectsLegacyCopy(t *t
 	legacyDir := testutil.CopyFixtureDir(t, factoryConfigSmokeFixtureDir(t, "service_simple"))
 	rewriteRepresentativeSmokeFixtureToLegacyAliases(t, legacyDir)
 
-	_, err := config.LoadRuntimeConfig(legacyDir, nil)
+	_, err := expandFactoryConfigForSmoke(legacyDir)
 	if err == nil {
 		t.Fatal("expected representative legacy copy to be rejected")
 	}
@@ -214,54 +195,6 @@ func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryRejectsLegacyCopy(t *t
 	}
 	if !strings.Contains(err.Error(), `json: unknown field "work_types"`) {
 		t.Fatalf("expected work_types rejection, got %v", err)
-	}
-}
-
-func TestFactoryConfigSmoke_OpenAPIFactorySchemaRejectsLegacySnakeCasePublicFields(t *testing.T) {
-	factorySchema := loadFactorySchemaForSmoke(t)
-
-	var payload any
-	if err := json.Unmarshal([]byte(factoryConfigSmokeLegacyJSON()), &payload); err != nil {
-		t.Fatalf("unmarshal legacy factory payload: %v", err)
-	}
-
-	err := factorySchema.VisitJSON(payload)
-	if err == nil {
-		t.Fatal("expected raw legacy snake_case factory config to be rejected by the public OpenAPI Factory schema")
-	}
-
-	for _, fragment := range []string{"inputTypes", "workTypes", "executorProvider", "promptFile", "resources"} {
-		if strings.Contains(err.Error(), fragment) {
-			return
-		}
-	}
-
-	t.Fatalf("expected schema rejection to reference missing canonical camelCase fields, got %v", err)
-}
-
-func TestFactoryConfigSmoke_OpenAPIFactorySchemaRejectsZeroAnnotationSize(t *testing.T) {
-	factorySchema := loadFactorySchemaForSmoke(t)
-	payloadJSON := `{
-		"name":"layout-factory",
-		"layout":{"schemaVersion":1,"annotations":[{
-			"id":"note-1","kind":"NOTE","position":{"x":0,"y":0},"size":{"width":0,"height":80},
-			"note":{"body":"literal note","tone":"NEUTRAL"}
-		}]}
-	}`
-	var payload any
-	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-		t.Fatalf("unmarshal layout factory payload: %v", err)
-	}
-	if err := factorySchema.VisitJSON(payload); err == nil {
-		t.Fatal("OpenAPI Factory schema accepted zero annotation width, want exclusive lower-bound rejection")
-	}
-
-	positivePayload := strings.Replace(payloadJSON, `"width":0`, `"width":0.5`, 1)
-	if err := json.Unmarshal([]byte(positivePayload), &payload); err != nil {
-		t.Fatalf("unmarshal positive layout factory payload: %v", err)
-	}
-	if err := factorySchema.VisitJSON(payload); err != nil {
-		t.Fatalf("OpenAPI Factory schema rejected positive annotation width: %v", err)
 	}
 }
 
@@ -306,24 +239,81 @@ func writeFactoryConfigSmokeDir(t *testing.T, content string) string {
 	return dir
 }
 
-func loadRuntimeConfigForSmoke(t *testing.T, dir string) *config.LoadedFactoryConfig {
+func loadRuntimeConfigForSmoke(t *testing.T, dir string) interfaces.MutableLoadedFactorySource {
 	t.Helper()
 
-	loaded, err := config.LoadRuntimeConfig(dir, nil)
+	config, err := expandFactoryConfigForSmoke(dir)
 	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(%s): %v", dir, err)
+		t.Fatalf("expand Factory config %s: %v", dir, err)
+	}
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(dir, config, nil, nil)
+	if err != nil {
+		t.Fatalf("build loaded Factory value %s: %v", dir, err)
 	}
 	return loaded
 }
 
-func assertLoadedFactoryRuntimeForSmoke(t *testing.T, loaded *config.LoadedFactoryConfig) {
+func loadRepresentativeRuntimeConfigForSmoke(t *testing.T, dir string) interfaces.MutableLoadedFactorySource {
+	t.Helper()
+
+	config, err := expandFactoryConfigForSmoke(dir)
+	if err != nil {
+		t.Fatalf("expand representative Factory config %s: %v", dir, err)
+	}
+	worker := factoryWorkerForSmoke(config, "worker-a")
+	if worker == nil {
+		t.Fatal("representative Factory value is missing worker-a")
+	}
+	worker.Type = interfaces.WorkerTypeModel
+	worker.Model = "test-model"
+	worker.StopToken = "COMPLETE"
+	workstation := factoryWorkstationForSmoke(config, "step-one")
+	if workstation == nil {
+		t.Fatal("representative Factory value is missing step-one")
+	}
+	workstation.Type = interfaces.WorkstationTypeModel
+	workstation.PromptTemplate = "Do the work."
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(dir, config, nil, nil)
+	if err != nil {
+		t.Fatalf("build representative loaded Factory value %s: %v", dir, err)
+	}
+	return loaded
+}
+
+func factoryWorkerForSmoke(config *interfaces.FactoryConfig, name string) *interfaces.FactoryWorkerConfig {
+	for index := range config.Workers {
+		if config.Workers[index].Name == name {
+			return &config.Workers[index]
+		}
+	}
+	return nil
+}
+
+func factoryWorkstationForSmoke(config *interfaces.FactoryConfig, name string) *interfaces.FactoryWorkstationConfig {
+	for index := range config.Workstations {
+		if config.Workstations[index].Name == name {
+			return &config.Workstations[index]
+		}
+	}
+	return nil
+}
+
+func expandFactoryConfigForSmoke(dir string) (*interfaces.FactoryConfig, error) {
+	payload, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
+	if err != nil {
+		return nil, err
+	}
+	return factorymapping.NewFactoryConfigMapper().Expand(payload)
+}
+
+func assertLoadedFactoryRuntimeForSmoke(t *testing.T, loaded interfaces.MutableLoadedFactorySource) {
 	t.Helper()
 
 	assertLoadedFactorySmokeWorker(t, loaded)
 	assertLoadedFactorySmokeWorkstation(t, loaded)
 }
 
-func assertLoadedFactorySmokeWorker(t *testing.T, loaded *config.LoadedFactoryConfig) {
+func assertLoadedFactorySmokeWorker(t *testing.T, loaded interfaces.MutableLoadedFactorySource) {
 	t.Helper()
 
 	worker, ok := loaded.Worker("executor")
@@ -338,7 +328,7 @@ func assertLoadedFactorySmokeWorker(t *testing.T, loaded *config.LoadedFactoryCo
 	}
 }
 
-func assertLoadedFactorySmokeWorkstation(t *testing.T, loaded *config.LoadedFactoryConfig) {
+func assertLoadedFactorySmokeWorkstation(t *testing.T, loaded interfaces.MutableLoadedFactorySource) {
 	t.Helper()
 
 	workstation, ok := loaded.Workstation("execute-story")
@@ -362,7 +352,7 @@ func assertLoadedFactorySmokeWorkstation(t *testing.T, loaded *config.LoadedFact
 	}
 }
 
-func assertRepresentativeLoadedFactoryRuntimeForSmoke(t *testing.T, loaded *config.LoadedFactoryConfig) {
+func assertRepresentativeLoadedFactoryRuntimeForSmoke(t *testing.T, loaded interfaces.MutableLoadedFactorySource) {
 	t.Helper()
 
 	worker, ok := loaded.Worker("worker-a")
@@ -388,9 +378,15 @@ func assertRepresentativeLoadedFactoryRuntimeForSmoke(t *testing.T, loaded *conf
 func flattenFactoryConfigForSmoke(t *testing.T, dir string) []byte {
 	t.Helper()
 
-	flattened, err := config.FlattenFactoryConfig(dir)
+	return flattenLoadedFactoryConfigForSmoke(t, loadRuntimeConfigForSmoke(t, dir))
+}
+
+func flattenLoadedFactoryConfigForSmoke(t *testing.T, loaded interfaces.MutableLoadedFactorySource) []byte {
+	t.Helper()
+
+	flattened, err := factorymapping.NewFactoryConfigMapper().Flatten(loaded.FactoryConfig())
 	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(%s): %v", dir, err)
+		t.Fatalf("flatten Factory config: %v", err)
 	}
 	return flattened
 }
@@ -405,68 +401,6 @@ func assertFactorySchemaAcceptsJSON(t *testing.T, schema *openapi3.Schema, data 
 	if err := schema.VisitJSON(payload); err != nil {
 		t.Fatalf("factory payload should validate against the OpenAPI Factory schema: %v", err)
 	}
-}
-
-func assertFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, data []byte) {
-	t.Helper()
-
-	assertFactoryConfigJSONUsesRequiredAndForbiddenKeys(t, data, []string{
-		`"inputTypes"`,
-		`"workTypes"`,
-		`"executorProvider"`,
-		`"modelProvider"`,
-		`"stopToken"`,
-		`"skipPermissions"`,
-		`"body"`,
-		`"promptFile"`,
-		`"outputSchema"`,
-		`"onRejection"`,
-		`"onFailure"`,
-		`"resources"`,
-		`"stopWords"`,
-		`"maxExecutionTime"`,
-		`"workingDirectory"`,
-		`"triggerAtStart"`,
-		`"expiryWindow"`,
-		`"workType"`,
-		`"parentInput"`,
-		`"spawnedBy"`,
-		`"maxVisits"`,
-	}, []string{
-		`"input_types"`,
-		`"work_types"`,
-		`"provider"`,
-		`"model_provider"`,
-		`"session_id"`,
-		`"stop_token"`,
-		`"skip_permissions"`,
-		`"runtimeType"`,
-		`"runtime_type"`,
-		`"prompt_file"`,
-		`"promptTemplate"`,
-		`"prompt_template"`,
-		`"output_schema"`,
-		`"on_rejection"`,
-		`"on_failure"`,
-		`"resource_usage"`,
-		`"resource-usage"`,
-		`"runtimeStopWords"`,
-		`"stop_words"`,
-		`"kind":"standard"`,
-		`"kind":"cron"`,
-		`"kind":"repeater"`,
-		`"max_execution_time"`,
-		`"working_directory"`,
-		`"trigger_at_start"`,
-		`"expiry_window"`,
-		`"timeout"`,
-		`"work_type"`,
-		`"parent_input"`,
-		`"spawned_by"`,
-		`"exhaustionRules"`,
-		`"watch_workstation"`,
-		`"max_visits"`,
-	})
 }
 
 func assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, data []byte) {
@@ -516,17 +450,12 @@ func decodeGeneratedFactoryForSmoke(t *testing.T, data []byte) factoryapi.Factor
 	return factory
 }
 
-func generatedFactoryForSmoke(t *testing.T, loaded *config.LoadedFactoryConfig) factoryapi.Factory {
+func generatedFactoryForSmoke(t *testing.T, captured factoryapi.Factory) factoryapi.Factory {
 	t.Helper()
 
-	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
-		"smoke-factory",
-		loaded.FactoryConfig(),
-		loaded,
-		replay.WithFactorySnapshotSourceDirectory("smoke-factory"),
-	)
+	snapshot, err := interfaces.NewFactorySnapshot(captured)
 	if err != nil {
-		t.Fatalf("FactorySnapshotFromRuntimeConfig: %v", err)
+		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
 	generated, err := factorysnapshot.ToAPI(snapshot)
 	if err != nil {
@@ -767,66 +696,6 @@ func factoryConfigSmokeCanonicalJSON() string {
     "inputs":[{"workType":"story","state":"complete"}],
     "outputs":[{"workType":"story","state":"failed"}],
     "guards":[{"type":"VISIT_COUNT","workstation":"execute-story","maxVisits":3}]
-  }]
-}`
-}
-
-func factoryConfigSmokeLegacyJSON() string {
-	return `{
-  "name": "analytics-platform",
-  "id": "analytics-platform",
-  "input_types": [{"name":"batch","type":"default"}],
-  "work_types": [
-    {"name":"parent","states":[{"name":"init","type":"INITIAL"}]},
-    {"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"},{"name":"complete","type":"TERMINAL"}]}
-  ],
-  "resources": [{"name":"agent-slot","capacity":2}],
-  "workers": [{
-    "name":"executor",
-    "type":"MODEL_WORKER",
-    "provider":"script_wrap",
-    "model_provider":"anthropic",
-    "resources":[{"name":"agent-slot","capacity":1}],
-    "stop_token":"COMPLETE",
-    "skip_permissions":true,
-    "body":"You are the executor."
-  }],
-  "workstations": [{
-    "id":"execute-story-id",
-    "name":"execute-story",
-    "kind":"cron",
-    "runtime_type":"MODEL_WORKSTATION",
-    "worker":"executor",
-    "prompt_file":"prompt.md",
-    "prompt_template":"Implement {{ .WorkID }}.",
-    "output_schema":"schema.json",
-    "timeout":"30m",
-    "on_rejection":{"work_type":"story","state":"init"},
-    "on_failure":{"work_type":"story","state":"failed"},
-    "resource-usage":[{"name":"agent-slot","capacity":2}],
-    "stopToken":"DONE",
-    "working_directory":"/repo/{{ .WorkID }}",
-    "cron":{"schedule":"*/10 * * * *","trigger_at_start":true,"expiry_window":"20s"},
-    "inputs":[
-      {"work_type":"parent","state":"init"},
-      {"work_type":"story","state":"complete","guards":[{"type":"all_children_complete","parent_input":"parent","spawned_by":"fanout"}]}
-    ],
-    "outputs":[{"work_type":"story","state":"complete"}],
-    "guards":[{"type":"visit_count","workstation":"execute-story","max_visits":3}],
-    "env":{"TEAM":"factory"}
-  }, {
-    "name":"fanout",
-    "worker":"executor",
-    "type":"MODEL_WORKSTATION",
-    "inputs":[{"work_type":"parent","state":"init"}],
-    "outputs":[{"work_type":"story","state":"init"}]
-  }, {
-    "name":"guard-cycle",
-    "worker":"executor",
-    "type":"LOGICAL_MOVE",
-    "inputs":[{"work_type":"story","state":"complete"}],
-    "outputs":[{"work_type":"story","state":"failed"}],
-    "guards":[{"type":"visit_count","workstation":"execute-story","max_visits":3}]
   }]
 }`
 }

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,17 +32,8 @@ func TestDependencyTracking_BlocksUntilSatisfied(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		PlaceTokenCount("task:complete", 2)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 2})
 
 	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 2 {
 		t.Errorf("expected starter called 2 times, got %d", got)
@@ -54,15 +45,6 @@ func TestDependencyTracking_NoDepsPassThrough(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("no deps"))
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 5*time.Second)
+	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0})
 }

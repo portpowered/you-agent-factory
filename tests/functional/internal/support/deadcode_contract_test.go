@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestAcceptedCommandResults_ReturnsRequestedCompleteResponses(t *testing.T) {
@@ -26,28 +26,18 @@ func TestAcceptedCommandResults_ReturnsRequestedCompleteResponses(t *testing.T) 
 	}
 }
 
-func TestProviderCommandRequestsForWorker_FiltersRecordedRequests(t *testing.T) {
+func TestProviderCommandRunnerRecordsPolicyFreeProcessRequests(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
-	requests := []workers.CommandRequest{
-		{WorkerType: "planner"},
-		{WorkerType: "executor"},
-		{WorkerType: "planner"},
+	request := platformprocess.CommandRequest{Command: "provider", Args: []string{"run"}, Stdin: []byte("prompt")}
+	if _, err := runner.Run(context.Background(), request); err != nil {
+		t.Fatalf("runner.Run(%#v): %v", request, err)
 	}
-	for _, request := range requests {
-		if _, err := runner.Run(context.Background(), request); err != nil {
-			t.Fatalf("runner.Run(%#v): %v", request, err)
-		}
+	recorded := runner.Requests()
+	if len(recorded) != 1 {
+		t.Fatalf("len(recorded) = %d, want 1", len(recorded))
 	}
-
-	filtered := ProviderCommandRequestsForWorker(runner, "planner")
-
-	if len(filtered) != 2 {
-		t.Fatalf("len(filtered) = %d, want 2", len(filtered))
-	}
-	for i, request := range filtered {
-		if request.WorkerType != "planner" {
-			t.Fatalf("filtered[%d].WorkerType = %q, want %q", i, request.WorkerType, "planner")
-		}
+	if recorded[0].Command != request.Command || string(recorded[0].Stdin) != string(request.Stdin) {
+		t.Fatalf("recorded request = %#v, want %#v", recorded[0], request)
 	}
 }
 
@@ -127,7 +117,7 @@ func TestUpdateFactoryConfig_RewritesScaffoldedFactoryConfig(t *testing.T) {
 func TestNewStaticSuccessCommandRunner_ReturnsFixedStdoutWithoutFailureFields(t *testing.T) {
 	runner := NewStaticSuccessCommandRunner("script-output-ok")
 
-	result, err := runner.Run(context.Background(), workers.CommandRequest{Command: "script-tool"})
+	result, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "script-tool"})
 	if err != nil {
 		t.Fatalf("runner.Run: %v", err)
 	}

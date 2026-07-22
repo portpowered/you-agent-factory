@@ -8,15 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -33,16 +31,25 @@ func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "local-model-config-init", initResult, err)
+	_, initOutcome := initializeConfig(t, ctx, session, "local-model-config-init")
 
-	if writeErr := writeProjectFactoryJSON(session.WorkDir, tts.BuiltInFactoryJSON); writeErr != nil {
-		t.Fatalf("write project factory.json: %v", writeErr)
+	installedTTSDir := materializedNamedFactoryDir(
+		t,
+		initOutcome,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	ttsProjectDir := filepath.Join(t.TempDir(), "installed-tts-project")
+	if copyErr := os.CopyFS(
+		ttsProjectDir,
+		os.DirFS(installedTTSDir),
+	); copyErr != nil {
+		t.Fatalf("copy installed @you/tts into project Factory root: %v", copyErr)
 	}
+	session.WorkDir = ttsProjectDir
 
 	args := append([]string{"--json"}, session.ServerFlags()...)
 	args = append(args,
-		"models", "invoke", tts.DefaultModelName,
+		"models", "invoke", factorydefinitions.DefaultTTSModelName,
 		"--operation", "TTS",
 		"--text", "acceptance-local-model-missing-readiness",
 	)
@@ -58,7 +65,7 @@ func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(
 	combined := result.Stdout + result.Stderr
 	for _, want := range []string{
 		"pull or install",
-		tts.DefaultModelName,
+		factorydefinitions.DefaultTTSModelName,
 	} {
 		if !strings.Contains(combined, want) {
 			t.Fatalf("output = %q, want documented missing-readiness guidance %q", combined, want)
@@ -80,10 +87,8 @@ func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseIns
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "goal-repeat-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	_, initOutcome := initializeConfig(t, ctx, session, "goal-repeat-config-init")
+	configPath := initOutcome.ConfigPath
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -101,7 +106,7 @@ func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseIns
 	session.RequireSuccess(t, "goal-repeat-first-run", firstResult, firstErr)
 	firstResponse := decodeInvocationResponse(t, firstResult.Stdout)
 
-	installedDir := materializedNamedFactoryDir(t, session.HomeDir, goal.PackagedFactoryName)
+	installedDir := materializedNamedFactoryDir(t, initOutcome, goal.PackagedFactoryName)
 	if _, statErr := os.Stat(installedDir); statErr != nil {
 		t.Fatalf("installed goal dir %q: %v", installedDir, statErr)
 	}
@@ -209,10 +214,8 @@ func prepareNamedSubagentAcceptanceSession(t *testing.T) (*builtcliacceptance.Se
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "subagent-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	_, initOutcome := initializeConfig(t, ctx, session, "subagent-config-init")
+	configPath := initOutcome.ConfigPath
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -251,7 +254,7 @@ func namedSubagentJSONRunArgs(
 	args = append(args, session.ServerFlags()...)
 	args = append(args,
 		"run",
-		"--named", subagent.PackagedFactoryName,
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--quiet",
@@ -266,13 +269,13 @@ func namedSubagentJSONRunArgs(
 func writePackagedSubagentMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
-				WorkerName:      subagent.PackagedWorkerName,
-				WorkstationName: subagent.PackagedRunWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
+				WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 		},
 	}
@@ -287,23 +290,19 @@ func writePackagedSubagentMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
-func writeProjectFactoryJSON(workDir string, payload []byte) error {
-	factoryDir := filepath.Join(workDir, "factory")
-	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(factoryDir, "factory.json"), payload, 0o644)
-}
-
-func materializedNamedFactoryDir(t *testing.T, homeDir, factoryName string) string {
+func materializedNamedFactoryDir(t *testing.T, initialized configInitOutcome, factoryName string) string {
 	t.Helper()
 
-	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	dir, err := factoryconfig.MapNamedFactoryDir(globalRoot, factoryName)
-	if err != nil {
-		t.Fatalf("MapNamedFactoryDir(%q): %v", factoryName, err)
+	for _, installed := range initialized.PackagedFactories {
+		if installed.Name == factoryName {
+			if strings.TrimSpace(installed.FactoryDir) == "" {
+				t.Fatalf("config init returned empty Factory directory for %q: %#v", factoryName, initialized.PackagedFactories)
+			}
+			return installed.FactoryDir
+		}
 	}
-	return dir
+	t.Fatalf("config init omitted packaged Factory %q: %#v", factoryName, initialized.PackagedFactories)
+	return ""
 }
 
 func decodeInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

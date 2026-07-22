@@ -3,8 +3,7 @@ package runtimefixtures
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestRuntimeWorkstationLookupFixture_Workstation(t *testing.T) {
@@ -47,7 +46,7 @@ func TestRuntimeConfigLookupFixture_ImplementsLayeredContract(t *testing.T) {
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"router": {Name: "Router", Type: interfaces.WorkstationTypeLogical},
 		},
-		Workers: map[string]*workerconfig.Config{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
 			"writer": {Model: "gpt-5.4"},
 		},
 		FactoryPath: "/tmp/factory",

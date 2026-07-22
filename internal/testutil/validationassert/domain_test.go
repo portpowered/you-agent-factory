@@ -3,26 +3,26 @@ package validationassert
 import (
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestHasDomainTargetCode_MatchesAnyTargetWithCode(t *testing.T) {
-	targets := []factoryvalidation.Target{
-		{Code: factoryvalidation.CodeDuplicateIdentifier},
-		{Code: factoryvalidation.CodeDanglingWorkerReference},
+	targets := []factorydefinitions.ValidationTarget{
+		{Code: "factory.duplicateIdentifier"},
+		{Code: "factory.worker.danglingReference"},
 	}
 
-	HasDomainTargetCode(t, targets, factoryvalidation.CodeDanglingWorkerReference)
+	HasDomainTargetCode(t, targets, "factory.worker.danglingReference")
 }
 
 func TestHasDomainTargetSubject_MatchesSubject(t *testing.T) {
-	want := factoryvalidation.Subject{
-		Type:     factoryvalidation.SubjectTypeWorkstation,
+	want := factorydefinitions.ValidationSubject{
+		Type:     factorydefinitions.ValidationSubjectTypeWorkstation,
 		ID:       "process",
-		Location: factoryvalidation.SubjectLocationReference,
+		Location: factorydefinitions.ValidationSubjectLocationReference,
 	}
-	targets := []factoryvalidation.Target{{
-		Code:    factoryvalidation.CodeDanglingPlaceReference,
+	targets := []factorydefinitions.ValidationTarget{{
+		Code:    "factory.route.danglingPlaceReference",
 		Subject: want,
 	}}
 

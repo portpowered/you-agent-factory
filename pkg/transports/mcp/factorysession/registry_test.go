@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
@@ -512,30 +512,6 @@ func requireSchemaFieldsAbsent(t *testing.T, schema map[string]any, fields ...st
 	}
 }
 
-func TestDiscoverCompatibilityAliases_AreMarkedCompatibilityOnly(t *testing.T) {
-	aliases := mcpfactorysession.DiscoverCompatibilityAliases()
-	if len(aliases) == 0 {
-		t.Fatal("expected workflow compatibility aliases")
-	}
-	for _, alias := range aliases {
-		if !alias.CompatibilityOnly {
-			t.Fatalf("alias %q must be compatibility-only", alias.Name)
-		}
-		if !strings.HasPrefix(alias.Name, "you.workflow.") {
-			t.Fatalf("alias %q should use workflow vocabulary", alias.Name)
-		}
-		if !strings.HasPrefix(alias.CanonicalName, "you.factory_session.") {
-			t.Fatalf("alias %q should resolve to canonical Factory Session tool, got %q", alias.Name, alias.CanonicalName)
-		}
-		if _, ok := mcpfactorysession.ToolByName(alias.CanonicalName); !ok {
-			t.Fatalf("alias %q canonical target %q is not discoverable", alias.Name, alias.CanonicalName)
-		}
-		if !strings.Contains(alias.Description, "Compatibility-only") {
-			t.Fatalf("alias %q description should document compatibility-only semantics", alias.Name)
-		}
-	}
-}
-
 func TestMockClientDiscovery_RoundTripsJSON(t *testing.T) {
 	tools := mcpfactorysession.DiscoverTools()
 	encoded, err := json.Marshal(tools)
@@ -555,50 +531,9 @@ func TestMockClientDiscovery_RoundTripsJSON(t *testing.T) {
 	}
 }
 
-func TestMockClient_WorkflowValidateCompatibilityOnlyAliasMatchesCanonicalBehavior(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
-
-	projectRootPtr := projectRoot
-	sourceValue := "broken"
-	request := factoryapi.FactoryPreviewRequest{
-		SourceKind:  factoryapi.WORKFLOWNAME,
-		ProjectRoot: &projectRootPtr,
-		SourceValue: &sourceValue,
-	}
-	encoded, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-
-	client := mcpfactorysession.NewClient()
-	canonicalRaw, err := client.CallTool(mcpfactorysession.ToolValidateSource, encoded)
-	if err != nil {
-		t.Fatalf("canonical validate: %v", err)
-	}
-	aliasRaw, err := client.CallTool(mcpfactorysession.ToolWorkflowValidate, encoded)
-	if err != nil {
-		t.Fatalf("alias validate: %v", err)
-	}
-	if string(canonicalRaw) != string(aliasRaw) {
-		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)
-	}
-
-	var response mcpfactorysession.ToolResponse[factoryapi.FactoryPreviewResult]
-	if err := json.Unmarshal(aliasRaw, &response); err != nil {
-		t.Fatalf("unmarshal alias response: %v", err)
-	}
-	if response.Result != nil || response.Error == nil {
-		t.Fatalf("response = %#v, want typed validation error envelope", response)
-	}
-	if response.Error.Code == "" || response.Error.Message == "" {
-		t.Fatalf("error envelope = %#v, want code and message", response.Error)
-	}
-}
-
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, factory.WorkflowSourceProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
@@ -674,22 +609,6 @@ func TestProjectToolInventory_DerivesStableIDCandidates(t *testing.T) {
 	}
 	if got := byName[mcpfactorysession.ToolValidateSource].IDCandidate; got != "factory-session.validate-source" {
 		t.Fatalf("you.factory_session.validate_source idCandidate = %q, want factory-session.validate-source", got)
-	}
-}
-
-func TestProjectToolInventory_ExcludesCompatibilityAliases(t *testing.T) {
-	inventory, err := mcpfactorysession.ProjectToolInventory()
-	if err != nil {
-		t.Fatalf("ProjectToolInventory() error = %v", err)
-	}
-	aliasNames := make(map[string]struct{}, len(mcpfactorysession.DiscoverCompatibilityAliases()))
-	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		aliasNames[alias.Name] = struct{}{}
-	}
-	for _, tool := range inventory.Tools {
-		if _, ok := aliasNames[tool.Name]; ok {
-			t.Fatalf("compatibility alias %q must not appear in canonical inventory", tool.Name)
-		}
 	}
 }
 
@@ -904,30 +823,6 @@ func TestVerifyToolInventory_FailsWhenDiscoveredToolMissingHandler(t *testing.T)
 	}
 	if !strings.Contains(err.Error(), unregisteredTool) {
 		t.Fatalf("VerifyToolInventory() error = %v, want offending tool %q", err, unregisteredTool)
-	}
-}
-
-func TestVerifyToolInventory_RejectsCompatibilityAliasEntry(t *testing.T) {
-	inventory := mcpfactorysession.ToolInventory{
-		FormatVersion:   mcpfactorysession.ToolInventoryFormatVersion,
-		ProtocolVersion: mcpfactorysession.ToolInventoryProtocolVersion,
-		Tools: []mcpfactorysession.ToolInventoryEntry{{
-			IDCandidate:       "workflow.validate",
-			Name:              mcpfactorysession.ToolWorkflowValidate,
-			Description:       "compatibility alias that resolves to a handler",
-			InputSchema:       map[string]any{"type": "object"},
-			HandlerRegistered: true,
-		}},
-	}
-	err := mcpfactorysession.VerifyToolInventory(inventory)
-	if err == nil {
-		t.Fatal("VerifyToolInventory() error = nil, want failure")
-	}
-	if !strings.Contains(err.Error(), mcpfactorysession.ToolWorkflowValidate) {
-		t.Fatalf("VerifyToolInventory() error = %v, want alias name", err)
-	}
-	if !strings.Contains(err.Error(), "compatibility alias") {
-		t.Fatalf("VerifyToolInventory() error = %v, want compatibility alias rejection", err)
 	}
 }
 

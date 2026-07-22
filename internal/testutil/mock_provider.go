@@ -4,11 +4,11 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// MockProvider implements workers.Provider for testing. It returns
+// MockProvider implements provider.Provider for testing. It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockProvider struct {
@@ -95,4 +95,4 @@ func (m *MockProvider) LastCall() workerexecution.ProviderInferenceRequest {
 }
 
 // Compile-time check.
-var _ workers.Provider = (*MockProvider)(nil)
+var _ workerprovider.Provider = (*MockProvider)(nil)

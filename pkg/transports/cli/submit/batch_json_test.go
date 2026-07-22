@@ -2,6 +2,7 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +38,7 @@ func TestSubmitBatch_JSONSuccessOutputIncludesRequiredFields(t *testing.T) {
 	}`)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:      []string{path},
 		Server:    mustServerBase(t, srv.URL),
 		SessionID: "session-json",
@@ -119,7 +120,7 @@ func TestSubmitBatch_JSONDryRunIncludesSummaryWithoutTraceIDUnlessPresent(t *tes
 	path := writeBatchFile(t, validBatchJSON("batch-json-dry", "alpha"))
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		JSON:   true,
@@ -172,7 +173,7 @@ func TestSubmitBatch_JSONDryRunIncludesTraceIDWhenPresentInInput(t *testing.T) {
 	}`)
 
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTest(t, BatchConfig{Context: context.Background(),
 		Args:   []string{path},
 		DryRun: true,
 		JSON:   true,
@@ -191,12 +192,12 @@ func TestSubmitBatch_JSONDryRunIncludesTraceIDWhenPresentInInput(t *testing.T) {
 
 func TestSubmitBatch_ValidationErrorDoesNotEmitSuccessJSON(t *testing.T) {
 	var out bytes.Buffer
-	err := SubmitBatch(BatchConfig{
+	err := submitBatchForTestWithPreparation(t, BatchConfig{Context: context.Background(),
 		Args:   []string{`{"requestId":"bad","type":"FACTORY_REQUEST_BATCH","works":[]}`},
 		JSON:   true,
 		Server: "http://127.0.0.1:1",
 		Output: &out,
-	})
+	}, batchPreparationFailure("batch works must contain at least one item"))
 	if err == nil {
 		t.Fatal("expected validation error")
 	}

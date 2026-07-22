@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	domain "github.com/portpowered/infinite-you/pkg/factory/definition"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -46,11 +46,11 @@ func TestEditableFactoryRoundTripPreservesSnapshotAndVersion(t *testing.T) {
 func TestSaveModeFromAPIPreservesPolicySelection(t *testing.T) {
 	t.Parallel()
 
-	if got := saveModeFromAPI(factoryapi.FactorySaveModeUpsertNamedAndActivate); got != domain.SaveModeUpsertNamedAndActivate {
-		t.Fatalf("upsert mode = %q, want %q", got, domain.SaveModeUpsertNamedAndActivate)
+	if got := saveModeFromAPI(factoryapi.FactorySaveModeUpsertNamedAndActivate); got != factorydefinitions.SaveModeUpsertNamedAndActivate {
+		t.Fatalf("upsert mode = %q, want %q", got, factorydefinitions.SaveModeUpsertNamedAndActivate)
 	}
-	if got := saveModeFromAPI(factoryapi.FactorySaveModeReplaceCurrent); got != domain.SaveModeReplaceCurrent {
-		t.Fatalf("replace mode = %q, want %q", got, domain.SaveModeReplaceCurrent)
+	if got := saveModeFromAPI(factoryapi.FactorySaveModeReplaceCurrent); got != factorydefinitions.SaveModeReplaceCurrent {
+		t.Fatalf("replace mode = %q, want %q", got, factorydefinitions.SaveModeReplaceCurrent)
 	}
 }
 
@@ -74,15 +74,12 @@ func TestServiceRequiresDomainOwner(t *testing.T) {
 	if _, err := svc.CurrentFactoryDefinitionVersionAtRoot("root", "alpha"); err == nil {
 		t.Fatal("CurrentFactoryDefinitionVersionAtRoot error = nil, want missing owner error")
 	}
-	if _, err := svc.SerializeNamedFactory("alpha", nil, true); err == nil {
-		t.Fatal("SerializeNamedFactory error = nil, want missing owner error")
-	}
 }
 
 func TestEditableFactoryToAPIRequiresSnapshot(t *testing.T) {
 	t.Parallel()
 
-	if _, err := editableFactoryToAPI(domain.EditableFactory{}); err == nil {
+	if _, err := editableFactoryToAPI(factorydefinitions.EditableFactory{}); err == nil {
 		t.Fatal("editableFactoryToAPI error = nil, want missing snapshot error")
 	}
 }

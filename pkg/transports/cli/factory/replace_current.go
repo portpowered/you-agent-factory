@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -20,8 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-const replaceCurrentRequestTimeout = queryCurrentRequestTimeout
 
 var replaceCurrentOwningLabels = replaceCurrentLabels{
 	logLabel:     "factory replace-current",
@@ -35,25 +32,36 @@ type replaceCurrentLabels struct {
 
 // ReplaceCurrentConfig holds parameters for persisting the live current factory.
 type ReplaceCurrentConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	JSON        bool
 	Verbose     bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewReplaceCurrent(transport clihttp.Protocol) func(ReplaceCurrentConfig) error {
+	return func(cfg ReplaceCurrentConfig) error { cfg.HTTP = transport; return ReplaceCurrent(cfg) }
 }
 
 // ReplaceCurrent reads the session current factory and persists it with PUT.
 func ReplaceCurrent(cfg ReplaceCurrentConfig) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
 	saved, err := replaceCurrentFactory(replaceCurrentOptions{
+		Context:     cfg.Context,
 		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
+		HTTP:        cfg.HTTP,
 		labels:      replaceCurrentOwningLabels,
 	})
 	if err != nil {
@@ -68,11 +76,13 @@ func ReplaceCurrent(cfg ReplaceCurrentConfig) error {
 }
 
 type replaceCurrentOptions struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	Verbose     bool
 	Diagnostics io.Writer
 	labels      replaceCurrentLabels
+	HTTP        clihttp.Protocol
 }
 
 func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error) {
@@ -82,10 +92,12 @@ func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error
 	}
 
 	current, err := queryCurrent(queryCurrentOptions{
+		Context:     cfg.Context,
 		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
+		HTTP:        cfg.HTTP,
 	})
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -118,25 +130,18 @@ func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error
 		return factoryapi.Factory{}, fmt.Errorf("encode %s payload: %w", labels.failureLabel, err)
 	}
 
-	client := &http.Client{Timeout: replaceCurrentRequestTimeout}
-	started := time.Now()
 	var saved factoryapi.Factory
-	resp, err := clihttp.PutJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.PutJSON(
+		cfg.Context,
 		endpoint.String(),
 		bytes.NewReader(payload),
 		&saved,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     labels.logLabel,
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s response endpointPath=%s error=unreachable durationMillis=%d", labels.logLabel, endpoint.Path, response.Duration.Milliseconds())
 		return factoryapi.Factory{}, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -144,7 +149,7 @@ func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("read %s response: %w", labels.failureLabel, err)
 		}
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", labels.logLabel, endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", labels.logLabel, endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), len(body))
 		return factoryapi.Factory{}, replaceCurrentHTTPError(labels.failureLabel, resp.StatusCode, body)
 	}
 
@@ -159,7 +164,7 @@ func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error
 		labels.logLabel,
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		responseBytes,
 		saved.Name,
 	)

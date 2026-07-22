@@ -6,19 +6,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 )
 
 const cliCommandsBaselineFixture = "contracts/testdata/baseline/cli-commands.json"
 
 func TestWalk_ProductionInventoryMatchesCommittedBaseline(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
-	}
+	inventory := productionCLIObservation(t).Snapshot.Commands
 
 	got, err := commandidentity.MarshalInventory(inventory)
 	if err != nil {
@@ -48,11 +42,7 @@ func TestWriteProductionInventoryBaseline(t *testing.T) {
 		t.Skip("set UPDATE_CLI_BASELINES=1 to rewrite fixtures")
 	}
 
-	root := cli.NewRootCommand()
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
-	}
+	inventory := productionCLIObservation(t).Snapshot.Commands
 	got, err := commandidentity.MarshalInventory(inventory)
 	if err != nil {
 		t.Fatalf("MarshalInventory() error = %v", err)

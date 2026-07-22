@@ -240,29 +240,6 @@ paths:
           $ref: '#/components/responses/MoveWorkConflict'
         '500':
           $ref: '#/components/responses/InternalError'
-  /events:
-    get:
-      tags:
-        - Runtime
-      operationId: getEvents
-      summary: Stream process-global factory events (compatibility-only)
-      description: Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
-      parameters:
-        - $ref: '#/components/parameters/AfterEventId'
-        - $ref: '#/components/parameters/AfterSequence'
-      responses:
-        '200':
-          description: Factory event stream.
-          content:
-            text/event-stream:
-              schema:
-                type: string
-                description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
-              x-event-schema: '#/components/schemas/FactoryEvent'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/events:
     get:
       tags:
@@ -641,34 +618,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FactoryPreviewResult'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /workflow-previews:
-    post:
-      deprecated: true
-      tags:
-        - Workflows
-      operationId: previewWorkflow
-      summary: Preview workflow validation and policy (obsolete)
-      description: >-
-        Obsolete Batch 001 compatibility alias for POST /factories/preview.
-        Returns the same Factory preview contract while callers migrate to
-        canonical Factory preview semantics.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WorkflowPreviewRequest'
-      responses:
-        '200':
-          description: Compatibility alias of Factory preview validation and policy projection.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkflowPreviewResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -2309,10 +2258,6 @@ components:
       $ref: './components/schemas/api/FactoryPreviewRequest.yaml'
     FactoryPreviewResult:
       $ref: './components/schemas/api/FactoryPreviewResult.yaml'
-    WorkflowPreviewRequest:
-      $ref: './components/schemas/api/WorkflowPreviewRequest.yaml'
-    WorkflowPreviewResult:
-      $ref: './components/schemas/api/WorkflowPreviewResult.yaml'
     FactoryValidationSeverity:
       $ref: './components/schemas/api/FactoryValidationSeverity.yaml'
     FactoryValidationSubjectType:

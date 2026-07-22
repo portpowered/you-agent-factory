@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
 
 // Regression guard for you-goal-b03-date-layout: runtime logs and metrics must
@@ -26,20 +28,20 @@ func TestRuntimeArtifactInjectedClockSharedCalendarLayout(t *testing.T) {
 	tests := []struct {
 		name   string
 		root   string
-		kind   defaultpaths.RuntimeArtifactKind
+		kind   runtimeartifact.RuntimeArtifactKind
 		suffix string
 	}{
 		{
 			name:   "runtime log",
 			root:   logRoot,
-			kind:   defaultpaths.RuntimeArtifactKindLog,
-			suffix: defaultpaths.RuntimeArtifactPathComponents("runtime-injected"),
+			kind:   runtimeartifact.RuntimeArtifactKindLog,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents("runtime-injected"),
 		},
 		{
 			name: "runtime metrics",
 			root: metricsRoot,
-			kind: defaultpaths.RuntimeArtifactKindMetrics,
-			suffix: defaultpaths.RuntimeArtifactPathComponents(
+			kind: runtimeartifact.RuntimeArtifactKindMetrics,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents(
 				"session-injected",
 				"runtime-injected",
 				"layout-token",
@@ -55,13 +57,13 @@ func TestRuntimeArtifactInjectedClockSharedCalendarLayout(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			path := defaultpaths.RuntimeArtifactPath(tc.root, at, tc.kind, tc.suffix)
+			path := runtimeartifact.RuntimeArtifactPath(tc.root, at, tc.kind, tc.suffix)
 			assertInjectedClockSharedLayoutPath(t, tc.root, path, at, tc.kind)
 			assertPathUsesPlatformSeparators(t, path)
 
-			datedDir := defaultpaths.RuntimeLogsDatedDir(tc.root, at)
-			if tc.kind == defaultpaths.RuntimeArtifactKindMetrics {
-				datedDir = defaultpaths.RuntimeMetricsDatedDir(tc.root, at)
+			datedDir := runtimeartifact.RuntimeLogsDatedDir(tc.root, at)
+			if tc.kind == runtimeartifact.RuntimeArtifactKindMetrics {
+				datedDir = runtimeartifact.RuntimeMetricsDatedDir(tc.root, at)
 			}
 			if datedDir != filepath.Dir(path) {
 				t.Fatalf("dated dir = %q, want parent of path %q", datedDir, path)
@@ -91,18 +93,18 @@ func TestRuntimeArtifactInjectedClockReservesFilesOnFreshRoot(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		kind   defaultpaths.RuntimeArtifactKind
+		kind   runtimeartifact.RuntimeArtifactKind
 		suffix string
 	}{
 		{
 			name:   "runtime log",
-			kind:   defaultpaths.RuntimeArtifactKindLog,
-			suffix: defaultpaths.RuntimeArtifactPathComponents("runtime-fresh-layout"),
+			kind:   runtimeartifact.RuntimeArtifactKindLog,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents("runtime-fresh-layout"),
 		},
 		{
 			name: "runtime metrics",
-			kind: defaultpaths.RuntimeArtifactKindMetrics,
-			suffix: defaultpaths.RuntimeArtifactPathComponents(
+			kind: runtimeartifact.RuntimeArtifactKindMetrics,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents(
 				"session-fresh-layout",
 				"runtime-fresh-layout",
 			),
@@ -113,10 +115,11 @@ func TestRuntimeArtifactInjectedClockReservesFilesOnFreshRoot(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rootDir := t.TempDir()
 			assertRuntimeArtifactRootLacksCalendarDirectories(t, rootDir)
+			reserver := newRuntimeArtifactReserver(t)
 
-			path, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
+			path, err := reserver.Reserve(rootDir, at, string(tc.kind), tc.suffix)
 			if err != nil {
-				t.Fatalf("runtimeartifact.ReserveAvailablePath: %v", err)
+				t.Fatalf("Reserve: %v", err)
 			}
 
 			assertInjectedClockSharedLayoutPath(t, rootDir, path, at, tc.kind)
@@ -134,18 +137,18 @@ func TestRuntimeArtifactInjectedClockCollisionPreservesTimeKindShape(t *testing.
 
 	tests := []struct {
 		name   string
-		kind   defaultpaths.RuntimeArtifactKind
+		kind   runtimeartifact.RuntimeArtifactKind
 		suffix string
 	}{
 		{
 			name:   "runtime log",
-			kind:   defaultpaths.RuntimeArtifactKindLog,
-			suffix: defaultpaths.RuntimeArtifactPathComponents("runtime-collision-layout"),
+			kind:   runtimeartifact.RuntimeArtifactKindLog,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents("runtime-collision-layout"),
 		},
 		{
 			name: "runtime metrics",
-			kind: defaultpaths.RuntimeArtifactKindMetrics,
-			suffix: defaultpaths.RuntimeArtifactPathComponents(
+			kind: runtimeartifact.RuntimeArtifactKindMetrics,
+			suffix: runtimeartifact.RuntimeArtifactPathComponents(
 				"session-collision-layout",
 				"runtime-collision-layout",
 			),
@@ -155,18 +158,19 @@ func TestRuntimeArtifactInjectedClockCollisionPreservesTimeKindShape(t *testing.
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rootDir := t.TempDir()
+			reserver := newRuntimeArtifactReserver(t)
 
-			firstPath, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
+			firstPath, err := reserver.Reserve(rootDir, at, string(tc.kind), tc.suffix)
 			if err != nil {
-				t.Fatalf("runtimeartifact.ReserveAvailablePath first: %v", err)
+				t.Fatalf("Reserve first: %v", err)
 			}
 			if err := os.WriteFile(firstPath, []byte("preserved"), 0o644); err != nil {
 				t.Fatalf("WriteFile(%s): %v", firstPath, err)
 			}
 
-			secondPath, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
+			secondPath, err := reserver.Reserve(rootDir, at, string(tc.kind), tc.suffix)
 			if err != nil {
-				t.Fatalf("runtimeartifact.ReserveAvailablePath second: %v", err)
+				t.Fatalf("Reserve second: %v", err)
 			}
 			if firstPath == secondPath {
 				t.Fatalf("collision paths must differ, both %q", firstPath)
@@ -180,12 +184,31 @@ func TestRuntimeArtifactInjectedClockCollisionPreservesTimeKindShape(t *testing.
 	}
 }
 
+type runtimeArtifactTestFileSystem struct{}
+
+func (runtimeArtifactTestFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+
+func (runtimeArtifactTestFileSystem) OpenFile(path string, flag int, mode fs.FileMode) (io.WriteCloser, error) {
+	return os.OpenFile(path, flag, mode)
+}
+
+func newRuntimeArtifactReserver(t *testing.T) platformartifact.Reserver {
+	t.Helper()
+	reserver, err := platformartifact.NewReserver(runtimeArtifactTestFileSystem{})
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+	return reserver
+}
+
 func assertInjectedClockSharedLayoutPath(
 	t *testing.T,
 	rootDir string,
 	path string,
 	at time.Time,
-	kind defaultpaths.RuntimeArtifactKind,
+	kind runtimeartifact.RuntimeArtifactKind,
 ) {
 	t.Helper()
 
@@ -213,7 +236,7 @@ func assertInjectedClockSharedLayoutPath(
 		t.Fatalf("day directory = %q, want dd", parts[2])
 	}
 
-	timeToken := at.UTC().Format(defaultpaths.RuntimeArtifactTimeLayout)
+	timeToken := at.UTC().Format(runtimeartifact.RuntimeArtifactTimeLayout)
 	filenamePattern := regexp.MustCompile(
 		`^` + regexp.QuoteMeta(timeToken) + `-` + regexp.QuoteMeta(string(kind)) + `(-[A-Za-z0-9_.-]+)?(-\d+)?\.log$`,
 	)

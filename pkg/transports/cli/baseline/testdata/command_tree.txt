@@ -37,13 +37,3 @@ you work list	list	you work
 you work move	move <work-id> <state-name>	you work
 you work show	show <work-id>	you work
 you work visualize	visualize <batch-file.json>	you work
-you workflow	workflow	you
-you workflow artifacts	artifacts [session-id]	you workflow
-you workflow dispatches	dispatches [session-id]	you workflow
-you workflow events	events [session-id]	you workflow
-you workflow preview	preview	you workflow
-you workflow result	result [session-id]	you workflow
-you workflow run	run	you workflow
-you workflow start	start	you workflow
-you workflow status	status [session-id]	you workflow
-you workflow validate	validate	you workflow

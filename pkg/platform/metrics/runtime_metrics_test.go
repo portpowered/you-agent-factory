@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	factorymetrics "github.com/portpowered/infinite-you/pkg/factory/metrics"
 )
 
 func TestNormalizeRuntimeMetricsConfig(t *testing.T) {
@@ -128,8 +126,8 @@ func TestBuildRuntimeMetricsSinkCreatesDatedDirectoriesOnFreshRoot(t *testing.T)
 		after,
 	)
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
-		t.Fatalf("Counter on fresh root metrics sink: %v", err)
+	if err := sink.WriteMetric(context.Background(), map[string]any{"metric_name": "runtime.started"}); err != nil {
+		t.Fatalf("WriteMetric on fresh root metrics sink: %v", err)
 	}
 	if _, err := os.Stat(sink.Path()); err != nil {
 		t.Fatalf("active runtime metrics file %q should remain open after write: %v", sink.Path(), err)
@@ -175,7 +173,7 @@ func TestBuildRuntimeMetricsSinkUsesCanonicalDefaultMetricsDirectoryAsRoot(t *te
 	assertRuntimeMetricsPathFormat(
 		t,
 		sink.Path(),
-		defaultpaths.RuntimeMetricsRoot(homeDir),
+		RuntimeMetricsRoot(homeDir),
 		"session-default",
 		"runtime-default",
 		before,
@@ -190,8 +188,11 @@ func TestRuntimeMetricsSinkDoesNotRecreateFileAfterClose(t *testing.T) {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
-		t.Fatalf("Counter before close: %v", err)
+	if err := sink.WriteMetric(context.Background(), map[string]any{
+		"metric_name": "runtime.started", "session_id": "session-close",
+		"runtime_instance_id": "runtime-close",
+	}); err != nil {
+		t.Fatalf("WriteMetric before close: %v", err)
 	}
 	record := readSingleRuntimeMetricsRecord(t, sink.Path())
 	if record["metric_name"] != "runtime.started" {
@@ -208,8 +209,8 @@ func TestRuntimeMetricsSinkDoesNotRecreateFileAfterClose(t *testing.T) {
 		t.Fatalf("remove runtime metrics path after close: %v", err)
 	}
 
-	if err := sink.Counter(context.Background(), "runtime.after_close", 1, factorymetrics.Fields{}); !errors.Is(err, errRuntimeMetricsSinkClosed) {
-		t.Fatalf("Counter after close error = %v, want %v", err, errRuntimeMetricsSinkClosed)
+	if err := sink.WriteMetric(context.Background(), map[string]any{"metric_name": "runtime.after_close"}); !errors.Is(err, errRuntimeMetricsSinkClosed) {
+		t.Fatalf("WriteMetric after close error = %v, want %v", err, errRuntimeMetricsSinkClosed)
 	}
 	if _, err := os.Stat(sink.Path()); !os.IsNotExist(err) {
 		t.Fatalf("runtime metrics path exists after close and late write, stat err = %v", err)
@@ -231,18 +232,16 @@ func TestRuntimeMetricsSinkWritesStableJSONLEnvelope(t *testing.T) {
 	}
 	defer sink.Close()
 
-	fields := factorymetrics.Fields{
-		DispatchID:  "dispatch-123",
-		WorkID:      "work-456",
-		TraceID:     "trace-789",
-		Workstation: "provider",
-		WorkerType:  "llm",
-		Provider:    "openai",
-		Outcome:     "completed",
-		Reason:      "ok",
-	}
-	if err := sink.Sample(context.Background(), "dispatch.duration", 42.5, "ms", fields); err != nil {
-		t.Fatalf("Sample: %v", err)
+	if err := sink.WriteMetric(context.Background(), map[string]any{
+		"ts": "2026-07-20T12:00:00Z", "metric_name": "dispatch.duration",
+		"metric_type": "sample", "value": 42.5, "unit": "ms",
+		"session_id": "session-envelope", "runtime_instance_id": "runtime-envelope",
+		"folder_path": "/factory/folder", "factory_dir": "/factory",
+		"dispatch_id": "dispatch-123", "work_id": "work-456", "trace_id": "trace-789",
+		"workstation": "provider", "worker_type": "llm", "provider": "openai",
+		"outcome": "completed", "reason": "ok",
+	}); err != nil {
+		t.Fatalf("WriteMetric: %v", err)
 	}
 
 	records := readRuntimeMetricsRecords(t, sink.Path())
@@ -252,7 +251,7 @@ func TestRuntimeMetricsSinkWritesStableJSONLEnvelope(t *testing.T) {
 	record := records[0]
 
 	assertRuntimeMetricStringField(t, record, "metric_name", "dispatch.duration")
-	assertRuntimeMetricStringField(t, record, "metric_type", metricsMetricTypeSample)
+	assertRuntimeMetricStringField(t, record, "metric_type", "sample")
 	assertRuntimeMetricNumberField(t, record, "value", 42.5)
 	assertRuntimeMetricStringField(t, record, "unit", "ms")
 	assertRuntimeMetricStringField(t, record, "session_id", "session-envelope")
@@ -285,11 +284,17 @@ func TestRuntimeMetricsSinkCounterAndGaugeKeepEnvelopeStableWithoutOptionalField
 	}
 	defer sink.Close()
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
-		t.Fatalf("Counter: %v", err)
+	if err := sink.WriteMetric(context.Background(), map[string]any{
+		"ts": "2026-07-20T12:00:00Z", "metric_name": "runtime.started",
+		"metric_type": "counter", "value": 1.0, "unit": "",
+	}); err != nil {
+		t.Fatalf("WriteMetric counter: %v", err)
 	}
-	if err := sink.Gauge(context.Background(), "queue.depth", 3, factorymetrics.Fields{}); err != nil {
-		t.Fatalf("Gauge: %v", err)
+	if err := sink.WriteMetric(context.Background(), map[string]any{
+		"ts": "2026-07-20T12:00:00Z", "metric_name": "queue.depth",
+		"metric_type": "gauge", "value": 3.0, "unit": "",
+	}); err != nil {
+		t.Fatalf("WriteMetric gauge: %v", err)
 	}
 
 	records := readRuntimeMetricsRecords(t, sink.Path())
@@ -298,7 +303,7 @@ func TestRuntimeMetricsSinkCounterAndGaugeKeepEnvelopeStableWithoutOptionalField
 	}
 
 	assertRuntimeMetricStringField(t, records[0], "metric_name", "runtime.started")
-	assertRuntimeMetricStringField(t, records[0], "metric_type", metricsMetricTypeCounter)
+	assertRuntimeMetricStringField(t, records[0], "metric_type", "counter")
 	assertRuntimeMetricNumberField(t, records[0], "value", 1)
 	assertRuntimeMetricStringField(t, records[0], "unit", "")
 	assertRuntimeMetricTimestampField(t, records[0], "ts")
@@ -306,7 +311,7 @@ func TestRuntimeMetricsSinkCounterAndGaugeKeepEnvelopeStableWithoutOptionalField
 	assertRuntimeMetricFieldAbsent(t, records[0], "provider")
 
 	assertRuntimeMetricStringField(t, records[1], "metric_name", "queue.depth")
-	assertRuntimeMetricStringField(t, records[1], "metric_type", metricsMetricTypeGauge)
+	assertRuntimeMetricStringField(t, records[1], "metric_type", "gauge")
 	assertRuntimeMetricNumberField(t, records[1], "value", 3)
 	assertRuntimeMetricStringField(t, records[1], "unit", "")
 	assertRuntimeMetricTimestampField(t, records[1], "ts")
@@ -382,7 +387,11 @@ func TestBuildRuntimeMetricsSinkManyConcurrentStartsKeepCorrelationIsolated(t *t
 				errs <- err
 				return
 			}
-			if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
+			if err := sink.WriteMetric(context.Background(), map[string]any{
+				"metric_name": "runtime.started", "session_id": sessionID,
+				"runtime_instance_id": runtimeInstanceID,
+				"folder_path":         folderPath, "factory_dir": factoryDir,
+			}); err != nil {
 				_ = sink.Close()
 				errs <- err
 				return
@@ -445,11 +454,11 @@ func TestRuntimeMetricsSinkRotatesUnderLoad(t *testing.T) {
 
 	largeReason := strings.Repeat("rotation-payload-", 8192)
 	for i := 0; i < 16; i++ {
-		if err := sink.Sample(context.Background(), "dispatch.duration", float64(i+1), "ms", factorymetrics.Fields{
-			DispatchID: "dispatch-rotate",
-			Reason:     largeReason,
+		if err := sink.WriteMetric(context.Background(), map[string]any{
+			"metric_name": "dispatch.duration", "value": float64(i + 1),
+			"unit": "ms", "dispatch_id": "dispatch-rotate", "reason": largeReason,
 		}); err != nil {
-			t.Fatalf("Sample #%d: %v", i, err)
+			t.Fatalf("WriteMetric #%d: %v", i, err)
 		}
 	}
 	if err := sink.Close(); err != nil {

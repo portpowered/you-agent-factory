@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestRaceConditionConcurrentMutation verifies the engine has no race conditions
@@ -30,14 +29,9 @@ func TestRaceConditionConcurrentMutation(t *testing.T) {
 	)
 
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap(), testutil.WithExtraOptions(
-		factory.WithServiceMode(),
-		factory.WithWorkerExecutor("pipeline-worker", testutil.NewMockExecutor()),
-	))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	h := startStressProcess(t, dir, workerExecutorProvider{
+		executor: testutil.NewMockExecutor(),
+	})
 
 	// 10 goroutines submitting 10 items each.
 	var submitWg sync.WaitGroup
@@ -87,18 +81,15 @@ func TestRaceConditionConcurrentMutation(t *testing.T) {
 
 	// Poll until all tokens reach terminal state.
 	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, 25*time.Second)
+	h.WaitForTerminalCount(totalItems, 25*time.Second)
 
 	// Stop reader goroutines.
 	close(queryDone)
 	queryWg.Wait()
 
-	// Stop engine.
-	cancel()
-	<-errCh
-
 	// Final consistency checks.
 	snap := h.Marking()
+	h.Stop()
 	assertMarkingConsistency(t, snap, pipelineTerminalPlaces, totalItems)
 
 	t.Logf("completed: %d tokens, %d query calls", len(snap.Tokens), queryCount.Load())
@@ -117,14 +108,7 @@ func TestRaceConditionWithMockExecutors(t *testing.T) {
 
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
 	executor := &delayExecutor{maxDelay: 2 * time.Millisecond}
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap(), testutil.WithExtraOptions(
-		factory.WithServiceMode(),
-		factory.WithWorkerExecutor("pipeline-worker", executor),
-	))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
 
 	// 10 goroutines submitting 10 items each.
 	var submitWg sync.WaitGroup
@@ -172,16 +156,15 @@ func TestRaceConditionWithMockExecutors(t *testing.T) {
 
 	// Poll until all tokens reach terminal state.
 	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, 25*time.Second)
+	h.WaitForTerminalCount(totalItems, 25*time.Second)
 
 	// Stop readers and engine.
 	close(queryDone)
 	queryWg.Wait()
-	cancel()
-	<-errCh
 
 	// Final consistency checks.
 	snap := h.Marking()
+	h.Stop()
 	assertMarkingConsistency(t, snap, pipelineTerminalPlaces, totalItems)
 
 	t.Logf("completed: %d tokens, %d executor calls, %d query calls",
@@ -200,14 +183,11 @@ func TestRaceConditionMarkingConsistency(t *testing.T) {
 	)
 
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap(), testutil.WithExtraOptions(
-		factory.WithServiceMode(),
-		factory.WithWorkerExecutor("pipeline-worker", testutil.NewMockExecutor()),
-	))
-
+	h := startStressProcess(t, dir, workerExecutorProvider{
+		executor: testutil.NewMockExecutor(),
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
 
 	// Submit all items.
 	var submitWg sync.WaitGroup
@@ -262,14 +242,12 @@ func TestRaceConditionMarkingConsistency(t *testing.T) {
 	submitWg.Wait()
 	<-monitorDone
 
-	cancel()
-	<-errCh
-
 	if v := invariantViolations.Load(); v > 0 {
 		t.Errorf("%d invariant violations detected", v)
 	}
 
 	snap := h.Marking()
+	h.Stop()
 	assertMarkingConsistency(t, snap, pipelineTerminalPlaces, totalItems)
 
 	t.Logf("completed: %d tokens, max terminal observed during execution: %d", len(snap.Tokens), maxTerminal)
@@ -279,30 +257,8 @@ func TestRaceConditionMarkingConsistency(t *testing.T) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// pollUntilAllTerminalH polls the harness's marking until all expected work
-// tokens are in terminal/failed places, or the timeout expires.
-// terminalPlaces is the set of place IDs considered terminal (e.g. "task:complete", "task:failed").
-func pollUntilAllTerminalH(t *testing.T, h *testutil.ServiceTestHarness, terminalPlaces []string, expectedItems int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.After(timeout)
-	for {
-		snap := h.Marking()
-		terminalCount := countTerminalTokens(snap, terminalPlaces)
-		if terminalCount >= expectedItems {
-			return
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("timed out: %d/%d tokens terminal, %d total tokens",
-				terminalCount, expectedItems, len(snap.Tokens))
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-}
-
 // countTerminalTokens counts tokens in the specified terminal places.
-func countTerminalTokens(snap *petri.MarkingSnapshot, terminalPlaces []string) int {
+func countTerminalTokens(snap *factoryruntime.PetriMarkingSnapshot, terminalPlaces []string) int {
 	termSet := make(map[string]bool, len(terminalPlaces))
 	for _, p := range terminalPlaces {
 		termSet[p] = true
@@ -318,7 +274,7 @@ func countTerminalTokens(snap *petri.MarkingSnapshot, terminalPlaces []string) i
 
 // assertMarkingConsistency validates marking invariants after execution completes.
 // terminalPlaces is the set of place IDs that are considered terminal.
-func assertMarkingConsistency(t *testing.T, snap *petri.MarkingSnapshot, terminalPlaces []string, expectedItems int) {
+func assertMarkingConsistency(t *testing.T, snap *factoryruntime.PetriMarkingSnapshot, terminalPlaces []string, expectedItems int) {
 	t.Helper()
 
 	// All work tokens should be in terminal or failed places.

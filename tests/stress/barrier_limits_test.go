@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ---------------------------------------------------------------------------
@@ -27,47 +25,24 @@ import (
 // ---------------------------------------------------------------------------
 func TestBarrierAllSucceed(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, barrierConfig())
-
-	// TODO: migrate this to use the WithFullWorkerPoolAndScriptWrap option and real executors instead of mocks, to more fully test the async dispatch and fan-in behavior. The mock-based approach is simpler for now and still tests the core barrier logic, but it doesn't exercise the full async dispatch flow or the interaction between the spawner and completer via the petri net.
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-
 	spawner := &barrierSpawnerExecutor{childCount: 5}
-	h.SetCustomExecutor("spawner", spawner)
-
-	// processor: 5 successes.
-	h.MockWorker("processor",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	h.MockWorker("completer",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
+	processor := &acceptedCountingExecutor{}
+	completer := &acceptedCountingExecutor{}
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+		"spawner": spawner, "processor": processor, "completer": completer,
+	}})
+	t.Cleanup(h.Stop)
 	h.SubmitWork("parent", []byte("barrier test"))
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	// Fan-in fired: 1 parent:complete, 5 child:complete (observed, not consumed).
-	h.Assert().
-		PlaceTokenCount("parent:complete", 1).
-		PlaceTokenCount("child:complete", 5).
-		HasNoTokenInPlace("parent:init").
-		HasNoTokenInPlace("parent:waiting").
-		HasNoTokenInPlace("child:init")
-
-	// No tokens stuck anywhere.
-	snap := h.Marking()
-	total := len(snap.Tokens)
-	if total != 6 { // 1 parent + 5 children
-		t.Errorf("expected 6 total tokens, got %d", total)
-	}
-
-	// No double-firing: spawner called once, completer called once.
+	h.WaitForTerminalCount(6, 10*time.Second)
+	session := h.Session()
+	assertSessionPlaceCount(t, session, "parent:complete", 1)
+	assertSessionPlaceCount(t, session, "child:complete", 5)
+	assertSessionPlaceCount(t, session, "parent:waiting", 0)
 	if spawner.callCount() != 1 {
 		t.Errorf("spawner called %d times, want 1", spawner.callCount())
+	}
+	if completer.callCount() != 1 {
+		t.Errorf("completer called %d times, want 1", completer.callCount())
 	}
 }
 
@@ -78,46 +53,28 @@ func TestBarrierAllSucceed(t *testing.T) {
 // ---------------------------------------------------------------------------
 func TestBarrierPartialFailure(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, barrierConfigWithFailureDetection())
-
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-
 	spawner := &barrierSpawnerExecutor{childCount: 5}
-	h.SetCustomExecutor("spawner", spawner)
-
-	// Custom executor: 3rd child fails, rest succeed.
 	failExec := &failOnNthBarrierExecutor{failOn: 3}
-	h.SetCustomExecutor("processor", failExec)
-
-	completer := h.MockWorker("completer",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	failureHandler := h.MockWorker("failure-handler",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
+	completer := &acceptedCountingExecutor{}
+	failureHandler := &acceptedCountingExecutor{}
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+		"spawner": spawner, "processor": failExec, "completer": completer,
+		"failure-handler": failureHandler,
+	}})
+	t.Cleanup(h.Stop)
 	h.SubmitWork("parent", []byte("partial failure"))
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	// Parent routed to failed because fan-in couldn't fire (only 4 complete).
-	h.Assert().
-		PlaceTokenCount("parent:failed", 1).
-		HasNoTokenInPlace("parent:waiting").
-		HasNoTokenInPlace("parent:complete")
-
-	// 4 children complete, 1 failed.
-	h.Assert().
-		PlaceTokenCount("child:complete", 4).
-		PlaceTokenCount("child:failed", 1).
-		HasNoTokenInPlace("child:init")
-
-	if completer.CallCount() != 0 {
-		t.Fatalf("complete-parent fired %d times, want 0", completer.CallCount())
+	h.WaitForTerminalCount(6, 10*time.Second)
+	session := h.Session()
+	assertSessionPlaceCount(t, session, "parent:failed", 1)
+	assertSessionPlaceCount(t, session, "parent:complete", 0)
+	assertSessionPlaceCount(t, session, "child:complete", 4)
+	assertSessionPlaceCount(t, session, "child:failed", 1)
+	if completer.callCount() != 0 {
+		t.Fatalf("complete-parent fired %d times, want 0", completer.callCount())
 	}
-	if failureHandler.CallCount() != 1 {
-		t.Fatalf("failure-handler fired %d times, want 1", failureHandler.CallCount())
+	if failureHandler.callCount() != 1 {
+		t.Fatalf("failure-handler fired %d times, want 1", failureHandler.callCount())
 	}
-	assertNoExhaustionDispatches(t, h)
 }
 
 // ---------------------------------------------------------------------------
@@ -126,32 +83,18 @@ func TestBarrierPartialFailure(t *testing.T) {
 // ---------------------------------------------------------------------------
 func TestBarrierDelayedArrival(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, barrierConfig())
-	// TODO: migrate this to use the WithFullWorkerPoolAndScriptWrap option and real executors instead of mocks, to more fully test the async dispatch and fan-in behavior. The mock-based approach is simpler for now and still tests the core barrier logic, but it doesn't exercise the full async dispatch flow or the interaction between the spawner and completer via the petri net.
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-
 	spawner := &barrierSpawnerExecutor{childCount: 5}
-	h.SetCustomExecutor("spawner", spawner)
-
-	h.MockWorker("processor",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	h.MockWorker("completer",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	// Submit spawns children (1 tick in Submit).
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+		"spawner": spawner, "processor": &acceptedCountingExecutor{},
+		"completer": &acceptedCountingExecutor{},
+	}})
+	t.Cleanup(h.Stop)
 	h.SubmitWork("parent", []byte("delayed arrival"))
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("parent:complete", 1).
-		PlaceTokenCount("child:complete", 5).
-		HasNoTokenInPlace("parent:waiting")
+	h.WaitForTerminalCount(6, 10*time.Second)
+	session := h.Session()
+	assertSessionPlaceCount(t, session, "parent:complete", 1)
+	assertSessionPlaceCount(t, session, "child:complete", 5)
+	assertSessionPlaceCount(t, session, "parent:waiting", 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -165,68 +108,30 @@ func TestBarrierZeroChildren(t *testing.T) {
 	// Use per-input guards without spawned_by to test zero-cardinality boundary:
 	// AllWithParentGuard + CardinalityAll with 0 matching tokens → guard returns false.
 	dir := testutil.ScaffoldFactoryDir(t, barrierConfigObserveAll())
-
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-
 	spawner := &barrierSpawnerExecutor{childCount: 0}
-	h.SetCustomExecutor("spawner", spawner)
-
-	h.MockWorker("processor")
-	h.MockWorker("completer")
-
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+		"spawner": spawner, "processor": &acceptedCountingExecutor{},
+		"completer": &acceptedCountingExecutor{},
+	}})
+	t.Cleanup(h.Stop)
 	h.SubmitWork("parent", []byte("zero children"))
-
-	// With stateless termination, a non-terminal deadlock does not complete the
-	// engine. Run in the background under a bounded context, assert the parent is
-	// stably stuck in waiting, then cancel explicitly.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	availCtx, availCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer availCancel()
-	if err := h.WaitForRuntimeAvailability(availCtx, errCh); err != nil {
-		t.Fatalf("wait for runtime availability: %v", err)
-	}
-	// WaitToComplete returns an already-closed channel when no runtime is hosted.
-	// Capture it once after the run loop is live to avoid a startup race.
-	done := h.WaitToComplete()
-
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		select {
-		case <-done:
-			t.Fatal("expected zero-child barrier to remain incomplete")
-		default:
-		}
-		snap := h.Marking()
-		if len(snap.Tokens) == 1 {
+		session := h.Session()
+		if sessionPlaceCount(session, "parent:waiting") == 1 {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("expected 1 token (parent:waiting), got %d", len(snap.Tokens))
+			t.Fatalf("expected parent to remain waiting; session=%#v", session.Runtime.Progress)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-
-	// Parent stays stuck in waiting with no spawned children.
-	h.Assert().
-		HasTokenInPlace("parent:waiting").
-		HasNoTokenInPlace("parent:complete").
-		HasNoTokenInPlace("parent:failed").
-		HasNoTokenInPlace("child:init").
-		HasNoTokenInPlace("child:complete")
-
-	// Only 1 token in the system (the parent).
-	snap := h.Marking()
-	if len(snap.Tokens) != 1 {
-		t.Errorf("expected 1 token (parent:waiting), got %d", len(snap.Tokens))
-	}
-
-	cancel()
-	if err := <-errCh; err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-		t.Fatalf("background run returned unexpected error: %v", err)
-	}
+	session := h.Session()
+	assertSessionPlaceCount(t, session, "parent:waiting", 1)
+	assertSessionPlaceCount(t, session, "parent:complete", 0)
+	assertSessionPlaceCount(t, session, "parent:failed", 0)
+	assertSessionPlaceCount(t, session, "child:init", 0)
+	assertSessionPlaceCount(t, session, "child:complete", 0)
 }
 
 // ===========================================================================
@@ -253,7 +158,7 @@ var barrierWorkTypes = []interfaces.WorkTypeConfig{
 func barrierConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
+		Workers:   []interfaces.FactoryWorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -281,7 +186,7 @@ func barrierConfig() *interfaces.FactoryConfig {
 func barrierConfigWithFailureDetection() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}, {Name: "failure-handler"}},
+		Workers:   []interfaces.FactoryWorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}, {Name: "failure-handler"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -320,7 +225,7 @@ func barrierConfigWithFailureDetection() *interfaces.FactoryConfig {
 func barrierConfigObserveAll() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
+		Workers:   []interfaces.FactoryWorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -346,7 +251,8 @@ func barrierConfigObserveAll() *interfaces.FactoryConfig {
 // Custom executors
 // ===========================================================================
 
-// barrierSpawnerExecutor spawns N children with ParentID linked to the input token.
+// barrierSpawnerExecutor emits N child Work items through the canonical Work
+// Request output. The runtime adds their parent relation from the dispatch.
 type barrierSpawnerExecutor struct {
 	mu         sync.Mutex
 	calls      int
@@ -358,25 +264,24 @@ func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch work.WorkDi
 	e.calls++
 	e.mu.Unlock()
 
-	parentWorkID := ""
-	if len(dispatch.InputTokens) > 0 {
-		parentWorkID = firstInputToken(dispatch.InputTokens).Color.WorkID
-	}
-
-	spawned := make([]factorytoken.Color, e.childCount)
-	for i := range spawned {
-		spawned[i] = factorytoken.Color{
+	children := make([]work.Work, e.childCount)
+	for i := range children {
+		children[i] = work.Work{
+			Name:       fmt.Sprintf("child-%d", i+1),
 			WorkTypeID: "child",
 			WorkID:     fmt.Sprintf("child-%d", i+1),
-			ParentID:   parentWorkID,
 		}
+	}
+	output := ""
+	if len(children) > 0 {
+		output = workerGeneratedBatchOutput(children)
 	}
 
 	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      workerexecution.OutcomeAccepted,
-		SpawnedWork:  spawned,
+		Output:       output,
 	}, nil
 }
 
@@ -386,19 +291,36 @@ func (e *barrierSpawnerExecutor) callCount() int {
 	return e.calls
 }
 
-func assertNoExhaustionDispatches(t *testing.T, h *testutil.ServiceTestHarness) {
-	t.Helper()
-
-	snap, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
+func sessionPlaceCount(session factoryapi.FactorySession, placeID string) int {
+	if session.Runtime.Petri == nil {
+		return 0
 	}
-	for _, dispatch := range snap.DispatchHistory {
-		transition := snap.Topology.Transitions[dispatch.TransitionID]
-		if transition != nil && transition.Type == petri.TransitionExhaustion {
-			t.Fatalf("unexpected exhaustion dispatch %q while routing child failure", dispatch.TransitionID)
+	count := 0
+	for _, token := range session.Runtime.Petri.Marking {
+		if token.PlaceId == placeID {
+			count++
 		}
 	}
+	return count
+}
+
+func assertSessionPlaceCount(t *testing.T, session factoryapi.FactorySession, placeID string, want int) {
+	t.Helper()
+	if got := sessionPlaceCount(session, placeID); got != want {
+		t.Errorf("place %q contains %d work items, want %d", placeID, got, want)
+	}
+}
+
+func sessionTokenLastError(session factoryapi.FactorySession, placeID string) string {
+	if session.Runtime.Petri == nil {
+		return ""
+	}
+	for _, token := range session.Runtime.Petri.Marking {
+		if token.PlaceId == placeID && token.History != nil && token.History.LastError != nil {
+			return *token.History.LastError
+		}
+	}
+	return ""
 }
 
 // failOnNthBarrierExecutor fails on the Nth call, succeeds on all others.

@@ -185,18 +185,17 @@ type SessionCreateBinding struct {
 
 // SessionCreateRunE preserves the handwritten session create execution path.
 func SessionCreateRunE(binding SessionCreateBinding) RunE {
-	create := binding.CreateSession
-	if create == nil {
-		create = sessioncli.Create
-	}
 	return func(cmd *cobra.Command, _ []string) error {
+		if binding.CreateSession == nil {
+			return fmt.Errorf("session create service is required")
+		}
 		if binding.Config == nil {
 			return fmt.Errorf("session create config is required")
 		}
 		cfg := *binding.Config
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
-		return create(cfg)
+		return binding.CreateSession(cfg)
 	}
 }
 
@@ -211,15 +210,15 @@ type SessionListBinding struct {
 
 // SessionListRunE preserves the handwritten session list execution path.
 func SessionListRunE(binding SessionListBinding) RunE {
-	list := binding.ListSessions
-	if list == nil {
-		list = sessioncli.List
-	}
 	return func(cmd *cobra.Command, _ []string) error {
+		if binding.ListSessions == nil {
+			return fmt.Errorf("session list service is required")
+		}
 		if binding.Config == nil {
 			return fmt.Errorf("session list config is required")
 		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		if binding.Server != nil && cmd.Root().PersistentFlags().Changed("server") {
 			cfg.Server = *binding.Server
 		}
@@ -230,7 +229,7 @@ func SessionListRunE(binding SessionListBinding) RunE {
 		}
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
-		return list(cfg)
+		return binding.ListSessions(cfg)
 	}
 }
 
@@ -243,11 +242,10 @@ type SessionDeleteBinding struct {
 
 // SessionDeleteRunE preserves the handwritten session delete execution path.
 func SessionDeleteRunE(binding SessionDeleteBinding) RunE {
-	deleteSession := binding.DeleteSession
-	if deleteSession == nil {
-		deleteSession = sessioncli.Delete
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.DeleteSession == nil {
+			return fmt.Errorf("session delete service is required")
+		}
 		if binding.Config == nil {
 			return fmt.Errorf("session delete config is required")
 		}
@@ -255,7 +253,7 @@ func SessionDeleteRunE(binding SessionDeleteBinding) RunE {
 		cfg.SessionID = args[0]
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
-		return deleteSession(cfg)
+		return binding.DeleteSession(cfg)
 	}
 }
 
@@ -270,15 +268,15 @@ type SessionDispatchesBinding struct {
 
 // SessionDispatchesRunE preserves the handwritten dispatch inspection path.
 func SessionDispatchesRunE(binding SessionDispatchesBinding) RunE {
-	list := binding.ListDispatches
-	if list == nil {
-		list = sessioncli.Dispatches
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.ListDispatches == nil {
+			return fmt.Errorf("session dispatches service is required")
+		}
 		if binding.Config == nil {
 			return fmt.Errorf("session dispatches config is required")
 		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		cfg.SessionID = args[0]
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
@@ -288,7 +286,7 @@ func SessionDispatchesRunE(binding SessionDispatchesBinding) RunE {
 		}
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
-		return list(cfg)
+		return binding.ListDispatches(cfg)
 	}
 }
 
@@ -311,6 +309,7 @@ func SessionLifecycleRunE(binding SessionLifecycleBinding) RunE {
 			return fmt.Errorf("session lifecycle control handler is required")
 		}
 		cfg := *binding.Config
+		cfg.Context = cmd.Context()
 		if len(args) == 1 {
 			cfg.SessionID = args[0]
 		}
@@ -366,12 +365,12 @@ type SessionShowBinding struct {
 
 // SessionShowRunE returns the handwritten session show RunE used by production wiring.
 func SessionShowRunE(binding SessionShowBinding) RunE {
-	showSession := binding.ShowSession
-	if showSession == nil {
-		showSession = sessioncli.Show
-	}
 	return func(cmd *cobra.Command, args []string) error {
+		if binding.ShowSession == nil {
+			return fmt.Errorf("session show service is required")
+		}
 		cfg := sessioncli.ShowConfig{}
+		cfg.Context = cmd.Context()
 		if binding.Server != nil {
 			cfg.Server = *binding.Server
 		}
@@ -391,6 +390,6 @@ func SessionShowRunE(binding SessionShowBinding) RunE {
 		if binding.Debug != nil {
 			cfg.Debug = *binding.Debug
 		}
-		return showSession(cfg)
+		return binding.ShowSession(cfg)
 	}
 }

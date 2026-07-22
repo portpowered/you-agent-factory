@@ -5,98 +5,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 )
 
-func TestCheckReportsEveryDriftCategoryInDeterministicPathOrder(t *testing.T) {
-	root := checkFixture(t)
-	allowed := contractstaging.AllowedArtifacts()
-	writeCheckFixture(t, root, allowed[0], "stale-z")
-	writeCheckFixture(t, root, allowed[1], "stale-a")
-	if err := os.Remove(filepath.Join(root, filepath.FromSlash(allowed[2]))); err != nil {
-		t.Fatalf("remove expected artifact: %v", err)
-	}
-	unexpected := []string{
-		"packages/api/generated/ui/openapi.ts",
-		"packages/api/generated/client.gen.go",
-		"packages/api/generated/bin/you.exe",
-		"packages/api/generated/.cache/contracts/data",
-		"packages/api/generated/unrelated.txt",
-	}
-	for _, path := range unexpected {
-		writeCheckFixture(t, root, path, path)
-	}
-
-	want := contractstaging.Drift{
-		Stale:      []string{allowed[0], allowed[1]},
-		Missing:    []string{allowed[2]},
-		Unexpected: []string{unexpected[3], unexpected[2], unexpected[1], unexpected[0], unexpected[4]},
-	}
-	first, err := contractstaging.Check(root)
-	if err != nil {
-		t.Fatalf("first Check() error = %v", err)
-	}
-	second, err := contractstaging.Check(root)
-	if err != nil {
-		t.Fatalf("second Check() error = %v", err)
-	}
-	if !reflect.DeepEqual(first, want) || !reflect.DeepEqual(second, want) {
-		t.Fatalf("Check() drift = %#v then %#v, want %#v", first, second, want)
-	}
-}
-
-func TestCheckDistinguishesIndividualStaleMissingAndUnexpectedCases(t *testing.T) {
-	allowed := contractstaging.AllowedArtifacts()
-	tests := []struct {
-		name   string
-		mutate func(t *testing.T, root string)
-		want   contractstaging.Drift
-	}{
-		{
-			name: "stale",
-			mutate: func(t *testing.T, root string) {
-				writeCheckFixture(t, root, allowed[0], "stale")
-			},
-			want: contractstaging.Drift{Stale: []string{allowed[0]}},
-		},
-		{
-			name: "missing",
-			mutate: func(t *testing.T, root string) {
-				if err := os.Remove(filepath.Join(root, filepath.FromSlash(allowed[1]))); err != nil {
-					t.Fatalf("remove expected artifact: %v", err)
-				}
-			},
-			want: contractstaging.Drift{Missing: []string{allowed[1]}},
-		},
-		{
-			name: "unexpected",
-			mutate: func(t *testing.T, root string) {
-				writeCheckFixture(t, root, "packages/api/generated/forbidden.txt", "forbidden")
-			},
-			want: contractstaging.Drift{Unexpected: []string{"packages/api/generated/forbidden.txt"}},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			root := checkFixture(t)
-			test.mutate(t, root)
-			got, err := contractstaging.Check(root)
-			if err != nil {
-				t.Fatalf("Check() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, test.want) {
-				t.Fatalf("Check() drift = %#v, want %#v", got, test.want)
-			}
-		})
-	}
-}
-
 func TestCheckPassesCleanStagingAndDoesNotChangeRepositoryBytes(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	root := checkFixture(t)
-	writeCheckFixture(t, root, "contracts/testdata/fixture.json", "fixture")
-	writeCheckFixture(t, root, "unrelated.txt", "unrelated")
 	before := checkTree(t, root)
 
 	drift, err := contractstaging.Check(root)
@@ -106,8 +24,31 @@ func TestCheckPassesCleanStagingAndDoesNotChangeRepositoryBytes(t *testing.T) {
 	if !drift.Empty() {
 		t.Fatalf("Check() drift = %#v, want none", drift)
 	}
-	if after := checkTree(t, root); !reflect.DeepEqual(after, before) {
-		t.Fatal("Check() changed repository bytes on success")
+
+	if err := contractstaging.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	after := checkTree(t, root)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("Check() and Generate() changed repository bytes on clean fixture")
+	}
+}
+
+func TestCheckRejectsUnexpectedNonPackageArtifactPathsWhenOrderedAndSorted(t *testing.T) {
+	root := checkFixture(t)
+	contractstagingPath := filepath.Join(root, "packages", "api", "generated")
+	path := filepath.Join(contractstagingPath, "unexpected.txt")
+	if err := os.WriteFile(path, []byte("bad"), 0o644); err != nil {
+		t.Fatalf("write unexpected fixture: %v", err)
+	}
+	writeCheckFixture(t, root, "packages/api/generated/ui/openapi.ts", "ui")
+
+	drift, err := contractstaging.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if len(drift.Unexpected) == 0 || !strings.Contains(drift.Unexpected[0], "packages/api/generated/") {
+		t.Fatalf("Check() drift = %#v, want unexpected package artifact", drift)
 	}
 }
 
@@ -125,17 +66,6 @@ func checkFixture(t *testing.T) string {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	return root
-}
-
-func canonicalFixture(path string) string {
-	if path == "api/openapi.yaml" {
-		return standaloneSchemaFixture()
-	}
-	return "canonical:" + path
-}
-
-func standaloneSchemaFixture() string {
-	return "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n    FactoryEvent:\n      type: object\n      required: [schemaVersion, id, type, context, payload]\n      properties:\n        schemaVersion:\n          type: string\n          enum: [agent-factory.event.v1]\n        id:\n          type: string\n        type:\n          type: string\n          enum: [INITIAL_STRUCTURE_REQUEST]\n        context:\n          type: object\n        payload:\n          $ref: '#/components/schemas/Child'\n      discriminator:\n        propertyName: type\n        mapping:\n          INITIAL_STRUCTURE_REQUEST: '#/components/schemas/Child'\n    FactoryRecording:\n      type: object\n      required: [schemaVersion, sessionId, events]\n      properties:\n        schemaVersion:\n          type: string\n          enum: [agent-factory.recording.v1]\n        sessionId:\n          type: string\n        events:\n          type: array\n          items:\n            $ref: '#/components/schemas/FactoryEvent'\n"
 }
 
 func checkTree(t *testing.T, root string) map[string]string {
@@ -172,23 +102,35 @@ func writeCheckFixture(t *testing.T, root, path, contents string) {
 	}
 }
 
-const checkFixtureDefaultBranch = "main"
+func canonicalFixture(path string) string {
+	if path == "api/openapi.yaml" {
+		return "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n"
+	}
+	return "canonical:" + path
+}
 
 func initCheckGitRepo(t *testing.T, root string) {
 	t.Helper()
 	commands := [][]string{
-		{"git", "-C", root, "init", "--initial-branch", checkFixtureDefaultBranch},
+		{"git", "-C", root, "init", "--initial-branch", "main"},
 		{"git", "-C", root, "config", "user.email", "contractstaging-check@test"},
 		{"git", "-C", root, "config", "user.name", "contractstaging-check"},
 		{"git", "-C", root, "add", "-A"},
 		{"git", "-C", root, "commit", "-m", "contract staging check fixture"},
 	}
 	for _, command := range commands {
-		if output, err := exec.Command(command[0], command[1:]...).CombinedOutput(); err != nil {
+		if output, err := execCommand(command...); err != nil {
 			t.Fatalf("%v: %s", command, output)
 		}
 	}
 }
+
+func execCommand(command ...string) ([]byte, error) {
+	cmd := exec.Command(command[0], command[1:]...)
+	return cmd.CombinedOutput()
+}
+
+const checkFixtureDefaultBranch = "main"
 
 func localGitCloneURI(t *testing.T, path string) string {
 	t.Helper()

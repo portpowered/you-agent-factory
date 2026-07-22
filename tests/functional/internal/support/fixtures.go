@@ -9,10 +9,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/work"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
@@ -26,16 +24,7 @@ func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
 	}
-	expanded, err := config.NewFactoryConfigMapper().Expand(raw)
-	if err != nil {
-		t.Fatalf("expand factory config: %v", err)
-	}
-	factoryvalidation.NormalizeFixtureConfig(expanded)
-	data, err := config.MarshalCanonicalFactoryConfig(expanded)
-	if err != nil {
-		t.Fatalf("marshal canonical factory config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), raw, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
 

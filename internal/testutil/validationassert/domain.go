@@ -3,12 +3,12 @@ package validationassert
 import (
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // HasDomainTargetCode asserts that targets contains a validation target with the
 // given code.
-func HasDomainTargetCode(t *testing.T, targets []factoryvalidation.Target, code string) {
+func HasDomainTargetCode(t *testing.T, targets []factorydefinitions.ValidationTarget, code string) {
 	t.Helper()
 	for _, target := range targets {
 		if target.Code == code {
@@ -20,7 +20,7 @@ func HasDomainTargetCode(t *testing.T, targets []factoryvalidation.Target, code 
 
 // HasDomainTargetSubject asserts that targets contains a validation target whose
 // subject equals want.
-func HasDomainTargetSubject(t *testing.T, targets []factoryvalidation.Target, want factoryvalidation.Subject) {
+func HasDomainTargetSubject(t *testing.T, targets []factorydefinitions.ValidationTarget, want factorydefinitions.ValidationSubject) {
 	t.Helper()
 	for _, target := range targets {
 		if target.Subject == want {
