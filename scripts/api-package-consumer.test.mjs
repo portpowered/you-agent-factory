@@ -18,7 +18,7 @@ const packageDirectory = join(repositoryRoot, "packages", "api");
 const protectedFiles = [
 	"api/openapi-main.yaml",
 	"api/openapi.yaml",
-	"contracts/testdata/baseline/cli-commands.json",
+	"contracts/cli/commands.json",
 	"contracts/testdata/baseline/mcp-tools.json",
 	"contracts/common/deprecations.schema.json",
 	"contracts/common/documentation.schema.json",

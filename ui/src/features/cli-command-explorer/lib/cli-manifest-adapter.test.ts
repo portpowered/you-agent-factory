@@ -172,10 +172,14 @@ describe("CLI manifest adapter", () => {
       receivedVersion: "2.0.0",
       supportedVersions: ["1.0.0"],
     });
-    expect(loadPublishedCliManifest()).toMatchObject({
-      status: "unsupported-version",
-      receivedVersion: "cli-command-identity/v1",
-    });
+  });
+
+  it("loads the supported rich graph from the published package artifact", () => {
+    const result = loadPublishedCliManifest();
+    expect(result).toMatchObject({ status: "ready" });
+    if (result.status !== "ready") return;
+    expect(result.manifest.commands.you.path).toBe("you");
+    expect(result.manifest.commands["you.run"].path).toBe("you run");
   });
 
   it("returns deterministic actionable structural diagnostics", () => {

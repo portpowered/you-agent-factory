@@ -9,7 +9,7 @@ import { AppLocaleProvider, useAppLocale } from "./i18n";
 import { AppColorPaletteProvider } from "./theme";
 
 export const CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH = "/factory-emulator-demos";
-export const CLI_COMMAND_EXPLORER_PATH = "/cli";
+export const CLI_COMMAND_EXPLORER_PATH = "/dashboard/ui/cli";
 
 export interface AppProps {
   browserLanguage?: string | null;
@@ -57,7 +57,7 @@ function CliCommandExplorerPage() {
     <main className="min-h-screen overflow-x-hidden bg-surface p-3 md:p-6">
       <StaticCliCommandExplorer
         locale={locale}
-        state={loadPublishedCliManifest()}
+        state={loadPublishedCliManifest(locale)}
       />
     </main>
   );

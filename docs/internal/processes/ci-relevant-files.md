@@ -71,11 +71,6 @@
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
   profile into a coverage-policy failure without any source behavior change.
-  If repeated runs on one unchanged head fail different package floors, retain
-  every failing profile as evidence and lower only the observed package entries
-  to the lowest reported two-decimal value. Do not run the whole-manifest
-  updater for this mergeability repair: it can ratchet unrelated packages and
-  obscure the nondeterminism tracked by the backend coverage-stability task.
   Factory-service command-runner overrides are resolved while composing the
   runtime worker application, including through `wire.InjectFactoryService`.
   Functional API tests should set the service-level provider and script

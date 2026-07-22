@@ -9,7 +9,10 @@ import documentationSchema from "../../../../../contracts/common/documentation.s
   type: "json",
 };
 import { publishedCliManifestArtifact } from "../../../api/cli/published-cli-manifest";
-import { getCliManifestMessages } from "../messages/cli-manifest";
+import {
+  type CliManifestMessages,
+  getCliManifestMessages,
+} from "../messages/cli-manifest";
 import {
   type CliCommand,
   type CliFlag,
@@ -73,10 +76,20 @@ function schemaIssueCode(error: ErrorObject): CliManifestDiagnosticCode {
   return "invalid_value";
 }
 
+function schemaIssueDetail(
+  error: ErrorObject,
+  messages: CliManifestMessages,
+): string {
+  if (error.keyword === "type" && typeof error.params.type === "string") {
+    return messages.schemaTypeConstraint(error.params.type);
+  }
+  return messages.schemaConstraint(error.keyword);
+}
+
 function schemaDiagnostics(
   errors: readonly ErrorObject[],
+  messages: CliManifestMessages,
 ): CliManifestDiagnostic[] {
-  const messages = getCliManifestMessages();
   return errors
     .filter((error) => error.keyword !== "if")
     .map((error) => {
@@ -89,7 +102,7 @@ function schemaDiagnostics(
             ? messages.requiredField(String(path.at(-1)))
             : messages.contractFailure(
                 path.join(".") || "manifest",
-                error.message ?? error.keyword,
+                schemaIssueDetail(error, messages),
               ),
       };
     });
@@ -109,6 +122,7 @@ function registerID(
   path: Path,
   seenIDs: Map<string, Path>,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   const firstPath = seenIDs.get(id);
   if (firstPath) {
@@ -116,7 +130,7 @@ function registerID(
       diagnostics,
       "duplicate_id",
       path,
-      `Stable id ${id} duplicates ${firstPath.join(".")}.`,
+      messages.duplicateId(id, firstPath.join(".")),
     );
     return;
   }
@@ -126,17 +140,18 @@ function registerID(
 function validateRecordIdentities(
   manifest: CliManifest,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   const seenIDs = new Map<string, Path>();
   for (const [commandKey, command] of Object.entries(manifest.commands)) {
     const commandPath = ["commands", commandKey, "id"] as const;
-    registerID(command.id, commandPath, seenIDs, diagnostics);
+    registerID(command.id, commandPath, seenIDs, diagnostics, messages);
     if (commandKey !== command.id) {
       addDiagnostic(
         diagnostics,
         "unstable_id",
         commandPath,
-        `Command key ${commandKey} must match stable id ${command.id}.`,
+        messages.commandKeyMismatch(commandKey, command.id),
       );
     }
     for (const [collection, records] of [
@@ -151,13 +166,13 @@ function validateRecordIdentities(
           inputKey,
           "id",
         ] as const;
-        registerID(input.id, inputPath, seenIDs, diagnostics);
+        registerID(input.id, inputPath, seenIDs, diagnostics, messages);
         if (inputKey !== input.id) {
           addDiagnostic(
             diagnostics,
             "unstable_id",
             inputPath,
-            `Input key ${inputKey} must match stable id ${input.id}.`,
+            messages.inputKeyMismatch(inputKey, input.id),
           );
         }
       }
@@ -168,6 +183,7 @@ function validateRecordIdentities(
 function validateArgumentCardinality(
   command: CliCommand,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   const ordered = Object.values(command.arguments ?? {}).sort(
     (left, right) => left.position - right.position,
@@ -179,7 +195,7 @@ function validateArgumentCardinality(
         diagnostics,
         "invalid_cardinality",
         [...path, "position"],
-        `Argument positions must be unique and contiguous from zero; expected ${index}.`,
+        messages.argumentPosition(index),
       );
     }
     if (argument.variadic && index !== ordered.length - 1) {
@@ -187,7 +203,7 @@ function validateArgumentCardinality(
         diagnostics,
         "invalid_cardinality",
         [...path, "variadic"],
-        "Only the final positional argument may be variadic.",
+        messages.finalArgumentVariadic(),
       );
     }
     const impossible =
@@ -202,7 +218,7 @@ function validateArgumentCardinality(
         diagnostics,
         "invalid_cardinality",
         path,
-        `Argument ${argument.id} has contradictory required, minimum, maximum, or variadic cardinality.`,
+        messages.argumentCardinality(argument.id),
       );
     }
   }
@@ -211,6 +227,7 @@ function validateArgumentCardinality(
 function validateRelationships(
   command: CliCommand,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   const inputKinds = new Map<string, "argument" | "flag">([
     ...Object.keys(command.arguments ?? {}).map(
@@ -240,7 +257,7 @@ function validateRelationships(
           diagnostics,
           "invalid_reference",
           [...referencePath, "id"],
-          `Relationship participant ${reference.id} does not resolve to a ${reference.type} on this command.`,
+          messages.relationshipParticipant(reference.id, reference.type),
         );
       }
     }
@@ -287,6 +304,7 @@ function inheritedFlagSource(
 function validateHierarchyAndInheritance(
   manifest: CliManifest,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   const commandsByPath = new Map<string, CliCommand>();
   for (const command of Object.values(manifest.commands)) {
@@ -295,7 +313,7 @@ function validateHierarchyAndInheritance(
         diagnostics,
         "invalid_hierarchy",
         ["commands", command.id, "path"],
-        `Command path ${command.path} is duplicated.`,
+        messages.duplicateCommandPath(command.path),
       );
     }
     commandsByPath.set(command.path, command);
@@ -308,7 +326,7 @@ function validateHierarchyAndInheritance(
         diagnostics,
         "invalid_hierarchy",
         ["commands", command.id, "path"],
-        `Command path ${command.path} must contain non-empty segments and end with command name ${command.name}.`,
+        messages.commandPathName(command.path, command.name),
       );
     }
   }
@@ -317,7 +335,7 @@ function validateHierarchyAndInheritance(
       diagnostics,
       "invalid_hierarchy",
       ["rootPath"],
-      `Root path ${manifest.rootPath} does not resolve to a command.`,
+      messages.missingRootCommand(manifest.rootPath),
     );
   }
   for (const command of Object.values(manifest.commands)) {
@@ -328,7 +346,7 @@ function validateHierarchyAndInheritance(
           diagnostics,
           "invalid_hierarchy",
           ["commands", command.id, "path"],
-          `Parent command path ${parentPath || "<empty>"} does not resolve.`,
+          messages.missingParentCommand(parentPath),
         );
       }
       if (!command.path.startsWith(`${manifest.rootPath} `)) {
@@ -336,7 +354,7 @@ function validateHierarchyAndInheritance(
           diagnostics,
           "invalid_hierarchy",
           ["commands", command.id, "path"],
-          `Command path ${command.path} is outside root ${manifest.rootPath}.`,
+          messages.commandOutsideRoot(command.path, manifest.rootPath),
         );
       }
     }
@@ -349,26 +367,27 @@ function validateHierarchyAndInheritance(
           "contradictory_inheritance",
           ["commands", command.id, "flags", flag.id, "scope"],
           source
-            ? `Inherited flag --${flag.long} contradicts its persistent ancestor definition.`
-            : `Inherited flag --${flag.long} has no persistent ancestor definition.`,
+            ? messages.inheritedFlagContradiction(flag.long)
+            : messages.inheritedFlagMissing(flag.long),
         );
       }
     }
-    validateArgumentCardinality(command, diagnostics);
-    validateRelationships(command, diagnostics);
+    validateArgumentCardinality(command, diagnostics, messages);
+    validateRelationships(command, diagnostics, messages);
   }
 }
 
 function validateRootPath(
   rootPath: string,
   diagnostics: CliManifestDiagnostic[],
+  messages: CliManifestMessages,
 ): void {
   if (rootPath.split(" ").some((segment) => segment.length === 0)) {
     addDiagnostic(
       diagnostics,
       "invalid_hierarchy",
       ["rootPath"],
-      "Root path must contain non-empty command segments separated by single spaces.",
+      messages.invalidRootSpacing(),
     );
   }
 }
@@ -386,7 +405,11 @@ export function loadingCliManifest(): CliManifestLoadState {
   return { status: "loading" };
 }
 
-export function loadCliManifest(input: unknown): CliManifestLoadState {
+export function loadCliManifest(
+  input: unknown,
+  locale?: string | null,
+): CliManifestLoadState {
+  const messages = getCliManifestMessages(locale);
   if (
     isRecord(input) &&
     typeof input.formatVersion === "string" &&
@@ -402,14 +425,14 @@ export function loadCliManifest(input: unknown): CliManifestLoadState {
     return {
       status: "invalid-contract",
       diagnostics: sortedDiagnostics(
-        schemaDiagnostics(validateManifestShape.errors ?? []),
+        schemaDiagnostics(validateManifestShape.errors ?? [], messages),
       ),
     };
   }
 
   const manifest = input as CliManifest;
   const diagnostics: CliManifestDiagnostic[] = [];
-  validateRootPath(manifest.rootPath, diagnostics);
+  validateRootPath(manifest.rootPath, diagnostics, messages);
   if (Object.keys(manifest.commands).length === 0) {
     return diagnostics.length > 0
       ? {
@@ -418,8 +441,8 @@ export function loadCliManifest(input: unknown): CliManifestLoadState {
         }
       : { status: "empty", manifest };
   }
-  validateRecordIdentities(manifest, diagnostics);
-  validateHierarchyAndInheritance(manifest, diagnostics);
+  validateRecordIdentities(manifest, diagnostics, messages);
+  validateHierarchyAndInheritance(manifest, diagnostics, messages);
   return diagnostics.length > 0
     ? {
         status: "invalid-contract",
@@ -428,6 +451,8 @@ export function loadCliManifest(input: unknown): CliManifestLoadState {
     : { status: "ready", manifest };
 }
 
-export function loadPublishedCliManifest(): CliManifestLoadState {
-  return loadCliManifest(publishedCliManifestArtifact);
+export function loadPublishedCliManifest(
+  locale?: string | null,
+): CliManifestLoadState {
+  return loadCliManifest(publishedCliManifestArtifact, locale);
 }

@@ -170,4 +170,25 @@ describe("localized static CLI command explorer", () => {
       screen.getByText("mutually-exclusive：--dir, --named, --factory"),
     ).toBeVisible();
   });
+
+  it("renders schema and semantic diagnostics in the selected non-default locale", () => {
+    const schemaState = loadCliManifest(
+      { formatVersion: "1.0.0", commands: {} },
+      "zh-CN",
+    );
+    render(<StaticCliCommandExplorer locale="zh-CN" state={schemaState} />);
+    expect(
+      screen.getByRole("alert", { name: "CLI 契约无效" }),
+    ).toHaveTextContent("缺少必填字段 rootPath。");
+
+    cleanup();
+    const semanticState = loadCliManifest(
+      { formatVersion: "1.0.0", rootPath: "you  invalid", commands: {} },
+      "zh-CN",
+    );
+    render(<StaticCliCommandExplorer locale="zh-CN" state={semanticState} />);
+    expect(
+      screen.getByRole("alert", { name: "CLI 契约无效" }),
+    ).toHaveTextContent("根路径必须由单个空格分隔的非空命令段组成。");
+  });
 });
