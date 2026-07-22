@@ -371,6 +371,6 @@
   },
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
-  "packageVersion": "0.0.2",
+  "packageVersion": "0.0.0",
   "sourceCommit": "014042306e999e08a2157e1f7a95fbd291cff646"
 }

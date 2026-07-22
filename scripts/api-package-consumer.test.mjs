@@ -207,7 +207,7 @@ test("consumer verification rejects semantically substituted manifest and schema
 	const fixture = await temporaryDirectory(t, "you-api-consumer-semantics-");
 	const packageRoot = join(fixture, "package");
 	const substitutions = [
-		["manifest", { name: "@you-agent-factory/api", version: "0.0.2" }],
+		["manifest", { name: "@you-agent-factory/api", version: "0.0.0" }],
 		["schemas/you-config", { formatVersion: "global-config-topology/v1" }],
 		["schemas/factory", { formatVersion: "factory-openapi-parity/v1" }],
 		["schemas/mock-workers", { formatVersion: "mock-workers-topology/v1" }],

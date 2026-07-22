@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   assertPackedExportTargets,
+  assertPackedRequiredFiles,
   assertPublishVersion,
   PUBLIC_PACKAGES,
   patchPublicPackageManifest,
@@ -114,6 +115,25 @@ describe("public package publishing", () => {
       ]),
     ).toThrow(
       "@you-agent-factory/api candidate omits export target generated/joined/*",
+    );
+  });
+
+  test("isolates the packaged factories legacy deep-path contract", () => {
+    expect(() =>
+      assertPackedRequiredFiles(
+        "@you-agent-factory/packaged-factories",
+        ["factories/goal/factory.json"],
+        [{ path: "factories/goal/factory.json" }],
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertPackedRequiredFiles(
+        "@you-agent-factory/packaged-factories",
+        ["factories/goal/factory.json"],
+        [{ path: "factories/review/factory.json" }],
+      ),
+    ).toThrow(
+      "@you-agent-factory/packaged-factories candidate omits factories/goal/factory.json",
     );
   });
 });

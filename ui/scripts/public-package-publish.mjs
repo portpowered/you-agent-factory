@@ -47,6 +47,9 @@ export const RELEASE_PUBLIC_PACKAGES = Object.freeze([
     directory: "packaged-factories",
     sourceDirectory: "../packages/packaged-factories",
     build: false,
+    // Until the package owns an export map, keep its legacy deep-path contract
+    // isolated to this release specification.
+    requiredFiles: ["factories/goal/factory.json"],
   },
   ...PUBLIC_PACKAGES,
 ]);
@@ -74,6 +77,17 @@ export function assertPackedExportTargets(packageName, exports, files) {
   for (const target of collectExportTargets(exports)) {
     if (![...packedFiles].some((file) => matchesExportTarget(file, target))) {
       throw new Error(`${packageName} candidate omits export target ${target}`);
+    }
+  }
+}
+
+export function assertPackedRequiredFiles(packageName, requiredFiles, files) {
+  const packedFiles = new Set(
+    (files ?? []).map(({ path: file }) => file?.replaceAll("\\", "/")),
+  );
+  for (const requiredFile of requiredFiles ?? []) {
+    if (!packedFiles.has(requiredFile)) {
+      throw new Error(`${packageName} candidate omits ${requiredFile}`);
     }
   }
 }
@@ -207,6 +221,11 @@ export async function preparePublicPackageCandidates({
         );
       }
       assertPackedExportTargets(report.name, manifest.exports, report.files);
+      assertPackedRequiredFiles(
+        report.name,
+        packageSpec.requiredFiles,
+        report.files,
+      );
       candidates.push({
         name: report.name,
         version: report.version,
