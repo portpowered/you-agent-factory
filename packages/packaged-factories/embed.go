@@ -14,7 +14,8 @@ var authored embed.FS
 //
 // Paths use forward slashes and are relative to this package, beginning with
 // "factories/". Factory catalog, validation, installation, and lifecycle policy
-// remain owned by their existing backend services.
+// remain owned by their existing backend services. Bytes returned by filesystem
+// reads are detached and may be modified without affecting later reads.
 func Source() fs.FS {
 	return authored
 }
