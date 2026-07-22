@@ -44,11 +44,16 @@ type packagedFactoryInitResult struct {
 // inspection role, so these tests never need service-owned path policy.
 type observedFileSystem struct {
 	platformfilesystem.Local
-	inspected []string
+	inspected    []string
+	missingPaths map[string]bool
 }
 
 func (files *observedFileSystem) Stat(path string) (fs.FileInfo, error) {
-	files.inspected = append(files.inspected, filepath.Clean(path))
+	path = filepath.Clean(path)
+	files.inspected = append(files.inspected, path)
+	if files.missingPaths[path] {
+		return nil, fs.ErrNotExist
+	}
 	return files.Local.Stat(path)
 }
 
@@ -224,7 +229,9 @@ func TestInit_ConfigCreationFailureSurfacesActionableCLIError(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	err := executeConfigInit(t, &observedFileSystem{}, homeDir, false, true, io.Discard, &stderr)
+	legacyRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	files := &observedFileSystem{missingPaths: map[string]bool{legacyRoot: true}}
+	err := executeConfigInit(t, files, homeDir, false, true, io.Discard, &stderr)
 	if err == nil {
 		t.Fatal("expected config init failure")
 	}
@@ -282,6 +289,7 @@ func executeConfigInit(
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		OperatorSettingsFileSystem:                      files,
 		SystemInitializationInspectPath:                 files.Stat,
+		SystemInitializationMigrationFileSystem:         files,
 		FactoryDefinitionPortableFileSystem:             files,
 		FactoryDefinitionLoadingFileSystem:              files,
 		FactoryDefinitionVersionFileSystem:              files,

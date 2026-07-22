@@ -81,8 +81,8 @@ RETIRED_SURFACE_CHECK_ROOT ?= .
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check deadcode
 
 define run_verification_step
-	$(info ==> $(2) [make $(1)])
-	@$(MAKE) $(1)
+	@printf '%s\n' "==> $(2) [make $(1)]"
+	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
 define run_timed_step
