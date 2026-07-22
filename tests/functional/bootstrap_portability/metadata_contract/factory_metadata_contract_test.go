@@ -9,6 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	clirun "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -103,6 +104,23 @@ func TestFactoryMetadataContractLoadsLegacyExamplesAndRendersCanonicalHelp(t *te
 		if !strings.Contains(help.String(), want) {
 			t.Fatalf("invocation help missing %q:\n%s", want, help.String())
 		}
+	}
+}
+
+func TestFactoryMetadataSnapshotRejectsInvalidProgrammaticExampleArguments(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		Name: "invalid-example",
+		Examples: []interfaces.InvocationExampleConfig{{
+			Name:        "invalid",
+			Description: interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "Invalid"},
+			Args:        interfaces.InvocationExampleArguments{"tag": []interface{}{"alpha", 3}},
+		}},
+	}
+	got, err := factorysnapshot.ObjectFromFactoryConfig(cfg)
+	if err == nil || got != nil || !strings.Contains(err.Error(), "factory.examples[0].args.tag must be a string or array of strings") {
+		t.Fatalf("ObjectFromFactoryConfig() = (%#v, %v), want field-specific rejection", got, err)
 	}
 }
 
