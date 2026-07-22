@@ -248,15 +248,19 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+		if len(promptArgs) > 0 {
+			err = runcli.MapInvocationFailure(err)
+		}
+		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+			return err
+		}
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
 		var ambiguousInputErr *runcli.AmbiguousInvocationInputError
 		if errors.As(err, &ambiguousInputErr) {
 			errorWriter = cmd.ErrOrStderr()
 		}
-		if !runcli.WriteInvocationError(errorWriter, err, globals.json) {
-			if errorWriter != nil {
-				_, _ = fmt.Fprintln(errorWriter, err)
-			}
+		if errorWriter != nil {
+			_, _ = fmt.Fprintln(errorWriter, err)
 		}
 	}
 	return err

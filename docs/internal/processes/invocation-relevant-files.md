@@ -438,6 +438,12 @@ response-stream output.
   bounded typed allow-list; JSON emits only `factory_event` records and sends
   every accepted event plus the final `invocation_result` through one lossless
   ordered writer. Do not reuse the human progress queue's drop policy for JSON.
+  Invocation failures are mapped in `pkg/transports/cli/run/invocation_error.go`
+  to one generated API `ErrorResponse` with the established symbolic invocation
+  code and `INTERNAL_SERVER_ERROR` family. `pkg/transports/cli/root_work.go`
+  writes that object directly to stderr before applying quiet human-terminal
+  suppression, so human, quiet, single-JSON, and NDJSON modes share one error
+  boundary while retaining their distinct terminal stdout rules.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factory/sessions/responseevents` (distinct from internal
   `pkg/factory/sessions/responsestream` fragment kinds).

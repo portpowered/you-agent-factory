@@ -48,14 +48,22 @@ submission and waiting stay outside the Work package.
 
 ## Invocation output and observation
 
-Supported one-shot invocations expose three stdout modes on the CLI and a
+Supported one-shot invocations expose four stdout modes on the CLI and a
 session-scoped SSE counterpart on the API:
 
 | Mode | How to select | What stdout or SSE carries |
 | --- | --- | --- |
 | Primary result (default) | Default `you run --factory` or `--named` | Only the configured `primaryResult` on success |
+| Single JSON | Global `--json` | Exactly one terminal `InvocationResponse` |
 | Human response-stream | `--output response-stream` | Human-readable progress, then the same primary result |
 | NDJSON automation | Global `--json` with `--output response-stream` | One JSON record per non-empty stdout line; streamed events use `recordType=factory_event` with a nested canonical `FactoryEvent`; an available invocation ends with exactly one terminal `recordType=invocation_result` whose `response` is the `InvocationResponse` |
+
+All four modes write invocation failures through one stderr boundary as exactly
+one API `ErrorResponse` JSON object and preserve a failing process exit. A
+pre-terminal failure leaves stdout empty. A failed terminal
+`InvocationResponse` is still emitted once in modes whose stdout contract
+includes terminal responses; quiet mode remains terminal-value-only and emits
+no failure value.
 
 The session API separately exposes the public `FactoryResponseEvent` contract on
 `GET /factory-sessions/{session_id}/response-events`. That route is ephemeral

@@ -238,7 +238,7 @@ func runFactoryInvocation(
 		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request),
 	)
 	if err != nil {
-		return err
+		return MapInvocationFailure(err)
 	}
 	if streamRenderer != nil && len(outcome.FactoryEvents) > 0 {
 		streamRenderer.PresentFactoryEvents(outcome.FactoryEvents)
@@ -322,6 +322,14 @@ func (e invocationCLIError) contextSuffix() string {
 		return ""
 	}
 	return " [" + strings.Join(fields, " ") + "]"
+}
+
+func (e invocationCLIError) responseMessage() string {
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "clean invocation failed"
+	}
+	return message + e.contextSuffix()
 }
 
 func invocationResultFailure(result apisurface.FactoryInvocationResult) error {

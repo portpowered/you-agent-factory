@@ -15,6 +15,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -22,6 +23,46 @@ const (
 	defaultResponseStreamProgressQueueCapacity = 64
 	responseStreamProgressDrainTimeout         = 250 * time.Millisecond
 )
+
+func TestWriteInvocationError_WritesOneStandardErrorResponseForTerminalFailure(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	handled := WriteInvocationError(&stderr, invocationCLIError{
+		Code:      "INVOCATION_RUNTIME_FAILURE",
+		Message:   "goal execution failed",
+		SessionID: "session-failed",
+		WorkID:    "work-failed",
+	}, false)
+	if !handled {
+		t.Fatal("terminal invocation failure was not handled")
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr.String()), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", err, stderr.String())
+	}
+	if response.Family != factoryapi.ErrorFamilyInternalServerError ||
+		response.Code != factoryapi.ErrorResponseCode("INVOCATION_RUNTIME_FAILURE") {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
+	if response.Message != "goal execution failed [session=session-failed workId=work-failed]" {
+		t.Fatalf("message = %q", response.Message)
+	}
+}
+
+func TestMapInvocationFailure_PreservesCancellationCode(t *testing.T) {
+	t.Parallel()
+
+	err := MapInvocationFailure(context.Canceled)
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		t.Fatalf("error = %T, want InvocationError", err)
+	}
+	if invocationErr.Code != InvocationErrorCodeCancelled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("InvocationError = %#v", invocationErr)
+	}
+}
 
 func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	t.Parallel()

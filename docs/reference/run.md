@@ -221,6 +221,16 @@ earlier releases.
 you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
 ```
 
+### Invocation failures
+
+Every one-shot invocation failure writes exactly one `ErrorResponse` JSON
+object to stderr and exits unsuccessfully, in every output mode. Failures that
+occur before a terminal response leave stdout empty. When the Factory Session
+returns a failed `InvocationResponse`, single-JSON and NDJSON modes still write
+that terminal response once to stdout; human stream mode writes its terminal
+outcome, while quiet mode writes no terminal value. Provider response chunks
+are never used as error output.
+
 ### Mode availability
 
 `--output response-stream` is available for live and replayed one-shot Factory

@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -155,7 +156,7 @@ func TestStreamOutputMode_JSONMode_EmitsCanonicalNDJSONRecordsWithTerminalInvoca
 	}
 }
 
-func TestStreamOutputMode_JSONMode_FailureBeforeSessionWritesNoTerminalRecord(t *testing.T) {
+func TestInvocationOutputModes_FailureBeforeSessionWritesOneErrorResponse(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow built-CLI JSON response-stream pre-session failure acceptance")
 	}
@@ -165,15 +166,125 @@ func TestStreamOutputMode_JSONMode_FailureBeforeSessionWritesNoTerminalRecord(t 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	result, err := session.Run(ctx,
-		"--json", "run", "--named", "@you/missing", "--output", "response-stream", "--no-record", "prompt",
-	)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("expected pre-session failure, got result=%#v err=%v", result, err)
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "human", args: []string{"run", "--named", "@you/missing", "--no-record", "prompt"}},
+		{name: "quiet", args: []string{"run", "--named", "@you/missing", "--quiet", "--no-record", "prompt"}},
+		{name: "single JSON", args: []string{"--json", "run", "--named", "@you/missing", "--no-record", "prompt"}},
+		{name: "NDJSON", args: []string{"--json", "run", "--named", "@you/missing", "--output", "response-stream", "--no-record", "prompt"}},
 	}
-	if result.Stdout != "" {
-		t.Fatalf("stdout = %q, want no Factory Event or terminal record", result.Stdout)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := session.Run(ctx, tc.args...)
+			if err == nil || result.ExitCode == 0 {
+				t.Fatalf("expected pre-session failure, got result=%#v err=%v", result, err)
+			}
+			if result.Stdout != "" {
+				t.Fatalf("stdout = %q, want no lifecycle or terminal value", result.Stdout)
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(result.Stderr), &response); decodeErr != nil {
+				t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", decodeErr, result.Stderr)
+			}
+			if response.Family != factoryapi.ErrorFamilyInternalServerError || response.Code == "" || response.Message == "" {
+				t.Fatalf("ErrorResponse = %#v", response)
+			}
+		})
 	}
+}
+
+func TestInvocationOutputModes_TerminalFailurePreservesStdoutAndErrorResponse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow built-CLI terminal invocation failure acceptance")
+	}
+
+	session, _ := prepareNamedGoalOutputAcceptanceSession(t)
+	rejectingWorkersPath := writePackagedGoalRejectingMockWorkersConfig(t)
+	cases := []struct {
+		name         string
+		outputMode   string
+		jsonMode     bool
+		wantTerminal bool
+		wantHuman    bool
+	}{
+		{name: "quiet"},
+		{name: "single JSON", jsonMode: true, wantTerminal: true},
+		{name: "human", outputMode: "response-stream", wantTerminal: true, wantHuman: true},
+		{name: "NDJSON", outputMode: "response-stream", jsonMode: true, wantTerminal: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			args := namedGoalOutputRunArgs(
+				session, tc.outputMode, tc.jsonMode, rejectingWorkersPath,
+				fmt.Sprintf("acceptance-terminal-failure-%s-%d", tc.name, time.Now().UnixNano()),
+			)
+			result, err := session.Run(ctx, args...)
+			if err == nil || result.ExitCode == 0 {
+				t.Fatalf("expected terminal invocation failure, got result=%#v err=%v", result, err)
+			}
+			var errorResponse factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(result.Stderr), &errorResponse); decodeErr != nil {
+				t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", decodeErr, result.Stderr)
+			}
+			if errorResponse.Family != factoryapi.ErrorFamilyInternalServerError || errorResponse.Code == "" {
+				t.Fatalf("ErrorResponse = %#v", errorResponse)
+			}
+			if !tc.wantTerminal {
+				if result.Stdout != "" {
+					t.Fatalf("stdout = %q, want no quiet terminal failure value", result.Stdout)
+				}
+				return
+			}
+			if tc.wantHuman {
+				if !strings.Contains(result.Stdout, "--- invocation outcome ---") || !strings.Contains(result.Stdout, "status: FAILED") {
+					t.Fatalf("human stdout lacks terminal failed response:\n%s", result.Stdout)
+				}
+				return
+			}
+			if tc.outputMode == "response-stream" {
+				records, parseErr := parseResponseStreamNDJSONRecords(result.Stdout)
+				if parseErr != nil {
+					t.Fatalf("parse terminal-failure NDJSON: %v\n%s", parseErr, result.Stdout)
+				}
+				terminal, terminalErr := responseStreamTerminalInvocation(records)
+				if terminalErr != nil || terminal.Status != factoryapi.InvocationTerminalStatusFailed {
+					t.Fatalf("terminal response = %#v, err=%v", terminal, terminalErr)
+				}
+				return
+			}
+			var terminal factoryapi.InvocationResponse
+			if decodeErr := json.Unmarshal([]byte(result.Stdout), &terminal); decodeErr != nil {
+				t.Fatalf("single-JSON stdout is not one InvocationResponse: %v\n%s", decodeErr, result.Stdout)
+			}
+			if terminal.Status != factoryapi.InvocationTerminalStatusFailed {
+				t.Fatalf("terminal status = %q, want FAILED", terminal.Status)
+			}
+		})
+	}
+}
+
+func writePackagedGoalRejectingMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	config := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{
+		{WorkerName: "goal-planner", WorkstationName: "plan-goal", RunType: workers.MockWorkerRunTypeReject},
+		{WorkerName: "goal-executor", WorkstationName: "execute-goal", RunType: workers.MockWorkerRunTypeReject},
+		{WorkerName: "goal-checker", WorkstationName: "check-goal", RunType: workers.MockWorkerRunTypeReject},
+		{WorkerName: "goal-reviewer", WorkstationName: "review-goal", RunType: workers.MockWorkerRunTypeReject},
+	}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal rejecting mock workers: %v", err)
+	}
+	path := t.TempDir() + string(os.PathSeparator) + "rejecting-mock-workers.json"
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write rejecting mock workers: %v", err)
+	}
+	return path
 }
 
 func TestStreamOutputMode_PrimaryAndStreamModesAgreeOnTerminalOutcome(t *testing.T) {
