@@ -4,7 +4,7 @@ package wire
 import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
 
 func NewService(eventIDs responseeventstore.ResponseEventIDGenerator) (responsestreamservice.Service, error) {

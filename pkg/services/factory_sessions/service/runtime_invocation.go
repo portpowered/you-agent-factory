@@ -9,12 +9,12 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
-	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/packagedtts"
-	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/runtimeadapter"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
+	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
 )
 
 // NewInvocationOwner constructs the canonical invocation owner from the

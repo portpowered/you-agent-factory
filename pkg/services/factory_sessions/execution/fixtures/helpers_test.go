@@ -22,7 +22,7 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"

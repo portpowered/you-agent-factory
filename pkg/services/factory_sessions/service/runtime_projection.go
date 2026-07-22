@@ -10,9 +10,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
+	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 type sessionSyncPreflightTarget struct {

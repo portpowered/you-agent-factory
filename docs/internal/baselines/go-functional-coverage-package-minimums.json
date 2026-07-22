@@ -527,19 +527,19 @@
       "minimum": 33.27
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
       "minimum": 50.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane",
       "minimum": 22.17
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors",
       "minimum": 6.83
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors/persistence",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence",
       "minimum": 0.00
     },
     {
@@ -565,27 +565,27 @@
       "minimum": 67.34
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening",
       "minimum": 43.67
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects",
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation",
       "minimum": 63.42
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/packagedtts",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts",
       "minimum": 53.33
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/runtimeadapter",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter",
       "minimum": 76.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/logicaltarget",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -595,7 +595,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
       "minimum": 70.21
     },
     {
@@ -603,19 +603,19 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
       "minimum": 47.64
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
       "minimum": 32.83
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/fragmentmap",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
       "minimum": 35.39
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/ndjsoncontract",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -625,15 +625,15 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
       "minimum": 61.02
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
       "minimum": 57.42
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimehosting",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
       "minimum": 70.49
     },
     {
@@ -653,11 +653,11 @@
       "minimum": 44.15
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
       "minimum": 54.21
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
       "minimum": 53.65
     },
     {

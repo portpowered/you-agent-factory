@@ -9,8 +9,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )

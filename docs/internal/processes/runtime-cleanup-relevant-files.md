@@ -592,6 +592,14 @@ wrapper function and an owner-defined dependency struct; function variables or
 type aliases alone are insufficient because generated Wire resolves them back
 to the underlying implementation package and recreates the forbidden import.
 
+Factory Sessions supporting implementations belong below
+`pkg/services/factory_sessions/internal`, including target discovery, cursor
+storage, response-stream storage, runtime binding/hosting, invocation adapters,
+session registries, and process-lifecycle policy. When moving one of these
+packages, relocate path-keyed quality entries and fixture-relative paths with
+the implementation, but delete its `service-root-unexpected-directory`
+baseline finding instead of replacing that finding with an internal path.
+
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
 contract when that does not create a cycle; implementation capabilities needed

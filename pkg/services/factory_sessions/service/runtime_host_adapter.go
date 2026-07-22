@@ -7,9 +7,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 // newSessionHost combines canonical state-derived callbacks with the few

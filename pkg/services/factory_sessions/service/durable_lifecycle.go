@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 )
 
 // PauseDurableFactorySession applies durable pause control through the control plane.

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
 type (

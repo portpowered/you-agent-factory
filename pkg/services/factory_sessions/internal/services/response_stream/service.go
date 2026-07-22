@@ -8,10 +8,10 @@ import (
 	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 )
 
 var (

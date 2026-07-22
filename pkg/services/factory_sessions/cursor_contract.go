@@ -4,7 +4,7 @@ import (
 	"io"
 	"io/fs"
 
-	cursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
+	cursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 )
 
 // Reconnect cursor recovery contracts are exposed from the Factory Sessions

@@ -3,7 +3,7 @@ package service
 
 import (
 	factorymetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 )
 
 // Runtime metric names emitted by the transport runtime host.

@@ -10,7 +10,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
 const testBackendScope = "backend-scope"

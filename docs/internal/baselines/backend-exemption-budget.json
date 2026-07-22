@@ -543,12 +543,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -669,37 +663,43 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/executionopening/direct_javascript_test.go#TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup",
+      "target": "pkg/services/factory_sessions/internal/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/executionopening/stdio.go#StdioOpeningService.OpenStdio",
+      "target": "pkg/services/factory_sessions/internal/executionopening/direct_javascript_test.go#TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/invocation/session_owner.go#SessionOwner.InvokeFactorySession",
+      "target": "pkg/services/factory_sessions/internal/executionopening/stdio.go#StdioOpeningService.OpenStdio",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/invocation/session_owner.go#SessionOwner.InvokeFactorySession",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/responsestream/construction_contract_test.go#TestPublishesAndCompletesOneOrderedDispatch",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/runtimebinding/binding.go#Replace",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/projection_test.go#TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/responsestream/construction_contract_test.go#TestPublishesAndCompletesOneOrderedDispatch",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/runtimebinding/binding.go#Replace",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

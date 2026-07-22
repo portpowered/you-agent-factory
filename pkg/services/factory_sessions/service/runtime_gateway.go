@@ -8,10 +8,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"go.uber.org/zap"
 )
 

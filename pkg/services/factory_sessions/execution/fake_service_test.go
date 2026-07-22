@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )

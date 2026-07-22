@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/fixtures"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
 func TestJavaScriptRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndProgress(t *testing.T) {

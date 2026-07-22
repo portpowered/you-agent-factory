@@ -7,7 +7,7 @@ import (
 	"time"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
 // LoadFakeScenariosFromContractFixtures loads deterministic fake scenarios from the

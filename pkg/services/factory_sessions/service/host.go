@@ -7,8 +7,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
 // Host exposes composition-root seams required by the session gateway.

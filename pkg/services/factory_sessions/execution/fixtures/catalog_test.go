@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/fixtures"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
 func TestPublishedFixtureScenarios_DocumentStableIdentity(t *testing.T) {

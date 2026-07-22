@@ -7,8 +7,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
-	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 

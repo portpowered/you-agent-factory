@@ -3109,77 +3109,12 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/applicationopening",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/controlplane",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/cursors",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/execution",
       "target": "pkg/services/factory_sessions"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/executionopening",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/fileeffects",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/invocation",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/logicaltarget",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/processlifecycle",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/responseevents",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/responseeventstore",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/responsestream",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/runtime",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/runtimebinding",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/runtimehosting",
       "target": "pkg/services/factory_sessions"
     },
     {
@@ -3190,16 +3125,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/service",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/sessionregistry",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/stream",
       "target": "pkg/services/factory_sessions"
     },
     {

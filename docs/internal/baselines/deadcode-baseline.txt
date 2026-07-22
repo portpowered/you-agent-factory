@@ -158,7 +158,7 @@ pkg/services/factory_runtime/subsystems/noop_dispatcher.go: unreachable func: No
 pkg/services/factory_runtime/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
 pkg/services/factory_sessions/api.go: unreachable func: FactoryName
-pkg/services/factory_sessions/cursors/observer.go: unreachable func: RecordPreflight
+pkg/services/factory_sessions/internal/cursors/observer.go: unreachable func: RecordPreflight
 pkg/services/factory_sessions/execution/fake_service_runtime_test.go: unreachable func: newResumeCoverageBlockingProvider
 pkg/services/factory_sessions/execution/fake_service_runtime_test.go: unreachable func: resumeCoverageBlockingProvider.Execute
 pkg/services/factory_sessions/execution/fake_service_runtime_test.go: unreachable func: resumeCoverageBlockingProvider.resumeCoverageCallCount
@@ -185,8 +185,8 @@ pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go:
 pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go: unreachable func: waitForPersistedInterruptedSnapshot
 pkg/services/factory_sessions/execution/recordingreplay/service.go: unreachable func: Service.IsNonLiveReplay
 pkg/services/factory_sessions/execution/recordingreplay/service.go: unreachable func: Service.QueryDispatches
-pkg/services/factory_sessions/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeBackendScopeID
-pkg/services/factory_sessions/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeProviderBoundary
+pkg/services/factory_sessions/internal/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeBackendScopeID
+pkg/services/factory_sessions/internal/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeProviderBoundary
 pkg/services/factory_sessions/runtimeopening/operatordefaults/operator_defaults_runtime_test.go: unreachable func: writeOperatorDefaultsFactoryJSON
 pkg/services/factory_sessions/service/runtime.go: unreachable func: SessionRuntime.waitForActiveRuntime
 pkg/services/factory_sessions/service/runtime_gateway.go: unreachable func: SessionRuntime.inferenceProgressPublisher

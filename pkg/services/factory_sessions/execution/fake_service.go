@@ -9,7 +9,7 @@ import (
 	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
 // FakeService is a deterministic in-memory implementation of Service for API, CLI,

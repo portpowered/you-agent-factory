@@ -11,8 +11,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.

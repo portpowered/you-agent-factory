@@ -221,7 +221,7 @@ func TestRunRejectsRetiredResponseStreamRemovalGateTransportImport(t *testing.T)
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	path := "pkg/services/factory_sessions/responsestream/removalgate/gate.go"
+	path := "pkg/services/factory_sessions/internal/responsestream/removalgate/gate.go"
 	writeGoImportFile(t, repoRoot, path, "removalgate", "github.com/portpowered/infinite-you/pkg/transports/cli/docs")
 
 	stderr := &bytes.Buffer{}

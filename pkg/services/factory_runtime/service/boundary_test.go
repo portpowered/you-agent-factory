@@ -30,7 +30,7 @@ func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *te
 	// transport mapping shares the pure reconnect-cursor contract. Session
 	// registries, concrete stores, projections, and runtime state remain forbidden.
 	allowedFactorySessionLeaves := map[string]struct{}{
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors":        {},
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors":        {},
 		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations":   {},
 		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents": {},
 	}

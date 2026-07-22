@@ -197,7 +197,7 @@ flowchart LR
         currentLogs[(Runtime log files)]
         currentLogging[[pkg/logging]]
         currentReplay[[pkg/replay]]
-        currentSessionPersistence[[pkg/services/factory_sessions/cursors/persistence]]
+        currentSessionPersistence[[pkg/services/factory_sessions/internal/cursors/persistence]]
         currentInternalPlatform[[pkg/internal/metrics and cursorstorage]]
 
         currentLogging --> currentLogs

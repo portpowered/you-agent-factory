@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 )
 
 type memoryCursorStore struct {
