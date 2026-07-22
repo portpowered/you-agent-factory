@@ -18,6 +18,7 @@ import (
 const (
 	defaultScenarioPath = "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go"
 	diagnosticPrefix    = "[agent-factory:functional-boundary]"
+	providerTestRoot    = "tests/functional/providers/"
 )
 
 var forbiddenRequestBatchImports = []string{
@@ -37,6 +38,17 @@ var forbiddenCompositionImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/workers/executor",
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection",
 	"github.com/portpowered/infinite-you/pkg/wire",
+}
+
+var forbiddenProviderImplementationImports = []string{
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/codex",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{
@@ -104,6 +116,13 @@ func checkFunctionalCompositionTree(root string) error {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
+		providerSource := isDedicatedProviderSource(relative)
+		if providerSource && isProviderSharedSupportSource(relative) {
+			return fmt.Errorf(
+				"%s prohibited provider-local shared support (%s); keep reusable process composition in tests/functional/internal/support",
+				diagnosticPrefix, relative,
+			)
+		}
 		fileSet := token.NewFileSet()
 		file, err := parser.ParseFile(fileSet, path, nil, parser.ImportsOnly)
 		if err != nil {
@@ -113,6 +132,18 @@ func checkFunctionalCompositionTree(root string) error {
 			importPath, err := strconv.Unquote(spec.Path.Value)
 			if err != nil {
 				return fmt.Errorf("%s read import in %s: %w", diagnosticPrefix, relative, err)
+			}
+			if providerSource && importPath == "github.com/portpowered/infinite-you/pkg/root" {
+				return fmt.Errorf(
+					"%s prohibited provider functional composition import: %s (%s); use tests/functional/internal/support.BuildProcess with exact edges.Edges replacements",
+					diagnosticPrefix, importPath, relative,
+				)
+			}
+			if providerSource && matchesImportPrefix(importPath, forbiddenProviderImplementationImports) {
+				return fmt.Errorf(
+					"%s prohibited concrete provider implementation import: %s (%s); exercise provider behavior through tests/functional/internal/support.BuildProcess with exact edges.Edges replacements",
+					diagnosticPrefix, importPath, relative,
+				)
 			}
 			for _, forbidden := range forbiddenCompositionImports {
 				if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
@@ -156,6 +187,29 @@ func checkFunctionalCompositionTree(root string) error {
 		}
 		return nil
 	})
+}
+
+func isDedicatedProviderSource(relative string) bool {
+	if !strings.HasPrefix(relative, providerTestRoot) {
+		return false
+	}
+	remainder := strings.TrimPrefix(relative, providerTestRoot)
+	return strings.Contains(remainder, "/")
+}
+
+func isProviderSharedSupportSource(relative string) bool {
+	remainder := strings.TrimPrefix(relative, providerTestRoot)
+	return strings.HasPrefix(remainder, "support/") ||
+		strings.HasPrefix(remainder, "internal/support/")
+}
+
+func matchesImportPrefix(importPath string, forbiddenImports []string) bool {
+	for _, forbidden := range forbiddenImports {
+		if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func calledName(expression ast.Expr) string {

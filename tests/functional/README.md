@@ -84,11 +84,16 @@ test results.
 
 - Cross-package functional helpers belong in `tests/functional/internal/support`.
 - `tests/functional/internal/support.StartFunctionalAPIServer` is the
-  canonical Wire-backed HTTP harness for backend transport regressions: it
-  builds the decomposed services through `wire.Build`, so runtime
+  canonical production-composed HTTP harness for backend transport regressions:
+  it builds the customer process through `root.BuildProcess` with exact typed
+  `edges.Edges` replacements, so runtime
   API smoke coverage for `/status`, `/models`, session routes, and factory
   activation should prefer that seam over hand-built HTTP doubles when the
   goal is startup-path parity.
+- Provider functional packages must obtain executable processes through
+  `tests/functional/internal/support.BuildProcess`; they must not import
+  `pkg/root`, `pkg/wire`, initializer or runtime composition internals, or a
+  concrete built-in provider implementation package.
 - Keep package-local helpers next to the tests until a second behavior package
   needs them, then promote them into the support package instead of importing
   or copying another package's `*_test.go` helpers.

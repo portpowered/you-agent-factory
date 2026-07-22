@@ -89,6 +89,69 @@ func scenario() {
 	}
 }
 
+func TestCheckFunctionalCompositionTreeAcceptsProviderSharedProcessHarness(t *testing.T) {
+	root, _ := writeProviderFunctionalSource(t, `package codex
+import (
+  "github.com/portpowered/infinite-you/pkg/services/edges"
+  "github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+func scenario() {
+  process := support.BuildProcess(nil, edges.Edges{})
+  _ = process
+}
+`)
+	if err := checkFunctionalCompositionTree(root); err != nil {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v", err)
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsProviderDirectRootComposition(t *testing.T) {
+	root, _ := writeProviderFunctionalSource(t, `package codex
+import (
+  "github.com/portpowered/infinite-you/pkg/root"
+  "github.com/portpowered/infinite-you/pkg/services/edges"
+)
+func scenario() {
+  process, _ := root.BuildProcess(nil, edges.Edges{})
+  _ = process
+}
+`)
+	err := checkFunctionalCompositionTree(root)
+	if err == nil || !strings.Contains(err.Error(), "prohibited provider functional composition import") {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v, want provider composition failure", err)
+	}
+	if !strings.Contains(err.Error(), "tests/functional/internal/support.BuildProcess with exact edges.Edges replacements") {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v, want shared typed-edge harness remediation", err)
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsConcreteProviderImplementation(t *testing.T) {
+	for _, importPath := range forbiddenProviderImplementationImports {
+		t.Run(importPath, func(t *testing.T) {
+			root, _ := writeProviderFunctionalSource(t, "package codex\nimport _ \""+importPath+"\"\n")
+			err := checkFunctionalCompositionTree(root)
+			if err == nil || !strings.Contains(err.Error(), "prohibited concrete provider implementation import: "+importPath) {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want concrete provider failure", err)
+			}
+			if !strings.Contains(err.Error(), "support.BuildProcess with exact edges.Edges replacements") {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want shared typed-edge harness remediation", err)
+			}
+		})
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsProviderLocalSharedSupport(t *testing.T) {
+	root, _ := writeFunctionalSourceAt(
+		t,
+		"tests/functional/providers/internal/support/process.go",
+		"package support\n",
+	)
+	err := checkFunctionalCompositionTree(root)
+	if err == nil || !strings.Contains(err.Error(), "keep reusable process composition in tests/functional/internal/support") {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v, want canonical support-root failure", err)
+	}
+}
+
 func TestCheckFunctionalCompositionTreeRejectsLegacyHarnessCall(t *testing.T) {
 	for _, call := range []string{"NewServiceTestHarness", "GetEngineStateSnapshot"} {
 		t.Run(call, func(t *testing.T) {
@@ -142,8 +205,18 @@ var fixture = config{ConfigureRuntime: func() {}}
 
 func writeFunctionalSource(t *testing.T, source string) (string, string) {
 	t.Helper()
+	return writeFunctionalSourceAt(t, "tests/functional/guards_batch/request_batch_test.go", source)
+}
+
+func writeProviderFunctionalSource(t *testing.T, source string) (string, string) {
+	t.Helper()
+	return writeFunctionalSourceAt(t, "tests/functional/providers/codex/process_test.go", source)
+}
+
+func writeFunctionalSourceAt(t *testing.T, relativePath, source string) (string, string) {
+	t.Helper()
 	root := t.TempDir()
-	path := filepath.Join(root, "tests", "functional", "guards_batch", "request_batch_test.go")
+	path := filepath.Join(root, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("create functional fixture: %v", err)
 	}
