@@ -594,6 +594,44 @@ const (
 	FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE FactoryWorldWorkItemRefPayloadStatus = "UNAVAILABLE"
 )
 
+// Defines values for GlobalConfigWorkerPresetModelProvider.
+const (
+	GlobalConfigWorkerPresetModelProviderAGYUpper         GlobalConfigWorkerPresetModelProvider = "AGY"
+	GlobalConfigWorkerPresetModelProviderAgent            GlobalConfigWorkerPresetModelProvider = "agent"
+	GlobalConfigWorkerPresetModelProviderAgy              GlobalConfigWorkerPresetModelProvider = "agy"
+	GlobalConfigWorkerPresetModelProviderAnthropic        GlobalConfigWorkerPresetModelProvider = "anthropic"
+	GlobalConfigWorkerPresetModelProviderAnthropicUpper   GlobalConfigWorkerPresetModelProvider = "ANTHROPIC"
+	GlobalConfigWorkerPresetModelProviderAntigravity      GlobalConfigWorkerPresetModelProvider = "antigravity"
+	GlobalConfigWorkerPresetModelProviderClaude           GlobalConfigWorkerPresetModelProvider = "claude"
+	GlobalConfigWorkerPresetModelProviderClaudeUpper      GlobalConfigWorkerPresetModelProvider = "CLAUDE"
+	GlobalConfigWorkerPresetModelProviderCodex            GlobalConfigWorkerPresetModelProvider = "codex"
+	GlobalConfigWorkerPresetModelProviderCodexUpper       GlobalConfigWorkerPresetModelProvider = "CODEX"
+	GlobalConfigWorkerPresetModelProviderCursor           GlobalConfigWorkerPresetModelProvider = "cursor"
+	GlobalConfigWorkerPresetModelProviderCursorAgent      GlobalConfigWorkerPresetModelProvider = "cursor-agent"
+	GlobalConfigWorkerPresetModelProviderCursorAgentUpper GlobalConfigWorkerPresetModelProvider = "CURSOR_AGENT"
+	GlobalConfigWorkerPresetModelProviderCursorUpper      GlobalConfigWorkerPresetModelProvider = "CURSOR"
+	GlobalConfigWorkerPresetModelProviderGemini           GlobalConfigWorkerPresetModelProvider = "gemini"
+	GlobalConfigWorkerPresetModelProviderGeminiUpper      GlobalConfigWorkerPresetModelProvider = "GEMINI"
+	GlobalConfigWorkerPresetModelProviderKiro             GlobalConfigWorkerPresetModelProvider = "kiro"
+	GlobalConfigWorkerPresetModelProviderKiroCLI          GlobalConfigWorkerPresetModelProvider = "kiro-cli"
+	GlobalConfigWorkerPresetModelProviderKiroUpper        GlobalConfigWorkerPresetModelProvider = "KIRO"
+	GlobalConfigWorkerPresetModelProviderOpenAI           GlobalConfigWorkerPresetModelProvider = "openai"
+	GlobalConfigWorkerPresetModelProviderOpenAIUpper      GlobalConfigWorkerPresetModelProvider = "OPENAI"
+	GlobalConfigWorkerPresetModelProviderOpenCode         GlobalConfigWorkerPresetModelProvider = "opencode"
+	GlobalConfigWorkerPresetModelProviderOpenCodeUpper    GlobalConfigWorkerPresetModelProvider = "OPENCODE"
+	GlobalConfigWorkerPresetModelProviderPI               GlobalConfigWorkerPresetModelProvider = "pi"
+	GlobalConfigWorkerPresetModelProviderPIUpper          GlobalConfigWorkerPresetModelProvider = "PI"
+)
+
+// Defines values for GlobalConfigWorkerPresetReasoningEffort.
+const (
+	GlobalConfigWorkerPresetReasoningEffortHigh        GlobalConfigWorkerPresetReasoningEffort = "high"
+	GlobalConfigWorkerPresetReasoningEffortLow         GlobalConfigWorkerPresetReasoningEffort = "low"
+	GlobalConfigWorkerPresetReasoningEffortMedium      GlobalConfigWorkerPresetReasoningEffort = "medium"
+	GlobalConfigWorkerPresetReasoningEffortMinimal     GlobalConfigWorkerPresetReasoningEffort = "minimal"
+	GlobalConfigWorkerPresetReasoningEffortUnspecified GlobalConfigWorkerPresetReasoningEffort = ""
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -4025,6 +4063,48 @@ type FailureDetail struct {
 	// Reason Stable machine-readable failure type used to classify failed work across providers and runtimes.
 	Reason WorkFailureType `json:"reason"`
 }
+
+// GlobalConfig Shared operator configuration stored in .you-agent-factory/config.json.
+type GlobalConfig struct {
+	// BackendScopeID Stable identifier for the local provider-backed runtime boundary.
+	BackendScopeID *string `json:"backendScopeID,omitempty"`
+
+	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
+	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
+
+	// WorkerPresets Named worker model presets loaded from the shared configuration file.
+	WorkerPresets *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
+}
+
+// GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
+type GlobalConfigDefaults struct {
+	// WorkerModel Default worker model name.
+	WorkerModel *string `json:"workerModel,omitempty"`
+
+	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
+	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
+}
+
+// GlobalConfigWorkerPreset Named worker model selection available to Factory Session runtime opening.
+type GlobalConfigWorkerPreset struct {
+	// Id Non-empty preset identifier after surrounding whitespace is trimmed.
+	Id string `json:"id"`
+
+	// Model Optional model name, trimmed when present.
+	Model *string `json:"model,omitempty"`
+
+	// ModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
+	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
+
+	// ReasoningEffort Optional reasoning effort; an empty value is accepted and normalized as unspecified.
+	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
+}
+
+// GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
+type GlobalConfigWorkerPresetModelProvider string
+
+// GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; an empty value is accepted and normalized as unspecified.
+type GlobalConfigWorkerPresetReasoningEffort string
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
 type Guard struct {

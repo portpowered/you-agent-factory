@@ -4,12 +4,114 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
+
+func TestGlobalConfigContract_GeneratesNamedGoModels(t *testing.T) {
+	presets := []generated.GlobalConfigWorkerPreset{{
+		Id: "research", ModelProvider: generated.GlobalConfigWorkerPresetModelProviderOpenAI,
+	}}
+	config := generated.GlobalConfig{
+		Defaults:      &generated.GlobalConfigDefaults{},
+		WorkerPresets: &presets,
+	}
+	if config.Defaults == nil || config.WorkerPresets == nil || len(*config.WorkerPresets) != 1 {
+		t.Fatalf("generated GlobalConfig models did not retain structured fields: %#v", config)
+	}
+}
+
+func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
+	schema := requireOpenAPI3ComponentSchema(t, loadValidatedOpenAPIContract(t), "GlobalConfig")
+	for _, payload := range []string{
+		`{}`,
+		`{
+			"backendScopeID":"local-11111111-1111-4111-8111-111111111111",
+			"defaults":{"workerModelProvider":"DEFAULT","workerModel":"gpt-5"},
+			"workerPresets":[
+				{"id":"research","modelProvider":"openai","model":"gpt-5","reasoningEffort":"high"},
+				{"id":"fast","modelProvider":"CLAUDE","reasoningEffort":""}
+			]
+		}`,
+	} {
+		assertGlobalConfigValidates(t, schema, payload)
+	}
+}
+
+func TestGlobalConfigContract_RejectsUnsupportedDocumentShapes(t *testing.T) {
+	schema := requireOpenAPI3ComponentSchema(t, loadValidatedOpenAPIContract(t), "GlobalConfig")
+	for _, test := range []struct {
+		name    string
+		payload string
+	}{
+		{name: "unknown top-level field", payload: `{"unknown":true}`},
+		{name: "free-form defaults field", payload: `{"defaults":{"provider":"codex"}}`},
+		{name: "missing preset id", payload: `{"workerPresets":[{"modelProvider":"codex"}]}`},
+		{name: "blank preset id", payload: `{"workerPresets":[{"id":"   ","modelProvider":"codex"}]}`},
+		{name: "missing preset provider", payload: `{"workerPresets":[{"id":"build"}]}`},
+		{name: "symbolic preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`},
+		{name: "unsupported preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`},
+		{name: "unsupported reasoning effort", payload: `{"workerPresets":[{"id":"build","modelProvider":"codex","reasoningEffort":"extreme"}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertGlobalConfigRejected(t, schema, test.payload)
+		})
+	}
+}
+
+func TestGlobalConfigContract_UsesClosedNamedComponents(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	globalConfig := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfig")
+	defaults := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigDefaults")
+	preset := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigWorkerPreset")
+
+	for name, schema := range map[string]*openapi3.Schema{
+		"GlobalConfig": globalConfig, "GlobalConfigDefaults": defaults, "GlobalConfigWorkerPreset": preset,
+	} {
+		if schema.AdditionalProperties.Has == nil || *schema.AdditionalProperties.Has {
+			t.Fatalf("%s must set additionalProperties to false", name)
+		}
+	}
+	assertOpenAPI3PropertyRef(t, globalConfig, "GlobalConfig", "defaults", "#/components/schemas/GlobalConfigDefaults")
+	assertOpenAPI3ArrayPropertyDescription(t, globalConfig, "GlobalConfig", "workerPresets")
+	workerPresetItemsRef := globalConfig.Properties["workerPresets"].Value.Items.Ref
+	if workerPresetItemsRef != "#/components/schemas/GlobalConfigWorkerPreset" {
+		t.Fatalf("GlobalConfig.properties.workerPresets.items.$ref = %q", workerPresetItemsRef)
+	}
+	if len(defaults.Properties) != 2 || defaults.Properties["workerModelProvider"] == nil || defaults.Properties["workerModel"] == nil {
+		t.Fatalf("GlobalConfigDefaults.properties = %#v, want workerModelProvider and workerModel", defaults.Properties)
+	}
+	if !slices.Contains(preset.Required, "id") || !slices.Contains(preset.Required, "modelProvider") {
+		t.Fatal("GlobalConfigWorkerPreset must require id and modelProvider")
+	}
+}
+
+func assertGlobalConfigValidates(t *testing.T, schema *openapi3.Schema, payloadJSON string) {
+	t.Helper()
+	var payload any
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	if err := schema.VisitJSON(payload); err != nil {
+		t.Fatalf("GlobalConfig payload should validate: %v", err)
+	}
+}
+
+func assertGlobalConfigRejected(t *testing.T, schema *openapi3.Schema, payloadJSON string) {
+	t.Helper()
+	var payload any
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	if err := schema.VisitJSON(payload); err == nil {
+		t.Fatalf("GlobalConfig payload should be rejected: %s", payloadJSON)
+	}
+}
 
 func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *testing.T) {
 	data, err := os.ReadFile("../../../../api/openapi.yaml")

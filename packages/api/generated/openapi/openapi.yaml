@@ -9657,6 +9657,120 @@ components:
               type: WORK_TYPE
               id: task
               location: STATES
+    GlobalConfig:
+      type: object
+      additionalProperties: false
+      description: Shared operator configuration stored in .you-agent-factory/config.json.
+      properties:
+        backendScopeID:
+          type: string
+          description: Stable identifier for the local provider-backed runtime boundary.
+        defaults:
+          $ref: '#/components/schemas/GlobalConfigDefaults'
+        workerPresets:
+          type: array
+          description: Named worker model presets loaded from the shared configuration file.
+          items:
+            $ref: '#/components/schemas/GlobalConfigWorkerPreset'
+    GlobalConfigDefaults:
+      type: object
+      additionalProperties: false
+      description: Operator defaults that participate independently in file, environment, and flag precedence.
+      properties:
+        workerModelProvider:
+          type: string
+          description: Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
+        workerModel:
+          type: string
+          description: Default worker model name.
+    GlobalConfigWorkerPreset:
+      type: object
+      additionalProperties: false
+      description: Named worker model selection available to Factory Session runtime opening.
+      required:
+        - id
+        - modelProvider
+      properties:
+        id:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+          description: Non-empty preset identifier after surrounding whitespace is trimmed.
+        modelProvider:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+          description: Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
+          x-enum-varnames:
+            - GlobalConfigWorkerPresetModelProviderAGYUpper
+            - GlobalConfigWorkerPresetModelProviderAnthropicUpper
+            - GlobalConfigWorkerPresetModelProviderClaudeUpper
+            - GlobalConfigWorkerPresetModelProviderCodexUpper
+            - GlobalConfigWorkerPresetModelProviderCursorUpper
+            - GlobalConfigWorkerPresetModelProviderCursorAgentUpper
+            - GlobalConfigWorkerPresetModelProviderGeminiUpper
+            - GlobalConfigWorkerPresetModelProviderKiroUpper
+            - GlobalConfigWorkerPresetModelProviderOpenAIUpper
+            - GlobalConfigWorkerPresetModelProviderOpenCodeUpper
+            - GlobalConfigWorkerPresetModelProviderPIUpper
+            - GlobalConfigWorkerPresetModelProviderAgent
+            - GlobalConfigWorkerPresetModelProviderAgy
+            - GlobalConfigWorkerPresetModelProviderAnthropic
+            - GlobalConfigWorkerPresetModelProviderAntigravity
+            - GlobalConfigWorkerPresetModelProviderClaude
+            - GlobalConfigWorkerPresetModelProviderCodex
+            - GlobalConfigWorkerPresetModelProviderCursor
+            - GlobalConfigWorkerPresetModelProviderCursorAgent
+            - GlobalConfigWorkerPresetModelProviderGemini
+            - GlobalConfigWorkerPresetModelProviderKiro
+            - GlobalConfigWorkerPresetModelProviderKiroCLI
+            - GlobalConfigWorkerPresetModelProviderOpenAI
+            - GlobalConfigWorkerPresetModelProviderOpenCode
+            - GlobalConfigWorkerPresetModelProviderPI
+          enum:
+            - AGY
+            - ANTHROPIC
+            - CLAUDE
+            - CODEX
+            - CURSOR
+            - CURSOR_AGENT
+            - GEMINI
+            - KIRO
+            - OPENAI
+            - OPENCODE
+            - PI
+            - agent
+            - agy
+            - anthropic
+            - antigravity
+            - claude
+            - codex
+            - cursor
+            - cursor-agent
+            - gemini
+            - kiro
+            - kiro-cli
+            - openai
+            - opencode
+            - pi
+        model:
+          type: string
+          description: Optional model name, trimmed when present.
+        reasoningEffort:
+          type: string
+          description: Optional reasoning effort; an empty value is accepted and normalized as unspecified.
+          x-enum-varnames:
+            - GlobalConfigWorkerPresetReasoningEffortUnspecified
+            - GlobalConfigWorkerPresetReasoningEffortMinimal
+            - GlobalConfigWorkerPresetReasoningEffortLow
+            - GlobalConfigWorkerPresetReasoningEffortMedium
+            - GlobalConfigWorkerPresetReasoningEffortHigh
+          enum:
+            - ''
+            - minimal
+            - low
+            - medium
+            - high
     WorkRequest:
       type: object
       additionalProperties: false
