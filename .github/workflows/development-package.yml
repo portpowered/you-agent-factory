@@ -69,6 +69,9 @@ jobs:
       - name: Validate package allowlist, packing, and isolated consumption
         run: make api-package-pack-smoke
 
+      - name: Install Playwright browser for frontend package verification
+        run: make ui-install-playwright
+
       - name: Validate the canonical frontend package release family
         run: make ui-public-package-release
 
