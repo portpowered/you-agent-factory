@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
 type legacyFactoryMigration struct {
@@ -58,7 +57,7 @@ func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files Le
 	pointerPath := filepath.Join(legacyRoot, factorydefinitions.CurrentFactoryPointerFile)
 	pointer, err := files.ReadFile(pointerPath)
 	if err == nil {
-		if err := namedfactorypath.ValidateName(strings.TrimSpace(string(pointer))); err != nil {
+		if err := factorydefinitions.ValidateName(strings.TrimSpace(string(pointer))); err != nil {
 			return nil, fmt.Errorf("validate legacy current Factory pointer %s: %w", pointerPath, err)
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
@@ -102,11 +101,11 @@ func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files Le
 }
 
 func mapLegacyFactoryMigration(legacyRoot, canonicalRoot string, segments []string) (legacyFactoryMigration, error) {
-	name, err := namedfactorypath.NameFromPathSegments(segments)
+	name, err := factorydefinitions.NameFromPathSegments(segments)
 	if err != nil {
 		return legacyFactoryMigration{}, fmt.Errorf("map legacy Factory directory %s: %w", filepath.Join(append([]string{legacyRoot}, segments...)...), err)
 	}
-	targetDir, err := namedfactorypath.MapDir(canonicalRoot, name)
+	targetDir, err := factorydefinitions.MapDir(canonicalRoot, name)
 	if err != nil {
 		return legacyFactoryMigration{}, fmt.Errorf("map legacy Factory %q from %s: %w", name, legacyRoot, err)
 	}

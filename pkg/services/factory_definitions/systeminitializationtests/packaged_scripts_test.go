@@ -83,8 +83,11 @@ func packagedScriptsTestPersistence() interfaces.Persistence {
 			)
 		},
 		func(targetDir string) error {
-			_, err := factorydefinitioncomposition.LoadDirectory(targetDir, nil)
-			return err
+			return factorydefinitioncomposition.Loader().ValidateFactoryDirReadOnly(
+				targetDir,
+				nil,
+				portableconfig.NewWritesValidator(platformfilesystem.Local{}),
+			)
 		},
 		nil,
 		nil,
@@ -131,8 +134,21 @@ func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEn
 
 func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string]directoryEntrySnapshot) {
 	t.Helper()
-	if after := snapshotDirectoryContents(t, root); !reflect.DeepEqual(before, after) {
-		t.Fatalf("directory changed: before=%#v after=%#v", before, after)
+	after := snapshotDirectoryContents(t, root)
+	if reflect.DeepEqual(before, after) {
+		return
+	}
+	for path, want := range before {
+		if got, ok := after[path]; !ok {
+			t.Errorf("directory entry %q was removed", path)
+		} else if !reflect.DeepEqual(want, got) {
+			t.Errorf("directory entry %q changed: before=%#v after=%#v", path, want, got)
+		}
+	}
+	for path := range after {
+		if _, ok := before[path]; !ok {
+			t.Errorf("directory entry %q was added", path)
+		}
 	}
 }
 

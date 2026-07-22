@@ -175,6 +175,65 @@ func TestRunReportsMultiplePackagesDeterministically(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsExactDeletionOnlyBaseline(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writePackageFiles(t, repoRoot, "pkg/service", 16)
+	writePackageFileCountBaseline(t, repoRoot, "pkg/service", 16)
+
+	stdout := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot, packageFileLimit: defaultPackageFileLimit}, stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run() error = %v, want exact baseline to pass", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "1 exact deletion-only baseline entries remain") {
+		t.Fatalf("run() stdout = %q, want baseline status", got)
+	}
+}
+
+func TestRunRejectsPackageGrowthBeyondBaseline(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writePackageFiles(t, repoRoot, "pkg/service", 17)
+	writePackageFileCountBaseline(t, repoRoot, "pkg/service", 16)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot, packageFileLimit: defaultPackageFileLimit}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "package grew beyond baseline: pkg/service (recorded 16, now 17)") {
+		t.Fatalf("run() error = %v, stderr = %q, want growth violation", err, stderr.String())
+	}
+}
+
+func TestRunRejectsBaselineThatWasNotLoweredAfterReduction(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writePackageFiles(t, repoRoot, "pkg/service", 16)
+	writePackageFileCountBaseline(t, repoRoot, "pkg/service", 17)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot, packageFileLimit: defaultPackageFileLimit}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "reduced baseline entry: pkg/service (recorded 17, now 16); lower it in the same change") {
+		t.Fatalf("run() error = %v, stderr = %q, want reduction violation", err, stderr.String())
+	}
+}
+
+func TestRunRejectsStaleBaselineEntry(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writePackageFiles(t, repoRoot, "pkg/service", 15)
+	writePackageFileCountBaseline(t, repoRoot, "pkg/service", 16)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot, packageFileLimit: defaultPackageFileLimit}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "stale baseline entry: pkg/service (recorded 16, now <= 15 or absent); remove it") {
+		t.Fatalf("run() error = %v, stderr = %q, want stale entry violation", err, stderr.String())
+	}
+}
+
 func TestMakePkgFileCountTargetFailsForOversizedOwnedPackage(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	fixtureRoot := t.TempDir()
@@ -254,5 +313,18 @@ func writeGoFile(t *testing.T, repoRoot string, relativePath string, content str
 	}
 	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", relativePath, err)
+	}
+}
+
+func writePackageFileCountBaseline(t *testing.T, repoRoot string, packagePath string, fileCount int) {
+	t.Helper()
+
+	baselinePath := filepath.Join(repoRoot, filepath.FromSlash(packageFileBaselinePath))
+	if err := os.MkdirAll(filepath.Dir(baselinePath), 0o755); err != nil {
+		t.Fatalf("create baseline directory: %v", err)
+	}
+	content := fmt.Sprintf("{\n  \"version\": 1,\n  \"entries\": [{\n    \"packagePath\": %q,\n    \"fileCount\": %d,\n    \"owner\": \"backend-maintainers\",\n    \"removalReason\": \"Split the package along durable responsibilities.\"\n  }]\n}\n", packagePath, fileCount)
+	if err := os.WriteFile(baselinePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write package file-count baseline: %v", err)
 	}
 }

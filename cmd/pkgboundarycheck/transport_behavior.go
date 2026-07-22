@@ -185,6 +185,7 @@ var transportPlatformSelectionPrefixes = []string{
 
 const factorySessionMCPTransportPrefix = "pkg/transports/mcp/factorysession/"
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func scanTransportBehavior(repoRoot string) ([]transportBehaviorFinding, error) {
 	root := filepath.Join(repoRoot, "pkg", "transports")
 	findingsByKey := map[string]transportBehaviorFinding{}

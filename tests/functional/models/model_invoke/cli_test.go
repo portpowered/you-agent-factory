@@ -21,6 +21,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for the customer models-invoke process")

@@ -134,6 +134,7 @@ func CloneReplacements(
 
 // PruneRemovedDocs removes authored documentation files no longer declared by
 // the Factory Definition manifest.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func PruneRemovedDocs(
 	fileSystem portablefiles.FileSystem,
 	factoryDir string,

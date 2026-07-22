@@ -128,7 +128,7 @@ func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.
 func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
 	homeDir := t.TempDir()
 	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "customer")
-	canonicalDir := filepath.Join(factorydefinitions.NamedFactoriesRoot(homeDir), "customer")
+	canonicalDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "customer")
 	for _, dir := range []string{legacyDir, canonicalDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)

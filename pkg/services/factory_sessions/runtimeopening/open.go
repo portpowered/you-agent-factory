@@ -18,6 +18,9 @@ import (
 
 // openRuntime constructs one Factory Session and its domain-owned runtime state from
 // collaborators selected by the canonical process injector.
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,

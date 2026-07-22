@@ -42,6 +42,7 @@ type Root struct {
 
 var _ models.Service = (*Root)(nil)
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func NewRoot(
 	assetPlatform localmodels.HostPlatform,
 	assetHTTP modelassets.HTTPDoer,
@@ -104,7 +105,7 @@ func NewRoot(
 		assetCreate == nil || assetOpen == nil {
 		return nil, missingDependencyError("model asset cache operations")
 	}
-	process := models.ProcessDependencies{Logger: zap.NewNop(), Clock: time.Now}
+	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
 	}

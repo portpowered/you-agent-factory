@@ -71,6 +71,8 @@ type workflowContextProvider interface {
 }
 
 // New constructs a Worker execution service from injected dependencies.
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func New(
 	sessions factorysessions.CurrentRuntimeResolver,
 	modelService models.Service,

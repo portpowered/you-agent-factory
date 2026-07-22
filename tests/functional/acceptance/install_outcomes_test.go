@@ -30,6 +30,7 @@ var packagedFactoryNames = []string{
 	factorydefinitions.PackagedFusionFactoryName,
 	factorydefinitions.PackagedGoalFactoryName,
 	factorydefinitions.PackagedQuorumFactoryName,
+	factorydefinitions.PackagedReviewFactoryName,
 	factorydefinitions.PackagedSubagentFactoryName,
 	factorydefinitions.PackagedTTSFactoryName,
 }

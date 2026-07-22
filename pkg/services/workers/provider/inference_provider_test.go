@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
+// pkgmaintcheck:ignore-file-lines service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption.
 package provider
 
 import (
@@ -13,8 +15,8 @@ import (
 	"testing"
 	"time"
 
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 

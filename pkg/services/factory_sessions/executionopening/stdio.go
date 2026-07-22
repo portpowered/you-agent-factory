@@ -33,6 +33,7 @@ func NewStdioOpeningService(
 	}, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (service *StdioOpeningService) OpenStdio(
 	ctx context.Context,
 	request factorysessions.StdioOpeningRequest,

@@ -315,6 +315,7 @@ func TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvent
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions(t *testing.T) {
 	service := scriptedExecutionService{
 		pause: func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

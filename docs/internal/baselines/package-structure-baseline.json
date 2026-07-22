@@ -114,6 +114,11 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
+      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
+      "target": "tests/functional/runtime_api"
+    },
+    {
+      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -205,6 +210,11 @@
     {
       "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
+      "target": "tests/functional/runtime_api"
+    },
+    {
+      "rule": "deprecated-runtime-api-file",
+      "filePath": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_validation_test.go",
       "target": "tests/functional/runtime_api"
     },
     {
@@ -494,6 +504,21 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
+      "target": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
+      "target": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
+      "target": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
       "target": "TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession"
     },
@@ -656,6 +681,11 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "target": "TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_validation_test.go",
+      "target": "TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -1104,6 +1134,11 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go",
+      "target": "replay_contracts"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/doc.go",
       "target": "replay_contracts"
     },
@@ -1244,6 +1279,11 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go",
+      "target": "smoke"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
       "target": "smoke"
     },
@@ -1280,6 +1320,11 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go",
+      "target": "smoke"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/smoke/cli_named_review_invocation_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -1571,6 +1616,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/config_file_operations.go",
       "target": "NewFactoryConfigRootResolver"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/default_paths.go",
+      "target": "LegacyNamedFactoriesRoot"
     },
     {
       "rule": "service-root-exported-function",
@@ -2740,7 +2790,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/system_initialization",
-      "target": "pkg/services/system_initialization/service.go:OperatorSettings,pkg/services/system_initialization/service.go:Service"
+      "target": "pkg/services/system_initialization/service.go:LegacyFactoryMigrationFileSystem,pkg/services/system_initialization/service.go:OperatorSettings,pkg/services/system_initialization/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",

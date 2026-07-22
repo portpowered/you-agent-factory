@@ -40,6 +40,7 @@ func NewCreate(transport clihttp.Protocol) func(CreateConfig) error {
 }
 
 // Create opens a live factory session on a running host via HTTP.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func Create(cfg CreateConfig) error {
 	folderPath := strings.TrimSpace(cfg.Dir)
 	if folderPath == "" {

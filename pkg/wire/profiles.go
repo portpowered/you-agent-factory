@@ -67,14 +67,7 @@ func provideCurrentFactoryDirectoryResolver(
 
 func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 	return func(mode terminalpolicy.Mode, debug bool) (*zap.Logger, error) {
-		switch mode {
-		case terminalpolicy.ModeQuiet:
-			return zap.NewNop(), nil
-		case terminalpolicy.ModeNormal:
-			return logging.BuildTerminalMutedLogger()
-		default:
-			return logging.BuildLogger(true, debug)
-		}
+		return logging.BuildTerminalLogger(string(mode), debug)
 	}
 }
 

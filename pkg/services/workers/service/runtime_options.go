@@ -19,6 +19,7 @@ import (
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the
 // same canonical executor builder used for direct model invocation.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *Service) BuildRuntimeExecutors(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	factoryConfig *interfaces.FactoryConfig,

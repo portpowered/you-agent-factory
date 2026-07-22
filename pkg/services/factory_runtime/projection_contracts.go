@@ -50,3 +50,4 @@ var ValidStatesByType = state.ValidStatesByType
 var NormalizeTransitionTopology = state.NormalizeTransitionTopology
 var NewEngineStateSnapshot = state.NewEngineStateSnapshot
 var GenerateResourcePlaces = state.GenerateResourcePlaces
+var ProjectInitialStructure = state.ProjectInitialStructure

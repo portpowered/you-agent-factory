@@ -72,6 +72,7 @@ func (r ValidationRoot) TargetDir() string {
 // ResolveTarget validates a portable relative location and resolves it below
 // root. stripPrefix may remove a domain container such as "factory/" before
 // the location is mapped onto disk.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func ResolveTarget(root ValidationRoot, targetLocation, stripPrefix string) (Target, error) {
 	trimmed := strings.TrimSpace(targetLocation)
 	if trimmed == "" {

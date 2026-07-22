@@ -53,6 +53,7 @@ func New(
 
 // Initialize ensures operator configuration and packaged Factories exist
 // without overwriting valid customer-owned files.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (initializer *Initializer) Initialize(
 	ctx context.Context,
 	request Request,

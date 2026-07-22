@@ -208,6 +208,7 @@ func TestMockClient_GetResult_RunningFixtureReturnsTypedNotReadyEnvelope(t *test
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult(t *testing.T) {
 	client := clientWithScript(scriptedExecutionService{
 		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {

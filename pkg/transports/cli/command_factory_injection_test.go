@@ -32,6 +32,7 @@ func (injectedModelsCLIService) Inspect(modelscli.InspectConfig) error { return 
 func (injectedModelsCLIService) Invoke(modelscli.InvokeConfig) error   { return nil }
 func (injectedModelsCLIService) Pull(modelscli.PullConfig) error       { return nil }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +61,7 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	t.Parallel()
 

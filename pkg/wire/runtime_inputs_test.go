@@ -385,6 +385,7 @@ func TestFactorySessionRuntimePersistenceUsesExplicitEdgeOrPlatformDefault(t *te
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.T) {
 	t.Parallel()
 	skip := true

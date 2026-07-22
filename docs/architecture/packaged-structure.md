@@ -81,8 +81,8 @@ be removed.
 | Invariant | Current enforcement | Status | Missing or required closure |
 | --- | --- | --- | --- |
 | Direct children of `pkg/` use only the approved package families. | `make pkg-boundary` / `cmd/pkgboundarycheck` root-family allowlist and retired-root checks. | **Partial** | Align the executable allowlist with the normative standard: `pkg/config` is still approved by the checker even though the standard retires it. |
-| Hand-maintained package directories contain no more than 15 Go files. | `make pkg-file-count`, included in `make lint`. | **Failing** | The 2026-07-21 audit found 35 oversized package directories. Add an exact deletion-only ratchet for existing debt or complete the splits before treating the absolute cap as merge-ready. |
-| No package grows through broad permanent architectural exceptions. | Several deletion-only baseline mechanisms in `pkgboundarycheck`; `docs/internal/baselines/backend-exemption-budget.json` covers size/complexity directives. | **Partial** | Consolidate structural debt into one exact architecture conformance ledger; package file-count debt currently has no safe ratchet. |
+| Hand-maintained package directories contain no more than 15 Go files. | `make pkg-file-count`, included in `make lint`, blocks unrecorded oversized packages and exactly ratchets audited existing counts. | **Enforced** | Burn down `backend-package-file-count.json`; every reduction must lower or remove its entry. |
+| No package grows through broad permanent architectural exceptions. | Exact deletion-only ledgers in `pkgboundarycheck` and `backend-package-file-count.json`; `backend-exemption-budget.json` covers size/complexity directives. | **Partial** | Consolidate the remaining structural ledgers into one architecture conformance ledger. |
 
 # intializer
 

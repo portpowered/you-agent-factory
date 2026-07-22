@@ -160,6 +160,7 @@ func javascriptRecordingFactory() factoryapi.Factory {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func assertRecordedJavaScriptLifecycle(t *testing.T, recorded []factoryapi.FactoryEvent, wantStatus factoryapi.FactorySessionDurableLifecycleStatus, wantFailure string) {
 	t.Helper()
 	var started *factoryapi.SessionStartedEventPayload

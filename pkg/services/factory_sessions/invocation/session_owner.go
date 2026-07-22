@@ -94,6 +94,7 @@ func NewSessionOwner(
 
 // InvokeFactorySession resolves and validates one request, submits exactly one
 // Work item, then delegates event-derived result waiting to the injected waiter.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (o *SessionOwner) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,

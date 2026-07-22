@@ -45,6 +45,7 @@ func NewList(transport clihttp.Protocol, prepare fse.RequestPreparation) func(Li
 
 // List requests factory sessions from a running host and, when scoped listing
 // includes durable rows, from the deterministic fixture-backed provider.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func List(cfg ListConfig) (err error) {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")

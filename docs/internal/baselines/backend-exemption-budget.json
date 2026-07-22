@@ -3,15 +3,45 @@
   "entries": [
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "cmd/pkgboundarycheck/main.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "cmd/pkgboundarycheck/main_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/factory_definitions/contracts/interfaces_contract_test.go",
       "owner": "backend-maintainers",
       "removalReason": "consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_definitions/validation/definitionmapping_validation_migration_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_runtime/subsystems/subsystem_transitioner_mutations_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -27,9 +57,27 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/fixtures/helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/execution/projection_consistency.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -39,15 +87,69 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/factory_sessions/projection_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/recordings/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/recordings/workstation_requests.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/work/request_normalize_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/workers/executor/workstation_executor_test.go",
       "owner": "backend-maintainers",
       "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/provider/inference_provider_error_normalization_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/provider/inference_provider_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/provider/inference_provider_test_helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/provider/provider_behavior_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/workers/provider/provider_errors_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -69,6 +171,24 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/http/server_factory_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/http/servertests/server_durable_session_execution_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -80,10 +200,148 @@
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "tests/functional/bootstrap_portability/automat_portability_fixture_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "cmd/pkgboundarycheck/initializer_behavior.go#scanInitializerBehavior",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "cmd/pkgboundarycheck/production_defaults.go#scanProductionDefaultSelections",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "cmd/pkgboundarycheck/test_behavior_boundary.go#scanTestBehaviorBoundaries",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "cmd/pkgboundarycheck/transport_behavior.go#scanTransportBehavior",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "internal/backenddependencygraph/graph_test.go#TestRenderDOTColorsPackageFamiliesAndServiceInternalImports",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/edges/contract_ownership_test.go#TestEdgesAggregateExactOwnerTypes",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/edges/definition.go#Merge",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/edges/definition_test.go#TestMergeUsesExplicitReplacementsAndPreservesDefaults",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_definitions/validation/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/runtime/factory.go#New",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/service/assembly.go#Assembly.Assemble",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/service/build.go#assembleRuntimeBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/service/runtime_build.go#NewRuntimeBuild",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/service/runtime_build.go#buildBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
       "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/runtimeopening/factory.go#NewFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/service/assembly.go#Assembly.Complete",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_sessions/service/runtime_definitions.go#DefinitionCallbacks",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
@@ -93,9 +351,87 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/workers/service/service.go#New",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/wire/models_runtime.go#provideModelsService",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "tests/functional/models/model_invoke/cli_test.go#TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go#TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: this end-to-end current-factory layout round-trip test keeps save, reload, persistence, and runtime assertions on one contract seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/platform/portablefiles/materialize.go#ResolveTarget",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/edges/contract_ownership_test.go#TestEdgesAggregateExactOwnerTypes",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/edges/definition.go#Merge",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/edges/definition_test.go#TestMergeUsesExplicitReplacementsAndPreservesDefaults",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/authoredlayout/writer.go#interpreterFlagModeForArg",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/internal/namedfactories/service.go#List",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/loading/loader.go#Loader.validate",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/loading/loader.go#hasInlineRuntimeDefinitions",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -108,6 +444,36 @@
       "target": "pkg/services/factory_definitions/persistence/integrationtests/cli_config_migration_test.go#assertExistingSplitDefinitionsPreserved",
       "owner": "backend-maintainers",
       "removalReason": "this helper keeps the preserved split-definition contract inline across all authored files."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/persistence/service.go#service.persistNamedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/portableconfig/materialization.go#PruneRemovedDocs",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_definitions/runtimeconfig/merge.go#applyWorkerRuntimeDefinition",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -159,9 +525,27 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/subsystems/subsystem_transitioner_worker_batch_test.go#assertGeneratedWorkerBatchSubmissions",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_runtime/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -282,6 +666,60 @@
       "target": "pkg/services/factory_sessions/execution/resume.go#validateDurableResumeFacts",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/executionopening/direct_javascript_test.go#TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/executionopening/stdio.go#StdioOpeningService.OpenStdio",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/invocation/session_owner.go#SessionOwner.InvokeFactorySession",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/projection_test.go#TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/responsestream/construction_contract_test.go#TestPublishesAndCompletesOneOrderedDispatch",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/runtimebinding/binding.go#Replace",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/models/internal/service/runtime_factory.go#NewRoot",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -423,6 +861,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/recordings/replay/javascript_recording_contract_test.go#assertRecordedJavaScriptLifecycle",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/recordings/workstation_requests_test.go#TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -441,9 +885,33 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/system_initialization/initializer.go#Initializer.Initialize",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/work/content_staging_test.go#TestContentStagingOwnsPersistenceSignedResolutionAndCleanup",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/construction/service.go#Service.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/executor/agent_inference_test.go#TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/agentrun/tools.go#PolicyToolExecutor.resolveBoundedPath",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -471,15 +939,63 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/provider/inference_provider_error_normalization_test.go#assertNormalizedProviderFailure",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/provider/inference_provider_exit_failure_test.go#TestNewFromInputRejectsMissingRequiredEdges",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/provider/provider_behavior.go#cursorProviderBehavior.BuildArgs",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/provider/recording_provider_test.go#TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/service/boundary_test.go#TestExecutorBuilderIsOwnedByWorkerExecutionService",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/service/progress_composition_test.go#TestNewRequiresCompositionSelectedWorkerEffects",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/service/runtime_options.go#Service.BuildRuntimeExecutors",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/baseline/root_entrypoint_boundary_test.go#TestProductionCLIConstructionIsReachableOnlyThroughWire",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/baseline/root_entrypoint_boundary_test.go#TestTestsOutsideHTTPAndWireCannotConstructApplicationServers",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -513,9 +1029,51 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/climanifestgen/generate.go#renderManifestGoValue",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryDoesNotInstallTransportDefaults",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryPreservesInjectedOperations",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/mcp/serve_smoke_test.go#TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/session/create.go#Create",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/session/lifecycle_control.go#invokeLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/session/list.go#List",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/sessionexecution/retired_surface_test.go#TestRetiredSessionExecutionSurfaceCannotReturn",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -534,6 +1092,12 @@
       "target": "pkg/transports/http/server_submit_work_test.go#TestSubmitWork_AcceptsCanonicalContent",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go#TestRetryFactorySessionDispatch_RuntimeBackedFailedSessionReturnsTypedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -591,21 +1155,57 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mcp/factorysession/execution_test.go#TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mcp/factorysession/failure_paths_test.go#TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/mcp/factorysession/inspection.go#invokeLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this MCP control router keeps lifecycle kind dispatch on one seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go#TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl",
+      "target": "pkg/transports/mcp/factorysession/inspection_test.go#TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "tests/functional/cli/mcp_resume/serve_runtime_smoke_test.go#TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult",
+      "target": "pkg/transports/mcp/server/server_test.go#TestServeStdioUsesSDKProtocolAndRegistersCatalog",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/wire/boundary_test.go#TestLegacyRuntimeBuilderAndRuntimeBundleCannotReturn",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/wire/models_runtime.go#provideModelsService",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/wire/runtime_inputs_test.go#TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -615,9 +1215,27 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_definitions/validation/definitionmapping_validation_migration_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_runtime/subsystems/subsystem_transitioner_mutations_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -633,9 +1251,27 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/fixtures/helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/execution/projection_consistency.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -645,15 +1281,69 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/factory_sessions/projection_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/recordings/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/recordings/workstation_requests.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/work/request_normalize_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/workers/executor/workstation_executor_test.go",
       "owner": "backend-maintainers",
       "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/provider/inference_provider_error_normalization_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/provider/inference_provider_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/provider/inference_provider_test_helpers_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/provider/provider_behavior_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/workers/provider/provider_errors_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -675,6 +1365,24 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/http/server_factory_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/http/servertests/server_durable_session_execution_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -684,6 +1392,78 @@
       "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/edges/contract_ownership_test.go#TestEdgesAggregateExactOwnerTypes",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/edges/definition.go#Merge",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/edges/definition_test.go#TestMergeUsesExplicitReplacementsAndPreservesDefaults",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_definitions/validation/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/runtime/factory.go#New",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/service/assembly.go#Assembly.Assemble",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/service/build.go#assembleRuntimeBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/service/runtime_build.go#NewRuntimeBuild",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/service/runtime_build.go#buildBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
@@ -699,9 +1479,87 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/runtimeopening/factory.go#NewFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/service/assembly.go#Assembly.Complete",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_sessions/service/runtime_definitions.go#DefinitionCallbacks",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/workers/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/workers/provider/inference_provider_error_normalization_test.go#TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCategories",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/workers/service/service.go#New",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/transports/http/servertests/server_durable_session_execution_test.go#TestLifecycleControls_PreserveRunningSessionReadParity",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/wire/models_runtime.go#provideModelsService",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     }
   ]
 }

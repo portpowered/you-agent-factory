@@ -8,11 +8,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot"
+	eventsnapshot "github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot"
 )
 
 // CanonicalTopologyReplacementEvents returns backend-produced topology events
@@ -43,7 +41,7 @@ func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, ti
 		Workers:      mapWorkers(factory.Workers),
 		Workstations: mapWorkstations(factory.Workstations),
 	}
-	factorySnapshot := snapshot.FromInitialStructure(state.ProjectInitialStructure(net, lookup))
+	factorySnapshot := eventsnapshot.FromInitialStructure(factoryruntime.ProjectInitialStructure(net, lookup))
 	var payload []byte
 	if eventType == interfaces.FactoryEventTypeFactoryChange {
 		payload, err = json.Marshal(interfaces.FactoryChangeEventPayload{Factory: factorySnapshot})
@@ -66,10 +64,10 @@ func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, ti
 func topologyFactory(resourceName, workerName, workTypeName, initialStateName, workstationName string) *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		Name:      "canonical-topology",
-		Resources: []factoryresource.Config{{ID: "gpu-stable", Name: resourceName, Capacity: 2}},
-		Workers: []workerconfig.Config{{
+		Resources: []interfaces.ResourceConfig{{ID: "gpu-stable", Name: resourceName, Capacity: 2}},
+		Workers: []interfaces.FactoryWorkerConfig{{
 			ID: "writer-stable", Name: workerName, Type: interfaces.WorkerTypeScript,
-			Resources: []factoryresource.Config{{Name: resourceName, Capacity: 1}},
+			Resources: []interfaces.ResourceConfig{{Name: resourceName, Capacity: 1}},
 		}},
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			ID: "task-stable", Name: workTypeName,
@@ -85,13 +83,13 @@ func topologyFactory(resourceName, workerName, workTypeName, initialStateName, w
 			Inputs:         []interfaces.IOConfig{{WorkTypeName: workTypeName, StateName: initialStateName}},
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: workTypeName, StateName: "done"}},
 			OnFailure:      []interfaces.IOConfig{{WorkTypeName: workTypeName, StateName: "failed"}},
-			Resources:      []factoryresource.Config{{Name: resourceName, Capacity: 1}},
+			Resources:      []interfaces.ResourceConfig{{Name: resourceName, Capacity: 1}},
 		}},
 	}
 }
 
-func mapWorkers(workers []workerconfig.Config) map[string]*workerconfig.Config {
-	result := make(map[string]*workerconfig.Config, len(workers))
+func mapWorkers(workers []interfaces.FactoryWorkerConfig) map[string]*interfaces.FactoryWorkerConfig {
+	result := make(map[string]*interfaces.FactoryWorkerConfig, len(workers))
 	for i := range workers {
 		result[workers[i].Name] = &workers[i]
 	}

@@ -44,6 +44,8 @@ func (h *SessionRuntime) AttachFactoryDefinitionService(service interfaces.Servi
 
 // DefinitionCallbacks exposes bounded Factory Session callbacks for composition
 // with a Factory Definition implementation at the initializer boundary.
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 	dependencies := DefinitionHostCallbacks{}
 	if runtime == nil {

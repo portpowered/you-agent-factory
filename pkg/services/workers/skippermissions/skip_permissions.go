@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // EffectiveSkipPermissions resolves the invocation-time skip-permissions policy for

@@ -69,3 +69,16 @@ func BuildTerminalMutedLogger() (*zap.Logger, error) {
 	)
 	return zap.New(core), nil
 }
+
+// BuildTerminalLogger selects a process terminal logger for the resolved CLI
+// mode without leaking platform construction into transport packages.
+func BuildTerminalLogger(mode string, debug bool) (*zap.Logger, error) {
+	switch mode {
+	case "quiet":
+		return zap.NewNop(), nil
+	case "normal":
+		return BuildTerminalMutedLogger()
+	default:
+		return BuildLogger(true, debug)
+	}
+}

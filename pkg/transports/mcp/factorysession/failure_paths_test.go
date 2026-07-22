@@ -44,6 +44,7 @@ func TestMockClient_GetSession_FailedFixtureReturnsDeterministicStatusWithPartia
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails(t *testing.T) {
 	client := clientWithScript(scriptedExecutionService{
 		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {

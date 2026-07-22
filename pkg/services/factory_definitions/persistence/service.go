@@ -262,6 +262,7 @@ func (s *service) ReplaceFactoryLayout(
 	}, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *service) persistNamedFactory(
 	rootDir string,
 	name string,

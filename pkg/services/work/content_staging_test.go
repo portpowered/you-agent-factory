@@ -101,6 +101,7 @@ func newContentStagingServiceForTest(
 	return service, filesystem, clock
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
 	service, filesystem, _ := newContentStagingServiceForTest(t)
 	ctx := context.Background()

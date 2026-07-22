@@ -3316,6 +3316,7 @@ func TestFakeService_ResumeInterruptedSession_ReturnsUnsupported(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(t *testing.T) {
 	t.Parallel()
 	const sessionID = "dur-sess-0123456789abcdef0123456789abcdef"

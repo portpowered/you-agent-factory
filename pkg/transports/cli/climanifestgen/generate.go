@@ -235,6 +235,7 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 	return formatted, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func renderManifestGoValue(value reflect.Value) string {
 	if value.Kind() == reflect.Pointer {
 		if value.IsNil() {

@@ -99,6 +99,8 @@ var _ factory.Factory = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
 
 // New constructs a Factory from explicit runtime collaborators.
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,

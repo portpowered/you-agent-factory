@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 

@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
 package main
 
 import (
@@ -1511,6 +1512,7 @@ func writeMigrationShimCompatFile(t *testing.T, repoRoot string, packagePath str
 	}
 	content := fmt.Sprintf(`// Deprecated: use %s instead.
 // This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
 package %s
 
 import target "%s"

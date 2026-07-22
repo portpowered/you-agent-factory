@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 var exactInvocationInterpolationPattern = regexp.MustCompile(`^\$\{([A-Za-z0-9_.-]+)\}$`)

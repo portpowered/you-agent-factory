@@ -10,3 +10,7 @@ they govern.
 
 Baseline changes require review of the current findings. Prefer removing stale
 entries and lowering accepted debt over expanding a baseline.
+
+`backend-package-file-count.json` is an exact deletion-only ratchet. The package
+file-count gate rejects new oversized packages, count increases, and entries
+that were not lowered or removed when the corresponding package shrank.

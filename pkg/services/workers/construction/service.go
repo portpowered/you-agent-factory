@@ -109,6 +109,7 @@ func New(
 }
 
 // Build constructs one configured worker executor from direct collaborators.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *Service) Build(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	workerName string,

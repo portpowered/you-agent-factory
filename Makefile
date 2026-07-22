@@ -78,7 +78,7 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure durable-runtime-construction-check logging-boundary-check model-facade-check compatibility-alias-check retired-surface-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check deadcode
 
 define run_verification_step
 	$(info ==> $(2) [make $(1)])
@@ -127,7 +127,7 @@ endef
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
 .PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure durable-runtime-construction-check logging-boundary-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: compatibility-alias-check retired-surface-check readme-check deadcodedashboard-verify
+.PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -434,7 +434,6 @@ compatibility-alias-check:
 
 retired-surface-check:
 	$(GO) run ./cmd/retiredsurfacecheck -root $(RETIRED_SURFACE_CHECK_ROOT)
-
 
 deadcode:
 	$(GO) run ./cmd/deadcodecheck

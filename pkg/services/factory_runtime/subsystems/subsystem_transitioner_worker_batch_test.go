@@ -120,6 +120,7 @@ func normalizeGeneratedWorkerBatch(t *testing.T, batch work.GeneratedSubmissionB
 	return normalized
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func assertGeneratedWorkerBatchSubmissions(
 	t *testing.T,
 	requestID string,

@@ -24,6 +24,7 @@ var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 	return 0, nil
 })
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	base := func(provider, script workers.CommandRunner, allocator agypty.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
 		_, err := New(

@@ -114,7 +114,21 @@ func (h *POSIXHost) Start(launch ProcessLaunch, native Allocation) (Process, io.
 		_ = cmd.Wait()
 		return nil, nil, err
 	}
-	return &posixProcess{cmd: cmd, tree: tree}, alloc.master, nil
+	return &posixProcess{cmd: cmd, tree: tree}, &posixPTYReader{ReadCloser: alloc.master}, nil
+}
+
+// Linux reports EIO when the PTY slave closes. At the reader boundary that is
+// the terminal's ordinary end-of-stream signal, so expose it as EOF.
+type posixPTYReader struct {
+	io.ReadCloser
+}
+
+func (r *posixPTYReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if errors.Is(err, syscall.EIO) {
+		return n, io.EOF
+	}
+	return n, err
 }
 
 type posixProcess struct {

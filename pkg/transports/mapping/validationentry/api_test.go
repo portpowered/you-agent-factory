@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -68,7 +67,7 @@ func TestValidateEditableFactorySnapshot_PreservesLayoutBoundaryPath(t *testing.
 		t.Fatalf("error = %#v, want one structured layout target", err)
 	}
 	target := topologyErr.Targets[0]
-	if target.Code != factoryvalidation.CodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
+	if target.Code != interfaces.ValidationCodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
 		t.Fatalf("target = %#v, want field-specific invalid geometry", target)
 	}
 }

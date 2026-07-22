@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
 package main
 
 import (

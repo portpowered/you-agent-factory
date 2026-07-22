@@ -167,6 +167,8 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(

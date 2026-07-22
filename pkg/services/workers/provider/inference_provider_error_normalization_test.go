@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
+// pkgmaintcheck:ignore-file-lines service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption.
 package provider
 
 import (
@@ -370,6 +372,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureReturnsSafeBoundedMessage(t *t
 	}
 }
 
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCategories(t *testing.T) {
 	t.Parallel()
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")

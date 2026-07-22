@@ -20,7 +20,6 @@ return {
 };
 `
 
-// pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	projectRoot := runtimeSmokeProjectRoot(t)
 	client, shutdown, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)

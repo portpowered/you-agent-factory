@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
@@ -109,9 +110,10 @@ func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) er
 	if out == nil {
 		return fmt.Errorf("serve MCP stdio: output is required")
 	}
+	reader, writer := platformstdio.DrainJSONRPCResponses(ctx, in, out)
 	return s.Serve(ctx, &mcp.IOTransport{
-		Reader: io.NopCloser(in),
-		Writer: nopWriteCloser{Writer: out},
+		Reader: reader,
+		Writer: writer,
 	})
 }
 
@@ -130,7 +132,3 @@ func (s *Server) Serve(ctx context.Context, transport mcp.Transport) error {
 	}
 	return err
 }
-
-type nopWriteCloser struct{ io.Writer }
-
-func (nopWriteCloser) Close() error { return nil }

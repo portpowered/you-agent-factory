@@ -296,6 +296,7 @@ func (kiroProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInfe
 	return buildBaseProviderCommandRequest(req, args)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (b cursorProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err

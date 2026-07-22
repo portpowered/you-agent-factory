@@ -118,6 +118,7 @@ func StartDefault(
 // and active selection, and then stops the previous runtime. The request
 // context bounds readiness while the existing service context owns the new
 // runtime after the request returns.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func Replace(
 	readinessContext context.Context,
 	state *sessionruntime.Service,

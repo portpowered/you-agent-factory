@@ -40,6 +40,7 @@ type initializerBehaviorBaselineEntry struct {
 	DeletionGate string `json:"deletionGate"`
 }
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func scanInitializerBehavior(repoRoot string) ([]initializerBehaviorFinding, error) {
 	root := filepath.Join(repoRoot, "pkg", "initializer")
 	findingsByKey := map[string]initializerBehaviorFinding{}

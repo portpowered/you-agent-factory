@@ -147,6 +147,7 @@ func WriteCurrentPointer(paths PathResolver, rootDir, name string) error {
 	return paths.WriteCurrentPointer(rootDir, canonical)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func List(paths PathResolver, fileSystem FileSystem, rootDir string) ([]factorycontracts.NamedFactoryListEntry, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")

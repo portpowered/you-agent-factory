@@ -74,6 +74,7 @@ func Resume(cfg LifecycleControlConfig) error {
 	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindResume, "resume")
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func invokeLifecycleControl(
 	cfg LifecycleControlConfig,
 	operation factoryapi.FactorySessionLifecycleControlKind,

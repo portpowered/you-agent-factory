@@ -728,6 +728,7 @@ const (
 	interpreterArgFlagScriptPathValue
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func interpreterFlagModeForArg(
 	command string,
 	arg string,

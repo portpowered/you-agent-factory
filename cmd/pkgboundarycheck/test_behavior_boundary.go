@@ -195,6 +195,7 @@ type testBehaviorBaselineEntry struct {
 	DeletionGate string `json:"deletionGate"`
 }
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) {
 	findings := map[string]testBehaviorFinding{}
 	err := filepath.WalkDir(repoRoot, func(path string, entry os.DirEntry, walkErr error) error {

@@ -13,7 +13,7 @@ import (
 )
 
 func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
-	result, session := runWiredPOSIXPTY(t, []string{"/bin/sh", "-c", "printf '\\033[31magy-pty\\033[0m'"}, agypty.DefaultSessionConfig())
+	result, session := runWiredPOSIXPTY(t, []string{"/usr/bin/printf", "\x1b[31magy-pty\x1b[0m"}, agypty.DefaultSessionConfig())
 	defer session.Close()
 	if result.CleanedText != "agy-pty" {
 		t.Fatalf("CleanedText = %q", result.CleanedText)

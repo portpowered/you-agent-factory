@@ -171,6 +171,9 @@ func scanFile(repoRoot string, filePath string, cfg config) ([]violation, error)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", filepath.ToSlash(filePath), err)
 	}
+	if backendsizecheck.IsGeneratedGo(source) {
+		return nil, nil
+	}
 
 	relativePath, err := filepath.Rel(repoRoot, filePath)
 	if err != nil {

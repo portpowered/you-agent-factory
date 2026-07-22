@@ -18,7 +18,6 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity runtime resume smoke keeps interrupted setup, MCP control, and terminal continuity on one documented stdio path.
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
 	harness := newMCPRuntimeResumeSmokeHarness(t)
 	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)

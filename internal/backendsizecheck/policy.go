@@ -7,6 +7,21 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
+// IsGeneratedGo reports whether source carries the standard generated-code
+// marker before its package declaration.
+func IsGeneratedGo(source []byte) bool {
+	for _, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			return false
+		}
+		if strings.HasPrefix(trimmed, "// Code generated ") && strings.HasSuffix(trimmed, " DO NOT EDIT.") {
+			return true
+		}
+	}
+	return false
+}
+
 type PathClass string
 
 const (

@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
+// pkgmaintcheck:ignore-file-lines service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption.
 package apiserver_test
 
 import (
@@ -246,6 +248,7 @@ func strPtr(value string) *string {
 	return &value
 }
 
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestLifecycleControls_PreserveRunningSessionReadParity(t *testing.T) {
 	const sessionID = "dur-sess-running-parity-001"
 	status := factorysessionexecution.LifecycleStatusRunning

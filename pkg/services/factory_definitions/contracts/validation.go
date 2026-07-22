@@ -71,6 +71,9 @@ const (
 	ValidationCodeFactoryRuntimeNotIdle                  = "factory.runtime.notIdle"
 	ValidationCodeLayoutUnknownNodeReference             = "factory.layout.unknownNodeReference"
 	ValidationCodeLayoutEmptyStateUnknownNodeReference   = "factory.layout.emptyState.unknownNodeReference"
+	ValidationCodeLayoutInvalidGeometry                  = "factory.layout.invalidGeometry"
+	ValidationCodeLayoutInvalidValue                     = "factory.layout.invalidValue"
+	ValidationCodeLayoutImageBudgetExceeded              = "factory.layout.imageBudgetExceeded"
 	ValidationCodeWorkerWorkstationBehaviorCompatibility = "workstation-worker-behavior-compatibility"
 )
 

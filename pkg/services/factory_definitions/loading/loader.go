@@ -384,6 +384,7 @@ func (l *Loader) ValidateFactoryDirReadOnly(
 	return err
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (l *Loader) validate() error {
 	switch {
 	case l == nil:
@@ -789,6 +790,7 @@ func mergeRuntimeWorkstationDefinitions(
 	return merged, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func hasInlineRuntimeDefinitions(factoryConfig *factorydefinitions.FactoryConfig) bool {
 	for _, worker := range factoryConfig.Workers {
 		if strings.TrimSpace(worker.Type) != "" ||

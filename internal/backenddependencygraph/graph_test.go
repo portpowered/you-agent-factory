@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestRenderDOTColorsPackageFamiliesAndServiceInternalImports(t *testing.T) {
 	t.Parallel()
 

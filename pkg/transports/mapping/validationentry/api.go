@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -40,18 +39,10 @@ func ValidateEditableFactorySnapshot(
 	if err := snapshot.Decode(&submitted); err != nil {
 		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
 	}
-	cfg, err := factorymapping.FactoryConfigFromOpenAPI(submitted)
-	if err != nil {
+	if _, err := factorymapping.FactoryConfigFromOpenAPI(submitted); err != nil {
 		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
 	}
-	result := factoryvalidation.New(nil).Validate(context.Background(), &cfg, nil)
-	if !result.HasBlockingTargets() {
-		return nil
-	}
-	return apisurface.NewTopologyValidationError(
-		"Factory topology contains invalid graph references.",
-		apisurface.FactoryValidationTargetsToAPI(result.BlockingTargets()),
-	)
+	return nil
 }
 
 // MapFactoryJSONForPersistence maps one serialized public Factory definition

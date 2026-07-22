@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -29,25 +28,25 @@ func (e *PortableLayoutValidationError) Error() string {
 
 // PortableLayoutValidationTarget maps one raw layout failure into the
 // canonical Factory validation vocabulary shared by public entrypoints.
-func PortableLayoutValidationTarget(err error) (factoryvalidation.Target, bool) {
+func PortableLayoutValidationTarget(err error) (interfaces.ValidationTarget, bool) {
 	var layoutErr *PortableLayoutValidationError
 	if !errors.As(err, &layoutErr) {
-		return factoryvalidation.Target{}, false
+		return interfaces.ValidationTarget{}, false
 	}
 	path := "factory." + strings.TrimPrefix(layoutErr.Path, "factory.")
-	code := factoryvalidation.CodeLayoutInvalidValue
+	code := interfaces.ValidationCodeLayoutInvalidValue
 	if strings.Contains(path, ".position") || strings.Contains(path, ".size") {
-		code = factoryvalidation.CodeLayoutInvalidGeometry
+		code = interfaces.ValidationCodeLayoutInvalidGeometry
 	} else if strings.Contains(layoutErr.Message, "Factory embedded-image budget") {
-		code = factoryvalidation.CodeLayoutImageBudgetExceeded
+		code = interfaces.ValidationCodeLayoutImageBudgetExceeded
 	}
 	subjectID := strings.TrimPrefix(path, "factory.layout.")
 	if subjectID == path || subjectID == "" {
 		subjectID = "layout"
 	}
-	return factoryvalidation.Target{
-		Code: code, Severity: factoryvalidation.SeverityError, Message: layoutErr.Message,
-		Subject: factoryvalidation.Subject{Type: factoryvalidation.SubjectTypeFactory, ID: subjectID, Location: factoryvalidation.SubjectLocationDefinition},
+	return interfaces.ValidationTarget{
+		Code: code, Severity: interfaces.ValidationSeverityError, Message: layoutErr.Message,
+		Subject: interfaces.ValidationSubject{Type: interfaces.ValidationSubjectTypeFactory, ID: subjectID, Location: interfaces.ValidationSubjectLocationDefinition},
 		Path:    path,
 	}, true
 }

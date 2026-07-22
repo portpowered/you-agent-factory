@@ -25,6 +25,7 @@ func TestDirectJavaScriptRunOperationSupportsCustomerSourceExtensions(t *testing
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testing.T) {
 	for _, testCase := range []struct {
 		name        string

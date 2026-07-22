@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestRetiredSessionExecutionSurfaceCannotReturn(t *testing.T) {
 	retiredFiles := []string{"async.go", "normalize.go", "result.go", "source.go", "status.go", "types.go"}
 	for _, name := range retiredFiles {

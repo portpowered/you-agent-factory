@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "owner": "factory_runtime",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
+      "filePath": "internal/testutil/replayfixtures/canonical_topology.go",
+      "targetRoot": "pkg/services/factory_runtime",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "replace reusable support composition with service-root contracts, typed edge fakes, package-local owner fixtures, or root.BuildProcess"
+    },
+    {
+      "owner": "recordings",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot",
+      "filePath": "internal/testutil/replayfixtures/canonical_topology.go",
+      "targetRoot": "pkg/services/recordings",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "replace reusable support composition with service-root contracts, typed edge fakes, package-local owner fixtures, or root.BuildProcess"
+    }
+  ]
+}

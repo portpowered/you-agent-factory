@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestPublishesAndCompletesOneOrderedDispatch(t *testing.T) {
 	t.Parallel()
 

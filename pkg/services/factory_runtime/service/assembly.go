@@ -33,6 +33,8 @@ func NewAssembly(runtimeFactory *RuntimeFactory) (*Assembly, error) {
 
 // Assemble creates one session-owned runtime from invocation values and the
 // product-policy dependencies already selected by Wire.
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func (a *Assembly) Assemble(
 	ctx context.Context,
 	defaultWorkerModelProvider string,

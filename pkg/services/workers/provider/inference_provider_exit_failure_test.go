@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
 	t.Parallel()
 	allocator := &agypty.MockAllocator{}

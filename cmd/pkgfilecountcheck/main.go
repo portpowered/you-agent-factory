@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 const (
 	defaultPackageFileLimit = 15
 	defaultScanRoot         = "pkg"
+	packageFileBaselinePath = "docs/internal/baselines/backend-package-file-count.json"
 )
 
 var (
@@ -34,6 +36,18 @@ type packageFinding struct {
 	packagePath string
 	files       []string
 	limit       int
+}
+
+type packageFileBaseline struct {
+	Version int                        `json:"version"`
+	Entries []packageFileBaselineEntry `json:"entries"`
+}
+
+type packageFileBaselineEntry struct {
+	PackagePath   string `json:"packagePath"`
+	FileCount     int    `json:"fileCount"`
+	Owner         string `json:"owner"`
+	RemovalReason string `json:"removalReason"`
 }
 
 func main() {
@@ -62,21 +76,110 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	baseline, err := loadBaseline(cfg)
+	if err != nil {
+		return err
+	}
+	if baseline != nil {
+		return enforceBaseline(cfg, findings, baseline, stdout, stderr)
+	}
 	if len(findings) == 0 {
 		fmt.Fprintf(stdout, "[agent-factory:pkg-file-count] package file-count passed (package files <= %d)\n", cfg.packageFileLimit)
 		return nil
 	}
 
 	for _, finding := range findings {
-		fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] oversized package: %s\n", finding.packagePath)
-		fmt.Fprintf(stderr, "  package files: %d\n", len(finding.files))
-		fmt.Fprintf(stderr, "  limit: %d\n", finding.limit)
-		fmt.Fprintln(stderr, "  counted files:")
-		for _, file := range finding.files {
-			fmt.Fprintf(stderr, "    - %s\n", file)
-		}
+		printFinding(stderr, finding)
 	}
 	return fmt.Errorf("[agent-factory:pkg-file-count] found %d package file-count violation(s)", len(findings))
+}
+
+func loadBaseline(cfg config) (*packageFileBaseline, error) {
+	path := filepath.Join(cfg.root, filepath.FromSlash(packageFileBaselinePath))
+	source, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read package file-count baseline: %w", err)
+	}
+
+	baseline := &packageFileBaseline{}
+	if err := json.Unmarshal(source, baseline); err != nil {
+		return nil, fmt.Errorf("parse package file-count baseline: %w", err)
+	}
+	if baseline.Version != 1 {
+		return nil, fmt.Errorf("package file-count baseline version must be 1, got %d", baseline.Version)
+	}
+	previousPath := ""
+	for index, entry := range baseline.Entries {
+		if entry.PackagePath == "" || !strings.HasPrefix(entry.PackagePath, cfg.packageRoot+"/") {
+			return nil, fmt.Errorf("package file-count baseline entry %d has invalid packagePath %q", index, entry.PackagePath)
+		}
+		if entry.PackagePath <= previousPath {
+			return nil, fmt.Errorf("package file-count baseline entries must be unique and sorted by packagePath: %q follows %q", entry.PackagePath, previousPath)
+		}
+		if entry.FileCount <= cfg.packageFileLimit {
+			return nil, fmt.Errorf("package file-count baseline entry %q must exceed limit %d, got %d", entry.PackagePath, cfg.packageFileLimit, entry.FileCount)
+		}
+		if strings.TrimSpace(entry.Owner) == "" || strings.TrimSpace(entry.RemovalReason) == "" {
+			return nil, fmt.Errorf("package file-count baseline entry %q must declare owner and removalReason", entry.PackagePath)
+		}
+		previousPath = entry.PackagePath
+	}
+	return baseline, nil
+}
+
+func enforceBaseline(cfg config, findings []packageFinding, baseline *packageFileBaseline, stdout io.Writer, stderr io.Writer) error {
+	findingsByPath := make(map[string]packageFinding, len(findings))
+	for _, finding := range findings {
+		findingsByPath[finding.packagePath] = finding
+	}
+	baselineByPath := make(map[string]packageFileBaselineEntry, len(baseline.Entries))
+	violations := 0
+	for _, entry := range baseline.Entries {
+		baselineByPath[entry.PackagePath] = entry
+		finding, exists := findingsByPath[entry.PackagePath]
+		if !exists {
+			fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] stale baseline entry: %s (recorded %d, now <= %d or absent); remove it\n", entry.PackagePath, entry.FileCount, cfg.packageFileLimit)
+			violations++
+			continue
+		}
+		actual := len(finding.files)
+		if actual < entry.FileCount {
+			fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] reduced baseline entry: %s (recorded %d, now %d); lower it in the same change\n", entry.PackagePath, entry.FileCount, actual)
+			violations++
+		} else if actual > entry.FileCount {
+			fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] package grew beyond baseline: %s (recorded %d, now %d)\n", entry.PackagePath, entry.FileCount, actual)
+			violations++
+		}
+	}
+	for _, finding := range findings {
+		if _, exists := baselineByPath[finding.packagePath]; exists {
+			continue
+		}
+		printFinding(stderr, finding)
+		violations++
+	}
+	if violations > 0 {
+		return fmt.Errorf("[agent-factory:pkg-file-count] found %d package file-count baseline violation(s)", violations)
+	}
+	if len(baseline.Entries) == 0 {
+		fmt.Fprintf(stdout, "[agent-factory:pkg-file-count] package file-count passed (package files <= %d)\n", cfg.packageFileLimit)
+		return nil
+	}
+	fmt.Fprintf(stdout, "[agent-factory:pkg-file-count] package file-count holds (%d exact deletion-only baseline entries remain; unrecorded packages <= %d files)\n", len(baseline.Entries), cfg.packageFileLimit)
+	return nil
+}
+
+func printFinding(stderr io.Writer, finding packageFinding) {
+	fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] oversized package: %s\n", finding.packagePath)
+	fmt.Fprintf(stderr, "  package files: %d\n", len(finding.files))
+	fmt.Fprintf(stderr, "  limit: %d\n", finding.limit)
+	fmt.Fprintln(stderr, "  counted files:")
+	for _, file := range finding.files {
+		fmt.Fprintf(stderr, "    - %s\n", file)
+	}
 }
 
 func scanRepo(cfg config) ([]packageFinding, error) {

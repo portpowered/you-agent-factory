@@ -167,6 +167,7 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/pty/platform_windows.go", operation: "conPTYAllocation.OutputPipe", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},
 }
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func scanProductionDefaultSelections(repoRoot string) ([]productionDefaultFinding, error) {
 	wireSelections, err := readWireProductionSelections(repoRoot)
 	if err != nil {

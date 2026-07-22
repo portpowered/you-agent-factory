@@ -521,6 +521,8 @@ func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
 	}
 }
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestValidate_CanonicalFindingsAndStableIdentity(t *testing.T) {
 	t.Run("canonical findings match config validation", func(t *testing.T) {
 		apiFactory, err := factoryfixtures.DecodeCrossPathInvalidFactory()

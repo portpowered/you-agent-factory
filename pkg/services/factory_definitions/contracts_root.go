@@ -92,6 +92,7 @@ var (
 	PublicWorkerModelProviderFromInternal        = contracts.PublicWorkerModelProviderFromInternal
 	PermissivePublicFactoryRunnerID              = contracts.PermissivePublicFactoryRunnerID
 	PermissivePublicFactoryRunnerSelectionSource = contracts.PermissivePublicFactoryRunnerSelectionSource
+	SupportedModelProviders                      = contracts.SupportedModelProviders
 )
 
 type PortableBundledFileReplacement = contracts.PortableBundledFileReplacement
@@ -134,6 +135,9 @@ const (
 	ValidationCodeFactoryVersionStale                    = contracts.ValidationCodeFactoryVersionStale
 	ValidationCodeFactoryRuntimeNotIdle                  = contracts.ValidationCodeFactoryRuntimeNotIdle
 	ValidationCodeLayoutUnknownNodeReference             = contracts.ValidationCodeLayoutUnknownNodeReference
+	ValidationCodeLayoutInvalidGeometry                  = contracts.ValidationCodeLayoutInvalidGeometry
+	ValidationCodeLayoutInvalidValue                     = contracts.ValidationCodeLayoutInvalidValue
+	ValidationCodeLayoutImageBudgetExceeded              = contracts.ValidationCodeLayoutImageBudgetExceeded
 	ValidationCodeWorkerWorkstationBehaviorCompatibility = contracts.ValidationCodeWorkerWorkstationBehaviorCompatibility
 	ValidationSeverityError                              = contracts.ValidationSeverityError
 	ValidationSeverityWarning                            = contracts.ValidationSeverityWarning

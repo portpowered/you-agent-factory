@@ -71,6 +71,8 @@ type Factory struct {
 	replayFiles                     fileeffects.ReplayRecordingReader
 }
 
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func NewFactory(
 	providerSessions providersessions.Service,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -72,7 +72,7 @@ func (packagedReviewFailingCommandRunner) Run(_ context.Context, _ platformproce
 
 func startPackagedReviewInvocationServer(t *testing.T, runner platformprocess.CommandRunner) *functionalAPIServer {
 	t.Helper()
-	dir := support.InstallPackagedFactory(t, t.TempDir(), review.PackagedFactoryName)
+	dir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedReviewFactoryName)
 	return startFunctionalServer(t, dir, false, withWorkerCommands(runner, nil))
 }
 

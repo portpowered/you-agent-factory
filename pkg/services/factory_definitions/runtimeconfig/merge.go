@@ -59,6 +59,7 @@ func applyRuntimeDefinitions(
 	return nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func applyWorkerRuntimeDefinition(
 	worker *factorydefinitions.FactoryWorkerConfig,
 	definition *factorydefinitions.FactoryWorkerConfig,

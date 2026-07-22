@@ -74,6 +74,7 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	t.Parallel()
 

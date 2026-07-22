@@ -11,8 +11,10 @@ type PackagedGoalPromptFileSystem interface {
 }
 
 const (
-	PackagedDeepResearchFactoryName = "@you/deep-research"
-	PackagedFusionFactoryName       = "@you/fusion"
-	PackagedGoalFactoryName         = "@you/goal"
-	PackagedReviewFactoryName       = "@you/review"
+	PackagedDeepResearchFactoryName      = "@you/deep-research"
+	PackagedFusionFactoryName            = "@you/fusion"
+	PackagedGoalFactoryName              = "@you/goal"
+	PackagedReviewFactoryName            = "@you/review"
+	PackagedReviewExecuteWorkstationName = "execute-review-work"
+	PackagedReviewWorkstationName        = "review-review-work"
 )
