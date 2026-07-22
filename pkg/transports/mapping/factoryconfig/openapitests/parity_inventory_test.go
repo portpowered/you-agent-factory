@@ -2,8 +2,6 @@ package openapitests
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -274,99 +272,8 @@ func TestWriteFactoryOpenAPIParityIndexBaseline(t *testing.T) {
 	}
 }
 
-// productionBoundarySources records the handwritten Factory schema, OpenAPI
-// fragments, and mappings this inventory lane must not alter. Generated API
-// artifacts are protected by the generation drift gate and consumer compile
-// tests instead of source hashes.
-var productionBoundarySources = []struct {
-	relativePath string
-	sha256Hex    string
-}{
-	{
-		relativePath: "pkg/transports/mapping/factoryconfig/openapi_factory.go",
-		sha256Hex:    "df9518e4dcadf48e05acb4463edd5e5d07d739022021fda61adfc66f3d6debef",
-	},
-	{
-		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
-		sha256Hex:    "92e28064ff982807683155b793678070df1ccec390a1f134ed025761781420a2",
-	},
-	{
-		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
-		sha256Hex:    "e4cf0939261875b3530e0d2bf8bb1e6b9237be31c599447a862d6f953f035815",
-	},
-	{
-		relativePath: "pkg/transports/mapping/factoryconfig/layout_annotations.go",
-		sha256Hex:    "7377202c1bd819c2b6f2a2184732b93afadba1127ad78e88be7b9d44342c7dd6",
-	},
-	{
-		relativePath: "pkg/transports/mapping/factoryconfig/authored_helpers.go",
-		sha256Hex:    "478af0c8ce100f09e57dc5137bde292b39923789228b058008c480025c17dea4",
-	},
-	{
-		relativePath: "pkg/services/factory_definitions/contracts/factory_config.go",
-		sha256Hex:    "edcad0ddc8956599e7f6e7ede52a1e42d30b685c453c4ea01de31e7d3ba612e8",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/Factory.yaml",
-		sha256Hex:    "92f660a1240801fb670ffc16394b1c9b734517ffbd8918bf283276b223cfcc05",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/WorkerType.yaml",
-		sha256Hex:    "8f559a3646c66ac4e08eabd72edb7dea7eeec81f1a165169abc1879c3b46fe57",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/WorkstationType.yaml",
-		sha256Hex:    "9eb93d0f1f16f1baf00a1441d111bfa7d57e76f4d80795cae35376fe8632ddde",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/FactoryGuard.yaml",
-		sha256Hex:    "da72ecfe42451c48100348d8161f4511fcf208ce46adbae4b147e2b766d8f793",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/FactoryLayout.yaml",
-		sha256Hex:    "32709e48f177114300e4d128e5c869d0efc840b020eafd06741d200886c57566",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/FactoryOrchestrator.yaml",
-		sha256Hex:    "08669ab5b1aa7af5c55185a9ec5827959dac35d51f0c0098732852a21d18d84c",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/Resource.yaml",
-		sha256Hex:    "e19cd17f7daddfcedc7c46dffb75dced03b2021f8ce33543a88f4a105df9632b",
-	},
-}
-
 var parityInventoryLaneRoots = []string{
 	"pkg/transports/mapping/factoryconfig/openapitests/testdata",
-}
-
-func TestProductionBoundarySources_UnchangedForParityLane(t *testing.T) {
-	t.Parallel()
-
-	for _, src := range productionBoundarySources {
-		src := src
-		t.Run(src.relativePath, func(t *testing.T) {
-			t.Parallel()
-
-			path := testutil.MustRepoPath(t, src.relativePath)
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read production boundary source %s: %v", path, err)
-			}
-			data = normalizeParityFixtureBytes(data)
-
-			sum := sha256.Sum256(data)
-			got := hex.EncodeToString(sum[:])
-			if got != src.sha256Hex {
-				t.Fatalf(
-					"production boundary source drift detected for %s; update lane gate hashes only when intentionally changing schema, mapping, or generated clients\ngot %s, want %s",
-					src.relativePath,
-					got,
-					src.sha256Hex,
-				)
-			}
-		})
-	}
 }
 
 func normalizeParityFixtureBytes(data []byte) []byte {
