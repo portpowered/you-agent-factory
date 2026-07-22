@@ -508,6 +508,10 @@ do not conflate reconnect parameters, retention, or error codes between them.
 - `pkg/transports/http/client/client.gen.go`
 - `ui/src/api/generated/openapi.ts`
 
+Factory contract changes must also run `bun run generate` from
+`ui/packages/client` so its package-local `src/generated/openapi.ts` and
+standalone Factory schema copies stay aligned with these canonical outputs.
+
 **Runtime, handler, and mapping ownership**
 
 - HTTP SSE transport:
@@ -544,7 +548,9 @@ do not conflate reconnect parameters, retention, or error codes between them.
 
 **Maintainer verification commands**
 
-- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible
+- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible;
+  for Factory contract changes, also run `cd ui/packages/client && bun run
+  generate` and verify with `make ui-public-package-release`
 - Packaged session guidance edits: `make docs-reference-smoke`
 - Focused HTTP lane:
   `go test ./pkg/transports/http/... -run 'FactoryResponseEvents' -count=1`
