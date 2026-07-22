@@ -310,6 +310,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   generated family artifacts until the authored production manifest is migrated.
   Every `scope: inherited` flag must identify its persistent ancestor through
   `inheritedFromInputId` and preserve that source's public and value semantics.
+  Runtime handler bindings for an inherited flag must read the persistent
+  ancestor's live storage; do not leave execution dependent on retired
+  command-local storage after canonicalizing an input as inherited.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
