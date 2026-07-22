@@ -14,11 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening"
-	sessionexecutionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/invocation/wire"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -65,7 +61,7 @@ var servicesSet = wire.NewSet(
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
-	processlifecycle.NewLifecyclePlanOperation,
+	factorysessionwire.NewLifecyclePlanOperation,
 	provideFactoryVisualizationFactory,
 	provideResponsePresentation,
 	provideWorkContentStagingService,
@@ -183,12 +179,13 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimeservice.NewRuntimeFactory,
 	factoryruntimeservice.NewAssembly,
-	wire.Bind(new(runtimeopening.FactoryRuntimeAssembler), new(*factoryruntimeservice.Assembly)),
+	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimeservice.Assembly)),
+	wire.Struct(new(factorysessionwire.RuntimeOpeningDependencies), "*"),
 	provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
-	runtimeopening.NewFactory,
+	factorysessionwire.NewRuntimeOpeningFactory,
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -288,24 +285,24 @@ var BundleSet = wire.NewSet(
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
 	provideRuntimeInputResolver,
-	applicationopening.New,
+	factorysessionwire.NewApplicationService,
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	invocationwire.NewOperation,
+	factorysessionwire.NewInvocationOperation,
 	initializerapplication.NewStdioRunnerBuilder,
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory,
-	wire.Bind(new(factorysessions.StdioExecutionOpening), new(*sessionexecutionopening.Factory)),
-	sessionexecutionopening.NewStdioOpeningService,
-	wire.Bind(new(factorysessions.StdioOpeningOperation), new(*sessionexecutionopening.StdioOpeningService)),
+	wire.Bind(new(factorysessions.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
+	factorysessionwire.NewStdioOpeningService,
+	wire.Bind(new(factorysessions.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
-	sessionexecutionopening.NewDirectJavaScriptRunOperation,
+	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
-	sessionexecutionopening.NewServiceBuilder,
+	factorysessionwire.NewExecutionServiceBuilder,
 	provideCLICommandFactory,
 	initializerapplication.NewProcess,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),

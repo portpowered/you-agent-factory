@@ -144,11 +144,7 @@ func (fs *SessionRuntime) observeLiveLifecycleControl(
 	runtimebinding.ObserveLifecycleControl(fs.logger, fs.sessionState, sessionID, operation, control, outcome, status, err)
 }
 
-// SessionGateway is the bounded Factory Session application boundary used by
-// the Factory Session runtime.
-type SessionGateway = Gateway
-
-var _ SessionGateway = (*Service)(nil)
+var _ factorysessions.Service = (*Service)(nil)
 
 func newSessionGatewayService(fs *SessionRuntime) *Service {
 	if fs == nil || fs.sessionState == nil {
@@ -176,7 +172,7 @@ func (fs *SessionRuntime) AttachSessionGateway(gateway *Service) *Service {
 }
 
 // Gateway returns the single gateway attached to this Factory Session runtime.
-func (fs *SessionRuntime) Gateway() Gateway {
+func (fs *SessionRuntime) Gateway() factorysessions.Service {
 	return fs.requireSessionGateway()
 }
 
@@ -279,7 +275,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	)
 }
 
-func (fs *SessionRuntime) requireSessionGateway() SessionGateway {
+func (fs *SessionRuntime) requireSessionGateway() factorysessions.Service {
 	if fs == nil {
 		return newSessionGatewayService(nil)
 	}

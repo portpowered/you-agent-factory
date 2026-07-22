@@ -200,8 +200,4 @@ type LegacyHost interface {
 	stream.Host
 }
 
-// Gateway aliases the public Factory Sessions contract for compatibility with
-// existing service-local call sites.
-type Gateway = factorysessions.Service
-
 var _ factorysessions.Service = (*Service)(nil)

@@ -33,10 +33,6 @@ import (
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
-	factorysessionexecutionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
-	factorysessionruntimeopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -271,7 +267,7 @@ func provideFactoryDefinitionsFactory(
 	namedPaths factorydefinitions.NamedPathResolver,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
-) factorysessionruntimeopening.FactoryDefinitionsFactory {
+) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
 		validator factorydefinitions.Validator,
@@ -355,7 +351,7 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationFactory() factorysessionruntimeopening.AutomationFactory {
+func provideAutomationFactory() factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
 		clock factoryruntime.Clock,
@@ -387,8 +383,8 @@ func provideFactorySessionsService(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessions.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
-	initialWorkFiles fileeffects.InitialWorkReader,
+	invocationInputFiles factorysessionwire.InvocationInputReader,
+	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
@@ -400,9 +396,9 @@ func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessions.RuntimePersistenceStoreFactory,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
+	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
-) factorysessionruntimeopening.FactorySessionExecutionFactory {
+) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
@@ -432,10 +428,10 @@ func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessions.RuntimePersistenceStoreFactory,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
+	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
-	fixtureFiles fileeffects.ContractFixtureReader,
-) factorysessionexecutionopening.StandaloneSessionExecutionFactory {
+	fixtureFiles factorysessionwire.ContractFixtureReader,
+) factorysessionwire.StandaloneSessionExecutionFactory {
 	return func(
 		provider factorysessions.ExecutionProvider,
 		projectRoot string,
@@ -462,19 +458,19 @@ func provideStandaloneSessionExecutionFactory(
 	}
 }
 
-func provideFactorySessionSyncWaitScheduler() factorysessionexecution.SyncWaitScheduler {
+func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitScheduler {
 	return platformclock.Real{}
 }
 
-func provideRecordingsProjectionFactory() factorysessionruntimeopening.RecordingsProjectionFactory {
+func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectionFactory {
 	return recordingsservice.NewProjectionService
 }
 
-func provideRecordingsFactory() factorysessionruntimeopening.RecordingsFactory {
+func provideRecordingsFactory() factorysessionwire.RecordingsFactory {
 	return recordingsservice.NewService
 }
 
-func provideRuntimeLedgerFactory() factorysessionruntimeopening.RuntimeLedgerFactory {
+func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 	return func() factoryruntime.RuntimeLedgerFactory {
 		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
 			return recordingsservice.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
@@ -529,7 +525,7 @@ func provideRuntimeRecorderFactory(
 	}
 }
 
-func provideReplayClockFactory() factorysessionruntimeopening.ReplayClockFactory {
+func provideReplayClockFactory() factorysessionwire.ReplayClockFactory {
 	return recordingsservice.NewReplayClock
 }
 
@@ -564,7 +560,7 @@ func provideWorkersRuntimeFactory(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	defaultAllocator agypty.PTYAllocator,
 	edges serviceedges.Edges,
-) (factorysessionruntimeopening.WorkersRuntimeFactory, error) {
+) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, agypty.ErrHostRequired
 	}
@@ -730,7 +726,7 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 	return workersservice.NewMockCommandRunner
 }
 
-func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysessionruntimeopening.WorkerHostedPollersFactory, error) {
+func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysessionwire.WorkerHostedPollersFactory, error) {
 	checkpointStore := edges.HostedLinearCheckpointStore
 	if checkpointStore == nil {
 		var err error
@@ -759,11 +755,11 @@ func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysession
 	}, nil
 }
 
-func provideWorkersLocalRuntimeHooksFactory() factorysessionruntimeopening.WorkersLocalRuntimeHooksFactory {
+func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {
 	return workersservice.LocalRuntimeHooks
 }
 
-func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionexecutionopening.WorkerInvocationFactory {
+func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
 		commandClock = platformclock.Real{}
@@ -798,22 +794,22 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionexec
 }
 
 func provideSessionExecutionOpeningFactory(
-	runtimes *factorysessionruntimeopening.Factory,
+	runtimes *factorysessionwire.RuntimeOpeningFactory,
 	edges serviceedges.Edges,
-	build factorysessionexecutionopening.StandaloneSessionExecutionFactory,
-	invocation factorysessionexecutionopening.WorkerInvocationFactory,
+	build factorysessionwire.StandaloneSessionExecutionFactory,
+	invocation factorysessionwire.WorkerInvocationFactory,
 	resolveClock factoryruntime.ClockResolver,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	adaptRunner factorysessionruntimeopening.WorkerCommandRunnerAdapter,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	paths factorysessions.ExecutionOpeningFileSystem,
 	allocator agypty.PTYAllocator,
 	logger *zap.Logger,
-) (*factorysessionexecutionopening.Factory, error) {
+) (*factorysessionwire.ExecutionOpeningFactory, error) {
 	workerEdges, err := withStandaloneWorkerProductionEdges(edges)
 	if err != nil {
 		return nil, err
 	}
-	return factorysessionexecutionopening.NewFactory(
+	return factorysessionwire.NewExecutionOpeningFactory(
 		runtimes, projectRuntimeOpeningExternalEffects(workerEdges), adaptRunner(workerEdges.ProviderCommandRunner), allocator,
 		build, invocation, resolveClock, artifactRoots, adaptRunner, paths, logger,
 	)
@@ -821,8 +817,8 @@ func provideSessionExecutionOpeningFactory(
 
 // projectRuntimeOpeningExternalEffects is the sole selection from the process
 // edge aggregate into the effects consumed by Factory Session runtime opening.
-func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionruntimeopening.ExternalEffects {
-	return factorysessionruntimeopening.ExternalEffects{
+func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
+	return factorysessionwire.RuntimeOpeningExternalEffects{
 		Clock:                     edges.Clock,
 		ProviderOverride:          edges.ProviderOverride,
 		ModelPullMetricsRecorder:  edges.ModelPullMetricsRecorder,
@@ -862,7 +858,7 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (agypty.PTYAllocator, erro
 	return agypty.NewAllocator(host, clock)
 }
 
-func provideWorkerCommandRunnerAdapter() factorysessionruntimeopening.WorkerCommandRunnerAdapter {
+func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
 	return workerprocess.AdaptCommandRunner
 }
 
@@ -901,7 +897,7 @@ func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFile
 	return os.ReadFile
 }
 
-func provideWorkFactory(readFile work.SubmittedFileReader) factorysessionruntimeopening.WorkFactory {
+func provideWorkFactory(readFile work.SubmittedFileReader) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
 		return workservice.NewService(runtimes, readFile)
 	}

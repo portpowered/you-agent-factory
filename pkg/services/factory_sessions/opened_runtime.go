@@ -70,7 +70,7 @@ type RuntimeHTTPServices struct {
 	FactoryRuntime     factoryruntime.Service
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
-	FactorySessions    Gateway
+	FactorySessions    Service
 	SessionInvocation  SessionInvoker
 	SessionExecution   ExecutionService
 	Work               work.Service
@@ -111,7 +111,7 @@ type OpenedProcessApplication struct {
 // roles.
 type OpenedInvocationRuntime struct {
 	Workers        workers.Service
-	Sessions       Gateway
+	Sessions       Service
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
 	Execution      ExecutionService

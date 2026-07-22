@@ -149,6 +149,7 @@ type Gateway interface {
 }
 
 // Service is the canonical Factory Sessions application contract. Gateway is
-// retained as the declared interface during the deletion-only root-contract
-// migration.
+// retained as the declared interface until the remaining root effect-port
+// interfaces move behind the private implementation boundary in one deletion-
+// only baseline reduction.
 type Service = Gateway

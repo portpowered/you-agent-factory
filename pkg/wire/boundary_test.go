@@ -16,7 +16,7 @@ import (
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 )
 
 func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsPlatformDefault(t *testing.T) {
@@ -55,8 +55,8 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
-		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
-		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
+		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		func(path string) (string, error) { return path, nil },
 	)
 	if err != nil {
@@ -119,6 +119,28 @@ func TestWirePackageExposesOnlyCanonicalApplicationInjector(t *testing.T) {
 	if _, ok := names["InjectBundle"]; !ok {
 		t.Fatalf("Wire injector names = %v, want InjectBundle", names)
 	}
+}
+
+func TestRootWireUsesOnlyFactorySessionsContractsAndOwnedAdapters(t *testing.T) {
+	t.Parallel()
+
+	const root = "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	parseProductionGoFiles(t, ".", func(path string, file *ast.File) {
+		for _, spec := range file.Imports {
+			importPath, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				t.Errorf("%s contains invalid import %q: %v", path, spec.Path.Value, err)
+				continue
+			}
+			if importPath == root || importPath == root+"/wire" ||
+				strings.HasPrefix(importPath, root+"/transports/") {
+				continue
+			}
+			if strings.HasPrefix(importPath, root+"/") {
+				t.Errorf("%s imports Factory Sessions implementation package %s", path, importPath)
+			}
+		}
+	})
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

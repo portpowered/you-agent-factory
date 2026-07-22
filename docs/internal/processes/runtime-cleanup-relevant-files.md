@@ -585,6 +585,13 @@ may retain an exact mutation-recording callback while assembling the Factory
 Runtime, but consumers must not receive the raw durable engine as a parallel
 service boundary.
 
+Canonical root Wire imports only the Factory Sessions root, its service-local
+`wire` package, and service-owned transport adapters. When Wire must compose a
+legacy implementation during structural migration, expose a real service-local
+wrapper function and an owner-defined dependency struct; function variables or
+type aliases alone are insufficient because generated Wire resolves them back
+to the underlying implementation package and recreates the forbidden import.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

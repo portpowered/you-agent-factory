@@ -15,7 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
@@ -144,8 +144,8 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		zap.NewNop(),
 		time.Now,
 		edges.ModelPullMetricsRecorder,
-		runtimeopening.ModelHostDiagnosticLogger(zap.NewNop()),
-		runtimeopening.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),
+		factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()),
+		factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),
 		workersservice.LocalRuntimeHooks(),
 	)
 }

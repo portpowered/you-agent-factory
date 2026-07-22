@@ -3144,11 +3144,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/gateway",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/identity",
       "target": "pkg/services/factory_sessions"
     },

@@ -15,7 +15,7 @@ import (
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
 // runtime opening binds a clock selected from the invocation's external edges.
 type Root struct {
-	factorysessions.Gateway
+	factorysessions.Service
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService

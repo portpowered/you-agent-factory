@@ -55,5 +55,5 @@ type RuntimeAssembly interface {
 		reconnectCursorValidator ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
 		invocationMetricsRecorder InvocationMetricsRecorder,
-	) (ApplicationRuntime, Gateway, SessionInvoker, DefinitionHost, error)
+	) (ApplicationRuntime, Service, SessionInvoker, DefinitionHost, error)
 }
