@@ -187,6 +187,25 @@ func TestExecuteInvocationRejectsCompletedMessageBeforeFailure(t *testing.T) {
 	}
 }
 
+func TestExecuteInvocationRejectsMultipleAuthoritativeCompletedMessages(t *testing.T) {
+	t.Parallel()
+	destination := &orderedWriter{}
+	integration := lifecycleIntegration{invoke: func(ctx context.Context, request contract.InvocationRequest, writer contract.ResponseWriter) error {
+		if err := writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindMessage, workers.PhaseCompleted, "message-1", messagePayload(t, "first"))); err != nil {
+			return err
+		}
+		_ = writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindMessage, workers.PhaseCompleted, "message-2", messagePayload(t, "second")))
+		_ = writer.Close(ctx, contract.SuccessfulCompletion(contract.NewResponse(contract.ResponseInput{Content: "second"})))
+		return nil
+	}}
+
+	err := contract.ExecuteInvocation(context.Background(), integration, request(), destination)
+	assertProtocolRule(t, err, "final_result_agreement")
+	if len(destination.order) != 0 || destination.closes != 0 {
+		t.Fatalf("destination received contradictory terminal state: order = %v, closes = %d", destination.order, destination.closes)
+	}
+}
+
 func TestExecuteInvocationNormalizesErrorBeforeClose(t *testing.T) {
 	t.Parallel()
 	destination := &orderedWriter{}

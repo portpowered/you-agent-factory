@@ -27,6 +27,7 @@ type AdverseSuite struct {
 	MissingClose        IntegrationFactory
 	Disagreement        IntegrationFactory
 	FailureAfterSuccess IntegrationFactory
+	ConflictingMessages IntegrationFactory
 	Request             contract.InvocationRequest
 }
 
@@ -58,6 +59,7 @@ func RunAdverse(t *testing.T, suite AdverseSuite) {
 			runViolationScenario(t, "missing-close", identity, suite.MissingClose, suite.Request, "missing_close", outcomeMalformedFailure)
 			runViolationScenario(t, "result-event-disagreement", identity, suite.Disagreement, suite.Request, "final_result_agreement", outcomeNone)
 			runViolationScenario(t, "failure-after-success-event", identity, suite.FailureAfterSuccess, suite.Request, "final_result_agreement", outcomeNone)
+			runViolationScenario(t, "conflicting-completed-messages", identity, suite.ConflictingMessages, suite.Request, "final_result_agreement", outcomeNone)
 		})
 	}
 }
@@ -219,6 +221,7 @@ func validateAdverseSuite(suite AdverseSuite) error {
 		suite.MissingClose,
 		suite.Disagreement,
 		suite.FailureAfterSuccess,
+		suite.ConflictingMessages,
 	}
 	for _, factory := range factories {
 		if factory == nil {

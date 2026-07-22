@@ -183,6 +183,9 @@ func (w *protocolWriter) validateDraft(draft workers.Draft) error {
 			return err
 		}
 		if represented {
+			if w.hasFinalMessage {
+				return protocolError("final_result_agreement", "only one completed message may represent the authoritative response")
+			}
 			w.finalMessage = content
 			w.hasFinalMessage = true
 		}

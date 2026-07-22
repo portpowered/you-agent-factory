@@ -32,6 +32,7 @@ func TestAdverseConformance(t *testing.T) {
 		MissingClose:        factory(adverseMissingClose),
 		Disagreement:        factory(adverseDisagreement),
 		FailureAfterSuccess: factory(adverseFailureAfterSuccess),
+		ConflictingMessages: factory(adverseConflictingMessages),
 		Request:             request("invocation-adverse", contract.CapabilityPromptSubmission),
 	})
 }
@@ -47,6 +48,7 @@ const (
 	adverseMissingClose
 	adverseDisagreement
 	adverseFailureAfterSuccess
+	adverseConflictingMessages
 )
 
 type adverseIntegration struct {
@@ -102,6 +104,13 @@ func (f *adverseIntegration) Invoke(ctx context.Context, request contract.Invoca
 		return writer.Close(ctx, contract.FailedCompletion(contract.NewFailure(contract.FailureInput{
 			Kind: contract.FailureDependency, Message: "provider dependency failed",
 		})))
+	case adverseConflictingMessages:
+		if err := writer.WriteEvent(ctx, adverseMessageEvent(request.InvocationID(), f.identity)); err != nil {
+			return err
+		}
+		_ = writer.WriteEvent(ctx, adverseConflictingMessageEvent(request.InvocationID(), f.identity))
+		_ = writer.Close(ctx, contract.SuccessfulCompletion(contract.NewResponse(contract.ResponseInput{Content: "contradictory response"})))
+		return nil
 	default:
 		return errors.New("unsupported adverse behavior")
 	}
@@ -143,6 +152,20 @@ func adverseMessageEvent(invocationID string, identity contract.Identity) contra
 	event, err := contract.NewEventDraft(contract.EventDraftInput{
 		RunID: invocationID, Kind: workers.KindMessage, Phase: workers.PhaseCompleted, ItemID: "message-adverse",
 		Payload:    mustJSON(messagePayload()),
+		Provenance: adverseProvenance(identity, workers.RepresentationSnapshot),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return event
+}
+
+func adverseConflictingMessageEvent(invocationID string, identity contract.Identity) contract.EventDraft {
+	event, err := contract.NewEventDraft(contract.EventDraftInput{
+		RunID: invocationID, Kind: workers.KindMessage, Phase: workers.PhaseCompleted, ItemID: "message-conflict",
+		Payload: mustJSON(workers.MessagePayload{
+			Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "contradictory response"}},
+		}),
 		Provenance: adverseProvenance(identity, workers.RepresentationSnapshot),
 	})
 	if err != nil {

@@ -34,7 +34,10 @@ primary-result behavior.
   later provider write or close without sending a competing completion. Once
   an authoritative completed message represents success, reject a later
   failure completion and discard the buffered terminal tail so orchestration
-  observes neither side of a contradictory outcome.
+  observes neither side of a contradictory outcome. Reject a second
+  authoritative completed message as `final_result_agreement`, even when it
+  uses a different item correlation, so no earlier represented result can be
+  overwritten before completion validation.
 
 ## CLI run and submit command contracts
 
