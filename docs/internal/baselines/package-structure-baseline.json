@@ -3124,11 +3124,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/dataplane",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/execution",
       "target": "pkg/services/factory_sessions"
     },
@@ -3144,27 +3139,12 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/identity",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/invocation",
       "target": "pkg/services/factory_sessions"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/logicalidentity",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/logicaltarget",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/observations",
       "target": "pkg/services/factory_sessions"
     },
     {

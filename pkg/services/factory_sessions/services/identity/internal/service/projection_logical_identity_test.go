@@ -1,4 +1,4 @@
-package logicalidentity_test
+package service_test
 
 import (
 	"os"

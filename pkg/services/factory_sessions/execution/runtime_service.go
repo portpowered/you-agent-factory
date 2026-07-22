@@ -12,13 +12,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/livechild"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
-	factorysessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/identity"
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewDurableSessionID allocates one durable Factory Session identifier.
-func NewDurableSessionID(generateID factorysessionidentity.Generator) (string, error) {
+func NewDurableSessionID(generateID internalcontracts.SessionIDGenerator) (string, error) {
 	if generateID == nil {
 		return "", errors.New("Factory Session ID generator is required")
 	}
@@ -217,7 +217,7 @@ type JavaScriptRuntimeService struct {
 	workerPresetIDs     map[string]struct{}
 	workerSettings      factory.JavaScriptWorkerSettings
 	recordingWriter     recording.PortableRecordingWriter
-	generateSessionID   factorysessionidentity.Generator
+	generateSessionID   internalcontracts.SessionIDGenerator
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -244,7 +244,7 @@ func NewJavaScriptRuntimeService(
 	workerPresetIDs map[string]struct{},
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
-	generateSessionID factorysessionidentity.Generator,
+	generateSessionID internalcontracts.SessionIDGenerator,
 ) *JavaScriptRuntimeService {
 	if generateSessionID == nil {
 		return nil

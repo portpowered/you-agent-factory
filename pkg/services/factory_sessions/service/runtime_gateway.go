@@ -9,7 +9,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
@@ -112,7 +111,7 @@ func (fs *SessionRuntime) SessionResponseStreamDispatchIDs(sessionID string) ([]
 func (fs *SessionRuntime) inferenceProgressPublisher(
 	sessionID string,
 	logger *zap.Logger,
-) observations.ProgressPublisher {
+) factorysessions.ProgressPublisher {
 	if fs == nil {
 		return nil
 	}

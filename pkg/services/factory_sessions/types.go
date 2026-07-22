@@ -10,7 +10,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/identity"
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 )
@@ -31,7 +31,7 @@ type RuntimeInstanceIDGenerator func() string
 // SessionIDGenerator supplies opaque identities for live sessions, durable
 // sessions, and session-owned invocation requests. Wire selects the process
 // implementation and tests replace it only at the external edge.
-type SessionIDGenerator = factorysessionidentity.Generator
+type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
 type ResponseEventIDGenerator = responseeventstore.ResponseEventIDGenerator
 

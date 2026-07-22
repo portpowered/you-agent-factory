@@ -3,19 +3,19 @@ package stream
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
 
-func mapInferenceProgressFragment(fragment observations.ProgressFragment) responsestream.Event {
+func mapInferenceProgressFragment(fragment factorysessions.ProgressFragment) responsestream.Event {
 	kind := responsestream.EventKindProgressFragment
 	switch fragment.Kind {
-	case observations.ResponseFragmentKind:
+	case factorysessions.ResponseFragmentKind:
 		kind = responsestream.EventKindResponseFragment
-	case observations.CompletedFragmentKind:
+	case factorysessions.CompletedFragmentKind:
 		kind = responsestream.EventKindStreamCompleted
-	case observations.FailedFragmentKind:
+	case factorysessions.FailedFragmentKind:
 		kind = responsestream.EventKindStreamFailed
 	}
 	return responsestream.Event{

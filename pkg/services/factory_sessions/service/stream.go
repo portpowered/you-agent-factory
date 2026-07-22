@@ -5,7 +5,6 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +53,7 @@ func (s *Service) JavaScriptCheckpointStore(session *factorysessions.LiveSession
 }
 
 // InferenceProgressPublisherFactory returns worker-provider progress publishers.
-func (s *Service) InferenceProgressPublisherFactory(logger *zap.Logger) func(sessionID string) observations.ProgressPublisher {
+func (s *Service) InferenceProgressPublisherFactory(logger *zap.Logger) func(sessionID string) factorysessions.ProgressPublisher {
 	if s == nil || s.streams == nil {
 		return nil
 	}

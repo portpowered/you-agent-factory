@@ -501,10 +501,6 @@
       "minimum": 87.95
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane",
-      "minimum": 75.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution",
       "minimum": 79.10
     },
@@ -529,26 +525,6 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/gateway",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/identity",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation",
       "minimum": 83.10
     },
@@ -563,16 +539,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/logicaltarget",
       "minimum": 96.77
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle",

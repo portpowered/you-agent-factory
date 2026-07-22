@@ -592,6 +592,13 @@ wrapper function and an owner-defined dependency struct; function variables or
 type aliases alone are insufficient because generated Wire resolves them back
 to the underlying implementation package and recreates the forbidden import.
 
+Retire leaf compatibility packages that only re-export Factory Sessions root
+value or function contracts. Same-owner implementations should consume the root
+contract when that does not create a cycle; implementation capabilities needed
+on both sides of an existing root-to-implementation dependency belong under
+`factory_sessions/internal/contracts`, with only the canonical customer-facing
+name published at the root.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

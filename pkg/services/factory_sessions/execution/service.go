@@ -6,7 +6,7 @@ import (
 	"fmt"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
-	factorysessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/identity"
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -358,7 +358,7 @@ func NewJavaScriptExecutionService(
 	workerPresetIDs map[string]struct{},
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
-	generateSessionID factorysessionidentity.Generator,
+	generateSessionID internalcontracts.SessionIDGenerator,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {

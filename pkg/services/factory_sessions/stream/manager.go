@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/fragmentmap"
@@ -115,11 +114,11 @@ func (m *Manager) CloseDispatch(session *factorysessions.LiveSession, dispatchID
 
 // InferenceProgressPublisherFactory returns one publisher factory for worker
 // provider progress routed into session-owned response streams.
-func (m *Manager) InferenceProgressPublisherFactory(logger *zap.Logger) func(sessionID string) observations.ProgressPublisher {
+func (m *Manager) InferenceProgressPublisherFactory(logger *zap.Logger) func(sessionID string) factorysessions.ProgressPublisher {
 	if m == nil || m.sessions == nil {
 		return nil
 	}
-	return func(sessionID string) observations.ProgressPublisher {
+	return func(sessionID string) factorysessions.ProgressPublisher {
 		return m.inferenceProgressPublisher(sessionID, logger)
 	}
 }
@@ -145,12 +144,12 @@ func (m *Manager) DispatchCompletionObserverFactory() func(sessionID string) fun
 func (m *Manager) inferenceProgressPublisher(
 	sessionID string,
 	logger *zap.Logger,
-) observations.ProgressPublisher {
+) factorysessions.ProgressPublisher {
 	if m == nil || m.sessions == nil {
 		return nil
 	}
 	normalizedSessionID := normalizeSessionID(sessionID)
-	return func(fragment observations.ProgressFragment) {
+	return func(fragment factorysessions.ProgressFragment) {
 		dispatchID := strings.TrimSpace(fragment.DispatchID)
 		var session *factorysessions.LiveSession
 		defer func() {
