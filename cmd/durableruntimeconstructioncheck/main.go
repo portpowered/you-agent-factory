@@ -36,10 +36,10 @@ var applicationCompositionCalls = map[string]struct{}{
 }
 
 var approvedApplicationCompositionFiles = map[string]struct{}{
-	"pkg/initializer/application/entrypoints.go":                {},
-	"pkg/services/factory_sessions/executionopening/factory.go": {},
-	"pkg/services/factory_sessions/execution/service.go":        {},
-	"pkg/services/factory_sessions/service/execution.go":        {},
+	"pkg/initializer/application/entrypoints.go":                                                {},
+	"pkg/services/factory_sessions/executionopening/factory.go":                                 {},
+	"pkg/services/factory_sessions/execution/service.go":                                        {},
+	"pkg/services/factory_sessions/services/durable_execution/internal/service/construction.go": {},
 }
 
 var javascriptLiveChildRoots = []string{

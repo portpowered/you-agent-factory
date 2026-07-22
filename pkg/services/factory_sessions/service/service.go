@@ -8,6 +8,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/durable_execution"
+	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/durable_execution/wire"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
@@ -22,6 +24,7 @@ type Service struct {
 	reconnects     factorysessions.ReconnectCursorValidator
 	results        factoryruntime.SessionResultProjectionOperation
 	responseEvents responsestreamservice.Service
+	durable        durableexecution.Service
 }
 
 // ForRuntime rejects rebinding an already-bound application gateway. Runtime
@@ -78,6 +81,13 @@ func NewWithResponseService(
 	if err != nil {
 		return nil
 	}
+	var durable durableexecution.Service
+	if execution := host.DurableExecution(); execution != nil {
+		durable, err = durableexecutionwire.NewService(execution)
+		if err != nil {
+			return nil
+		}
+	}
 	return &Service{
 		host:           host,
 		liveRuntime:    liveRuntime,
@@ -85,6 +95,7 @@ func NewWithResponseService(
 		reconnects:     reconnects,
 		results:        results,
 		responseEvents: responseEvents,
+		durable:        durable,
 	}
 }
 

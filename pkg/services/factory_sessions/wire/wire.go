@@ -12,7 +12,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
-	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/durable_execution/wire"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -110,7 +110,7 @@ func NewDurableExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (factorysessions.ExecutionService, error) {
-	return factorysessionservice.NewDurableExecution(
+	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
 		checkpointSummaries, workflows, workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID,
@@ -134,7 +134,7 @@ func NewStandaloneExecution(
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
 ) (factorysessions.ExecutionService, error) {
-	return factorysessionservice.NewStandaloneExecution(
+	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
 		executor, clock, syncWaits, checkpointSummaries, workflows,
 		recordingWriter, generateSessionID, fixtureFiles,

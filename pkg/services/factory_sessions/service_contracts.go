@@ -113,6 +113,7 @@ type RuntimeBinding struct {
 // uses ForRuntime to create an isolated runtime view; a bound view serves the
 // remaining application operations.
 type Gateway interface {
+	ExecutionService
 	ForRuntime(RuntimeBinding) (RuntimeAssembly, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)

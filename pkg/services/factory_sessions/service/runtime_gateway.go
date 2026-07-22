@@ -62,10 +62,10 @@ func (s *Service) ReadDurableFactorySessionEventStream(
 	sessionID string,
 	reconnect factorysessions.EventReconnectRequest,
 ) (*interfaces.FactoryEventStream, error) {
-	if s == nil || s.host == nil || s.host.DurableExecution() == nil {
+	if s == nil || s.durable == nil {
 		return nil, factorysessions.ErrExecutionServiceNotConfigured
 	}
-	result, err := s.host.DurableExecution().ReadEvents(ctx, sessionID, reconnect)
+	result, err := s.durable.ReadEvents(ctx, sessionID, reconnect)
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +79,10 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	sessionID string,
 	reconnect factorysessions.EventReconnectRequest,
 ) error {
-	if s == nil || s.host == nil || s.host.DurableExecution() == nil {
+	if s == nil || s.durable == nil {
 		return factorysessions.ErrExecutionServiceNotConfigured
 	}
-	_, err := s.host.DurableExecution().ReadEvents(ctx, sessionID, reconnect)
+	_, err := s.durable.ReadEvents(ctx, sessionID, reconnect)
 	return err
 }
 

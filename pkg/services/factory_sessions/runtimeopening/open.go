@@ -358,7 +358,6 @@ func openRuntime(
 	opened := assembleRuntimeProducts(
 		factoryDefinitionOwner,
 		service4,
-		factorysessionexecutionService,
 		invocationDomain,
 		sessionRuntime,
 		factoryWorkflows,

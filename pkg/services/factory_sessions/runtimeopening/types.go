@@ -20,7 +20,6 @@ type runtimeProducts struct {
 func assembleRuntimeProducts(
 	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway factorysessions.Service,
-	sessionExecution factorysessions.ExecutionService,
 	sessionInvocation factorysessions.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
@@ -51,7 +50,7 @@ func assembleRuntimeProducts(
 		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 		WorkflowPreview: workflowPreview,
 		FactorySessions: factorySessionGateway, SessionInvocation: sessionInvocation,
-		SessionExecution: sessionExecution, Work: workService, Models: modelService,
+		SessionExecution: factorySessionGateway, Work: workService, Models: modelService,
 		Workers: workerService, ProviderSessions: providerSessions,
 		WorkerPrompts: workerPrompts, Logger: resources.Logger,
 	}
@@ -66,11 +65,11 @@ func assembleRuntimeProducts(
 		invocation: factorysessions.OpenedInvocationRuntime{
 			Workers: workerService, Sessions: factorySessionGateway,
 			Invoker: sessionInvocation, InputResolver: inputResolver,
-			Execution: sessionExecution, Lifecycle: lifecycle,
+			Execution: factorySessionGateway, Lifecycle: lifecycle,
 			CloseArtifacts: startup.CloseArtifacts,
 		},
 		execution: factorysessions.OpenedExecutionRuntime{
-			Execution: sessionExecution, WorkflowPreview: workflowPreview,
+			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
 			Resources: resources,
 		},
 	}

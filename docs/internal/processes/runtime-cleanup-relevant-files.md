@@ -346,10 +346,11 @@ When changing durable Factory Session execution construction, run
 `make durable-runtime-construction-check`. The guard permits direct
 `NewJavaScriptRuntimeService` calls only in the package-local execution-provider
 factory and approved deterministic test harness. Project-local persistence path
-resolution and directory-store construction belong at the fallible application
-composition boundary in `pkg/factory/sessions/execution/service.go`; production
-runtime code must receive either that injected store or an explicit disabled
-policy and must not use a persistence boolean.
+resolution and durable-engine selection belong at the fallible owner-private
+composition boundary in
+`pkg/services/factory_sessions/services/durable_execution/internal/service/construction.go`;
+production runtime code must receive either that injected store or an explicit
+disabled policy and must not use a persistence boolean.
 
 Construct `pkg/service/runtimebuild.Service` with an explicit clock, logger, and
 runtime bundle builder, and propagate its constructor error before initializer
@@ -573,6 +574,16 @@ and its service-local constructors; they must not select the concrete session
 owner or one-shot invocation implementation directly. Construction remains
 inert, while timeout and cancellation ownership stays inside the invocation
 capability.
+
+Durable Factory Session start, idempotency, lifecycle control, persistence,
+restart recovery, result/dispatch/artifact inspection, and canonical event
+reads are owned by `factory_sessions/services/durable_execution`. Construct the
+capability through its service-local Wire package, retain the concrete engine
+behind that private contract, and expose execution to HTTP, invocation, and MCP
+runtime views through the outer Factory Sessions `Service`. Runtime composition
+may retain an exact mutation-recording callback while assembling the Factory
+Runtime, but consumers must not receive the raw durable engine as a parallel
+service boundary.
 
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in

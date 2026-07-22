@@ -73,7 +73,7 @@ func (s *Service) ApproveDurableFactorySession(
 	if s == nil || s.host == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.ApproveDurableFactorySession(ctx, s.host, sessionID, request)
+	return controlplane.ApproveDurableFactorySession(ctx, s.durableLifecycleHost(), sessionID, request)
 }
 
 // RetryDurableFactorySessionDispatch applies durable retry-dispatch control through the control plane.
@@ -85,7 +85,7 @@ func (s *Service) RetryDurableFactorySessionDispatch(
 	if s == nil || s.host == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.RetryDurableFactorySessionDispatch(ctx, s.host, sessionID, request)
+	return controlplane.RetryDurableFactorySessionDispatch(ctx, s.durableLifecycleHost(), sessionID, request)
 }
 
 // InterruptDurableFactorySessionDispatch applies durable interrupt-dispatch control through the control plane.
@@ -97,7 +97,7 @@ func (s *Service) InterruptDurableFactorySessionDispatch(
 	if s == nil || s.host == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.InterruptDurableFactorySessionDispatch(ctx, s.host, sessionID, request)
+	return controlplane.InterruptDurableFactorySessionDispatch(ctx, s.durableLifecycleHost(), sessionID, request)
 }
 
 type durableLifecycleControlFunc func(
@@ -116,5 +116,20 @@ func (s *Service) applyDurableLifecycleControl(
 	if s == nil || s.host == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	return apply(ctx, s.host, sessionID, request)
+	return apply(ctx, s.durableLifecycleHost(), sessionID, request)
+}
+
+type durableLifecycleHost struct {
+	execution factorysessions.ExecutionService
+}
+
+func (h durableLifecycleHost) DurableExecution() factorysessions.ExecutionService {
+	return h.execution
+}
+
+func (s *Service) durableLifecycleHost() controlplane.DurableLifecycleHost {
+	if s == nil {
+		return durableLifecycleHost{}
+	}
+	return durableLifecycleHost{execution: s.durable}
 }

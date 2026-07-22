@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
 )
@@ -182,6 +184,113 @@ func TestService_ProbeDurableFactorySessionEvents_ReadsWithoutMaterializingStrea
 	if len(execution.readCalls) != 1 || execution.readCalls[0].AfterEventID != "event-0" {
 		t.Fatalf("read calls = %#v, want one probe read", execution.readCalls)
 	}
+}
+
+func TestService_DurableOperationsUseOuterFactorySessionsBoundary(t *testing.T) {
+	t.Parallel()
+
+	execution := &outerBoundaryExecution{}
+	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
+
+	started, err := gateway.StartAsync(context.Background(), factorysessionexecution.StartRequest{RequestID: "request-outer"})
+	if err != nil || started.SessionID != "dur-sess-outer" {
+		t.Fatalf("StartAsync = (%#v, %v)", started, err)
+	}
+	read, err := gateway.GetSession(context.Background(), started.SessionID)
+	if err != nil || read.SessionID != started.SessionID {
+		t.Fatalf("GetSession = (%#v, %v)", read, err)
+	}
+	result, err := gateway.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{})
+	if err != nil || result.ResultStatus != factorysessionexecution.ResultStatusFinal {
+		t.Fatalf("GetResult = (%#v, %v)", result, err)
+	}
+	events, err := gateway.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
+	if err != nil || events.SessionID != started.SessionID {
+		t.Fatalf("ReadEvents = (%#v, %v)", events, err)
+	}
+	if execution.calls != 4 {
+		t.Fatalf("execution calls = %d, want 4", execution.calls)
+	}
+}
+
+func TestService_DurableStartIdempotencyUsesOuterFactorySessionsBoundary(t *testing.T) {
+	t.Parallel()
+
+	const requestID = "request-idempotent"
+	execution, err := factorysessionexecution.NewFakeService(
+		fixedExecutionClock{now: time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)},
+		factorysessionexecution.FakeScenario{
+			ID:        "idempotent",
+			RequestID: requestID,
+			Session: factorysessionexecution.SessionReadResult{
+				SessionID: "dur-sess-idempotent",
+				Status:    factorysessionexecution.LifecycleStatusRunning,
+			},
+			AsyncStart: &factorysessionexecution.AsyncStartResult{
+				SessionID: "dur-sess-idempotent",
+				Status:    string(factorysessionexecution.LifecycleStatusRunning),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewFakeService: %v", err)
+	}
+	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
+	request := factorysessionexecution.StartRequest{
+		RequestID: requestID,
+		Source: factorysessionexecution.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: "factory-1",
+		},
+	}
+
+	first, err := gateway.StartAsync(context.Background(), request)
+	if err != nil {
+		t.Fatalf("first StartAsync: %v", err)
+	}
+	second, err := gateway.StartAsync(context.Background(), request)
+	if err != nil {
+		t.Fatalf("replayed StartAsync: %v", err)
+	}
+	if second.SessionID != first.SessionID || first.SessionID != "dur-sess-idempotent" {
+		t.Fatalf("start replay = (%q, %q), want stable dur-sess-idempotent", first.SessionID, second.SessionID)
+	}
+	conflict := request
+	conflict.Args = map[string]any{"changed": true}
+	if _, err := gateway.StartAsync(context.Background(), conflict); !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("conflicting StartAsync error = %v, want request ID conflict", err)
+	}
+}
+
+type fixedExecutionClock struct {
+	now time.Time
+}
+
+func (c fixedExecutionClock) Now() time.Time { return c.now }
+
+type outerBoundaryExecution struct {
+	factorysessionexecution.Service
+	calls int
+}
+
+func (s *outerBoundaryExecution) StartAsync(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
+	s.calls++
+	return factorysessionexecution.AsyncStartResult{SessionID: "dur-sess-outer"}, nil
+}
+
+func (s *outerBoundaryExecution) GetSession(context.Context, string) (factorysessionexecution.SessionReadResult, error) {
+	s.calls++
+	return factorysessionexecution.SessionReadResult{SessionID: "dur-sess-outer"}, nil
+}
+
+func (s *outerBoundaryExecution) GetResult(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
+	s.calls++
+	return factorysessionexecution.ResultReadResult{SessionID: "dur-sess-outer", ResultStatus: factorysessionexecution.ResultStatusFinal}, nil
+}
+
+func (s *outerBoundaryExecution) ReadEvents(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+	s.calls++
+	return factorysessionexecution.EventReadResult{SessionID: "dur-sess-outer"}, nil
 }
 
 func (s *stubDurableExecution) ListSessions(context.Context, factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsResult, error) {
