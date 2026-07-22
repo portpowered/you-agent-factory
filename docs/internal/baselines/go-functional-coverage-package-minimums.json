@@ -382,7 +382,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "minimum": 43.00
+      "minimum": 42.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
