@@ -320,6 +320,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   policy: higher tiers replace lower tiers, scalar observations from one binding
   use the last value, repeated observations append in order, and multiple
   same-tier bindings for one input are rejected.
+  Static-plus-Factory composition is owned by
+  `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
+  command and only the selected Factory's `InvocationSignatureConfig`. The pure
+  projection keeps manifest inputs separate from dynamic Factory parameters and
+  rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
+  and stable-binding collisions with sorted diagnostics that identify both
+  owners. Named and explicit-file selectors must not enter this composition
+  policy; equivalent selected signatures produce equivalent results.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
   path-specific semantic diagnostics before generation or consumption.
