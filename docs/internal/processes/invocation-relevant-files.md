@@ -364,6 +364,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   lower tiers, scalar observations from one binding
   use the last value, repeated observations append in order, and multiple
   same-tier bindings for one input are rejected.
+  Resolved runtime CLI values belong in
+  `pkg/transports/cli/resolvedinput`: its collection-based resolver and accessors
+  use stable schema input IDs and canonical typed values, with no Cobra, public
+  spelling, position, environment, filesystem, or process-global dependency.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
