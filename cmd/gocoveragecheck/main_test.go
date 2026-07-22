@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 var emptyCoverageBaseline = map[string]struct{}{}
@@ -118,6 +120,11 @@ func TestResolveCoverageLaneFunctionalSuite(t *testing.T) {
 	} {
 		if !slices.Contains(testPackages, functionalPackage) {
 			t.Fatalf("test packages missing maintained functional package %q: %v", functionalPackage, testPackages)
+		}
+	}
+	for _, providerPackage := range testlanes.RequiredProviderFunctionalPackages() {
+		if !slices.Contains(testPackages, providerPackage) {
+			t.Fatalf("test packages missing required provider package %q: %v", providerPackage, testPackages)
 		}
 	}
 	if slices.Contains(testPackages, modulePath+"/tests/functional/internal/support") {
