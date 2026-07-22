@@ -17,6 +17,14 @@ primary-result behavior.
   package's observed numeric floor and the wrapper package's documented
   measurement exception when it has no executable statements. Verify both with
   `make test-unit-coverage` and `make test-functional-coverage`.
+- The customer-implementable provider inference contract lives in
+  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+  through `ExecuteInvocation` so provider-authored drafts are validated for
+  provenance, invocation and item correlation, lifecycle ordering, terminal
+  result agreement, and exactly-once close before they reach orchestration.
+  Keep this boundary provider-neutral and test it with deterministic writers;
+  Factory Session publication identity, sequencing, retention, and replay stay
+  outside this package.
 
 ## CLI run and submit command contracts
 
