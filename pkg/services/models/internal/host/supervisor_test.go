@@ -354,3 +354,19 @@ func TestLoadedFactoryConfigForSupervisedTests(t *testing.T) {
 		t.Fatal("loaded config is nil")
 	}
 }
+
+func TestSupervisedRuntime_UnexpectedStateAndAbsentProcessAreSafe(t *testing.T) {
+	t.Parallel()
+
+	runtime := &supervisedRuntime{state: supervisedState("unexpected")}
+	snapshot := runtime.readinessOverlay(Identity{Name: "OMNIVOICE_Q4_K_M"}, ReadinessSnapshot{
+		ReadinessState: managedruntime.ReadinessStateReady,
+	})
+	if snapshot.ReadinessState != managedruntime.ReadinessStateLoading ||
+		snapshot.LifecycleState != managedruntime.LifecycleStateLoading {
+		t.Fatalf("unexpected-state snapshot = %#v, want conservative loading state", snapshot)
+	}
+	if err := runtime.stop(context.Background()); err != nil {
+		t.Fatalf("stop without a managed process: %v", err)
+	}
+}
