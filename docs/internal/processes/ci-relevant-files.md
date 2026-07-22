@@ -72,6 +72,10 @@
   `go list ./tests/functional/...` result, the shared-support exclusion, and
   required provider-destination validation in both callers. Required package
   validation protects topology but must not become an execution allowlist.
+  `make functional-boundary-check` also owns the deletion-only inventory of
+  grandfathered `tests/functional/providers/*_test.go` files: existing entries
+  may be removed as they migrate, but new provider scenarios must begin in a
+  dedicated provider or provider-domain subpackage.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing

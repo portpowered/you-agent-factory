@@ -82,7 +82,7 @@ test results.
 | `workflow` | Core multi-step workflow behavior such as routing, review loops, and ordinary progression across workstations. |
 | `guards_batch` | Guard evaluation, dependency gating, fan-in or batch semantics, and request-batch behavior that should fail in one narrow behavior area. |
 | `runtime_api` | Runtime projections, HTTP API behavior, event or state queries, and other externally observable runtime read models. |
-| `providers` | Legacy aggregate provider coverage that remains runnable while scenarios migrate to the dedicated packages below. Do not add new scenarios here. |
+| `providers` | Legacy aggregate provider coverage that remains runnable while scenarios migrate to the dedicated packages below. `make functional-boundary-check` rejects new root-level Go test files; do not add new scenarios here. |
 | `providers/contract` | Provider-neutral extension behavior shared across provider identities. |
 | `providers/agy`, `providers/claude`, `providers/codex`, `providers/cursor`, `providers/gemini`, `providers/kiro`, `providers/opencode`, `providers/pi` | Behavior owned by the named built-in model provider. |
 | `providers/script` | Script-worker behavior, which is not model-provider behavior. |

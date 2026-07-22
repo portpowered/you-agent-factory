@@ -203,6 +203,48 @@ var fixture = config{ConfigureRuntime: func() {}}
 	}
 }
 
+func TestCheckAggregateProviderTestsAcceptsGrandfatheredFiles(t *testing.T) {
+	root := t.TempDir()
+	for name := range grandfatheredAggregateProviderTestFiles {
+		writeFunctionalSourceAtRoot(t, root, providerTestRoot+name, "package providers\n")
+	}
+
+	if err := checkAggregateProviderTests(root); err != nil {
+		t.Fatalf("checkAggregateProviderTests() error = %v", err)
+	}
+}
+
+func TestCheckAggregateProviderTestsRejectsNewAggregateTest(t *testing.T) {
+	root := t.TempDir()
+	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"new_scenario_test.go", "package providers\n")
+
+	err := checkAggregateProviderTests(root)
+	if err == nil || !strings.Contains(err.Error(), "new aggregate provider test prohibited: tests/functional/providers/new_scenario_test.go") {
+		t.Fatalf("checkAggregateProviderTests() error = %v, want new aggregate test failure", err)
+	}
+	if !strings.Contains(err.Error(), "dedicated provider or domain subpackage") {
+		t.Fatalf("checkAggregateProviderTests() error = %v, want migration destination", err)
+	}
+}
+
+func TestCheckAggregateProviderTestsAllowsGrandfatheredRemoval(t *testing.T) {
+	root := t.TempDir()
+	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"helpers_test.go", "package providers\n")
+
+	if err := checkAggregateProviderTests(root); err != nil {
+		t.Fatalf("checkAggregateProviderTests() error = %v", err)
+	}
+}
+
+func TestCheckAggregateProviderTestsAcceptsDedicatedSubpackageTest(t *testing.T) {
+	root := t.TempDir()
+	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"codex/new_scenario_test.go", "package codex\n")
+
+	if err := checkAggregateProviderTests(root); err != nil {
+		t.Fatalf("checkAggregateProviderTests() error = %v", err)
+	}
+}
+
 func writeFunctionalSource(t *testing.T, source string) (string, string) {
 	t.Helper()
 	return writeFunctionalSourceAt(t, "tests/functional/guards_batch/request_batch_test.go", source)
@@ -216,6 +258,12 @@ func writeProviderFunctionalSource(t *testing.T, source string) (string, string)
 func writeFunctionalSourceAt(t *testing.T, relativePath, source string) (string, string) {
 	t.Helper()
 	root := t.TempDir()
+	path := writeFunctionalSourceAtRoot(t, root, relativePath, source)
+	return root, path
+}
+
+func writeFunctionalSourceAtRoot(t *testing.T, root, relativePath, source string) string {
+	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("create functional fixture: %v", err)
@@ -223,5 +271,5 @@ func writeFunctionalSourceAt(t *testing.T, relativePath, source string) (string,
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatalf("write functional fixture: %v", err)
 	}
-	return root, path
+	return path
 }

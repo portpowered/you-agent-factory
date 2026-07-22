@@ -75,6 +75,32 @@ var forbiddenFunctionalConfigFields = map[string]struct{}{
 	"ConfigureRuntime": {},
 }
 
+// grandfatheredAggregateProviderTestFiles is deletion-only: existing aggregate
+// tests may remain runnable while they migrate, but new tests belong in a
+// dedicated provider or provider-domain package.
+var grandfatheredAggregateProviderTestFiles = map[string]struct{}{
+	"cli_script_executor_test.go":                        {},
+	"cli_script_executor_timeout_long_test.go":           {},
+	"cli_template_resolution_long_test.go":               {},
+	"cli_timeout_cleanup_process_unix_test.go":           {},
+	"cli_timeout_cleanup_process_windows_test.go":        {},
+	"cli_timeout_cleanup_smoke_test.go":                  {},
+	"cli_timeout_companion_smoke_long_test.go":           {},
+	"cli_worktree_passthrough_test.go":                   {},
+	"codex_content_test.go":                              {},
+	"codex_worktree_workstation_test.go":                 {},
+	"cursor_provider_command_test.go":                    {},
+	"helpers_long_test.go":                               {},
+	"helpers_test.go":                                    {},
+	"mock_workers_agent_test.go":                         {},
+	"mock_workers_cli_http_stability_smoke_long_test.go": {},
+	"mock_workers_end_to_end_smoke_test.go":              {},
+	"mock_workers_script_test.go":                        {},
+	"mock_workers_service_runner_test.go":                {},
+	"packaged_script_runtime_test.go":                    {},
+	"runtime_logging_smoke_test.go":                      {},
+}
+
 type config struct {
 	root string
 	path string
@@ -95,7 +121,31 @@ func run(args []string, stderr io.Writer) error {
 	if err := checkSource(cfg.root, cfg.path); err != nil {
 		return err
 	}
+	if err := checkAggregateProviderTests(cfg.root); err != nil {
+		return err
+	}
 	return checkFunctionalCompositionTree(cfg.root)
+}
+
+func checkAggregateProviderTests(root string) error {
+	providerRoot := filepath.Join(root, filepath.FromSlash(providerTestRoot))
+	entries, err := os.ReadDir(providerRoot)
+	if err != nil {
+		return fmt.Errorf("%s read aggregate provider tests: %w", diagnosticPrefix, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		if _, grandfathered := grandfatheredAggregateProviderTestFiles[entry.Name()]; grandfathered {
+			continue
+		}
+		return fmt.Errorf(
+			"%s new aggregate provider test prohibited: %s%s; place the test in the dedicated provider or domain subpackage",
+			diagnosticPrefix, providerTestRoot, entry.Name(),
+		)
+	}
+	return nil
 }
 
 func checkFunctionalCompositionTree(root string) error {
