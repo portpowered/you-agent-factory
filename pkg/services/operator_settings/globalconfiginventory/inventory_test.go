@@ -77,8 +77,8 @@ func TestProjectTopologyInventory_RecordsRequiredFieldsAndLayers(t *testing.T) {
 		t.Fatalf("backendScopeID precedence layers = %#v, want none", backendScope.PrecedenceLayers)
 	}
 
-	if len(inventory.UnknownFieldPolicy) < 2 {
-		t.Fatalf("unknown field policy len = %d, want settings and identity loader entries", len(inventory.UnknownFieldPolicy))
+	if len(inventory.UnknownFieldPolicy) != 1 {
+		t.Fatalf("unknown field policy len = %d, want one canonical generated-document policy", len(inventory.UnknownFieldPolicy))
 	}
 }
 

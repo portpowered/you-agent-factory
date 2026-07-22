@@ -594,35 +594,6 @@ const (
 	FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE FactoryWorldWorkItemRefPayloadStatus = "UNAVAILABLE"
 )
 
-// Defines values for GlobalConfigWorkerPresetModelProvider.
-const (
-	GlobalConfigWorkerPresetModelProviderAGYUpper         GlobalConfigWorkerPresetModelProvider = "AGY"
-	GlobalConfigWorkerPresetModelProviderAgent            GlobalConfigWorkerPresetModelProvider = "agent"
-	GlobalConfigWorkerPresetModelProviderAgy              GlobalConfigWorkerPresetModelProvider = "agy"
-	GlobalConfigWorkerPresetModelProviderAnthropic        GlobalConfigWorkerPresetModelProvider = "anthropic"
-	GlobalConfigWorkerPresetModelProviderAnthropicUpper   GlobalConfigWorkerPresetModelProvider = "ANTHROPIC"
-	GlobalConfigWorkerPresetModelProviderAntigravity      GlobalConfigWorkerPresetModelProvider = "antigravity"
-	GlobalConfigWorkerPresetModelProviderClaude           GlobalConfigWorkerPresetModelProvider = "claude"
-	GlobalConfigWorkerPresetModelProviderClaudeUpper      GlobalConfigWorkerPresetModelProvider = "CLAUDE"
-	GlobalConfigWorkerPresetModelProviderCodex            GlobalConfigWorkerPresetModelProvider = "codex"
-	GlobalConfigWorkerPresetModelProviderCodexUpper       GlobalConfigWorkerPresetModelProvider = "CODEX"
-	GlobalConfigWorkerPresetModelProviderCursor           GlobalConfigWorkerPresetModelProvider = "cursor"
-	GlobalConfigWorkerPresetModelProviderCursorAgent      GlobalConfigWorkerPresetModelProvider = "cursor-agent"
-	GlobalConfigWorkerPresetModelProviderCursorAgentUpper GlobalConfigWorkerPresetModelProvider = "CURSOR_AGENT"
-	GlobalConfigWorkerPresetModelProviderCursorUpper      GlobalConfigWorkerPresetModelProvider = "CURSOR"
-	GlobalConfigWorkerPresetModelProviderGemini           GlobalConfigWorkerPresetModelProvider = "gemini"
-	GlobalConfigWorkerPresetModelProviderGeminiUpper      GlobalConfigWorkerPresetModelProvider = "GEMINI"
-	GlobalConfigWorkerPresetModelProviderKiro             GlobalConfigWorkerPresetModelProvider = "kiro"
-	GlobalConfigWorkerPresetModelProviderKiroCLI          GlobalConfigWorkerPresetModelProvider = "kiro-cli"
-	GlobalConfigWorkerPresetModelProviderKiroUpper        GlobalConfigWorkerPresetModelProvider = "KIRO"
-	GlobalConfigWorkerPresetModelProviderOpenAI           GlobalConfigWorkerPresetModelProvider = "openai"
-	GlobalConfigWorkerPresetModelProviderOpenAIUpper      GlobalConfigWorkerPresetModelProvider = "OPENAI"
-	GlobalConfigWorkerPresetModelProviderOpenCode         GlobalConfigWorkerPresetModelProvider = "opencode"
-	GlobalConfigWorkerPresetModelProviderOpenCodeUpper    GlobalConfigWorkerPresetModelProvider = "OPENCODE"
-	GlobalConfigWorkerPresetModelProviderPI               GlobalConfigWorkerPresetModelProvider = "pi"
-	GlobalConfigWorkerPresetModelProviderPIUpper          GlobalConfigWorkerPresetModelProvider = "PI"
-)
-
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -4084,15 +4055,15 @@ type GlobalConfigWorkerPreset struct {
 	// Model Optional model name, trimmed when present.
 	Model *string `json:"model,omitempty"`
 
-	// ModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
+	// ModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
 	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
 
 	// ReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
 	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
 }
 
-// GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
-type GlobalConfigWorkerPresetModelProvider string
+// GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+type GlobalConfigWorkerPresetModelProvider = string
 
 // GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
 type GlobalConfigWorkerPresetReasoningEffort = string

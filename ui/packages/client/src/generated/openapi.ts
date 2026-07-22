@@ -4847,15 +4847,13 @@ export interface components {
     GlobalConfigWorkerPreset: {
       /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
       id: string;
-      /**
-       * @description Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
-       * @enum {string}
-       */
-      modelProvider: GlobalConfigWorkerPresetModelProvider;
+      modelProvider: components["schemas"]["GlobalConfigWorkerPresetModelProvider"];
       /** @description Optional model name, trimmed when present. */
       model?: string;
       reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
     };
+    /** @description Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
+    GlobalConfigWorkerPresetModelProvider: string;
     /** @description Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified. */
     GlobalConfigWorkerPresetReasoningEffort: string;
     WorkRequest: {
@@ -7930,35 +7928,6 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
-export const GlobalConfigWorkerPresetModelProvider = {
-  GlobalConfigWorkerPresetModelProviderAGYUpper: "AGY",
-  GlobalConfigWorkerPresetModelProviderAnthropicUpper: "ANTHROPIC",
-  GlobalConfigWorkerPresetModelProviderClaudeUpper: "CLAUDE",
-  GlobalConfigWorkerPresetModelProviderCodexUpper: "CODEX",
-  GlobalConfigWorkerPresetModelProviderCursorUpper: "CURSOR",
-  GlobalConfigWorkerPresetModelProviderCursorAgentUpper: "CURSOR_AGENT",
-  GlobalConfigWorkerPresetModelProviderGeminiUpper: "GEMINI",
-  GlobalConfigWorkerPresetModelProviderKiroUpper: "KIRO",
-  GlobalConfigWorkerPresetModelProviderOpenAIUpper: "OPENAI",
-  GlobalConfigWorkerPresetModelProviderOpenCodeUpper: "OPENCODE",
-  GlobalConfigWorkerPresetModelProviderPIUpper: "PI",
-  GlobalConfigWorkerPresetModelProviderAgent: "agent",
-  GlobalConfigWorkerPresetModelProviderAgy: "agy",
-  GlobalConfigWorkerPresetModelProviderAnthropic: "anthropic",
-  GlobalConfigWorkerPresetModelProviderAntigravity: "antigravity",
-  GlobalConfigWorkerPresetModelProviderClaude: "claude",
-  GlobalConfigWorkerPresetModelProviderCodex: "codex",
-  GlobalConfigWorkerPresetModelProviderCursor: "cursor",
-  GlobalConfigWorkerPresetModelProviderCursorAgent: "cursor-agent",
-  GlobalConfigWorkerPresetModelProviderGemini: "gemini",
-  GlobalConfigWorkerPresetModelProviderKiro: "kiro",
-  GlobalConfigWorkerPresetModelProviderKiroCLI: "kiro-cli",
-  GlobalConfigWorkerPresetModelProviderOpenAI: "openai",
-  GlobalConfigWorkerPresetModelProviderOpenCode: "opencode",
-  GlobalConfigWorkerPresetModelProviderPI: "pi",
-} as const;
-export type GlobalConfigWorkerPresetModelProvider =
-  (typeof GlobalConfigWorkerPresetModelProvider)[keyof typeof GlobalConfigWorkerPresetModelProvider];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",

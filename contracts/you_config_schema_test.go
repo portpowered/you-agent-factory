@@ -414,8 +414,8 @@ func TestYouConfigSchemaPersistenceCasesAgreeWithDocumentedSemantics(t *testing.
 	}
 
 	defaults := fields["defaults"].(map[string]any)
-	if defaults["parseOwner"] != "operator_settings" || defaults["persistenceOwner"] != "none" {
-		t.Fatalf("defaults ownership = parse %q persist %q, want operator_settings/none", defaults["parseOwner"], defaults["persistenceOwner"])
+	if defaults["parseOwner"] != "operator_settings" || defaults["persistenceOwner"] != "operator_settings" {
+		t.Fatalf("defaults ownership = parse %q persist %q, want operator_settings/operator_settings", defaults["parseOwner"], defaults["persistenceOwner"])
 	}
 
 	summary := contract["sharedFileSplit"].(map[string]any)["summary"].(string)

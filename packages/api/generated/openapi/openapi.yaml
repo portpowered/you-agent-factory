@@ -9697,67 +9697,16 @@ components:
           pattern: .*\S.*
           description: Non-empty preset identifier after surrounding whitespace is trimmed.
         modelProvider:
-          type: string
-          minLength: 1
-          pattern: .*\S.*
-          description: Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
-          x-enum-varnames:
-            - GlobalConfigWorkerPresetModelProviderAGYUpper
-            - GlobalConfigWorkerPresetModelProviderAnthropicUpper
-            - GlobalConfigWorkerPresetModelProviderClaudeUpper
-            - GlobalConfigWorkerPresetModelProviderCodexUpper
-            - GlobalConfigWorkerPresetModelProviderCursorUpper
-            - GlobalConfigWorkerPresetModelProviderCursorAgentUpper
-            - GlobalConfigWorkerPresetModelProviderGeminiUpper
-            - GlobalConfigWorkerPresetModelProviderKiroUpper
-            - GlobalConfigWorkerPresetModelProviderOpenAIUpper
-            - GlobalConfigWorkerPresetModelProviderOpenCodeUpper
-            - GlobalConfigWorkerPresetModelProviderPIUpper
-            - GlobalConfigWorkerPresetModelProviderAgent
-            - GlobalConfigWorkerPresetModelProviderAgy
-            - GlobalConfigWorkerPresetModelProviderAnthropic
-            - GlobalConfigWorkerPresetModelProviderAntigravity
-            - GlobalConfigWorkerPresetModelProviderClaude
-            - GlobalConfigWorkerPresetModelProviderCodex
-            - GlobalConfigWorkerPresetModelProviderCursor
-            - GlobalConfigWorkerPresetModelProviderCursorAgent
-            - GlobalConfigWorkerPresetModelProviderGemini
-            - GlobalConfigWorkerPresetModelProviderKiro
-            - GlobalConfigWorkerPresetModelProviderKiroCLI
-            - GlobalConfigWorkerPresetModelProviderOpenAI
-            - GlobalConfigWorkerPresetModelProviderOpenCode
-            - GlobalConfigWorkerPresetModelProviderPI
-          enum:
-            - AGY
-            - ANTHROPIC
-            - CLAUDE
-            - CODEX
-            - CURSOR
-            - CURSOR_AGENT
-            - GEMINI
-            - KIRO
-            - OPENAI
-            - OPENCODE
-            - PI
-            - agent
-            - agy
-            - anthropic
-            - antigravity
-            - claude
-            - codex
-            - cursor
-            - cursor-agent
-            - gemini
-            - kiro
-            - kiro-cli
-            - openai
-            - opencode
-            - pi
+          $ref: '#/components/schemas/GlobalConfigWorkerPresetModelProvider'
         model:
           type: string
           description: Optional model name, trimmed when present.
         reasoningEffort:
           $ref: '#/components/schemas/GlobalConfigWorkerPresetReasoningEffort'
+    GlobalConfigWorkerPresetModelProvider:
+      type: string
+      description: Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+      pattern: ^[ \t\r\n]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[ \t\r\n]*$
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.

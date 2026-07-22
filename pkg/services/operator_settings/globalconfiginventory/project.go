@@ -45,11 +45,7 @@ func topologyUnknownFieldPolicies() []UnknownFieldPolicy {
 	return []UnknownFieldPolicy{
 		{
 			Package: ownerOperatorSettings,
-			Policy:  "settings loading uses the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
-		},
-		{
-			Package: ownerOperatorSettings,
-			Policy:  "identity loading reads only backendScopeID and ignores other top-level keys; identity persistence rewrites through a raw-message map that preserves unrelated sibling keys",
+			Policy:  "settings and identity loading use the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and reject unknown top-level keys, unknown nested keys, and trailing JSON values",
 		},
 	}
 }

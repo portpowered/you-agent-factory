@@ -15,7 +15,7 @@ import (
 
 func TestGlobalConfigContract_GeneratesNamedGoModels(t *testing.T) {
 	presets := []generated.GlobalConfigWorkerPreset{{
-		Id: "research", ModelProvider: generated.GlobalConfigWorkerPresetModelProviderOpenAI,
+		Id: "research", ModelProvider: generated.GlobalConfigWorkerPresetModelProvider("openai"),
 	}}
 	config := generated.GlobalConfig{
 		Defaults:      &generated.GlobalConfigDefaults{},
@@ -34,7 +34,7 @@ func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
 			"backendScopeID":"local-11111111-1111-4111-8111-111111111111",
 			"defaults":{"workerModelProvider":"DEFAULT","workerModel":"gpt-5"},
 			"workerPresets":[
-				{"id":"research","modelProvider":"openai","model":"gpt-5","reasoningEffort":" HIGH "},
+				{"id":"research","modelProvider":" openai ","model":"gpt-5","reasoningEffort":" HIGH "},
 				{"id":"fast","modelProvider":"CLAUDE","reasoningEffort":""}
 			]
 		}`,
@@ -69,6 +69,7 @@ func TestGlobalConfigContract_UsesClosedNamedComponents(t *testing.T) {
 	globalConfig := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfig")
 	defaults := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigDefaults")
 	preset := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigWorkerPreset")
+	provider := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigWorkerPresetModelProvider")
 
 	for name, schema := range map[string]*openapi3.Schema{
 		"GlobalConfig": globalConfig, "GlobalConfigDefaults": defaults, "GlobalConfigWorkerPreset": preset,
@@ -88,6 +89,12 @@ func TestGlobalConfigContract_UsesClosedNamedComponents(t *testing.T) {
 	}
 	if !slices.Contains(preset.Required, "id") || !slices.Contains(preset.Required, "modelProvider") {
 		t.Fatal("GlobalConfigWorkerPreset must require id and modelProvider")
+	}
+	if preset.Properties["modelProvider"].Ref != "#/components/schemas/GlobalConfigWorkerPresetModelProvider" {
+		t.Fatalf("GlobalConfigWorkerPreset.properties.modelProvider.$ref = %q", preset.Properties["modelProvider"].Ref)
+	}
+	if provider.Pattern == "" {
+		t.Fatal("GlobalConfigWorkerPresetModelProvider must constrain supported trimmed provider inputs")
 	}
 }
 

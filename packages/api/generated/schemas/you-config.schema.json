@@ -64,36 +64,8 @@
   "$defs": {
     "operatorWorkerModelProvider": {
       "type": "string",
-      "minLength": 1,
-      "pattern": ".*\\S.*",
-      "enum": [
-        "AGY",
-        "ANTHROPIC",
-        "CLAUDE",
-        "CODEX",
-        "CURSOR",
-        "CURSOR_AGENT",
-        "GEMINI",
-        "KIRO",
-        "OPENAI",
-        "OPENCODE",
-        "PI",
-        "agent",
-        "agy",
-        "anthropic",
-        "antigravity",
-        "claude",
-        "codex",
-        "cursor",
-        "cursor-agent",
-        "gemini",
-        "kiro",
-        "kiro-cli",
-        "openai",
-        "opencode",
-        "pi"
-      ],
-      "description": "Required non-empty model provider canonicalized to supported providers. Symbolic DEFAULT is rejected in presets."
+      "pattern": "^[ \\t\\r\\n]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[ \\t\\r\\n]*$",
+      "description": "Required model provider canonicalized to a supported provider after surrounding whitespace is trimmed. Symbolic DEFAULT is rejected in presets."
     },
     "workerPreset": {
       "type": "object",
@@ -306,11 +278,7 @@
     "unknownFieldPolicy": [
       {
         "package": "operator_settings",
-        "policy": "settings loading uses the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
-      },
-      {
-        "package": "operator_settings",
-        "policy": "identity loading reads only backendScopeID and ignores other top-level keys; identity persistence rewrites through a raw-message map that preserves unrelated sibling keys"
+        "policy": "settings and identity loading use the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and reject unknown top-level keys, unknown nested keys, and trailing JSON values"
       }
     ],
     "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
@@ -318,11 +286,11 @@
       "backendScopeID": {
         "inventoryId": "backendScopeID",
         "jsonPath": "backendScopeID",
-        "defaultEmptyBehavior": "missing, whitespace-only file, or empty value triggers EnsureLocalBackendScope to generate local-<uuid> and persist it",
+        "defaultEmptyBehavior": "missing document or missing, empty, or whitespace-only value triggers EnsureLocalBackendScope to generate local-<uuid> and persist it; a present whitespace-only document is invalid",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
-        "strictness": "operator_settings identity tolerant load (unknown top-level keys ignored on read; preserved on persist)",
-        "notes": "operator_settings owns identity persistence; its settings parser accepts backendScopeID as a service-owned sibling",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
+        "notes": "operator_settings loads identity from the canonical generated GlobalConfig document and persists it by re-encoding modeled fields",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.backend-scope-id",
@@ -365,9 +333,9 @@
         "jsonPath": "defaults",
         "defaultEmptyBehavior": "missing defaults object yields empty operator defaults",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
-        "notes": "defaults object is not persisted by operator_settings loaders; only parsed from file before env/flag resolution",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
+        "notes": "defaults are parsed before env/flag resolution and preserved when operator_settings persists a generated backend scope",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults",
@@ -416,8 +384,8 @@
         "jsonPath": "defaults.workerModelProvider",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "notes": "values are trimmed and canonicalized; unsupported providers fail resolve",
         "documentation": {
           "formatVersion": "1.0.0",
@@ -468,8 +436,8 @@
         "jsonPath": "defaults.workerModel",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults.worker-model",
@@ -518,8 +486,8 @@
         "jsonPath": "workerPresets",
         "defaultEmptyBehavior": "missing workerPresets array is backward compatible and yields an empty preset list",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "notes": "file-only (no env or flag layers)",
         "documentation": {
           "formatVersion": "1.0.0",
@@ -572,8 +540,8 @@
         "jsonPath": "workerPresets[].id",
         "defaultEmptyBehavior": "required non-empty after trim; duplicate ids are rejected",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.id",
@@ -618,8 +586,8 @@
         "jsonPath": "workerPresets[].modelProvider",
         "defaultEmptyBehavior": "required non-empty; canonicalized to supported providers; symbolic DEFAULT is rejected in presets",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model-provider",
@@ -665,8 +633,8 @@
         "jsonPath": "workerPresets[].model",
         "defaultEmptyBehavior": "optional; trimmed when present",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model",
@@ -711,8 +679,8 @@
         "jsonPath": "workerPresets[].reasoningEffort",
         "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
         "parseOwner": "operator_settings",
-        "persistenceOwner": "none",
-        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.reasoning-effort",

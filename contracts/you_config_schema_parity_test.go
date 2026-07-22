@@ -77,7 +77,7 @@ var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
 	},
 }
 
-func TestYouConfigSchemaAndLoaderAcceptCanonicalizedReasoningEffort(t *testing.T) {
+func TestYouConfigSchemaAndLoaderAcceptCanonicalizedPresetFields(t *testing.T) {
 	t.Parallel()
 
 	data := readOperatorFixture(t, "valid/worker-presets-canonicalized.json")
@@ -86,15 +86,15 @@ func TestYouConfigSchemaAndLoaderAcceptCanonicalizedReasoningEffort(t *testing.T
 		t.Fatal("canonicalized worker preset fixture must be valid JSON")
 	}
 	if err := youConfigSchema(t).Validate(instance); err != nil {
-		t.Fatalf("schema rejected normalized reasoning effort input: %v", err)
+		t.Fatalf("schema rejected normalized preset input: %v", err)
 	}
 
 	config, err := globalconfigmapping.Decode(data)
 	if err != nil {
-		t.Fatalf("Decode() rejected normalized reasoning effort input: %v", err)
+		t.Fatalf("Decode() rejected normalized preset input: %v", err)
 	}
-	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ReasoningEffort != "high" {
-		t.Fatalf("worker presets = %#v, want one preset normalized to reasoning effort high", config.WorkerPresets)
+	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ModelProvider != "CODEX" || config.WorkerPresets[0].ReasoningEffort != "high" {
+		t.Fatalf("worker presets = %#v, want provider CODEX and reasoning effort high", config.WorkerPresets)
 	}
 }
 

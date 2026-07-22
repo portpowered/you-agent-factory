@@ -2276,6 +2276,8 @@ components:
       $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
     GlobalConfigWorkerPreset:
       $ref: './components/schemas/api/GlobalConfigWorkerPreset.yaml'
+    GlobalConfigWorkerPresetModelProvider:
+      $ref: './components/schemas/api/GlobalConfigWorkerPresetModelProvider.yaml'
     GlobalConfigWorkerPresetReasoningEffort:
       $ref: './components/schemas/api/GlobalConfigWorkerPresetReasoningEffort.yaml'
     # ==== Raw data types here =======

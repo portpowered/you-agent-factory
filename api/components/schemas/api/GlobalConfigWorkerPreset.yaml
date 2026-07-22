@@ -11,62 +11,7 @@ properties:
     pattern: '.*\S.*'
     description: Non-empty preset identifier after surrounding whitespace is trimmed.
   modelProvider:
-    type: string
-    minLength: 1
-    pattern: '.*\S.*'
-    description: Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
-    x-enum-varnames:
-      - GlobalConfigWorkerPresetModelProviderAGYUpper
-      - GlobalConfigWorkerPresetModelProviderAnthropicUpper
-      - GlobalConfigWorkerPresetModelProviderClaudeUpper
-      - GlobalConfigWorkerPresetModelProviderCodexUpper
-      - GlobalConfigWorkerPresetModelProviderCursorUpper
-      - GlobalConfigWorkerPresetModelProviderCursorAgentUpper
-      - GlobalConfigWorkerPresetModelProviderGeminiUpper
-      - GlobalConfigWorkerPresetModelProviderKiroUpper
-      - GlobalConfigWorkerPresetModelProviderOpenAIUpper
-      - GlobalConfigWorkerPresetModelProviderOpenCodeUpper
-      - GlobalConfigWorkerPresetModelProviderPIUpper
-      - GlobalConfigWorkerPresetModelProviderAgent
-      - GlobalConfigWorkerPresetModelProviderAgy
-      - GlobalConfigWorkerPresetModelProviderAnthropic
-      - GlobalConfigWorkerPresetModelProviderAntigravity
-      - GlobalConfigWorkerPresetModelProviderClaude
-      - GlobalConfigWorkerPresetModelProviderCodex
-      - GlobalConfigWorkerPresetModelProviderCursor
-      - GlobalConfigWorkerPresetModelProviderCursorAgent
-      - GlobalConfigWorkerPresetModelProviderGemini
-      - GlobalConfigWorkerPresetModelProviderKiro
-      - GlobalConfigWorkerPresetModelProviderKiroCLI
-      - GlobalConfigWorkerPresetModelProviderOpenAI
-      - GlobalConfigWorkerPresetModelProviderOpenCode
-      - GlobalConfigWorkerPresetModelProviderPI
-    enum:
-      - AGY
-      - ANTHROPIC
-      - CLAUDE
-      - CODEX
-      - CURSOR
-      - CURSOR_AGENT
-      - GEMINI
-      - KIRO
-      - OPENAI
-      - OPENCODE
-      - PI
-      - agent
-      - agy
-      - anthropic
-      - antigravity
-      - claude
-      - codex
-      - cursor
-      - cursor-agent
-      - gemini
-      - kiro
-      - kiro-cli
-      - openai
-      - opencode
-      - pi
+    $ref: './GlobalConfigWorkerPresetModelProvider.yaml'
   model:
     type: string
     description: Optional model name, trimmed when present.

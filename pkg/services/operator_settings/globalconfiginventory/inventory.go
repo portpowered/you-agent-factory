@@ -8,10 +8,8 @@ const FormatVersion = "global-config-topology/v1"
 
 const (
 	ownerOperatorSettings = "operator_settings"
-	ownerNone             = "none"
 
-	strictnessOperatorSettingsStrictDecode = "operator_settings strict decode (DisallowUnknownFields on parse)"
-	strictnessOperatorSettingsIdentityLoad = "operator_settings identity tolerant load (unknown top-level keys ignored on read; preserved on persist)"
+	strictnessOperatorSettingsStrictDecode = "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)"
 	strictnessFileOnly                     = "file-only (no env or flag layers)"
 )
 
