@@ -65,7 +65,7 @@ func (s *Service) Discover(_ context.Context, request identity.DiscoverRequest) 
 }
 
 func (s *Service) ResolveFolder(folderPath string) (string, error) {
-	return factorysessions.ResolveSessionFolder(folderPath, s.resolveHome, s.directories)
+	return logicaltarget.ResolveSessionFolder(folderPath, s.resolveHome, s.directories)
 }
 
 func (s *Service) Select(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {

@@ -15,7 +15,7 @@ import (
 
 // Discover lists runnable factory targets under folderPath.
 func Discover(folderPath string, probe factorysessions.TargetProbe, directories factorysessions.DirectoryInspection, resolveHome factorysessions.HomeDirectoryResolver) ([]factorysessions.Target, error) {
-	resolvedFolder, err := factorysessions.ResolveSessionFolder(folderPath, resolveHome, directories)
+	resolvedFolder, err := ResolveSessionFolder(folderPath, resolveHome, directories)
 	if err != nil {
 		return nil, err
 	}

@@ -37,7 +37,7 @@ func (h *openControlHost) ValidateInitNewFactoryNestedDir(folder string) error {
 }
 
 func (h *openControlHost) ResolveSessionFolder(folder string) (string, error) {
-	return factorysessions.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
+	return logicaltarget.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
 }
 
 type liveOpenHost struct {
@@ -169,7 +169,7 @@ func (h *initNewFactoryHost) ValidateInitNewFactoryNestedDir(folder string) erro
 }
 
 func (h *initNewFactoryHost) ResolveSessionFolder(folder string) (string, error) {
-	return factorysessions.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
+	return logicaltarget.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
 }
 
 func TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens(t *testing.T) {

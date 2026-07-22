@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -105,7 +106,7 @@ func PrepareRuntime(
 		if resolveErr != nil {
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("resolve factory dir: %w", resolveErr)
 		}
-		prepared.Definition.Directory, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir, resolveHome)
+		prepared.Definition.Directory, err = logicaltarget.AbsolutizeFactoryDirectory(resolvedDir, resolveHome)
 		if err != nil {
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("resolve factory dir: %w", err)
 		}

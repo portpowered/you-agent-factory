@@ -537,6 +537,11 @@ Live Factory Session summaries and discovered targets retain `LiveSession`,
 including canonical runtime session identity and optional target names, through
 `pkg/transports/mapping/factorysession` when assembling open or list responses;
 do not export generated summary or target constructors from the session owner.
+Injected home resolution, absolute-path cleanup, folder inspection, and path
+equivalence policy belong to the owner-private
+`pkg/services/factory_sessions/internal/logicaltarget` capability. Keep only
+the plain filesystem effect contracts at the service root so runtime opening,
+identity, and discovery cannot reintroduce root behavioral helpers.
 
 Live Factory Session runtime and detail reads follow the same boundary. Derive
 `RuntimeProjection` in `pkg/factory/sessions`, then map status, lifecycle,

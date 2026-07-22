@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"go.uber.org/zap"
 )
 
@@ -23,7 +24,7 @@ func ResolveRuntimeRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 ) (RuntimeRoot, error) {
-	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(dir, resolveHome)
+	factoryRootDir, err := logicaltarget.AbsolutizeFactoryDirectory(dir, resolveHome)
 	if err != nil {
 		return RuntimeRoot{}, err
 	}

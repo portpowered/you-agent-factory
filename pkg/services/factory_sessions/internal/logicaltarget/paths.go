@@ -1,4 +1,4 @@
-package factorysessions
+package logicaltarget
 
 import (
 	"errors"
@@ -6,14 +6,12 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-// HomeDirectoryResolver resolves the process user's home directory at the
-// external filesystem edge selected by Wire.
-type HomeDirectoryResolver func() (string, error)
-
 // AbsolutizeFactoryDirectory resolves and cleans a factory directory path.
-func AbsolutizeFactoryDirectory(dir string, resolveHome HomeDirectoryResolver) (string, error) {
+func AbsolutizeFactoryDirectory(dir string, resolveHome factorysessions.HomeDirectoryResolver) (string, error) {
 	trimmed := strings.TrimSpace(dir)
 	if trimmed == "" {
 		return "", fmt.Errorf("factory directory is required")
@@ -29,16 +27,12 @@ func AbsolutizeFactoryDirectory(dir string, resolveHome HomeDirectoryResolver) (
 	return filepath.Clean(resolved), nil
 }
 
-// ResolveSessionFolder validates and resolves a factory session folder path.
-func ResolveSessionFolder(
-	folderPath string,
-	resolveHome HomeDirectoryResolver,
-	directories DirectoryInspection,
-) (string, error) {
+// ResolveSessionFolder validates and resolves a Factory Session folder path.
+func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDirectoryResolver, directories factorysessions.DirectoryInspection) (string, error) {
 	trimmed := strings.TrimSpace(folderPath)
 	if trimmed == "" {
-		return "", NewValidationError(
-			validationReasonRequired,
+		return "", factorysessions.NewValidationError(
+			factorysessions.ValidationReasonRequired,
 			"folderPath",
 			fmt.Errorf("factory session folder is required"),
 		)
@@ -58,14 +52,14 @@ func ResolveSessionFolder(
 	if err != nil {
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			return "", NewValidationError(
-				validationReasonMissing,
+			return "", factorysessions.NewValidationError(
+				factorysessions.ValidationReasonMissing,
 				"folderPath",
 				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
 			)
 		case errors.Is(err, fs.ErrPermission):
-			return "", NewValidationError(
-				validationReasonUnreadable,
+			return "", factorysessions.NewValidationError(
+				factorysessions.ValidationReasonUnreadable,
 				"folderPath",
 				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
 			)
@@ -74,8 +68,8 @@ func ResolveSessionFolder(
 		}
 	}
 	if !info.IsDir() {
-		return "", NewValidationError(
-			validationReasonNotDirectory,
+		return "", factorysessions.NewValidationError(
+			factorysessions.ValidationReasonNotDirectory,
 			"folderPath",
 			fmt.Errorf("factory session folder %q must be a directory", resolved),
 		)
@@ -84,13 +78,11 @@ func ResolveSessionFolder(
 }
 
 // ExpandFolderHome expands a leading tilde in folder paths.
-func ExpandFolderHome(path string, resolveHome HomeDirectoryResolver) (string, error) {
+func ExpandFolderHome(path string, resolveHome factorysessions.HomeDirectoryResolver) (string, error) {
 	if resolveHome == nil {
 		return "", fmt.Errorf("Factory Session home-directory resolver is required")
 	}
-	if path != "~" &&
-		!strings.HasPrefix(path, "~/") &&
-		!strings.HasPrefix(path, `~\`) {
+	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, `~\`) {
 		return path, nil
 	}
 

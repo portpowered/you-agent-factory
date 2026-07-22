@@ -68,7 +68,7 @@ func SessionFactoryRootDir(serviceRootDir string, session *LiveSession) string {
 	if session.FolderPath == "" {
 		return rootDir
 	}
-	if session.FactoryDir == "" || !SameFactoryDir(session.FactoryDir, session.FolderPath) {
+	if session.FactoryDir == "" || !sameFactoryDir(session.FactoryDir, session.FolderPath) {
 		return rootDir
 	}
 	serviceRoot := filepath.Clean(serviceRootDir)
@@ -95,7 +95,7 @@ func FactoryName(rootDir string, runtimeCfg interfaces.RuntimeConfigLookup) stri
 	}
 	factoryDir := runtimeCfg.FactoryDir()
 	cleanRoot := filepath.Clean(rootDir)
-	if SameFactoryDir(factoryDir, cleanRoot) {
+	if sameFactoryDir(factoryDir, cleanRoot) {
 		return CurrentFactoryName
 	}
 	if rootDir != "" && filepath.Dir(factoryDir) == cleanRoot {
@@ -114,6 +114,13 @@ func FactoryName(rootDir string, runtimeCfg interfaces.RuntimeConfigLookup) stri
 		}
 	}
 	return "factory"
+}
+
+func sameFactoryDir(left, right string) bool {
+	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
+		return false
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func stringPointerOrNil(value string) *string {

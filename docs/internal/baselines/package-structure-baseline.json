@@ -1819,26 +1819,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/paths.go",
-      "target": "AbsolutizeFactoryDirectory"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/paths.go",
-      "target": "ExpandFolderHome"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/paths.go",
-      "target": "ResolveSessionFolder"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/paths.go",
-      "target": "SameFactoryDir"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/projection.go",
       "target": "ProjectRuntimeContract"
     },
