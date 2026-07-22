@@ -18,7 +18,7 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 	if ctx.Session == nil {
 		return ctx
 	}
-	ref, err := factorysessions.NormalizeLogicalTargetRef(
+	ref, err := logicaltarget.NormalizeTargetRefWithEffects(
 		filepath.EvalSymlinks,
 		os.UserHomeDir,
 		backendScopeID,

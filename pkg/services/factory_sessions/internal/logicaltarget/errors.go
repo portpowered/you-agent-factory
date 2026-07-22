@@ -57,10 +57,10 @@ func (e *validationError) Field() string {
 // a logical-target validation error.
 func ValidationReasonFromError(err error) (reason string, field string, ok bool) {
 	var validation *validationError
-	if errors.As(err, &validation) && validation != nil {
-		return validation.reason, validation.field, true
+	if !errors.As(err, &validation) || validation == nil {
+		return "", "", false
 	}
-	return factorysessions.LogicalTargetValidationReason(err)
+	return validation.reason, validation.field, true
 }
 
 func newValidationError(reason, field string, err error) error {

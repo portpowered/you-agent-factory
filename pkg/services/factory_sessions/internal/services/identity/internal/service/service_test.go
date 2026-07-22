@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
@@ -32,7 +33,7 @@ func TestServiceNormalizesDefaultNamedFolderAndProviderTargets(t *testing.T) {
 	}
 	if defaultIdentity.Reference.FolderPath != canonicalFolder ||
 		defaultIdentity.Reference.Kind != factorysessions.LogicalTargetKindDefault ||
-		!factorysessions.IsLogicalSessionKeyID(defaultIdentity.LogicalSessionKeyID) {
+		!logicaltarget.IsLogicalSessionKeyID(defaultIdentity.LogicalSessionKeyID) {
 		t.Fatalf("default identity = %#v", defaultIdentity)
 	}
 

@@ -13,13 +13,13 @@ import (
 const testBackendScopeID = "backend-scope-001"
 
 func TestNormalizeFolderPathRequiresAndUsesInjectedSymlinkResolver(t *testing.T) {
-	if _, err := factorysessions.NormalizeLogicalTargetFolderPath(nil, os.UserHomeDir, t.TempDir()); err == nil {
+	if _, err := logicaltarget.NormalizeFolderPathWithEffects(nil, os.UserHomeDir, t.TempDir()); err == nil {
 		t.Fatal("NormalizeLogicalTargetFolderPath(nil) error = nil, want required resolver")
 	}
 
 	var received string
 	want := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	got, err := factorysessions.NormalizeLogicalTargetFolderPath(
+	got, err := logicaltarget.NormalizeFolderPathWithEffects(
 		func(path string) (string, error) {
 			received = path
 			return want, nil

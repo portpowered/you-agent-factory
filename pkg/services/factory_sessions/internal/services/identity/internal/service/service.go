@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 )
 
@@ -28,7 +29,7 @@ func New(
 }
 
 func (s *Service) Normalize(_ context.Context, request identity.NormalizeRequest) (identity.ResolvedIdentity, error) {
-	ref, err := factorysessions.NormalizeLogicalTargetRef(
+	ref, err := logicaltarget.NormalizeTargetRefWithEffects(
 		s.resolveSymlinks, s.resolveHome, request.BackendScopeID, request.FolderPath, request.Target,
 	)
 	if err != nil {
@@ -38,7 +39,7 @@ func (s *Service) Normalize(_ context.Context, request identity.NormalizeRequest
 }
 
 func (s *Service) NormalizeProvider(_ context.Context, request identity.NormalizeProviderRequest) (identity.ResolvedIdentity, error) {
-	ref, err := factorysessions.NormalizeProviderLogicalTarget(
+	ref, err := logicaltarget.NormalizeProviderTargetWithEffects(
 		s.resolveSymlinks, s.resolveHome, request.BackendScopeID, request.FolderPath, request.Boundary,
 	)
 	if err != nil {
@@ -50,8 +51,8 @@ func (s *Service) NormalizeProvider(_ context.Context, request identity.Normaliz
 func resolvedIdentity(ref factorysessions.CanonicalLogicalTargetReference) identity.ResolvedIdentity {
 	return identity.ResolvedIdentity{
 		Reference:           ref,
-		LogicalSessionKeyID: factorysessions.DeriveLogicalSessionKeyID(ref),
-		RuntimeTarget:       factorysessions.RuntimeLogicalTargetFromReference(ref),
+		LogicalSessionKeyID: logicaltarget.DeriveLogicalSessionKeyID(ref),
+		RuntimeTarget:       logicaltarget.RuntimeLogicalTarget(ref),
 	}
 }
 

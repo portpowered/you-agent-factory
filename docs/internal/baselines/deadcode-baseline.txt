@@ -185,7 +185,6 @@ pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume
 pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume_test.go: unreachable func: waitForPersistedInterruptedSnapshot
 pkg/services/factory_sessions/internal/execution/recordingreplay/service.go: unreachable func: Service.IsNonLiveReplay
 pkg/services/factory_sessions/internal/execution/recordingreplay/service.go: unreachable func: Service.QueryDispatches
-pkg/services/factory_sessions/internal/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeBackendScopeID
 pkg/services/factory_sessions/internal/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeProviderBoundary
 pkg/services/factory_sessions/internal/runtimeopening/operatordefaults/operator_defaults_runtime_test.go: unreachable func: writeOperatorDefaultsFactoryJSON
 pkg/services/factory_sessions/internal/sessionservice/runtime.go: unreachable func: SessionRuntime.waitForActiveRuntime
