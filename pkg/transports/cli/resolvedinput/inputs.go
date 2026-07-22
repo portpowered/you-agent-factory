@@ -9,6 +9,7 @@ type Definition struct {
 	ID         string
 	Kind       ValueKind
 	Precedence []Source
+	Sensitive  bool
 }
 
 // Candidate is one already-collected value and its source provenance, addressed
@@ -25,8 +26,9 @@ type Inputs struct {
 }
 
 type entry struct {
-	value Value
-	state State
+	value     Value
+	state     State
+	sensitive bool
 }
 
 // Resolve validates schema definitions and resolves the first available source
@@ -70,7 +72,11 @@ func Resolve(definitions []Definition, candidates []Candidate) (Inputs, error) {
 			if !found {
 				continue
 			}
-			entries[definition.ID] = entry{value: value.clone(), state: stateFor(source)}
+			entries[definition.ID] = entry{
+				value:     value.clone(),
+				state:     stateFor(source),
+				sensitive: definition.Sensitive,
+			}
 			break
 		}
 	}
@@ -123,7 +129,7 @@ func (i Inputs) valueOfKind(inputID string, expected ValueKind) (Value, error) {
 	}
 	value := resolved.value
 	if value.Kind() != expected {
-		return Value{}, newKindMismatchError(inputID, expected, value.Kind())
+		return Value{}, newKindMismatchError(inputID, expected, resolved)
 	}
 	return value, nil
 }

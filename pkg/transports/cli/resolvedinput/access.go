@@ -16,15 +16,23 @@ type AccessError struct {
 	InputID      string
 	ExpectedKind ValueKind
 	ActualKind   ValueKind
+	Provenance   Source
+	Changed      bool
+	Default      bool
+	Value        any
 }
 
 func (e *AccessError) Error() string {
 	if e.Failure == AccessFailureKindMismatch {
 		return fmt.Sprintf(
-			"resolved CLI input %q requires accessor kind %q, got %q (%s)",
+			"resolved CLI input %q requires accessor kind %q, got %q from %q (changed=%t, default=%t, value=%v; %s)",
 			e.InputID,
 			e.ExpectedKind,
 			e.ActualKind,
+			e.Provenance,
+			e.Changed,
+			e.Default,
+			e.Value,
 			e.Failure,
 		)
 	}
@@ -44,11 +52,15 @@ func newMissingInputError(inputID string, expected ValueKind) error {
 	}
 }
 
-func newKindMismatchError(inputID string, expected, actual ValueKind) error {
+func newKindMismatchError(inputID string, expected ValueKind, resolved entry) error {
 	return &AccessError{
 		Failure:      AccessFailureKindMismatch,
 		InputID:      inputID,
 		ExpectedKind: expected,
-		ActualKind:   actual,
+		ActualKind:   resolved.value.Kind(),
+		Provenance:   resolved.state.Provenance,
+		Changed:      resolved.state.Changed,
+		Default:      resolved.state.Default,
+		Value:        observableValue(resolved.value, resolved.sensitive),
 	}
 }

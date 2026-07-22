@@ -372,7 +372,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   retains the winning provenance and derives changed/default state from that
   source instead of asking handlers to infer it. Typed, wrap-safe access
   diagnostics identify missing IDs and value-kind mismatches so handler adapters
-  can translate failures without string parsing.
+  can translate failures without string parsing. Definitions also carry schema
+  sensitivity into the detached snapshot: diagnostic and observation boundaries
+  expose provenance and changed/default state while replacing sensitive scalar
+  or collection values with `resolvedinput.RedactedValue`.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
