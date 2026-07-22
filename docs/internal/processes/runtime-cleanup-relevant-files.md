@@ -348,7 +348,7 @@ When changing durable Factory Session execution construction, run
 factory and approved deterministic test harness. Project-local persistence path
 resolution and durable-engine selection belong at the fallible owner-private
 composition boundary in
-`pkg/services/factory_sessions/services/durable_execution/internal/service/construction.go`;
+`pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go`;
 production runtime code must receive either that injected store or an explicit
 disabled policy and must not use a persistence boolean.
 
@@ -461,7 +461,7 @@ detached result-owner values and must not import transport contracts.
 
 Normalized Factory Session logical-target identity, target discovery, selection,
 and restart remapping are owned by the injected subservice rooted at
-`pkg/services/factory_sessions/services/identity`; its implementation receives
+`pkg/services/factory_sessions/internal/services/identity`; its implementation receives
 home, directory-inspection, and symlink-resolution effects through service-local
 Wire. The outer Factory Sessions service delegates open, list/read projection,
 and reconnect behavior to that subservice without exposing it cross-service.
@@ -474,7 +474,7 @@ return generated HTTP values.
 Factory Session response-event validation, retained-then-live subscription,
 cursor filtering and gap signaling, event-store lifecycle, and internal stream
 registry allocation are owned by the injected subservice rooted at
-`pkg/services/factory_sessions/services/response_stream`. Construct the inert
+`pkg/services/factory_sessions/internal/services/response_stream`. Construct the inert
 capability in Factory Sessions-local Wire, bind its stores and registries only
 after an explicit runtime clock is available, and delegate outer-service
 subscriptions through it. Keep transport consumers on the Factory Sessions root
@@ -484,7 +484,7 @@ capability.
 Live Factory Session opening, ordered registry reads, runtime snapshots,
 pause/resume decisions, lifecycle diagnostics, and stop coordination are owned
 by the runtime-bound subservice rooted at
-`pkg/services/factory_sessions/services/live_runtime`. Construct it through
+`pkg/services/factory_sessions/internal/services/live_runtime`. Construct it through
 Factory Sessions-local Wire from explicit runtime host callbacks; construction
 must not open, start, stop, or inspect a runtime. The outer Factory Sessions
 service delegates live operations through this capability, while discovery and

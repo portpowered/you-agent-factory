@@ -11,8 +11,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 )
 
 type sessionSyncPreflightTarget struct {

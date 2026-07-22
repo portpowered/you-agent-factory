@@ -7,12 +7,12 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
+	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
+	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/durable_execution"
-	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/durable_execution/wire"
-	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime"
-	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime/wire"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream"
 )
 

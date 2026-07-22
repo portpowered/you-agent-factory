@@ -32,9 +32,9 @@ func TestScanRejectsImplicitPersistenceConstruction(t *testing.T) {
 
 func TestScanAcceptsApplicationCompositionAndTransportTest(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/execution/service.go":                                        "testdata/approved_composition.go.txt",
-		"pkg/services/factory_sessions/services/durable_execution/internal/service/construction.go": "testdata/approved_private_durable_composition.go.txt",
-		"pkg/transports/http/transport_test.go":                                                     "testdata/approved_transport_test.go.txt",
+		"pkg/services/factory_sessions/execution/service.go":                                                 "testdata/approved_composition.go.txt",
+		"pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go": "testdata/approved_private_durable_composition.go.txt",
+		"pkg/transports/http/transport_test.go":                                                              "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)
