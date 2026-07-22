@@ -925,10 +925,20 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
 	t.Parallel()
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "nostream"), []byte("stdout-fallback\n"), []byte("stderr-fallback\n"), 7)
+	command := scriptPath
+	var args []string
+	if runtime.GOOS != "windows" {
+		// Invoke the freshly written fixture through the stable system shell. Some
+		// Linux filesystems can briefly return ETXTBSY when a new file is executed
+		// directly, even after the writer has been closed and the directory synced.
+		command = "/bin/sh"
+		args = []string{scriptPath}
+	}
 
 	runner := NewInferenceProgressPublishingCommandRunnerWithRunner(testProviderExecRunner(t), nil, nil)
 	result, err := runner.Run(context.Background(), CommandRequest{
-		Command: scriptPath,
+		Command: command,
+		Args:    args,
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
