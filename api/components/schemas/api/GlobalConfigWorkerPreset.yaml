@@ -71,17 +71,4 @@ properties:
     type: string
     description: Optional model name, trimmed when present.
   reasoningEffort:
-    type: string
-    description: Optional reasoning effort; an empty value is accepted and normalized as unspecified.
-    x-enum-varnames:
-      - GlobalConfigWorkerPresetReasoningEffortUnspecified
-      - GlobalConfigWorkerPresetReasoningEffortMinimal
-      - GlobalConfigWorkerPresetReasoningEffortLow
-      - GlobalConfigWorkerPresetReasoningEffortMedium
-      - GlobalConfigWorkerPresetReasoningEffortHigh
-    enum:
-      - ''
-      - minimal
-      - low
-      - medium
-      - high
+    $ref: './GlobalConfigWorkerPresetReasoningEffort.yaml'

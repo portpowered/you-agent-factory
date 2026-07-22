@@ -623,15 +623,6 @@ const (
 	GlobalConfigWorkerPresetModelProviderPIUpper          GlobalConfigWorkerPresetModelProvider = "PI"
 )
 
-// Defines values for GlobalConfigWorkerPresetReasoningEffort.
-const (
-	GlobalConfigWorkerPresetReasoningEffortHigh        GlobalConfigWorkerPresetReasoningEffort = "high"
-	GlobalConfigWorkerPresetReasoningEffortLow         GlobalConfigWorkerPresetReasoningEffort = "low"
-	GlobalConfigWorkerPresetReasoningEffortMedium      GlobalConfigWorkerPresetReasoningEffort = "medium"
-	GlobalConfigWorkerPresetReasoningEffortMinimal     GlobalConfigWorkerPresetReasoningEffort = "minimal"
-	GlobalConfigWorkerPresetReasoningEffortUnspecified GlobalConfigWorkerPresetReasoningEffort = ""
-)
-
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -4096,15 +4087,15 @@ type GlobalConfigWorkerPreset struct {
 	// ModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
 	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
 
-	// ReasoningEffort Optional reasoning effort; an empty value is accepted and normalized as unspecified.
+	// ReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
 	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
 }
 
 // GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
 type GlobalConfigWorkerPresetModelProvider string
 
-// GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; an empty value is accepted and normalized as unspecified.
-type GlobalConfigWorkerPresetReasoningEffort string
+// GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
+type GlobalConfigWorkerPresetReasoningEffort = string
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
 type Guard struct {

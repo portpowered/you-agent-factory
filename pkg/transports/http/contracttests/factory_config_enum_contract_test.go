@@ -34,7 +34,7 @@ func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
 			"backendScopeID":"local-11111111-1111-4111-8111-111111111111",
 			"defaults":{"workerModelProvider":"DEFAULT","workerModel":"gpt-5"},
 			"workerPresets":[
-				{"id":"research","modelProvider":"openai","model":"gpt-5","reasoningEffort":"high"},
+				{"id":"research","modelProvider":"openai","model":"gpt-5","reasoningEffort":" HIGH "},
 				{"id":"fast","modelProvider":"CLAUDE","reasoningEffort":""}
 			]
 		}`,

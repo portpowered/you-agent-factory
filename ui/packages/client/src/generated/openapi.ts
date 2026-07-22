@@ -4854,12 +4854,10 @@ export interface components {
       modelProvider: GlobalConfigWorkerPresetModelProvider;
       /** @description Optional model name, trimmed when present. */
       model?: string;
-      /**
-       * @description Optional reasoning effort; an empty value is accepted and normalized as unspecified.
-       * @enum {string}
-       */
-      reasoningEffort?: GlobalConfigWorkerPresetReasoningEffort;
+      reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
     };
+    /** @description Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified. */
+    GlobalConfigWorkerPresetReasoningEffort: string;
     WorkRequest: {
       /** @description Stable client-provided request identifier used for idempotent batch submission. */
       requestId: string;
@@ -7961,15 +7959,6 @@ export const GlobalConfigWorkerPresetModelProvider = {
 } as const;
 export type GlobalConfigWorkerPresetModelProvider =
   (typeof GlobalConfigWorkerPresetModelProvider)[keyof typeof GlobalConfigWorkerPresetModelProvider];
-export const GlobalConfigWorkerPresetReasoningEffort = {
-  GlobalConfigWorkerPresetReasoningEffortUnspecified: "",
-  GlobalConfigWorkerPresetReasoningEffortMinimal: "minimal",
-  GlobalConfigWorkerPresetReasoningEffortLow: "low",
-  GlobalConfigWorkerPresetReasoningEffortMedium: "medium",
-  GlobalConfigWorkerPresetReasoningEffortHigh: "high",
-} as const;
-export type GlobalConfigWorkerPresetReasoningEffort =
-  (typeof GlobalConfigWorkerPresetReasoningEffort)[keyof typeof GlobalConfigWorkerPresetReasoningEffort];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",

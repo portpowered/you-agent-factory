@@ -9757,20 +9757,11 @@ components:
           type: string
           description: Optional model name, trimmed when present.
         reasoningEffort:
-          type: string
-          description: Optional reasoning effort; an empty value is accepted and normalized as unspecified.
-          x-enum-varnames:
-            - GlobalConfigWorkerPresetReasoningEffortUnspecified
-            - GlobalConfigWorkerPresetReasoningEffortMinimal
-            - GlobalConfigWorkerPresetReasoningEffortLow
-            - GlobalConfigWorkerPresetReasoningEffortMedium
-            - GlobalConfigWorkerPresetReasoningEffortHigh
-          enum:
-            - ''
-            - minimal
-            - low
-            - medium
-            - high
+          $ref: '#/components/schemas/GlobalConfigWorkerPresetReasoningEffort'
+    GlobalConfigWorkerPresetReasoningEffort:
+      type: string
+      description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
+      pattern: ^[ \t\r\n]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[ \t\r\n]*$
     WorkRequest:
       type: object
       additionalProperties: false

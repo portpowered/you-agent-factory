@@ -30,11 +30,6 @@ type youConfigSchemaParityRule struct {
 }
 
 var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
-	"operator_settings:valid-worker-presets-canonicalized": {
-		kind:         schemaParityDiverges,
-		schemaAccept: boolPtr(false),
-		reason:       "operator_settings trims and canonicalizes preset values that Draft 2020-12 cannot express",
-	},
 	"operator_settings:invalid-preset-duplicate-id": {
 		kind:         schemaParityDiverges,
 		schemaAccept: boolPtr(true),
@@ -80,6 +75,27 @@ var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
 		kind:   schemaParityNotApplicable,
 		reason: "persistBackendScopeID validates scope IDs, not JSON documents",
 	},
+}
+
+func TestYouConfigSchemaAndLoaderAcceptCanonicalizedReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	data := readOperatorFixture(t, "valid/worker-presets-canonicalized.json")
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("canonicalized worker preset fixture must be valid JSON")
+	}
+	if err := youConfigSchema(t).Validate(instance); err != nil {
+		t.Fatalf("schema rejected normalized reasoning effort input: %v", err)
+	}
+
+	config, err := globalconfigmapping.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode() rejected normalized reasoning effort input: %v", err)
+	}
+	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ReasoningEffort != "high" {
+		t.Fatalf("worker presets = %#v, want one preset normalized to reasoning effort high", config.WorkerPresets)
+	}
 }
 
 func TestYouConfigSchemaParityMatrixCoversAllIndexedCases(t *testing.T) {
