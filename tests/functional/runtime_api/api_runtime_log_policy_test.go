@@ -3,6 +3,7 @@ package runtime_api
 import (
 	"encoding/json"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,14 @@ func TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault(t *testing.
 	logFiles := collectRuntimeLogFiles(t, logDir)
 	if len(logFiles) != 1 {
 		t.Fatalf("runtime log files = %v, want one production-default log", logFiles)
+	}
+	response, err := http.Get(server.URL() + "/factory-sessions/%20")
+	if err != nil {
+		t.Fatalf("GET whitespace Factory Session selector: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET whitespace Factory Session selector status = %d, want 404", response.StatusCode)
 	}
 }
 

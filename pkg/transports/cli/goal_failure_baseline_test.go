@@ -225,7 +225,7 @@ func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesTerminalOnOperationalF
 	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
 }
 
-func TestFailureBaseline_QuietLeak_RunFactoryQuietSuppressesTerminalOnInvocationFailure(t *testing.T) {
+func TestFailureBaseline_RunFactoryQuietWritesStructuredInvocationFailure(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() { runCLI = originalRunCLI }()
 
@@ -251,7 +251,20 @@ func TestFailureBaseline_QuietLeak_RunFactoryQuietSuppressesTerminalOnInvocation
 	if !strings.Contains(err.Error(), runcli.InvocationErrorCodeFailed) {
 		t.Fatalf("error = %q, want stable invocation failure code", err.Error())
 	}
-	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no quiet terminal response", stdout.String())
+	}
+	var response struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", decodeErr, stderr.String())
+	}
+	if response.Code != runcli.InvocationErrorCodeFailed || response.Family != "INTERNAL_SERVER_ERROR" {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
 }
 
 func TestFailureBaseline_NoServer_ModelsInvokeCommandUsesBootstrapInsteadOfUnreachableEndpoint(t *testing.T) {

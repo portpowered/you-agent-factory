@@ -7,7 +7,7 @@ factory			path to factory.json for portable one-shot runs; use positional text o
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr
 named			canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
 no-record		false	disable the default replay artifact for this invocation
-output			invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs
+output			invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs
 port		0	deprecated; use --server
 quiet		false	suppress dashboard output for quiet or CI-oriented runs
 record			path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used

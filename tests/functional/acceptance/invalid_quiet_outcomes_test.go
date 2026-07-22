@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 var quietLeakForbiddenMarkers = []string{
@@ -45,15 +48,18 @@ func TestInvalidGoal_UnknownNamedFactory_RejectsWithDocumentedError(t *testing.T
 		t.Fatalf("exit code = 0, want non-zero for invalid goal")
 	}
 
-	combined := result.Stdout + result.Stderr
+	if result.Stdout != "" {
+		t.Fatalf("stdout = %q, want empty on pre-terminal failure", result.Stdout)
+	}
+	response := decodeInvalidInvocationErrorResponse(t, result.Stderr)
 	for _, want := range []string{
 		`resolve named factory "@you/missing"`,
 		"not found",
 		"project root",
 		"global root",
 	} {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("output = %q, want documented invalid-goal guidance %q", combined, want)
+		if !strings.Contains(response.Message, want) {
+			t.Fatalf("ErrorResponse message = %q, want documented invalid-goal guidance %q", response.Message, want)
 		}
 	}
 }
@@ -83,8 +89,9 @@ func TestInvalidGoal_QuietMode_SuppressesTerminalOnOperationalFailure(t *testing
 	if result.Stdout != "" {
 		t.Fatalf("stdout = %q, want empty quiet operational-failure terminal output", result.Stdout)
 	}
-	if result.Stderr != "" {
-		t.Fatalf("stderr = %q, want empty quiet operational-failure terminal output", result.Stderr)
+	response := decodeInvalidInvocationErrorResponse(t, result.Stderr)
+	if !strings.Contains(response.Message, `named factory "@you/missing" not found`) {
+		t.Fatalf("ErrorResponse message = %q, want missing-factory detail", response.Message)
 	}
 	assertQuietLeakContractForbidden(t, result.Stdout+result.Stderr)
 }
@@ -113,16 +120,31 @@ func TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError(t 
 		t.Fatalf("exit code = 0, want non-zero for invalid goal topology")
 	}
 
-	combined := result.Stdout + result.Stderr
+	if result.Stdout != "" {
+		t.Fatalf("stdout = %q, want empty on pre-terminal failure", result.Stdout)
+	}
+	response := decodeInvalidInvocationErrorResponse(t, result.Stderr)
 	for _, want := range []string{
 		"invalid graph references",
-		"Blocking findings:",
-		"you factory config validate",
+		"blocking validation targets",
 	} {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("output = %q, want documented invalid-topology guidance %q", combined, want)
+		if !strings.Contains(response.Message, want) {
+			t.Fatalf("ErrorResponse message = %q, want invalid-topology detail %q", response.Message, want)
 		}
 	}
+}
+
+func decodeInvalidInvocationErrorResponse(t *testing.T, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError || response.Message == "" {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
+	return response
 }
 
 func TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrimaryResult(t *testing.T) {
