@@ -61,6 +61,70 @@
             "itemId": "example.factory.watch.flag.verbose",
             "state": "active",
             "since": "1.0.0"
+          },
+          "inheritedFromInputId": "example.factory.flag.verbose"
+        }
+      }
+    },
+    "example.factory": {
+      "id": "example.factory",
+      "name": "factory",
+      "path": "example factory",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory",
+        "documentation": {
+          "title": {
+            "id": "example.factory.title",
+            "canonicalEnglish": "Manage factories"
+          },
+          "description": {
+            "id": "example.factory.description",
+            "canonicalEnglish": "Manages factories with persistent verbose diagnostics."
+          }
+        },
+        "examples": [
+          "example factory --verbose"
+        ],
+        "visibility": "public",
+        "sourceHash": "2222333344445555666677778888999900001111aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {
+        "line": "factory",
+        "example": "  example factory"
+      },
+      "flags": {
+        "example.factory.flag.verbose": {
+          "id": "example.factory.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
           }
         }
       }

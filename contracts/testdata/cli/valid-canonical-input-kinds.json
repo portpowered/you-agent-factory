@@ -1,0 +1,136 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.invoke": {
+      "id": "example.invoke",
+      "name": "invoke",
+      "path": "example invoke",
+      "aliases": [],
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.invoke",
+        "documentation": {
+          "title": {"id": "example.invoke.title", "canonicalEnglish": "Invoke an example"},
+          "description": {"id": "example.invoke.description", "canonicalEnglish": "Exercises every canonical CLI input kind."}
+        },
+        "examples": ["example invoke"],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke", "state": "active", "since": "1.0.0"},
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "invoke [enabled] [name] [count] [offset] [labels...]"},
+      "arguments": {
+        "example.invoke.arg.enabled": {
+          "id": "example.invoke.arg.enabled", "name": "enabled", "position": 0, "kind": "positional", "valueType": "bool",
+          "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": 1, "variadic": false,
+          "defaultValue": {"boolean": false}, "enum": [], "pattern": "", "completion": "none", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "manifest-default"], "handlerBindingId": "example.invoke.binding.enabled", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.enabled", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.arg.name": {
+          "id": "example.invoke.arg.name", "name": "name", "position": 1, "kind": "positional", "valueType": "string",
+          "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": 1, "variadic": false,
+          "defaultValue": {"string": "worker"}, "enum": ["worker"], "pattern": "^[a-z]+$", "completion": "static", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "environment", "manifest-default"], "handlerBindingId": "example.invoke.binding.name", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.name", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.arg.count": {
+          "id": "example.invoke.arg.count", "name": "count", "position": 2, "kind": "positional", "valueType": "int",
+          "scope": "local", "required": true, "minCardinality": 1, "maxCardinality": 1, "variadic": false,
+          "enum": [], "pattern": "", "completion": "none", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "operator-config"], "handlerBindingId": "example.invoke.binding.count", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.count", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.arg.offset": {
+          "id": "example.invoke.arg.offset", "name": "offset", "position": 3, "kind": "positional", "valueType": "int64",
+          "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": 1, "variadic": false,
+          "defaultValue": {"int64": 9223372036854775807}, "enum": [], "pattern": "", "completion": "none", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "manifest-default"], "handlerBindingId": "example.invoke.binding.offset", "visibility": "hidden",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.offset", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.arg.labels": {
+          "id": "example.invoke.arg.labels", "name": "labels", "position": 4, "kind": "positional", "valueType": "stringArray",
+          "scope": "local", "required": false, "minCardinality": 0, "maxCardinality": -1, "variadic": true,
+          "defaultValue": {"stringArray": ["default"]}, "enum": [], "pattern": "", "completion": "dynamic", "doubleDash": "terminates-flags",
+          "acceptedSources": ["cli", "stdin", "manifest-default"], "handlerBindingId": "example.invoke.binding.labels", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.arg.labels", "state": "active", "since": "1.0.0"}
+        }
+      },
+      "flags": {
+        "example.invoke.flag.enabled": {
+          "id": "example.invoke.flag.enabled", "kind": "named", "long": "enabled", "shorthand": "e", "aliases": ["active"], "scope": "persistent",
+          "valueType": "bool", "required": false, "minCardinality": 0, "maxCardinality": 1, "defaultValue": {"boolean": false},
+          "noOptionDefaultValue": {"boolean": true}, "repeatable": false, "normalization": "", "completion": "none",
+          "acceptedSources": ["cli", "environment", "manifest-default"], "handlerBindingId": "example.invoke.binding.flag-enabled", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.enabled", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.flag.name": {
+          "id": "example.invoke.flag.name", "kind": "named", "long": "name", "shorthand": "", "aliases": [], "scope": "local",
+          "valueType": "string", "enum": ["worker"], "required": false, "minCardinality": 0, "maxCardinality": 1, "defaultValue": {"string": "worker"},
+          "noOptionDefaultValue": {"string": "worker"}, "repeatable": false, "normalization": "lowercase-trim", "completion": "static",
+          "acceptedSources": ["cli", "operator-config", "manifest-default"], "handlerBindingId": "example.invoke.binding.flag-name", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.name", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.flag.count": {
+          "id": "example.invoke.flag.count", "kind": "named", "long": "count", "shorthand": "", "aliases": [], "scope": "local",
+          "valueType": "int", "required": true, "minCardinality": 1, "maxCardinality": 1,
+          "repeatable": false, "normalization": "", "completion": "none", "acceptedSources": ["cli"],
+          "handlerBindingId": "example.invoke.binding.flag-count", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.count", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.flag.offset": {
+          "id": "example.invoke.flag.offset", "kind": "named", "long": "offset", "shorthand": "", "aliases": [], "scope": "local",
+          "valueType": "int64", "required": false, "minCardinality": 0, "maxCardinality": 1, "defaultValue": {"int64": -9223372036854775808},
+          "repeatable": false, "normalization": "", "completion": "none", "acceptedSources": ["cli", "manifest-default"],
+          "handlerBindingId": "example.invoke.binding.flag-offset", "visibility": "hidden",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.offset", "state": "active", "since": "1.0.0"}
+        },
+        "example.invoke.flag.labels": {
+          "id": "example.invoke.flag.labels", "kind": "named", "long": "label", "shorthand": "l", "aliases": ["tag"], "scope": "local",
+          "valueType": "stringArray", "required": false, "minCardinality": 0, "maxCardinality": -1, "defaultValue": {"stringArray": ["default"]},
+          "repeatable": true, "normalization": "trim", "completion": "dynamic", "acceptedSources": ["cli", "manifest-default"],
+          "handlerBindingId": "example.invoke.binding.flag-labels", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.labels", "state": "active", "since": "1.0.0"}
+        }
+      },
+      "sourceBindings": {
+        "example.invoke.source.arg-name-env": {
+          "id": "example.invoke.source.arg-name-env", "source": "environment", "externalKey": "EXAMPLE_NAME", "inputId": "example.invoke.arg.name"
+        },
+        "example.invoke.source.arg-count-config": {
+          "id": "example.invoke.source.arg-count-config", "source": "operator-config", "externalKey": "invoke.count", "inputId": "example.invoke.arg.count"
+        },
+        "example.invoke.source.arg-labels-stdin": {
+          "id": "example.invoke.source.arg-labels-stdin", "source": "stdin", "inputId": "example.invoke.arg.labels"
+        },
+        "example.invoke.source.flag-enabled-env": {
+          "id": "example.invoke.source.flag-enabled-env", "source": "environment", "externalKey": "EXAMPLE_ENABLED", "inputId": "example.invoke.flag.enabled"
+        },
+        "example.invoke.source.flag-name-config": {
+          "id": "example.invoke.source.flag-name-config", "source": "operator-config", "externalKey": "invoke.name", "inputId": "example.invoke.flag.name"
+        }
+      },
+      "handlerBindings": {
+        "example.invoke.binding.enabled": {"id": "example.invoke.binding.enabled", "inputId": "example.invoke.arg.enabled"},
+        "example.invoke.binding.name": {"id": "example.invoke.binding.name", "inputId": "example.invoke.arg.name"},
+        "example.invoke.binding.count": {"id": "example.invoke.binding.count", "inputId": "example.invoke.arg.count"},
+        "example.invoke.binding.offset": {"id": "example.invoke.binding.offset", "inputId": "example.invoke.arg.offset"},
+        "example.invoke.binding.labels": {"id": "example.invoke.binding.labels", "inputId": "example.invoke.arg.labels"},
+        "example.invoke.binding.flag-enabled": {"id": "example.invoke.binding.flag-enabled", "inputId": "example.invoke.flag.enabled"},
+        "example.invoke.binding.flag-name": {"id": "example.invoke.binding.flag-name", "inputId": "example.invoke.flag.name"},
+        "example.invoke.binding.flag-count": {"id": "example.invoke.binding.flag-count", "inputId": "example.invoke.flag.count"},
+        "example.invoke.binding.flag-offset": {"id": "example.invoke.binding.flag-offset", "inputId": "example.invoke.flag.offset"},
+        "example.invoke.binding.flag-labels": {"id": "example.invoke.binding.flag-labels", "inputId": "example.invoke.flag.labels"}
+      }
+    }
+  }
+}
