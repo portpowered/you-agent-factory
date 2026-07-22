@@ -76,6 +76,19 @@
   Functional API tests should set the service-level provider and script
   overrides directly and assert the runner is invoked, rather than supplying
   a prebuilt worker application that bypasses this composition boundary.
+
+- `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
+  shipped first-party Factory documents. Keep it in the default `make lint`
+  aggregation: it requires exactly one root Factory document per authored
+  directory under `packages/packaged-factories/factories`, preserves the seven
+  shipped identities, and rejects `@you/*` root definitions elsewhere while
+  also rejecting production Go literals that embed a first-party definition.
+  Examples, fixtures, test data, generated output, and the customer-authored
+  repository `factory/` scaffold remain outside that classification.
+  The package's passive embedded-filesystem tests run in `make test-maintenance`,
+  matching the repository-boundary checker that protects its authored data
+  ownership.
+
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
   not put background commands behind live `while`/`tee` pipelines: on Windows,
