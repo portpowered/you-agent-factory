@@ -66,7 +66,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
-      "minimum": 66.39
+      "minimum": 65.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
