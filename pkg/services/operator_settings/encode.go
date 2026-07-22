@@ -2,12 +2,16 @@ package operatorsettings
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -37,8 +41,10 @@ type ProviderModelUpdate struct {
 // and encoding. Files is required only by Load; pure operations remain usable
 // without a filesystem dependency.
 type ConfigDocumentService struct {
-	Files     FileSystem
-	Providers ProviderCatalog
+	Files           FileSystem
+	CreateTemp      CreateTemporaryFile
+	Providers       ProviderCatalog
+	PersistenceLock sync.Locker
 }
 
 // MarshalInputInventoryJSON renders the operator config input inventory as stable JSON.
@@ -59,6 +65,10 @@ func MarshalInputInventoryJSON(inventory InputInventory) ([]byte, error) {
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
 	if service.Files == nil {
 		return ConfigDocument{}, fmt.Errorf("operator config filesystem is required")
+	}
+	if service.PersistenceLock != nil {
+		service.PersistenceLock.Lock()
+		defer service.PersistenceLock.Unlock()
 	}
 	data, err := service.Files.ReadFile(path)
 	if err != nil {
@@ -170,6 +180,92 @@ func (service ConfigDocumentService) Marshal(document ConfigDocument) ([]byte, e
 		return nil, fmt.Errorf("encode operator config: %w", err)
 	}
 	return append(data, '\n'), nil
+}
+
+// Persist atomically publishes one complete, validated operator configuration.
+// Rename is the commit boundary: cancellation observed before it prevents the
+// replacement, while a successful rename is always reported as committed.
+func (service ConfigDocumentService) Persist(ctx context.Context, path string, document ConfigDocument) error {
+	data, err := service.Marshal(document)
+	if err != nil {
+		return err
+	}
+	if ctx == nil {
+		return fmt.Errorf("operator config context is required")
+	}
+	if service.Files == nil {
+		return fmt.Errorf("operator config filesystem is required")
+	}
+	if service.CreateTemp == nil {
+		return fmt.Errorf("operator config temporary-file creator is required")
+	}
+	if service.PersistenceLock == nil {
+		return fmt.Errorf("operator config persistence lock is required")
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("operator config path is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("persist operator config: %w", err)
+	}
+	service.PersistenceLock.Lock()
+	defer service.PersistenceLock.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("persist operator config: %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	if err := service.Files.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create operator config directory %q: %w", dir, err)
+	}
+	tmp, err := service.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create operator config temp file: %w", err)
+	}
+	return service.commitTemporaryFile(ctx, tmp, path, data)
+}
+
+func (service ConfigDocumentService) commitTemporaryFile(
+	ctx context.Context,
+	tmp TemporaryFile,
+	path string,
+	data []byte,
+) error {
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = service.Files.Remove(tmpPath)
+		}
+	}()
+
+	written, err := tmp.Write(data)
+	if err == nil && written != len(data) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write operator config temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync operator config temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close operator config temp file: %w", err)
+	}
+	if err := service.Files.Chmod(tmpPath, 0o600); err != nil {
+		return fmt.Errorf("set operator config temp file permissions: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("persist operator config before commit: %w", err)
+	}
+	if err := service.Files.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace operator config with temp file: %w", err)
+	}
+	committed = true
+	return nil
 }
 
 func emptyConfigDocument() ConfigDocument {
