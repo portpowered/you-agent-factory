@@ -20,6 +20,7 @@ const (
 	defaultScenarioPath = "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go"
 	diagnosticPrefix    = "[agent-factory:functional-boundary]"
 	providerTestRoot    = "tests/functional/providers/"
+	serviceImportPrefix = "github.com/portpowered/infinite-you/pkg/services/"
 )
 
 var forbiddenRequestBatchImports = []string{
@@ -50,6 +51,18 @@ var forbiddenProviderImplementationImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
+}
+
+// Provider scenarios may import service-root contracts and these exact public
+// external-effect ports to populate edges.Edges. Every other service
+// subpackage is an implementation or composition seam and must stay behind the
+// root-built process harness. Keep this set aligned with the package-boundary
+// policy's publicExternalEffectContractImports.
+var providerPublicEffectContractImports = map[string]struct{}{
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear": {},
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{
@@ -214,6 +227,12 @@ func checkFunctionalCompositionTree(root string) error {
 					diagnosticPrefix, importPath, relative,
 				)
 			}
+			if providerSource && isProviderServiceImplementationImport(importPath) {
+				return fmt.Errorf(
+					"%s prohibited provider service implementation or composition import: %s (%s); exercise provider behavior through tests/functional/internal/support.BuildProcess with exact edges.Edges replacements",
+					diagnosticPrefix, importPath, relative,
+				)
+			}
 			for _, forbidden := range forbiddenCompositionImports {
 				if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
 					return fmt.Errorf(
@@ -256,6 +275,17 @@ func checkFunctionalCompositionTree(root string) error {
 		}
 		return nil
 	})
+}
+
+func isProviderServiceImplementationImport(importPath string) bool {
+	if !strings.HasPrefix(importPath, serviceImportPrefix) {
+		return false
+	}
+	if _, publicEffectContract := providerPublicEffectContractImports[importPath]; publicEffectContract {
+		return false
+	}
+	remainder := strings.TrimPrefix(importPath, serviceImportPrefix)
+	return strings.Contains(remainder, "/")
 }
 
 func isDedicatedProviderSource(relative string) bool {

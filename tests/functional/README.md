@@ -103,8 +103,10 @@ test results.
   goal is startup-path parity.
 - Provider functional packages must obtain executable processes through
   `tests/functional/internal/support.BuildProcess`; they must not import
-  `pkg/root`, `pkg/wire`, initializer or runtime composition internals, or a
-  concrete built-in provider implementation package.
+  `pkg/root`, `pkg/wire`, initializer or runtime composition internals, service
+  implementation/composition subpackages, or concrete built-in provider
+  implementations. Service-root contracts and the exact public external-effect
+  ports needed to populate typed `edges.Edges` replacements remain available.
 - Keep package-local helpers next to the tests until a second behavior package
   needs them, then promote them into the support package instead of importing
   or copying another package's `*_test.go` helpers.

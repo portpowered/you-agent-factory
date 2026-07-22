@@ -76,7 +76,10 @@
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
   cannot authorize reintroduction. New provider scenarios must begin in a
-  dedicated provider or provider-domain subpackage.
+  dedicated provider or provider-domain subpackage. The same boundary check
+  rejects all service implementation and composition subpackage imports from
+  dedicated provider packages, while retaining service-root contracts and the
+  exact public external-effect ports used by typed `edges.Edges` replacements.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing

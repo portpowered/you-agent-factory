@@ -105,6 +105,21 @@ func scenario() {
 	}
 }
 
+func TestCheckFunctionalCompositionTreeAcceptsProviderPublicContracts(t *testing.T) {
+	for _, importPath := range []string{
+		"github.com/portpowered/infinite-you/pkg/services/edges",
+		"github.com/portpowered/infinite-you/pkg/services/models",
+		"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
+	} {
+		t.Run(importPath, func(t *testing.T) {
+			root, _ := writeProviderFunctionalSource(t, "package codex\nimport _ \""+importPath+"\"\n")
+			if err := checkFunctionalCompositionTree(root); err != nil {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want public contract accepted", err)
+			}
+		})
+	}
+}
+
 func TestCheckFunctionalCompositionTreeRejectsProviderDirectRootComposition(t *testing.T) {
 	root, _ := writeProviderFunctionalSource(t, `package codex
 import (
@@ -132,6 +147,25 @@ func TestCheckFunctionalCompositionTreeRejectsConcreteProviderImplementation(t *
 			err := checkFunctionalCompositionTree(root)
 			if err == nil || !strings.Contains(err.Error(), "prohibited concrete provider implementation import: "+importPath) {
 				t.Fatalf("checkFunctionalCompositionTree() error = %v, want concrete provider failure", err)
+			}
+			if !strings.Contains(err.Error(), "support.BuildProcess with exact edges.Edges replacements") {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want shared typed-edge harness remediation", err)
+			}
+		})
+	}
+}
+
+func TestCheckFunctionalCompositionTreeRejectsProviderServiceImplementation(t *testing.T) {
+	for _, importPath := range []string{
+		"github.com/portpowered/infinite-you/pkg/services/models/wire",
+		"github.com/portpowered/infinite-you/pkg/services/models/internal/service",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution",
+	} {
+		t.Run(importPath, func(t *testing.T) {
+			root, _ := writeProviderFunctionalSource(t, "package codex\nimport _ \""+importPath+"\"\n")
+			err := checkFunctionalCompositionTree(root)
+			if err == nil || !strings.Contains(err.Error(), "prohibited provider service implementation or composition import: "+importPath) {
+				t.Fatalf("checkFunctionalCompositionTree() error = %v, want service implementation failure", err)
 			}
 			if !strings.Contains(err.Error(), "support.BuildProcess with exact edges.Edges replacements") {
 				t.Fatalf("checkFunctionalCompositionTree() error = %v, want shared typed-edge harness remediation", err)
