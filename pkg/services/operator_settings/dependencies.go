@@ -25,6 +25,10 @@ type FileSystem interface {
 // CreateTemporaryFile reserves the atomic-write file selected by Wire.
 type CreateTemporaryFile func(string, string) (TemporaryFile, error)
 
+// ProviderCatalog canonicalizes a supported operator provider identity. The
+// returned boolean is false when the supplied identity is not in the catalog.
+type ProviderCatalog func(string) (string, bool)
+
 // IDGenerator supplies the opaque component of a local backend scope ID.
 type IDGenerator func() string
 

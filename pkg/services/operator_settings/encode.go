@@ -37,7 +37,8 @@ type ProviderModelUpdate struct {
 // and encoding. Files is required only by Load; pure operations remain usable
 // without a filesystem dependency.
 type ConfigDocumentService struct {
-	Files FileSystem
+	Files     FileSystem
+	Providers ProviderCatalog
 }
 
 // MarshalInputInventoryJSON renders the operator config input inventory as stable JSON.
@@ -114,17 +115,21 @@ func (service ConfigDocumentService) MergeProviderModelDefaults(
 	document ConfigDocument,
 	update ProviderModelUpdate,
 ) (ConfigDocument, error) {
+	validatedUpdate, err := service.validateProviderModelUpdate(update)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
 	fields := cloneRawFields(document.fields)
 	if fields == nil {
 		fields = make(map[string]json.RawMessage)
 	}
-	if update.Provider != nil || update.Model != nil {
+	if validatedUpdate.Provider != nil || validatedUpdate.Model != nil {
 		defaults, err := decodeDefaultsFields(fields[defaultsField])
 		if err != nil {
 			return ConfigDocument{}, err
 		}
-		setOptionalString(defaults, providerField, update.Provider)
-		setOptionalString(defaults, modelField, update.Model)
+		setOptionalString(defaults, providerField, validatedUpdate.Provider)
+		setOptionalString(defaults, modelField, validatedUpdate.Model)
 		encoded, err := json.Marshal(defaults)
 		if err != nil {
 			return ConfigDocument{}, fmt.Errorf("encode operator defaults: %w", err)
@@ -132,6 +137,26 @@ func (service ConfigDocumentService) MergeProviderModelDefaults(
 		fields[defaultsField] = encoded
 	}
 	return service.validateFields(fields)
+}
+
+func (service ConfigDocumentService) validateProviderModelUpdate(update ProviderModelUpdate) (ProviderModelUpdate, error) {
+	if update.Provider == nil {
+		return update, nil
+	}
+	provider := strings.TrimSpace(*update.Provider)
+	if provider == "" {
+		return ProviderModelUpdate{}, fmt.Errorf("worker model provider is required")
+	}
+	if service.Providers == nil {
+		return ProviderModelUpdate{}, fmt.Errorf("operator provider catalog is required")
+	}
+	canonical, ok := service.Providers(provider)
+	canonical = strings.TrimSpace(canonical)
+	if !ok || canonical == "" {
+		return ProviderModelUpdate{}, fmt.Errorf("unsupported worker model provider %q", provider)
+	}
+	update.Provider = &canonical
+	return update, nil
 }
 
 // Marshal encodes the complete validated document as JSON.
