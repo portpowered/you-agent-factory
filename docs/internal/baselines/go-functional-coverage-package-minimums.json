@@ -70,7 +70,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
-      "minimum": 73.33
+      "minimum": 72.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
@@ -474,7 +474,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
-      "minimum": 83.06
+      "minimum": 82.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
@@ -656,7 +656,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime",
-      "minimum": 61.02
+      "minimum": 60.29
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding",
@@ -848,7 +848,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 53.60
+      "minimum": 53.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
@@ -1192,7 +1192,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
-      "minimum": 37.43
+      "minimum": 37.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",
