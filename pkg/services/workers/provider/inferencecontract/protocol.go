@@ -287,6 +287,9 @@ func (w *protocolWriter) validateCompletion(completion Completion) error {
 		return protocolError("completion_outcome", "completion requires exactly one response or failure")
 	}
 	if failure != nil {
+		if w.hasFinalMessage {
+			return protocolError("final_result_agreement", "completed message content cannot be followed by an authoritative failure")
+		}
 		return ValidateFailure(*failure)
 	}
 	for _, state := range w.lifecycles {

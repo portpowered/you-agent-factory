@@ -31,7 +31,10 @@ primary-result behavior.
   `inferencecontract/testkit.RunAdverse` for normalized failure, cancellation,
   deadline, response-sink backpressure, and terminal-state scenarios. A sink
   write failure is terminal: preserve it for orchestration and reject every
-  later provider write or close without sending a competing completion.
+  later provider write or close without sending a competing completion. Once
+  an authoritative completed message represents success, reject a later
+  failure completion and discard the buffered terminal tail so orchestration
+  observes neither side of a contradictory outcome.
 
 ## CLI run and submit command contracts
 

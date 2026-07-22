@@ -17,16 +17,17 @@ type FailureIntegrationFactory func(contract.Identity, contract.FailureKind) con
 // failure, and malformed terminal behavior. Each factory must return a fresh
 // integration so scenarios can run independently and under the race detector.
 type AdverseSuite struct {
-	Identities   []contract.Identity
-	Failures     FailureIntegrationFactory
-	Cancellation IntegrationFactory
-	Timeout      IntegrationFactory
-	Backpressure IntegrationFactory
-	DoubleClose  IntegrationFactory
-	WriteAfter   IntegrationFactory
-	MissingClose IntegrationFactory
-	Disagreement IntegrationFactory
-	Request      contract.InvocationRequest
+	Identities          []contract.Identity
+	Failures            FailureIntegrationFactory
+	Cancellation        IntegrationFactory
+	Timeout             IntegrationFactory
+	Backpressure        IntegrationFactory
+	DoubleClose         IntegrationFactory
+	WriteAfter          IntegrationFactory
+	MissingClose        IntegrationFactory
+	Disagreement        IntegrationFactory
+	FailureAfterSuccess IntegrationFactory
+	Request             contract.InvocationRequest
 }
 
 var failureKinds = []contract.FailureKind{
@@ -56,6 +57,7 @@ func RunAdverse(t *testing.T, suite AdverseSuite) {
 			runViolationScenario(t, "write-after-close", identity, suite.WriteAfter, suite.Request, "write_after_close", outcomeSuccess)
 			runViolationScenario(t, "missing-close", identity, suite.MissingClose, suite.Request, "missing_close", outcomeMalformedFailure)
 			runViolationScenario(t, "result-event-disagreement", identity, suite.Disagreement, suite.Request, "final_result_agreement", outcomeNone)
+			runViolationScenario(t, "failure-after-success-event", identity, suite.FailureAfterSuccess, suite.Request, "final_result_agreement", outcomeNone)
 		})
 	}
 }
@@ -163,8 +165,8 @@ func runViolationScenario(t *testing.T, name string, identity contract.Identity,
 		}
 		switch outcome {
 		case outcomeNone:
-			if destination.closes != 0 {
-				t.Fatalf("destination closes = %d, want no contradictory terminal outcome", destination.closes)
+			if len(destination.events) != 0 || destination.closes != 0 {
+				t.Fatalf("destination received %d events and %d closes, want no contradictory terminal outcome", len(destination.events), destination.closes)
 			}
 		case outcomeSuccess:
 			assertSuccessfulClose(t, destination)
@@ -205,9 +207,23 @@ func requireAdverseSuite(t *testing.T, suite AdverseSuite) {
 }
 
 func validateAdverseSuite(suite AdverseSuite) error {
-	if suite.Failures == nil || suite.Cancellation == nil || suite.Timeout == nil || suite.Backpressure == nil ||
-		suite.DoubleClose == nil || suite.WriteAfter == nil || suite.MissingClose == nil || suite.Disagreement == nil {
+	if suite.Failures == nil {
 		return fmt.Errorf("all adverse integration factories are required")
+	}
+	factories := []IntegrationFactory{
+		suite.Cancellation,
+		suite.Timeout,
+		suite.Backpressure,
+		suite.DoubleClose,
+		suite.WriteAfter,
+		suite.MissingClose,
+		suite.Disagreement,
+		suite.FailureAfterSuccess,
+	}
+	for _, factory := range factories {
+		if factory == nil {
+			return fmt.Errorf("all adverse integration factories are required")
+		}
 	}
 	if len(suite.Identities) == 0 {
 		return fmt.Errorf("at least one opaque provider identity is required")

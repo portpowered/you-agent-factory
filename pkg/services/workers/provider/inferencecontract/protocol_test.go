@@ -168,6 +168,25 @@ func TestExecuteInvocationRejectsFinalResultDisagreement(t *testing.T) {
 	}
 }
 
+func TestExecuteInvocationRejectsCompletedMessageBeforeFailure(t *testing.T) {
+	t.Parallel()
+	destination := &orderedWriter{}
+	integration := lifecycleIntegration{invoke: func(ctx context.Context, request contract.InvocationRequest, writer contract.ResponseWriter) error {
+		if err := writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindMessage, workers.PhaseCompleted, "message-1", messagePayload(t, "answer"))); err != nil {
+			return err
+		}
+		return writer.Close(ctx, contract.FailedCompletion(contract.NewFailure(contract.FailureInput{
+			Kind: contract.FailureDependency, Message: "provider dependency failed",
+		})))
+	}}
+
+	err := contract.ExecuteInvocation(context.Background(), integration, request(), destination)
+	assertProtocolRule(t, err, "final_result_agreement")
+	if len(destination.order) != 0 || destination.closes != 0 {
+		t.Fatalf("destination received contradictory terminal state: order = %v, closes = %d", destination.order, destination.closes)
+	}
+}
+
 func TestExecuteInvocationNormalizesErrorBeforeClose(t *testing.T) {
 	t.Parallel()
 	destination := &orderedWriter{}

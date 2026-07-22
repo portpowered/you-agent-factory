@@ -24,14 +24,15 @@ func TestAdverseConformance(t *testing.T) {
 		Failures: func(identity contract.Identity, kind contract.FailureKind) contract.Integration {
 			return &adverseIntegration{identity: identity, behavior: adverseFailure, failureKind: kind}
 		},
-		Cancellation: factory(adverseInterrupted),
-		Timeout:      factory(adverseInterrupted),
-		Backpressure: factory(adverseBackpressure),
-		DoubleClose:  factory(adverseDoubleClose),
-		WriteAfter:   factory(adverseWriteAfterClose),
-		MissingClose: factory(adverseMissingClose),
-		Disagreement: factory(adverseDisagreement),
-		Request:      request("invocation-adverse", contract.CapabilityPromptSubmission),
+		Cancellation:        factory(adverseInterrupted),
+		Timeout:             factory(adverseInterrupted),
+		Backpressure:        factory(adverseBackpressure),
+		DoubleClose:         factory(adverseDoubleClose),
+		WriteAfter:          factory(adverseWriteAfterClose),
+		MissingClose:        factory(adverseMissingClose),
+		Disagreement:        factory(adverseDisagreement),
+		FailureAfterSuccess: factory(adverseFailureAfterSuccess),
+		Request:             request("invocation-adverse", contract.CapabilityPromptSubmission),
 	})
 }
 
@@ -45,6 +46,7 @@ const (
 	adverseWriteAfterClose
 	adverseMissingClose
 	adverseDisagreement
+	adverseFailureAfterSuccess
 )
 
 type adverseIntegration struct {
@@ -93,6 +95,13 @@ func (f *adverseIntegration) Invoke(ctx context.Context, request contract.Invoca
 			return err
 		}
 		return writer.Close(ctx, contract.SuccessfulCompletion(contract.NewResponse(contract.ResponseInput{Content: "contradictory response"})))
+	case adverseFailureAfterSuccess:
+		if err := writer.WriteEvent(ctx, adverseMessageEvent(request.InvocationID(), f.identity)); err != nil {
+			return err
+		}
+		return writer.Close(ctx, contract.FailedCompletion(contract.NewFailure(contract.FailureInput{
+			Kind: contract.FailureDependency, Message: "provider dependency failed",
+		})))
 	default:
 		return errors.New("unsupported adverse behavior")
 	}
