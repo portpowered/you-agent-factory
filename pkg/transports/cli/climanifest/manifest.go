@@ -53,6 +53,7 @@ type Relationship struct {
 	ID           string           `json:"id"`
 	Kind         string           `json:"kind"`
 	Participants []ParticipantRef `json:"participants"`
+	When         *ParticipantRef  `json:"when,omitempty"`
 }
 
 // ParticipantRef points to one flag or positional argument in a relationship.

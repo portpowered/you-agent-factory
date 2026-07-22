@@ -291,8 +291,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   then requires complete channels, outputs, exits, effects, runtime constraints,
   and stable handler metadata for runnable records. Register every authored command
   manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
-  participants on same-command flag or argument IDs so diagnostics name the exact
-  record path. Compatibility records must not be copied into the primary manifest
+  participants on flag or argument IDs visible in the command's effective scope
+  so diagnostics name the exact record path. Group relationship participants are
+  unordered sets; dependency and conditional relationships direct `when` toward
+  their participant targets and must remain acyclic. Compatibility records must
+  not be copied into the primary manifest
   merely to make generation convenient. Apply family-completeness validators only
   to the manifest classification that owns that family: `LoadProduction` owns
   canonical run/submit validation, while `LoadCompatibility` must remain able to

@@ -876,6 +876,7 @@
       }
     },
     "relationship": {
+      "description": "A deterministic input-constraint record. Group participants are unordered. Dependency and conditional records create directed edges from when to each participant. Equivalent same-kind records are duplicates; required-together contradicts exclusion over the same set, and a directed edge contradicts exclusion of its endpoints. Directed relationship edges must be acyclic.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -893,21 +894,21 @@
             "mutually-exclusive",
             "required-together",
             "at-least-one",
+            "dependency",
             "conditional",
             "conflict"
           ]
         },
         "participants": {
-          "description": "Ordered participant references constrained by this relationship.",
+          "description": "Participant references constrained by this relationship. Group relationship participants are an unordered set. Dependency and conditional participants are targets of the input named by when.",
           "type": "array",
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/participantRef"
-          },
-          "uniqueItems": true
+          }
         },
         "when": {
-          "description": "Trigger participant for conditional relationships. Required when kind is conditional.",
+          "description": "Trigger participant for dependency and conditional relationships.",
           "$ref": "#/$defs/participantRef"
         }
       },
@@ -929,6 +930,11 @@
             ]
           },
           "then": {
+            "not": {
+              "required": [
+                "when"
+              ]
+            },
             "properties": {
               "participants": {
                 "minItems": 2
@@ -940,7 +946,10 @@
           "if": {
             "properties": {
               "kind": {
-                "const": "conditional"
+                "enum": [
+                  "dependency",
+                  "conditional"
+                ]
               }
             },
             "required": [
@@ -953,7 +962,7 @@
             ],
             "properties": {
               "participants": {
-                "minItems": 2
+                "minItems": 1
               }
             }
           }
