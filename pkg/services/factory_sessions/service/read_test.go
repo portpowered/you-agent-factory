@@ -2,12 +2,28 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream/wire"
 )
+
+func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {
+	t.Helper()
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" })
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	registry, err := responseService.NewStreamRegistry(serviceTestClock)
+	if err != nil {
+		t.Fatalf("construct response-stream registry: %v", err)
+	}
+	return factorysessionservice.NewWithResponseService(host, host, host, registry, nil, nil, responseService)
+}
 
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {
 	t.Parallel()
@@ -46,6 +62,59 @@ func TestService_SubscribeFactoryResponseEvents_UsesExactSessionWithoutDefaultFa
 	)
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("SubscribeFactoryResponseEvents error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivateService(t *testing.T) {
+	t.Parallel()
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" })
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store, err := responseService.NewEventStore("session-1", serviceTestClock)
+	if err != nil {
+		t.Fatalf("construct event store: %v", err)
+	}
+	first, err := store.Publish(responseevents.FactoryResponseEvent{
+		RunID: "run-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta, Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"first"}`),
+	})
+	if err != nil {
+		t.Fatalf("publish first: %v", err)
+	}
+	secondInput := first
+	secondInput.Payload = json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"second"}`)
+	second, err := store.Publish(secondInput)
+	if err != nil {
+		t.Fatalf("publish second: %v", err)
+	}
+	host := &openTestHost{sessions: map[string]*factorysessions.LiveSession{
+		"session-1": {ID: "session-1", ResponseEvents: store},
+	}}
+	gateway := newResponseServiceTestGateway(t, host)
+	cursor, err := gateway.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: "session-1", AfterSequence: first.Sequence,
+	})
+	if err != nil {
+		t.Fatalf("SubscribeFactoryResponseEvents: %v", err)
+	}
+	defer cursor.Detach()
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 1 || events[0].Sequence != second.Sequence {
+		t.Fatalf("events = %#v, want only sequence %d", events, second.Sequence)
+	}
+	_, err = gateway.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: "session-1", AfterSequence: -1,
+	})
+	if !errors.Is(err, factorysessions.ErrInvalidResponseEventCursor) {
+		t.Fatalf("invalid cursor error = %v, want ErrInvalidResponseEventCursor", err)
 	}
 }
 

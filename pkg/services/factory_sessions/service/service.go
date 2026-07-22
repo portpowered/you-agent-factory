@@ -9,17 +9,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream"
 )
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
-	host          Host
-	liveOpener    *dataplane.LiveOpener
-	liveLifecycle *dataplane.LiveLifecycle
-	streams       *stream.Manager
-	reconnects    factorysessions.ReconnectCursorValidator
-	results       factoryruntime.SessionResultProjectionOperation
+	host           Host
+	liveOpener     *dataplane.LiveOpener
+	liveLifecycle  *dataplane.LiveLifecycle
+	streams        *stream.Manager
+	reconnects     factorysessions.ReconnectCursorValidator
+	results        factoryruntime.SessionResultProjectionOperation
+	responseEvents responsestreamservice.Service
 }
 
 // ForRuntime rejects rebinding an already-bound application gateway. Runtime
@@ -55,16 +57,31 @@ func NewWithReconnectValidation(
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
 ) *Service {
+	return NewWithResponseService(host, sessions, observer, responseStreams, reconnects, results, nil)
+}
+
+// NewWithResponseService injects the owner-private response-stream policy used
+// by the outer Factory Sessions boundary.
+func NewWithResponseService(
+	host Host,
+	sessions stream.SessionResolver,
+	observer stream.Observer,
+	responseStreams *responsestream.Registry,
+	reconnects factorysessions.ReconnectCursorValidator,
+	results factoryruntime.SessionResultProjectionOperation,
+	responseEvents responsestreamservice.Service,
+) *Service {
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
 	return &Service{
-		host:          host,
-		liveOpener:    dataplane.NewLiveOpener(host),
-		liveLifecycle: dataplane.NewLiveLifecycle(host),
-		streams:       stream.NewManagerWithDependencies(sessions, observer, responseStreams),
-		reconnects:    reconnects,
-		results:       results,
+		host:           host,
+		liveOpener:     dataplane.NewLiveOpener(host),
+		liveLifecycle:  dataplane.NewLiveLifecycle(host),
+		streams:        stream.NewManagerWithDependencies(sessions, observer, responseStreams),
+		reconnects:     reconnects,
+		results:        results,
+		responseEvents: responseEvents,
 	}
 }
 

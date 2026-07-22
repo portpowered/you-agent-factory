@@ -14,6 +14,7 @@ import (
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity/wire"
+	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -63,6 +64,10 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
+	responseStreams, err := responsestreamwire.NewService(eventIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	service, err := factorysessionroot.NewRoot(
 		newJavaScriptCheckpointStore,
@@ -78,6 +83,7 @@ func NewService(
 		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
+		responseStreams,
 	)
 	if err != nil {
 		return nil, err

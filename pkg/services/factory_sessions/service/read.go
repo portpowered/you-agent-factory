@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 )
 
 // ResolveFactorySession returns the canonical live session entity for
@@ -28,9 +30,31 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
+	session := s.host.GetLiveSession(request.SessionID)
+	if session == nil {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	if session.ResponseEvents == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	if s.responseEvents != nil {
+		cursor, err := s.responseEvents.Subscribe(ctx, session.ResponseEvents, responsestreamservice.SubscriptionRequest{
+			AfterSequence: request.AfterSequence,
+			DispatchID:    request.DispatchID,
+			Kinds:         request.Kinds,
+		})
+		switch {
+		case errors.Is(err, responsestreamservice.ErrInvalidCursor):
+			return nil, factorysessions.ErrInvalidResponseEventCursor
+		case errors.Is(err, responsestreamservice.ErrInvalidFilter):
+			return nil, factorysessions.ErrInvalidResponseEventFilter
+		default:
+			return cursor, err
+		}
+	}
 	return factorysessions.SubscribeFactoryResponseEvents(
 		ctx,
-		s.host.GetLiveSession(request.SessionID),
+		session,
 		request,
 	)
 }

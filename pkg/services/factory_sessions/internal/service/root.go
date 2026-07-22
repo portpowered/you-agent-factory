@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 )
 
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
@@ -28,6 +29,7 @@ type Root struct {
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
+	responseStreams              responsestreamservice.Service
 }
 
 var _ factorysessions.Service = (*Root)(nil)
@@ -48,6 +50,7 @@ func NewRoot(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
+	responseStreams responsestreamservice.Service,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -76,6 +79,9 @@ func NewRoot(
 	if identityService == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: identity service is required")
 	}
+	if responseStreams == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
+	}
 	return &Root{
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		sessionResultProjection:      sessionResultProjection,
@@ -90,6 +96,7 @@ func NewRoot(
 		invocationInputFiles:         invocationInputFiles,
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
+		responseStreams:              responseStreams,
 	}, nil
 }
 
@@ -117,6 +124,7 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 		r.invocationInputFiles,
 		r.initialWorkFiles,
 		r.identity,
+		r.responseStreams,
 	)
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")

@@ -470,6 +470,16 @@ logical-target kinds and provider-boundary fields only in
 `pkg/transports/mapping/factorysession`; domain target normalization must not
 return generated HTTP values.
 
+Factory Session response-event validation, retained-then-live subscription,
+cursor filtering and gap signaling, event-store lifecycle, and internal stream
+registry allocation are owned by the injected subservice rooted at
+`pkg/services/factory_sessions/services/response_stream`. Construct the inert
+capability in Factory Sessions-local Wire, bind its stores and registries only
+after an explicit runtime clock is available, and delegate outer-service
+subscriptions through it. Keep transport consumers on the Factory Sessions root
+cursor contract; they must not construct stores or import this private
+capability.
+
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
 Factory-owned `FactoryArtifact` metadata, including capture and redaction

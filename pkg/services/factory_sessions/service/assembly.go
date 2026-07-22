@@ -13,6 +13,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -37,6 +38,7 @@ type Assembly struct {
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
+	responseStreams              responsestreamservice.Service
 }
 
 type streamManager interface {
@@ -60,16 +62,17 @@ func NewAssembly(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
+	responseStreamService responsestreamservice.Service,
 ) factorysessions.RuntimeAssembly {
-	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil {
+	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil {
 		return nil
 	}
 	registry := sessionregistry.New()
-	newResponseStream := func() *factorysessions.SessionResponseStream {
-		return factorysessions.NewSessionResponseStream(clock)
+	responses, err := responseStreamService.NewStreamRegistry(clock)
+	if err != nil {
+		return nil
 	}
-	responses := factorysessions.NewResponseStreamRegistry(newResponseStream, clock)
-	state := sessionruntime.NewWithResponseStreams(registry, responses, nil, clock, eventIDs, sessionIDs)
+	state := sessionruntime.NewWithResponseService(registry, responses, nil, clock, eventIDs, sessionIDs, responseStreamService)
 	return &Assembly{
 		registry:                     registry,
 		state:                        state,
@@ -87,6 +90,7 @@ func NewAssembly(
 		invocationInputFiles:         invocationInputFiles,
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
+		responseStreams:              responseStreamService,
 	}
 }
 
@@ -194,6 +198,11 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
+	responseEvents, err := a.responseStreams.NewEventStore(factorysessions.CanonicalFactorySessionID(session), clock)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
+	}
+	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
 		Factory:        startupRuntime.RuntimeService(),
 		BackendScopeID: startupRuntime.BackendScope(),
@@ -238,13 +247,14 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
-	gateway := NewWithReconnectValidation(
+	gateway := NewWithResponseService(
 		SessionServiceHost(runtime),
 		a.state,
 		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
 		a.state.ResponseStreams(),
 		runtime.ReconnectCursorValidator(),
 		a.sessionResultProjection,
+		a.responseStreams,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)

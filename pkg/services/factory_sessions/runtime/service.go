@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 )
 
 // Registration contains the host-independent state needed to register one
@@ -109,13 +110,14 @@ func DefaultTarget(bundleDir, bundleFolder, factoryRootDir string) factorysessio
 // Service is the authoritative mutable registry for one process's live
 // Factory Sessions.
 type Service struct {
-	registry   factorysessions.Registry
-	responses  *responsestream.Registry
-	close      func(*factorysessions.LiveSession)
-	clock      factoryruntime.Clock
-	eventIDs   factorysessions.ResponseEventIDGenerator
-	sessionIDs factorysessions.SessionIDGenerator
-	activation sync.RWMutex
+	registry       factorysessions.Registry
+	responses      *responsestream.Registry
+	close          func(*factorysessions.LiveSession)
+	clock          factoryruntime.Clock
+	eventIDs       factorysessions.ResponseEventIDGenerator
+	sessionIDs     factorysessions.SessionIDGenerator
+	responseEvents responsestreamservice.Service
+	activation     sync.RWMutex
 }
 
 // CurrentRuntime returns the selected session's host-independent runtime view.
@@ -177,10 +179,24 @@ func NewWithResponseStreams(
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 ) *Service {
+	return NewWithResponseService(registry, responses, closeSession, clock, eventIDs, sessionIDs, nil)
+}
+
+// NewWithResponseService constructs the live registry with the owner-private
+// response-stream capability used for per-session event-store lifecycle.
+func NewWithResponseService(
+	registry factorysessions.Registry,
+	responses *responsestream.Registry,
+	closeSession func(*factorysessions.LiveSession),
+	clock factoryruntime.Clock,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseEvents responsestreamservice.Service,
+) *Service {
 	if registry == nil || responses == nil || clock == nil || eventIDs == nil || sessionIDs == nil {
 		return nil
 	}
-	return &Service{registry: registry, responses: responses, close: closeSession, clock: clock, eventIDs: eventIDs, sessionIDs: sessionIDs}
+	return &Service{registry: registry, responses: responses, close: closeSession, clock: clock, eventIDs: eventIDs, sessionIDs: sessionIDs, responseEvents: responseEvents}
 }
 
 // ResponseStreams returns the response-stream registry paired with this live
@@ -207,7 +223,11 @@ func (s *Service) CloseResponseStreams(session *factorysessions.LiveSession) {
 	if s == nil || s.responses == nil || session == nil {
 		return
 	}
-	session.CloseResponseEvents()
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
 	s.responses.Close(factorysessions.CanonicalFactorySessionID(session))
 }
 
@@ -252,6 +272,16 @@ func (s *Service) Register(registration Registration) string {
 		s.sessionIDs,
 		s.eventIDs,
 	)
+	if session == nil {
+		return ""
+	}
+	if s.responseEvents != nil {
+		responseEvents, err := s.responseEvents.NewEventStore(factorysessions.CanonicalFactorySessionID(session), s.clock)
+		if err != nil {
+			return ""
+		}
+		session.ResponseEvents = responseEvents
+	}
 	session.Runtime = registration.Runtime
 	factorysessions.BindResponseEventCompletion(session, registration.AddEventTypeRecorder)
 	s.registry.Upsert(session, registration.Select)
