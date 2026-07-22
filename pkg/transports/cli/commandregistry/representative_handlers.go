@@ -179,6 +179,7 @@ func applySessionDiagnostics(cmd *cobra.Command, binding SessionDiagnosticsBindi
 // SessionCreateBinding supplies handwritten session create dependencies.
 type SessionCreateBinding struct {
 	Config *sessioncli.CreateConfig
+	JSON   *bool
 	SessionDiagnosticsBinding
 	CreateSession func(sessioncli.CreateConfig) error
 }
@@ -193,6 +194,9 @@ func SessionCreateRunE(binding SessionCreateBinding) RunE {
 			return fmt.Errorf("session create config is required")
 		}
 		cfg := *binding.Config
+		if binding.JSON != nil {
+			cfg.JSON = *binding.JSON
+		}
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
 		return binding.CreateSession(cfg)
@@ -203,6 +207,7 @@ func SessionCreateRunE(binding SessionCreateBinding) RunE {
 type SessionListBinding struct {
 	Config *sessioncli.ListConfig
 	Server *string
+	JSON   *bool
 	SessionDiagnosticsBinding
 	Prepare      func(context.Context, *sessioncli.ListConfig) error
 	ListSessions func(sessioncli.ListConfig) error
@@ -222,6 +227,9 @@ func SessionListRunE(binding SessionListBinding) RunE {
 		if binding.Server != nil && cmd.Root().PersistentFlags().Changed("server") {
 			cfg.Server = *binding.Server
 		}
+		if binding.JSON != nil {
+			cfg.JSON = *binding.JSON
+		}
 		if binding.Prepare != nil {
 			if err := binding.Prepare(cmd.Context(), &cfg); err != nil {
 				return err
@@ -236,6 +244,7 @@ func SessionListRunE(binding SessionListBinding) RunE {
 // SessionDeleteBinding supplies handwritten session delete dependencies.
 type SessionDeleteBinding struct {
 	Config *sessioncli.DeleteConfig
+	JSON   *bool
 	SessionDiagnosticsBinding
 	DeleteSession func(sessioncli.DeleteConfig) error
 }
@@ -251,6 +260,9 @@ func SessionDeleteRunE(binding SessionDeleteBinding) RunE {
 		}
 		cfg := *binding.Config
 		cfg.SessionID = args[0]
+		if binding.JSON != nil {
+			cfg.JSON = *binding.JSON
+		}
 		cfg.Output = cmd.OutOrStdout()
 		applySessionDiagnostics(cmd, binding.SessionDiagnosticsBinding, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
 		return binding.DeleteSession(cfg)

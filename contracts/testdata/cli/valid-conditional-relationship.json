@@ -111,6 +111,20 @@
         }
       },
       "relationships": {
+        "example.factory.trace.rel.dependency.log-level-output": {
+          "id": "example.factory.trace.rel.dependency.log-level-output",
+          "kind": "dependency",
+          "when": {
+            "type": "flag",
+            "id": "example.factory.trace.flag.log-level"
+          },
+          "participants": [
+            {
+              "type": "flag",
+              "id": "example.factory.trace.flag.output"
+            }
+          ]
+        },
         "example.factory.trace.rel.conditional.verbose-log-level-output": {
           "id": "example.factory.trace.rel.conditional.verbose-log-level-output",
           "kind": "conditional",
@@ -119,10 +133,6 @@
             "id": "example.factory.trace.flag.verbose"
           },
           "participants": [
-            {
-              "type": "flag",
-              "id": "example.factory.trace.flag.verbose"
-            },
             {
               "type": "flag",
               "id": "example.factory.trace.flag.log-level"

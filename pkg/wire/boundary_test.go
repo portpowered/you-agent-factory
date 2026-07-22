@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -15,8 +16,31 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 )
+
+func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	presentationOutput := provideResponsePresentation().OpenLosslessOutput(&output)
+	if err := presentationOutput.Enqueue([]byte("factory event")); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	if err := presentationOutput.CloseAndDrain(); err != nil {
+		t.Fatalf("CloseAndDrain: %v", err)
+	}
+	if got, want := output.String(), "factory event\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestProvideWorkStopSummaryProjectorDelegatesToFactorySessions(t *testing.T) {
+	t.Parallel()
+	if got := provideWorkStopSummaryProjector()(factorysessions.WorkStopSummaryRequest{}); got != nil {
+		t.Fatalf("empty Work stop summary = %#v, want nil", got)
+	}
+}
 
 func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsPlatformDefault(t *testing.T) {
 	t.Parallel()

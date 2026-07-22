@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -108,7 +109,6 @@ func openInvocation(
 	recordPath resolvedRunRecordPath,
 	invocation factorysessions.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) (*Operation, error) {
 	if invocation == nil {
@@ -117,13 +117,10 @@ func openInvocation(
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && presentation == nil {
 		return nil, fmt.Errorf("construct factory invocation: response presentation operation is required")
 	}
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && responseEvents == nil {
-		return nil, fmt.Errorf("construct factory invocation: response-event validator is required")
-	}
 	return &Operation{
 		cfg: cfg, logger: logger, invocationRequest: request,
 		invocationTarget: invocationTarget(cfg, logger, mockWorkersConfig),
-		invocation:       invocation, presentation: presentation, responseEvents: responseEvents,
+		invocation:       invocation, presentation: presentation,
 		invocationMode: true, recordPath: recordPath,
 	}, nil
 }
@@ -220,7 +217,6 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	invocation factorysessions.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
 ) error {
 	if invocation == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
@@ -228,39 +224,26 @@ func runFactoryInvocation(
 
 	logPackagedTTSInvocationStart(cfg)
 
-	streamRenderer := invocationResponseStreamRenderer(cfg, presentation, responseEvents)
+	streamRenderer := invocationFactoryEventRenderer(cfg, presentation)
 	if streamRenderer != nil {
 		defer streamRenderer.stopProgressRendering()
 	}
 
+	var consume factorysessions.FactoryEventConsumer
+	if streamRenderer != nil {
+		consume = streamRenderer.PresentFactoryEvents
+	}
 	outcome, err := invocation.InvokeFactory(
-		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request),
+		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request), consume,
 	)
 	if err != nil {
-		return err
-	}
-	if sink, ok := streamRenderer.(responseEventSink); ok && len(outcome.ResponseEvents) > 0 {
-		sink.PresentResponseEvents(outcome.ResponseEvents)
+		return MapInvocationFailure(err)
 	}
 	result := outcome.Result
 	if result.Status != interfaces.InvocationTerminalStatusCompleted {
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
-}
-
-func invocationResponseStreamRenderer(
-	cfg RunConfig,
-	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
-) responseStreamRenderer {
-	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		return nil
-	}
-	if cfg.JSONOutput {
-		return newJSONResponseStreamRenderer(cfg.Output, presentation)
-	}
-	return newHumanResponseStreamRenderer(cfg.Output, presentation, responseEvents)
 }
 
 func invocationTarget(
@@ -337,6 +320,14 @@ func (e invocationCLIError) contextSuffix() string {
 	return " [" + strings.Join(fields, " ") + "]"
 }
 
+func (e invocationCLIError) responseMessage() string {
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "clean invocation failed"
+	}
+	return message + e.contextSuffix()
+}
+
 func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 	return invocationCLIError{
 		Code:      strings.TrimSpace(result.ErrorCode),
@@ -351,7 +342,7 @@ func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 func writeInvocationFailure(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer responseStreamRenderer,
+	streamRenderer factoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
 		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
@@ -368,7 +359,7 @@ func writeInvocationFailure(
 func writeInvocationSuccess(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer responseStreamRenderer,
+	streamRenderer factoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
 		return streamRenderer.writeFinalInvocationResult(result)
@@ -400,6 +391,46 @@ func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResul
 	}
 	_, err = fmt.Fprintln(output, string(encoded))
 	return err
+}
+
+func factoryEventForPublicPresentation(event interfaces.FactoryEvent) (interfaces.FactoryEvent, bool) {
+	var payload any
+	decoder := json.NewDecoder(bytes.NewReader(event.Payload))
+	decoder.UseNumber()
+	if len(event.Payload) == 0 || decoder.Decode(&payload) != nil {
+		event.Payload = json.RawMessage(`{}`)
+		return event, true
+	}
+	payload = redactPrivateFactoryEventPayload(payload)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return interfaces.FactoryEvent{}, false
+	}
+	event.Payload = encoded
+	return event, true
+}
+
+func redactPrivateFactoryEventPayload(value any) any {
+	if list, ok := value.([]any); ok {
+		for index, child := range list {
+			list[index] = redactPrivateFactoryEventPayload(child)
+		}
+		return list
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	if object["schemaVersion"] == string(factorysessions.ResponseEventSchemaVersionV1) {
+		return map[string]any{}
+	}
+	for _, key := range []string{"diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
+		delete(object, key)
+	}
+	for key, child := range object {
+		object[key] = redactPrivateFactoryEventPayload(child)
+	}
+	return object
 }
 
 func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {

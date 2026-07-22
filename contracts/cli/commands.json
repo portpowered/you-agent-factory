@@ -227,13 +227,19 @@
       "path": "you",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -297,6 +303,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -320,6 +327,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -343,6 +351,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -366,6 +375,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -389,6 +399,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -412,6 +423,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -533,6 +545,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -556,6 +569,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -579,6 +593,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -602,6 +617,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -625,6 +641,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -648,6 +665,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -679,13 +697,19 @@
       "path": "you config init",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -743,6 +767,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -766,6 +791,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -789,6 +815,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -812,6 +839,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -835,6 +863,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -858,6 +887,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -922,6 +952,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -945,6 +976,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -968,6 +1000,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -991,6 +1024,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1014,6 +1048,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1037,6 +1072,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1158,6 +1194,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1181,6 +1218,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1204,6 +1242,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1227,6 +1266,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1250,6 +1290,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1273,6 +1314,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1299,13 +1341,19 @@
       "path": "you factory config expand",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1420,6 +1468,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1443,6 +1492,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1466,6 +1516,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1489,6 +1540,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1512,6 +1564,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1535,6 +1588,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1561,13 +1615,19 @@
       "path": "you factory config flatten",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1684,6 +1744,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1707,6 +1768,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1730,6 +1792,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1753,6 +1816,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1776,6 +1840,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1799,6 +1864,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1831,13 +1897,19 @@
       "path": "you factory config validate",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1954,6 +2026,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1977,6 +2050,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2000,6 +2074,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2069,6 +2144,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2092,6 +2168,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2138,6 +2215,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2169,13 +2247,19 @@
       "path": "you factory create",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2291,6 +2375,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2314,6 +2399,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2337,6 +2423,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2383,6 +2470,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2406,6 +2494,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2429,6 +2518,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2460,13 +2550,19 @@
       "path": "you factory delete",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2583,6 +2679,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2606,6 +2703,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2629,6 +2727,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2675,6 +2774,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2698,6 +2798,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2721,6 +2822,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2752,13 +2854,19 @@
       "path": "you factory list",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2875,6 +2983,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2898,6 +3007,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2921,6 +3031,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2944,6 +3055,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2990,6 +3102,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3013,6 +3126,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3045,13 +3159,19 @@
       "path": "you factory query",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3147,6 +3267,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3170,6 +3291,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3193,6 +3315,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3216,6 +3339,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3262,6 +3386,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3308,6 +3433,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3340,13 +3466,19 @@
       "path": "you factory replace-current",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3462,6 +3594,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3485,6 +3618,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3508,6 +3642,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3577,6 +3712,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3600,6 +3736,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3623,6 +3760,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3654,13 +3792,19 @@
       "path": "you factory update",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3777,6 +3921,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3800,6 +3945,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3823,6 +3969,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3846,6 +3993,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3869,6 +4017,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3892,6 +4041,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3992,13 +4142,19 @@
       "path": "you init",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -4056,6 +4212,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4079,6 +4236,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4102,6 +4260,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4125,6 +4284,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4148,6 +4308,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4171,6 +4332,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4294,6 +4456,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4317,6 +4480,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4340,6 +4504,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4408,7 +4573,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4455,6 +4621,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4547,6 +4714,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4579,13 +4747,19 @@
       "path": "you session create",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "relationships": {
         "you.session.create.rel.mutex.init-new-factory-validate-only": {
@@ -4720,6 +4894,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4743,6 +4918,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4766,6 +4942,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4788,7 +4965,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4835,6 +5013,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4858,6 +5037,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4890,13 +5070,19 @@
       "path": "you session delete",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5012,6 +5198,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5035,6 +5222,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5058,6 +5246,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5081,6 +5270,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5150,6 +5340,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5196,6 +5387,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5228,13 +5420,19 @@
       "path": "you session dispatches",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5351,6 +5549,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5374,6 +5573,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5397,6 +5597,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5419,7 +5620,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5489,6 +5691,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5512,6 +5715,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5544,13 +5748,19 @@
       "path": "you session list",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5668,6 +5878,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5691,6 +5902,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5714,6 +5926,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5737,6 +5950,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5783,6 +5997,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5806,6 +6021,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5838,13 +6054,19 @@
       "path": "you session pause",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5962,6 +6184,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5985,6 +6208,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6008,6 +6232,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6031,6 +6256,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -6077,6 +6303,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6100,6 +6327,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -6132,13 +6360,19 @@
       "path": "you session resume",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -6255,6 +6489,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -6278,6 +6513,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6301,6 +6537,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6324,6 +6561,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -6370,6 +6608,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6393,6 +6632,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -6425,13 +6665,19 @@
       "path": "you session show",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -6495,6 +6741,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6518,6 +6765,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6541,6 +6789,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6564,6 +6813,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6587,6 +6837,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -6610,6 +6861,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6673,6 +6925,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6696,6 +6949,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6719,6 +6973,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6742,6 +6997,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6765,6 +7021,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -6788,6 +7045,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7042,13 +7300,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -7172,6 +7436,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7195,6 +7460,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7218,6 +7484,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7241,6 +7508,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7264,6 +7532,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7287,6 +7556,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7357,13 +7627,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -7505,6 +7781,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7528,6 +7805,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7551,6 +7829,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7574,6 +7853,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7597,6 +7877,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7620,6 +7901,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7713,13 +7995,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -7843,6 +8131,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7866,6 +8155,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7889,6 +8179,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7912,6 +8203,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7935,6 +8227,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7958,6 +8251,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8027,13 +8321,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8180,6 +8480,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8203,6 +8504,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8226,6 +8528,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8249,6 +8552,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8272,6 +8576,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8295,6 +8600,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8315,13 +8621,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8399,7 +8711,22 @@
       "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp", "since": "1.0.0", "state": "active"},
       "name": "mcp",
       "path": "you mcp",
-      "precedence": {"order": ["flags", "args", "env", "config", "stdin", "defaults"]},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
       "runnable": false,
       "usage": {"line": "mcp"},
       "visibility": "visible"
@@ -8427,15 +8754,15 @@
         "you.mcp.serve.exit.usage": {"code": 1, "id": "you.mcp.serve.exit.usage", "kind": "usage"}
       },
       "flags": {
-        "you.mcp.serve.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
-        "you.mcp.serve.flag.default-worker-model": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model", "since": "1.0.0", "state": "active"}, "long": "default-worker-model", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.default-worker-model-provider": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model-provider", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model-provider", "since": "1.0.0", "state": "active"}, "long": "default-worker-model-provider", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
+        "you.mcp.serve.flag.default-worker-model": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model", "since": "1.0.0", "state": "active"}, "long": "default-worker-model", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.default-worker-model-provider": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model-provider", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model-provider", "since": "1.0.0", "state": "active"}, "long": "default-worker-model-provider", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model-provider", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.fixture-catalog": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.fixture-catalog", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.fixture-catalog", "since": "1.0.0", "state": "active"}, "long": "fixture-catalog", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.mcp.serve.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.json", "shorthand": "", "valueType": "bool", "visibility": "visible"},
         "you.mcp.serve.flag.project-root": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.project-root", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.project-root", "since": "1.0.0", "state": "active"}, "long": "project-root", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.runtime": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.runtime", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.runtime", "since": "1.0.0", "state": "active"}, "long": "runtime", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "bool", "visibility": "visible"},
-        "you.mcp.serve.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.mcp.serve.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
+        "you.mcp.serve.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.mcp.serve.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.server", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
       },
       "handler": {"id": "you.mcp.serve.handler"},
       "id": "you.mcp.serve",
@@ -8446,7 +8773,22 @@
         "you.mcp.serve.output.protocol": {"channel": "stdout", "format": "json", "id": "you.mcp.serve.output.protocol"}
       },
       "path": "you mcp serve",
-      "precedence": {"order": ["flags", "args", "env", "config", "stdin", "defaults"]},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
       "relationships": {
         "you.mcp.serve.relationship.runtime-source": {"id": "you.mcp.serve.relationship.runtime-source", "kind": "mutually-exclusive", "participants": [{"type": "flag", "id": "you.mcp.serve.flag.runtime"}, {"type": "flag", "id": "you.mcp.serve.flag.fixture-catalog"}]}
       },
@@ -8504,6 +8846,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8527,6 +8870,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8550,6 +8894,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8573,6 +8918,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8596,6 +8942,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8619,6 +8966,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8682,6 +9030,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8705,6 +9054,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8728,6 +9078,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8751,6 +9102,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8774,6 +9126,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8797,6 +9150,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8840,13 +9194,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8974,6 +9334,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8997,6 +9358,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9020,6 +9382,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9043,6 +9406,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9066,6 +9430,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9089,6 +9454,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9132,13 +9498,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9266,6 +9638,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9289,6 +9662,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9312,6 +9686,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9335,6 +9710,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9358,6 +9734,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9381,6 +9758,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9493,13 +9871,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9635,6 +10019,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9658,6 +10043,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9681,6 +10067,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9704,6 +10091,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9727,6 +10115,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9750,6 +10139,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9793,13 +10183,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9882,11 +10278,11 @@
             },
             "description": {
               "id": "you.run.description",
-              "canonicalEnglish": "Load workflow and run the factory engine.\n\nFor the quickest local setup, run you run --work ./docs/examples/startup-work.json. That default flow bootstraps ./factory, watches factory/inputs/task/default, keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. Default execution uses batch mode and exits after idle completion. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata. Use global --default-worker-model-provider and --default-worker-model to set operator-level model defaults for omitted model-worker fields. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. Use --factory with a factory.json file path to run a portable factory config without guessing --dir. Supported run factory selectors are --dir, --named, and --factory. Selected factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection and materialization live in you docs authoring-factories; invocation inputs and output modes live in you docs run and you docs sessions. Model readiness, direct TTS invocation, and audio or JSON result choices live in you docs models. Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures."
+              "canonicalEnglish": "Load workflow and run the factory engine.\n\nFor the quickest local setup, run you run --work ./docs/examples/startup-work.json. That default flow bootstraps ./factory, watches factory/inputs/task/default, keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. Default execution uses batch mode and exits after idle completion. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata. Use global --default-worker-model-provider and --default-worker-model to set operator-level model defaults for omitted model-worker fields. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. Use --factory with a factory.json file path to run a portable factory config without guessing --dir. Supported run factory selectors are --dir, --named, and --factory. Selected factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection and materialization live in you docs authoring-factories; invocation inputs and output modes live in you docs run and you docs sessions. Model readiness, direct TTS invocation, and audio or JSON result choices live in you docs models. Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render ordered canonical Factory Events for live or replayed invocations; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures."
             }
           },
           "examples": [
-            "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
+            "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
           ],
           "visibility": "public",
           "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
@@ -9901,7 +10297,7 @@
         "runnable": true,
         "usage": {
           "line": "run",
-          "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
+          "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
         },
         "arguments": {
           "you.run.arg.0": {
@@ -9954,6 +10350,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -9977,6 +10374,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10000,6 +10398,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10069,6 +10468,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10483,6 +10883,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -10529,6 +10930,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10643,13 +11045,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [
@@ -10768,6 +11176,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10791,6 +11200,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10814,6 +11224,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10837,6 +11248,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10929,6 +11341,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -10975,6 +11388,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11018,13 +11432,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [
@@ -11155,6 +11575,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11178,6 +11599,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -11201,6 +11623,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -11270,6 +11693,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11316,6 +11740,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -11362,6 +11787,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11382,13 +11808,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [

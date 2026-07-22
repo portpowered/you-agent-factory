@@ -358,19 +358,19 @@ func productionParserParitySessionShowCases() []productionParserParityCase {
 func productionParserParitySessionCreateCases() []productionParserParityCase {
 	return []productionParserParityCase{
 		{
-			name:        "session create shadows root json with local flag definition",
+			name:        "session create inherits root json",
 			commandPath: "you session create",
 			argv:        []string{"session", "create", "--dir", "/tmp/factory", "--json"},
 			flagLong:    "json",
 			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "json")
-				if record.Scope != "local" {
-					t.Fatalf("inventory json scope = %q, want local shadowed definition", record.Scope)
+				if record.Scope != "inherited" {
+					t.Fatalf("inventory json scope = %q, want inherited", record.Scope)
 				}
 				showRecord := findFlagRecord(t, inv, "you session show", "json")
 				if showRecord.Scope != "inherited" {
-					t.Fatalf("session show json scope = %q, want inherited for contrast", showRecord.Scope)
+					t.Fatalf("session show json scope = %q, want inherited", showRecord.Scope)
 				}
 				flag := parsedFlag(parsed, "json")
 				if flag == nil || !flag.Changed || flag.Value != "true" {

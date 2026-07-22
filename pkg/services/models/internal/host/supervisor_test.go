@@ -158,6 +158,80 @@ func TestCatalogHost_SupervisedBackend_UnloadStopsManagedProcess(t *testing.T) {
 	}
 }
 
+func TestCatalogHost_SupervisedBackend_UnloadRejectsLoadingRuntime(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, supervisedCatalogFactoryConfig())
+	healthChecker := &blockingHealthChecker{started: make(chan struct{})}
+	host := newSupervisedTestHost(t, &fakeProcessLauncher{
+		newProcess: func(spec ProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(spec.HealthEndpoint, nil)
+		},
+	})
+	host.supervisor.HealthChecker = healthChecker
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := host.AcquireLease(ctx, loaded, "OMNIVOICE_Q4_K_M", LeaseOptions{})
+		errCh <- err
+	}()
+	<-healthChecker.started
+
+	err := host.Unload(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+	var readinessErr *ReadinessError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("Unload error = %v, want *ReadinessError", err)
+	}
+	if readinessErr.Snapshot.ReadinessState != managedruntime.ReadinessStateLoading {
+		t.Fatalf("readiness = %s, want LOADING", readinessErr.Snapshot.ReadinessState)
+	}
+	if !errors.Is(err, ErrCapacityExhausted) {
+		t.Fatalf("Unload error = %v, want ErrCapacityExhausted", err)
+	}
+
+	cancel()
+	select {
+	case acquireErr := <-errCh:
+		if !errors.Is(acquireErr, ErrCancelled) {
+			t.Fatalf("AcquireLease error = %v, want ErrCancelled", acquireErr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for cancelled lease acquisition")
+	}
+}
+
+func TestSupervisedRuntime_WaitForCompletedLoadReturnsFailure(t *testing.T) {
+	wantErr := errors.New("load failed")
+	loadDone := make(chan struct{})
+	close(loadDone)
+	runtime := &supervisedRuntime{
+		state:        supervisedStateFailed,
+		failureClass: FailureClassProcessCrash,
+		failureErr:   wantErr,
+	}
+
+	err := runtime.waitForLoad(context.Background(), loadDone)
+	var readinessErr *ReadinessError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("error = %v, want *ReadinessError", err)
+	}
+	if readinessErr.Snapshot.FailureClass != FailureClassProcessCrash {
+		t.Fatalf("failure class = %s, want %s", readinessErr.Snapshot.FailureClass, FailureClassProcessCrash)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want wrapped load failure", err)
+	}
+}
+
+func TestSupervisedRuntime_WaitForCompletedLoadRejectsUnexpectedState(t *testing.T) {
+	loadDone := make(chan struct{})
+	close(loadDone)
+	runtime := &supervisedRuntime{state: supervisedStateAbsent}
+
+	if err := runtime.waitForLoad(context.Background(), loadDone); !errors.Is(err, ErrRuntimeNotReady) {
+		t.Fatalf("error = %v, want ErrRuntimeNotReady", err)
+	}
+}
+
 func TestCatalogHost_SupervisedBackend_CancellationStopsManagedProcess(t *testing.T) {
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -282,6 +356,17 @@ type fakeProcessLauncher struct {
 	mu         sync.Mutex
 	starts     []ProcessStartSpec
 	newProcess func(spec ProcessStartSpec) *fakeManagedProcess
+}
+
+type blockingHealthChecker struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (checker *blockingHealthChecker) Check(ctx context.Context, _ string) error {
+	checker.once.Do(func() { close(checker.started) })
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (f *fakeProcessLauncher) Start(_ context.Context, spec ProcessStartSpec) (ManagedProcess, error) {

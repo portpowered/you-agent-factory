@@ -27,6 +27,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		Source:          source,
 		Args:            cloneArgs(req.Args),
 		RequestedPolicy: cloneArgs(req.RequestedPolicy),
+		EventConsumer:   req.EventConsumer,
 	}
 	if req.Runtime != nil {
 		runtime := *req.Runtime
