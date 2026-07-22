@@ -88,6 +88,41 @@ func TestConfigDocumentServicePersist_PreCommitFailuresPreserveDestination(t *te
 	}
 }
 
+func TestConfigDocumentServicePersist_DeniedDirectoryPermissionsPreserveDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce Unix directory permission bits")
+	}
+	path, original, document := persistedConfigFixture(t)
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Skipf("cannot establish restrictive directory permissions: %v", err)
+	}
+	defer func() {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			t.Errorf("restore directory permissions: %v", err)
+		}
+	}()
+
+	probe, probeErr := os.CreateTemp(dir, "permission-probe-*.tmp")
+	if probeErr == nil {
+		probePath := probe.Name()
+		_ = probe.Close()
+		_ = os.Remove(probePath)
+		t.Skip("environment does not enforce denied writes for the restrictive directory")
+	}
+	if !errors.Is(probeErr, fs.ErrPermission) {
+		t.Skipf("cannot establish permission-denied behavior: %v", probeErr)
+	}
+
+	service := persistedConfigService(testFiles, testCreateTemp)
+	err := service.Persist(context.Background(), path, document)
+	if err == nil || !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("Persist() error = %v, want permission denied", err)
+	}
+	assertConfigSemanticallyUnchanged(t, service, path, original)
+	assertNoTemporaryArtifacts(t, dir)
+}
+
 func TestConfigDocumentServicePersist_RejectsBeforeFilesystemSideEffects(t *testing.T) {
 	t.Parallel()
 	files := &faultFileSystem{FileSystem: testFiles}
@@ -525,6 +560,21 @@ func assertConfigBytesUnchanged(t *testing.T, path string, want []byte) {
 	}
 	if string(got) != string(want) {
 		t.Fatalf("destination changed: got %q want %q", got, want)
+	}
+}
+
+func assertConfigSemanticallyUnchanged(t *testing.T, service ConfigDocumentService, path string, want []byte) {
+	t.Helper()
+	wantDocument, err := service.Parse(want)
+	if err != nil {
+		t.Fatalf("Parse(original) error = %v", err)
+	}
+	gotDocument, err := service.Load(path)
+	if err != nil {
+		t.Fatalf("Load(destination) error = %v", err)
+	}
+	if !reflect.DeepEqual(gotDocument.FileConfig(), wantDocument.FileConfig()) || gotDocument.BackendScopeID() != wantDocument.BackendScopeID() {
+		t.Fatalf("destination changed semantically: got %#v/%q want %#v/%q", gotDocument.FileConfig(), gotDocument.BackendScopeID(), wantDocument.FileConfig(), wantDocument.BackendScopeID())
 	}
 }
 
