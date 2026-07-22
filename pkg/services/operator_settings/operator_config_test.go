@@ -3,6 +3,7 @@ package operatorsettings
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -14,6 +15,226 @@ func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {
 	}
 	if defaults != (Defaults{}) {
 		t.Fatalf("defaults = %#v, want empty", defaults)
+	}
+}
+
+func TestLoadConfigDocument_AbsentFileProducesMergeableEmptyConfig(t *testing.T) {
+	t.Parallel()
+	service := ConfigDocumentService{Files: testFiles, Providers: controlledProviderCatalog}
+	document, err := service.Load(filepath.Join(t.TempDir(), "missing.json"))
+	if err != nil {
+		t.Fatalf("LoadConfigDocument() error = %v", err)
+	}
+	provider, model := " codex ", " gpt-custom "
+	merged, err := service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &provider, Model: &model})
+	if err != nil {
+		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
+	}
+	if got := merged.FileConfig().Defaults; got != (Defaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-custom"}) {
+		t.Fatalf("defaults = %#v, want trimmed supplied values", got)
+	}
+	assertDocumentRoundTrip(t, merged)
+}
+
+func TestConfigDocumentServiceLoad_RequiresFilesystem(t *testing.T) {
+	t.Parallel()
+	_, err := (ConfigDocumentService{}).Load("config.json")
+	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("Load() error = %v, want required filesystem", err)
+	}
+}
+
+func TestMergeProviderModelDefaults_PreservesUnrelatedSemanticValues(t *testing.T) {
+	t.Parallel()
+	service := ConfigDocumentService{Providers: controlledProviderCatalog}
+	input := []byte(`{
+  "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+  "defaults": {"workerModelProvider": "claude", "workerModel": "old-model"},
+  "workerPresets": [{"id":" research ","modelProvider":"openai","model":" preset-model ","reasoningEffort":" HIGH "}]
+}`)
+	document, err := service.Parse(input)
+	if err != nil {
+		t.Fatalf("ParseConfigDocument() error = %v", err)
+	}
+	before := document.FileConfig()
+	provider, model := "gemini", "gemini-experimental"
+	merged, err := service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &provider, Model: &model})
+	if err != nil {
+		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
+	}
+	after := merged.FileConfig()
+	if merged.BackendScopeID() != document.BackendScopeID() {
+		t.Fatalf("backendScopeID = %q, want preserved %q", merged.BackendScopeID(), document.BackendScopeID())
+	}
+	if !reflect.DeepEqual(after.WorkerPresets, before.WorkerPresets) {
+		t.Fatalf("worker presets = %#v, want preserved %#v", after.WorkerPresets, before.WorkerPresets)
+	}
+	if after.Defaults != (Defaults{WorkerModelProvider: "GEMINI", WorkerModel: model}) {
+		t.Fatalf("defaults = %#v, want supplied provider/model", after.Defaults)
+	}
+	assertDocumentRoundTrip(t, merged)
+	if document.FileConfig().Defaults != before.Defaults {
+		t.Fatal("merge mutated the input document")
+	}
+}
+
+func TestMergeProviderModelDefaults_OmittedFieldsPreserveExistingDefaults(t *testing.T) {
+	t.Parallel()
+	service := ConfigDocumentService{Providers: controlledProviderCatalog}
+	document, err := service.Parse([]byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"existing-model"}}`))
+	if err != nil {
+		t.Fatalf("ParseConfigDocument() error = %v", err)
+	}
+	provider := "claude"
+	merged, err := service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &provider})
+	if err != nil {
+		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
+	}
+	if got := merged.FileConfig().Defaults; got != (Defaults{WorkerModelProvider: "CLAUDE", WorkerModel: "existing-model"}) {
+		t.Fatalf("defaults = %#v, want omitted model preserved", got)
+	}
+	clearModel := "  "
+	cleared, err := service.MergeProviderModelDefaults(merged, ProviderModelUpdate{Model: &clearModel})
+	if err != nil {
+		t.Fatalf("clear model: %v", err)
+	}
+	if got := cleared.FileConfig().Defaults.WorkerModel; got != "" {
+		t.Fatalf("model = %q, want explicitly supplied empty value cleared", got)
+	}
+}
+
+func TestMergeProviderModelDefaults_ValidatesProviderThroughInjectedCatalog(t *testing.T) {
+	t.Parallel()
+	document, err := (ConfigDocumentService{}).Parse([]byte(`{"defaults":{"workerModelProvider":"CODEX","workerModel":"existing"}}`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{name: "alias", provider: " openai ", want: "CODEX"},
+		{name: "canonical case insensitive", provider: "claude", want: "CLAUDE"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := ConfigDocumentService{Providers: controlledProviderCatalog}
+			merged, mergeErr := service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &test.provider})
+			if mergeErr != nil {
+				t.Fatalf("MergeProviderModelDefaults() error = %v", mergeErr)
+			}
+			if got := merged.FileConfig().Defaults.WorkerModelProvider; got != test.want {
+				t.Fatalf("provider = %q, want catalog canonical identity %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestMergeProviderModelDefaults_RejectsInvalidRequiredProvider(t *testing.T) {
+	t.Parallel()
+	document, err := (ConfigDocumentService{}).Parse([]byte(`{"defaults":{"workerModelProvider":"CODEX"}}`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name      string
+		provider  string
+		catalog   ProviderCatalog
+		wantError string
+	}{
+		{name: "empty", provider: "  ", catalog: controlledProviderCatalog, wantError: "provider is required"},
+		{name: "unsupported", provider: "other", catalog: controlledProviderCatalog, wantError: `unsupported worker model provider "other"`},
+		{name: "catalog required", provider: "codex", wantError: "provider catalog is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := ConfigDocumentService{Providers: test.catalog}
+			_, mergeErr := service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &test.provider})
+			if mergeErr == nil || !strings.Contains(mergeErr.Error(), test.wantError) {
+				t.Fatalf("MergeProviderModelDefaults() error = %v, want %q", mergeErr, test.wantError)
+			}
+			if got := document.FileConfig().Defaults.WorkerModelProvider; got != "CODEX" {
+				t.Fatalf("input provider = %q, want unchanged CODEX", got)
+			}
+		})
+	}
+}
+
+func TestMergeProviderModelDefaults_AcceptsFreeFormModelWithoutCatalogLookup(t *testing.T) {
+	t.Parallel()
+	document, err := (ConfigDocumentService{}).Parse([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	model := " provider/private-model@next "
+	merged, err := (ConfigDocumentService{}).MergeProviderModelDefaults(document, ProviderModelUpdate{Model: &model})
+	if err != nil {
+		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
+	}
+	if got := merged.FileConfig().Defaults.WorkerModel; got != "provider/private-model@next" {
+		t.Fatalf("model = %q, want trimmed free-form value", got)
+	}
+}
+
+func controlledProviderCatalog(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "codex", "openai":
+		return "CODEX", true
+	case "claude", "anthropic":
+		return "CLAUDE", true
+	case "gemini":
+		return "GEMINI", true
+	default:
+		return "", false
+	}
+}
+
+func TestLoadConfigDocument_InvalidContentFailsBeforeMutation(t *testing.T) {
+	t.Parallel()
+	service := ConfigDocumentService{Files: testFiles}
+	for _, test := range []struct{ name, data string }{
+		{name: "malformed", data: `{"defaults":`},
+		{name: "trailing", data: `{} {}`},
+		{name: "unknown", data: `{"unexpected":true}`},
+		{name: "null", data: `null`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(test.data), 0o600); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile before: %v", err)
+			}
+			_, err = service.Load(path)
+			if err == nil || !strings.Contains(err.Error(), path) {
+				t.Fatalf("LoadConfigDocument() error = %v, want invalid config error naming path", err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile after: %v", err)
+			}
+			if string(after) != string(before) {
+				t.Fatalf("invalid load changed destination: got %q want %q", after, before)
+			}
+		})
+	}
+}
+
+func assertDocumentRoundTrip(t *testing.T, document ConfigDocument) {
+	t.Helper()
+	data, err := (ConfigDocumentService{}).Marshal(document)
+	if err != nil {
+		t.Fatalf("MarshalConfigDocument() error = %v", err)
+	}
+	decoded, err := ParseFileConfig(data)
+	if err != nil {
+		t.Fatalf("ParseFileConfig(encoded) error = %v", err)
+	}
+	if !reflect.DeepEqual(decoded, document.FileConfig()) {
+		t.Fatalf("decoded config = %#v, want %#v", decoded, document.FileConfig())
 	}
 }
 
