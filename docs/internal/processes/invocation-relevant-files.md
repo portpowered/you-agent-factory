@@ -314,6 +314,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
   ID is the value referenced by the input's `handlerBindingId`.
+  Every canonical command precedence record uses the exact highest-to-lowest
+  order `cli`, `stdin`, `environment`, `operator-config`, `manifest-default`,
+  `factory-signature-default`. `climanifest.CanonicalPrecedence` owns the pure
+  policy: higher tiers replace lower tiers, scalar observations from one binding
+  use the last value, repeated observations append in order, and multiple
+  same-tier bindings for one input are rejected.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
   path-specific semantic diagnostics before generation or consumption.

@@ -29,8 +29,60 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 		diagnostics = append(diagnostics, cliCommandSpellingDiagnostics(document, commandKey, command, index)...)
 		diagnostics = append(diagnostics, cliCommandValueAndBindingDiagnostics(document, commandKey, command)...)
 		diagnostics = append(diagnostics, cliCommandRelationshipDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandPrecedenceDiagnostics(document, commandKey, command)...)
 	}
 	sortDiagnostics(diagnostics)
+	return diagnostics
+}
+
+var canonicalCLIPrecedence = []string{
+	"cli",
+	"stdin",
+	"environment",
+	"operator-config",
+	"manifest-default",
+	"factory-signature-default",
+}
+
+func cliCommandPrecedenceDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {
+	precedence, exists := command["precedence"].(map[string]any)
+	if !exists {
+		if command["completeness"] == "authoritative" {
+			return []Diagnostic{newDiagnostic("cli.precedence.missing", instancePath([]string{"commands", commandKey, "precedence"}), "authoritative command is missing source precedence", document)}
+		}
+		return nil
+	}
+	order, _ := precedence["order"].([]any)
+	if len(order) != len(canonicalCLIPrecedence) {
+		return []Diagnostic{newDiagnostic("cli.precedence.incomplete", instancePath([]string{"commands", commandKey, "precedence", "order"}), "source precedence must contain every canonical tier exactly once", document)}
+	}
+	seen := make(map[string]int, len(order))
+	known := make(map[string]bool, len(canonicalCLIPrecedence))
+	for _, source := range canonicalCLIPrecedence {
+		known[source] = true
+	}
+	var diagnostics []Diagnostic
+	for index, raw := range order {
+		source, _ := raw.(string)
+		path := instancePath([]string{"commands", commandKey, "precedence", "order", fmt.Sprint(index)})
+		if !known[source] {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.unknown", path, fmt.Sprintf("source tier %q is not canonical", source), document))
+			continue
+		}
+		if first, duplicate := seen[source]; duplicate {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.duplicate", path, fmt.Sprintf("source tier %q duplicates index %d", source, first), document))
+			continue
+		}
+		seen[source] = index
+		if source != canonicalCLIPrecedence[index] {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.order", path, fmt.Sprintf("source tier %q must be %q at index %d", source, canonicalCLIPrecedence[index], index), document))
+		}
+	}
+	for _, source := range canonicalCLIPrecedence {
+		if _, exists := seen[source]; !exists {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.missing-tier", instancePath([]string{"commands", commandKey, "precedence", "order"}), fmt.Sprintf("source precedence is missing tier %q", source), document))
+		}
+	}
 	return diagnostics
 }
 

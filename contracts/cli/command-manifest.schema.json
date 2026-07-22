@@ -1014,29 +1014,50 @@
       }
     },
     "precedence": {
-      "description": "Relative precedence of input sources when resolving one command invocation.",
+      "description": "Canonical source resolution policy. Explicit named flags and positional arguments share the cli tier; selected-Factory defaults are the lowest tier.",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "order"
+        "order",
+        "withinTier",
+        "acrossTiers",
+        "multipleBindings"
       ],
       "properties": {
         "order": {
-          "description": "Ordered input sources from highest to lowest precedence. Each source appears exactly once.",
+          "description": "Input sources from highest to lowest precedence. Semantic validation requires this exact order.",
           "type": "array",
           "minItems": 6,
           "maxItems": 6,
           "uniqueItems": true,
           "items": {
             "enum": [
-              "flags",
-              "args",
-              "env",
-              "config",
+              "cli",
               "stdin",
-              "defaults"
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
             ]
           }
+        },
+        "withinTier": {
+          "description": "Tie behavior for observations from one binding in invocation order.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scalar", "repeated"],
+          "properties": {
+            "scalar": { "const": "last" },
+            "repeated": { "const": "append" }
+          }
+        },
+        "acrossTiers": {
+          "description": "A value from the highest populated tier replaces values from all lower tiers, including for repeated inputs.",
+          "const": "replace"
+        },
+        "multipleBindings": {
+          "description": "Multiple bindings in the same tier targeting one input are ambiguous and rejected.",
+          "const": "reject"
         }
       }
     },

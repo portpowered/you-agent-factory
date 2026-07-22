@@ -2,6 +2,54 @@ package contractvalidator
 
 import "testing"
 
+func TestCLIManifestDiagnosticsValidateCanonicalPrecedence(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+		path   string
+	}{
+		{
+			name: "missing precedence",
+			mutate: func(command map[string]any) {
+				delete(command, "precedence")
+			},
+			code: "cli.precedence.missing", path: "/commands/example/precedence",
+		},
+		{
+			name: "duplicate and missing tier",
+			mutate: func(command map[string]any) {
+				command["precedence"].(map[string]any)["order"].([]any)[5] = "manifest-default"
+			},
+			code: "cli.precedence.duplicate", path: "/commands/example/precedence/order/5",
+		},
+		{
+			name: "unknown tier",
+			mutate: func(command map[string]any) {
+				command["precedence"].(map[string]any)["order"].([]any)[2] = "unknown"
+			},
+			code: "cli.precedence.unknown", path: "/commands/example/precedence/order/2",
+		},
+		{
+			name: "reordered tier",
+			mutate: func(command map[string]any) {
+				order := command["precedence"].(map[string]any)["order"].([]any)
+				order[0], order[1] = order[1], order[0]
+			},
+			code: "cli.precedence.order", path: "/commands/example/precedence/order/0",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := cliCanonicalInputTestDocument()
+			command := document["commands"].(map[string]any)["example"].(map[string]any)
+			test.mutate(command)
+			diagnostics := cliManifestDiagnostics("contract.json", document)
+			assertCLIDiagnostic(t, diagnostics, test.code, test.path)
+		})
+	}
+}
+
 func TestCLIManifestDiagnosticsRejectUnknownRelationshipParticipant(t *testing.T) {
 	document := map[string]any{
 		"commands": map[string]any{
@@ -256,6 +304,13 @@ func TestCLIManifestDiagnosticsRejectInvalidSourceAndHandlerBindings(t *testing.
 			},
 			code: "cli.source.multiple-targets", path: "/commands/example/sourceBindings/example.source.env/inputId",
 		},
+		{
+			name: "same tier binds one input twice",
+			mutate: func(command map[string]any) {
+				command["sourceBindings"].(map[string]any)["example.source.env.second"] = map[string]any{"id": "example.source.env.second", "source": "environment", "externalKey": "EXAMPLE_NAME_SECOND", "inputId": "example.flag.name"}
+			},
+			code: "cli.source.multiple-bindings", path: "/commands/example/sourceBindings/example.source.env.second/inputId",
+		},
 	}
 
 	for _, test := range tests {
@@ -284,13 +339,22 @@ func cliCanonicalInputTestDocument() map[string]any {
 		"handlerBindingId": "example.binding.other",
 	}
 	return map[string]any{"commands": map[string]any{"example": map[string]any{
-		"id": "example", "path": "example", "flags": map[string]any{"example.flag.name": name, "example.flag.other": other},
+		"id": "example", "path": "example", "completeness": "authoritative", "flags": map[string]any{"example.flag.name": name, "example.flag.other": other},
+		"precedence":     canonicalCLIPrecedenceTestValue(),
 		"sourceBindings": map[string]any{"example.source.env": map[string]any{"id": "example.source.env", "source": "environment", "externalKey": "EXAMPLE_NAME", "inputId": "example.flag.name"}},
 		"handlerBindings": map[string]any{
 			"example.binding.name":  map[string]any{"id": "example.binding.name", "inputId": "example.flag.name"},
 			"example.binding.other": map[string]any{"id": "example.binding.other", "inputId": "example.flag.other"},
 		},
 	}}}
+}
+
+func canonicalCLIPrecedenceTestValue() map[string]any {
+	return map[string]any{
+		"order":       []any{"cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"},
+		"withinTier":  map[string]any{"scalar": "last", "repeated": "append"},
+		"acrossTiers": "replace", "multipleBindings": "reject",
+	}
 }
 
 func cliCanonicalTestFlag(document map[string]any, id string) map[string]any {

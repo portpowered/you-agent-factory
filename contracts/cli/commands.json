@@ -227,13 +227,19 @@
       "path": "you",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -691,13 +697,19 @@
       "path": "you config init",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1329,13 +1341,19 @@
       "path": "you factory config expand",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1597,13 +1615,19 @@
       "path": "you factory config flatten",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -1873,13 +1897,19 @@
       "path": "you factory config validate",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2217,13 +2247,19 @@
       "path": "you factory create",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2514,13 +2550,19 @@
       "path": "you factory delete",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -2812,13 +2854,19 @@
       "path": "you factory list",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3111,13 +3159,19 @@
       "path": "you factory query",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3412,13 +3466,19 @@
       "path": "you factory replace-current",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -3732,13 +3792,19 @@
       "path": "you factory update",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -4076,13 +4142,19 @@
       "path": "you init",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -4675,13 +4747,19 @@
       "path": "you session create",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "relationships": {
         "you.session.create.rel.mutex.init-new-factory-validate-only": {
@@ -4992,13 +5070,19 @@
       "path": "you session delete",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5336,13 +5420,19 @@
       "path": "you session dispatches",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5658,13 +5748,19 @@
       "path": "you session list",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -5958,13 +6054,19 @@
       "path": "you session pause",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -6258,13 +6360,19 @@
       "path": "you session resume",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -6557,13 +6665,19 @@
       "path": "you session show",
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "runnable": true,
       "sideEffects": {
@@ -7186,13 +7300,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -7507,13 +7627,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -7869,13 +7995,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8189,13 +8321,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8483,13 +8621,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -8567,7 +8711,22 @@
       "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp", "since": "1.0.0", "state": "active"},
       "name": "mcp",
       "path": "you mcp",
-      "precedence": {"order": ["flags", "args", "env", "config", "stdin", "defaults"]},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
       "runnable": false,
       "usage": {"line": "mcp"},
       "visibility": "visible"
@@ -8614,7 +8773,22 @@
         "you.mcp.serve.output.protocol": {"channel": "stdout", "format": "json", "id": "you.mcp.serve.output.protocol"}
       },
       "path": "you mcp serve",
-      "precedence": {"order": ["flags", "args", "env", "config", "stdin", "defaults"]},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
       "relationships": {
         "you.mcp.serve.relationship.runtime-source": {"id": "you.mcp.serve.relationship.runtime-source", "kind": "mutually-exclusive", "participants": [{"type": "flag", "id": "you.mcp.serve.flag.runtime"}, {"type": "flag", "id": "you.mcp.serve.flag.fixture-catalog"}]}
       },
@@ -9020,13 +9194,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9318,13 +9498,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9685,13 +9871,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -9991,13 +10183,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [
@@ -10847,13 +11045,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [
@@ -11228,13 +11432,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [
@@ -11598,13 +11808,19 @@
         },
         "precedence": {
           "order": [
-            "flags",
-            "args",
-            "env",
-            "config",
+            "cli",
             "stdin",
-            "defaults"
-          ]
+            "environment",
+            "operator-config",
+            "manifest-default",
+            "factory-signature-default"
+          ],
+          "withinTier": {
+            "scalar": "last",
+            "repeated": "append"
+          },
+          "acrossTiers": "replace",
+          "multipleBindings": "reject"
         },
         "channels": {
           "input": [

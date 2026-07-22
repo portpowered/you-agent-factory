@@ -64,7 +64,17 @@ type ParticipantRef struct {
 
 // Precedence records input sources from highest to lowest priority.
 type Precedence struct {
-	Order []string `json:"order"`
+	Order            []string       `json:"order"`
+	WithinTier       WithinTierRule `json:"withinTier"`
+	AcrossTiers      string         `json:"acrossTiers"`
+	MultipleBindings string         `json:"multipleBindings"`
+}
+
+// WithinTierRule defines deterministic handling for repeated observations from
+// one source binding at the same precedence tier.
+type WithinTierRule struct {
+	Scalar   string `json:"scalar"`
+	Repeated string `json:"repeated"`
 }
 
 // Handler carries stable handler identity and optional OpenAPI operation binding.

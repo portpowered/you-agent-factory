@@ -247,6 +247,7 @@ func cliSourceBindingDiagnostics(document, commandKey string, command map[string
 	known := cliInputsByID(inputs)
 	bound := make(map[string]map[string]bool)
 	owners := make(map[string][]string)
+	bindingPaths := make(map[string]map[string][]string)
 	var diagnostics []Diagnostic
 	for _, key := range sortedStringKeys(bindings) {
 		binding, _ := bindings[key].(map[string]any)
@@ -265,6 +266,10 @@ func cliSourceBindingDiagnostics(document, commandKey string, command map[string
 			bound[inputID] = make(map[string]bool)
 		}
 		bound[inputID][source] = true
+		if bindingPaths[inputID] == nil {
+			bindingPaths[inputID] = make(map[string][]string)
+		}
+		bindingPaths[inputID][source] = append(bindingPaths[inputID][source], instancePath(path))
 		ownerKey := source + ":" + fmt.Sprint(binding["externalKey"])
 		if source == "stdin" {
 			ownerKey = source
@@ -281,6 +286,17 @@ func cliSourceBindingDiagnostics(document, commandKey string, command map[string
 		sort.Strings(paths)
 		for _, path := range paths {
 			diagnostics = append(diagnostics, newDiagnostic("cli.source.multiple-targets", path, fmt.Sprintf("source route %q targets multiple inputs", ownerKey), document))
+		}
+	}
+	for inputID, bySource := range bindingPaths {
+		for source, paths := range bySource {
+			if len(paths) < 2 {
+				continue
+			}
+			sort.Strings(paths)
+			for _, path := range paths {
+				diagnostics = append(diagnostics, newDiagnostic("cli.source.multiple-bindings", path, fmt.Sprintf("input %q has multiple bindings in source tier %q", inputID, source), document))
+			}
 		}
 	}
 	for _, input := range inputs {
