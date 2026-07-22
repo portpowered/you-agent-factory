@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 func TestVerifyCatalogToolIdentityCompleteness_PassesForAuthoredCatalogShape(t *testing.T) {

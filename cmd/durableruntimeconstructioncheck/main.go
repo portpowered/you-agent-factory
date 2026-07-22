@@ -53,10 +53,10 @@ var approvedRuntimeConstructorFiles = map[string]struct{}{
 
 var approvedPersistenceCompositionFiles = map[string]struct{}{
 	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":       {},
-	"pkg/transports/cli/session/smoke/resume_smoke_test.go":           {},
+	"pkg/services/factory_sessions/transports/cli/session/smoke/resume_smoke_test.go":           {},
 	"pkg/services/factory_sessions/execution/service.go":              {},
 	"pkg/services/factory_sessions/execution/runtimepersist/store.go": {},
-	"pkg/transports/mcp/factorysession/execution_test.go":             {},
+	"pkg/services/factory_sessions/transports/mcp/execution_test.go":             {},
 }
 
 type config struct{ root string }

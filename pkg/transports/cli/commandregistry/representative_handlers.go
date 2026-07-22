@@ -6,10 +6,10 @@ import (
 	"io"
 	"sort"
 
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	"github.com/spf13/cobra"
 )
 

@@ -1,7 +1,7 @@
 package contractvalidator
 
 import (
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 // MCPToolCatalogPublicationDiagnostics applies authored-catalog publication guards

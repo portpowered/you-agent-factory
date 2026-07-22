@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestMCPResumeSmokeLane_RuntimeBackedAsyncServeRegression(t *testing.T) {

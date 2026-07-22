@@ -1044,6 +1044,9 @@ func scanTestServiceSubpackageImports(repoRoot string) ([]testServiceImportFindi
 			if !isServiceSubpackage {
 				continue
 			}
+			if _, publicTransport := serviceOwnedTransportProtocol(repositoryPath); publicTransport {
+				continue
+			}
 			if callerIsService && callerOwner == importedOwner {
 				continue
 			}

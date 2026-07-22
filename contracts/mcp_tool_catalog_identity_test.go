@@ -3,8 +3,8 @@ package contracts_test
 import (
 	"testing"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 func TestMCPToolCatalogIdentityCompleteness_AuthoredCatalogMatchesDiscoverTools(t *testing.T) {

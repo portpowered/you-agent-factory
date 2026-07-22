@@ -228,6 +228,24 @@ func TestRunRejectsUnrecordedCrossOwnerTestServiceInternal(t *testing.T) {
 	}
 }
 
+func TestRunAllowsTestsToImportServiceOwnedTransportAdapters(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(
+		t,
+		repoRoot,
+		"tests/functional/cli/session_test.go",
+		"cli_test",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
+	)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want service-owned transport adapter import allowed; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunAllowsRecordedTestServiceInternalAndRejectsStaleEntry(t *testing.T) {
 	t.Parallel()
 

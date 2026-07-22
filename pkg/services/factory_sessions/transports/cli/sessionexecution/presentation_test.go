@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 )
 
 func TestRunNormalizedSyncPresentsActiveDirectJavaScriptResult(t *testing.T) {

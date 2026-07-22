@@ -1055,7 +1055,7 @@
       "minimum": 73.47
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
       "minimum": 16.56
     },
     {
@@ -1167,11 +1167,11 @@
       "minimum": 82.68
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
       "minimum": 69.21
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
       "minimum": 80.40
     },
     {

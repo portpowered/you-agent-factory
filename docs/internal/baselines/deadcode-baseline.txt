@@ -192,6 +192,10 @@ pkg/services/factory_sessions/service/runtime.go: unreachable func: SessionRunti
 pkg/services/factory_sessions/service/runtime_gateway.go: unreachable func: SessionRuntime.inferenceProgressPublisher
 pkg/services/factory_sessions/service/runtime_sessions.go: unreachable func: SessionRuntime.openFactorySession
 pkg/services/factory_sessions/service/runtime_sessions.go: unreachable func: SessionRuntime.startBackgroundSession
+pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultAvailabilityHuman
+pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
+pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
+pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
 pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperationSlots
 pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperations
 pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsResources
@@ -269,8 +273,6 @@ pkg/transports/cli/run/validator_test.go: unreachable func: uncheckedPersistence
 pkg/transports/cli/run/validator_test.go: unreachable func: uncheckedPersistenceValidator.ValidateTopology
 pkg/transports/cli/run/validator_test.go: unreachable func: uncheckedPersistenceValidator.WorkTypeHandlingBehavior
 pkg/transports/cli/run/validator_test.go: unreachable func: uncheckedPersistenceValidator.WorkerWorkstationBehaviorCompatibility
-pkg/transports/cli/sessionexecution/run.go: unreachable func: writeResultAvailabilityHuman
-pkg/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/transports/http/contracttests/factory_config_smoke_test.go: unreachable func: assertFactoryConfigJSONUsesRequiredAndForbiddenKeys
 pkg/transports/http/contracttests/factory_config_smoke_test.go: unreachable func: assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys
 pkg/transports/http/server_models_events_additional_test.go: unreachable func: modelWiringFactoryConfig
@@ -316,8 +318,6 @@ pkg/transports/mapping/validationentry/validator_test.go: unreachable func: prog
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkTypeHandlingBehavior
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkerWorkstationBehaviorCompatibility
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: testCanonicalFactoryLoader
-pkg/transports/mcp/factorysession/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
-pkg/transports/mcp/factorysession/registry_test.go: unreachable func: writeWorkflow
 pkg/wire/factorydefinitions/snapshot.go: unreachable func: FactorySnapshotDirectoryLoader
 tests/functional/bootstrap_portability/automat_portability_fixture_test.go: unreachable func: assertAutomatBundledFileEntryWithoutInline
 tests/functional/bootstrap_portability/export_import_fixture_test.go: unreachable func: exportImportFixture.persistAs

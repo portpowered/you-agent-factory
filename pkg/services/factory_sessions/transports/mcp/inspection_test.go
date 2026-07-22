@@ -8,8 +8,8 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 const (

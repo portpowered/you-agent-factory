@@ -11,8 +11,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestDiscoverTools_ExposesExpectedFactorySessionTools(t *testing.T) {

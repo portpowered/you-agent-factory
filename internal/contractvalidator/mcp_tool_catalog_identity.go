@@ -1,8 +1,8 @@
 package contractvalidator
 
 import (
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 const authoredMCPToolCatalogPath = "contracts/mcp/tools.json"

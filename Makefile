@@ -212,6 +212,7 @@ mcp-contract-smoke:
 	$(MAKE) contracts-validate
 	$(MAKE) mcp-discovery-check
 	$(MAKE) mcp-contract-check
+	$(GO) test ./pkg/services/factory_sessions/transports/mcp/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/transports/mcp/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/transports/cli/mcp -count=1 -timeout $(GO_TEST_TIMEOUT)
 
