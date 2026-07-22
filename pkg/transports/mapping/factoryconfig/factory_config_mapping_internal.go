@@ -70,6 +70,29 @@ func FactoryConfigFromOpenAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConf
 	return factoryInternalFromAPI(apiCfg)
 }
 
+// NameValueFromOpenAPI validates and maps one generated localized value into
+// the transport-independent Factory definition contract.
+func NameValueFromOpenAPI(value factoryapi.NameValue) (interfaces.NameValueConfig, error) {
+	result := interfaces.NameValueConfig{
+		Type:  string(value.Type),
+		Value: value.Value,
+		ID:    stringValue(value.Id),
+	}
+	if value.Locales != nil {
+		result.Locales = append([]string(nil), (*value.Locales)...)
+	}
+	if value.Values != nil {
+		result.Values = make(map[string]string, len(*value.Values))
+		for locale, localized := range *value.Values {
+			result.Values[locale] = localized
+		}
+	}
+	if err := result.Validate(); err != nil {
+		return interfaces.NameValueConfig{}, err
+	}
+	return result, nil
+}
+
 func inputTypesInternalFromAPI(inputTypes []factoryapi.InputType) []interfaces.InputTypeConfig {
 	values := make([]interfaces.InputTypeConfig, len(inputTypes))
 	for i, inputType := range inputTypes {

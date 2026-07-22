@@ -9,6 +9,8 @@ import (
 // Root-owned aliases expose the Factory Definition vocabulary without making
 // peer services import implementation subpackages.
 type FactoryConfig = contracts.FactoryConfig
+type NameValueConfig = contracts.NameValueConfig
+type NameValueValidationError = contracts.NameValueValidationError
 type SaveMode = contracts.SaveMode
 type NamedFactoryPersistenceMode = contracts.NamedFactoryPersistenceMode
 type NamedFactoryPersistenceRequest = contracts.NamedFactoryPersistenceRequest
@@ -66,6 +68,7 @@ type ValidationTarget = contracts.ValidationTarget
 type ValidationSubject = contracts.ValidationSubject
 
 const (
+	NameValueTypeLocalizableAsset      = contracts.NameValueTypeLocalizableAsset
 	SaveModeReplaceCurrent             = contracts.SaveModeReplaceCurrent
 	SaveModeUpsertNamedAndActivate     = contracts.SaveModeUpsertNamedAndActivate
 	NamedFactoryPersistenceModeCreate  = contracts.NamedFactoryPersistenceModeCreate
@@ -87,6 +90,8 @@ var (
 )
 
 var (
+	ValidateNameValue                            = contracts.ValidateNameValue
+	ResolveNameValue                             = contracts.ResolveNameValue
 	NewFactoryEvent                              = contracts.NewFactoryEvent
 	CanonicalFactoryGraphWorkstationID           = contracts.CanonicalFactoryGraphWorkstationID
 	PublicWorkerModelProviderFromInternal        = contracts.PublicWorkerModelProviderFromInternal

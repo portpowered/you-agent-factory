@@ -5719,6 +5719,38 @@ components:
       minLength: 1
       pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
       description: Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+    NameValue:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - value
+      description: A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.
+      properties:
+        type:
+          type: string
+          enum:
+            - LOCALIZABLE_ASSET
+          description: Discriminator for localized customer-facing metadata.
+        value:
+          type: string
+          minLength: 1
+          description: Required base value returned when no exact locale override exists.
+        locales:
+          type: array
+          uniqueItems: true
+          description: Canonical BCP 47 locales for which the base value was authored.
+          items:
+            type: string
+            minLength: 2
+        values:
+          type: object
+          description: Exact canonical BCP 47 locale tags mapped to localized overrides.
+          additionalProperties:
+            type: string
+        id:
+          type: string
+          description: Optional stable metadata identifier; consumers must not render it as display copy.
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object
       additionalProperties: false

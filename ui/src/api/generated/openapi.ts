@@ -2820,6 +2820,24 @@ export interface components {
     };
     /** @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier. */
     FactoryName: string;
+    /** @description A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling. */
+    NameValue: {
+      /**
+       * @description Discriminator for localized customer-facing metadata.
+       * @enum {string}
+       */
+      type: NameValueType;
+      /** @description Required base value returned when no exact locale override exists. */
+      value: string;
+      /** @description Canonical BCP 47 locales for which the base value was authored. */
+      locales?: string[];
+      /** @description Exact canonical BCP 47 locale tags mapped to localized overrides. */
+      values?: {
+        [key: string]: string;
+      };
+      /** @description Optional stable metadata identifier; consumers must not render it as display copy. */
+      id?: string;
+    };
     /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
     FactoryWorldWorkstationRequestProjectionSlice: {
       workstationRequestsByDispatchId?: {
@@ -7282,6 +7300,10 @@ export const ProviderSessionTranscriptEntryType = {
 } as const;
 export type ProviderSessionTranscriptEntryType =
   (typeof ProviderSessionTranscriptEntryType)[keyof typeof ProviderSessionTranscriptEntryType];
+export const NameValueType = {
+  LOCALIZABLE_ASSET: "LOCALIZABLE_ASSET",
+} as const;
+export type NameValueType = (typeof NameValueType)[keyof typeof NameValueType];
 export const FactoryWorldWorkItemRefPayloadStatus = {
   RESOLVED: "RESOLVED",
   UNAVAILABLE: "UNAVAILABLE",

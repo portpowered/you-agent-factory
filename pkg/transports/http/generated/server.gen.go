@@ -738,6 +738,11 @@ const (
 	ModelStatusUNAVAILABLE ModelStatus = "UNAVAILABLE"
 )
 
+// Defines values for NameValueType.
+const (
+	LOCALIZABLEASSET NameValueType = "LOCALIZABLE_ASSET"
+)
+
 // Defines values for OrchestratorPhaseStatus.
 const (
 	ACTIVE    OrchestratorPhaseStatus = "ACTIVE"
@@ -4770,6 +4775,27 @@ type MoveWorkRequest struct {
 	// StateName Authored marking state name to move the work item into.
 	StateName string `json:"stateName"`
 }
+
+// NameValue A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.
+type NameValue struct {
+	// Id Optional stable metadata identifier; consumers must not render it as display copy.
+	Id *string `json:"id,omitempty"`
+
+	// Locales Canonical BCP 47 locales for which the base value was authored.
+	Locales *[]string `json:"locales,omitempty"`
+
+	// Type Discriminator for localized customer-facing metadata.
+	Type NameValueType `json:"type"`
+
+	// Value Required base value returned when no exact locale override exists.
+	Value string `json:"value"`
+
+	// Values Exact canonical BCP 47 locale tags mapped to localized overrides.
+	Values *map[string]string `json:"values,omitempty"`
+}
+
+// NameValueType Discriminator for localized customer-facing metadata.
+type NameValueType string
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {

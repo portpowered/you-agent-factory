@@ -1904,6 +1904,8 @@ components:
       $ref: './components/schemas/shared/IntegerMap.yaml'
     FactoryName:
       $ref: './components/schemas/data-models/FactoryName.yaml'
+    NameValue:
+      $ref: './components/schemas/data-models/NameValue.yaml'
     FactoryWorldWorkstationRequestProjectionSlice:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml'
     FactoryWorldWorkMoveOperationProjectionSlice:

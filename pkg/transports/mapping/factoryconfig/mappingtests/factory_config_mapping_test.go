@@ -75,6 +75,46 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	assertExpandedConfigRoundTrip(t, expanded, original)
 }
 
+func TestNameValueOpenAPIInternalRoundTripPreservesMetadata(t *testing.T) {
+	locales := []string{"en-US"}
+	localized := map[string]string{"fr-FR": "Description française"}
+	id := "stable-description-id"
+	generated := factoryapi.NameValue{
+		Type:    factoryapi.LOCALIZABLEASSET,
+		Value:   "Base description",
+		Locales: &locales,
+		Values:  &localized,
+		Id:      &id,
+	}
+
+	internal, err := NameValueFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("NameValueFromOpenAPI: %v", err)
+	}
+	roundTrip := NameValueAPIFromInternal(&internal)
+	if !reflect.DeepEqual(roundTrip, &generated) {
+		t.Fatalf("round trip = %#v, want %#v", roundTrip, generated)
+	}
+
+	(*roundTrip.Locales)[0] = "de-DE"
+	(*roundTrip.Values)["fr-FR"] = "changed"
+	if internal.Locales[0] != "en-US" || internal.Values["fr-FR"] != "Description française" {
+		t.Fatal("public mapping shares mutable locale storage with internal contract")
+	}
+}
+
+func TestNameValueFromOpenAPIRejectsInvalidSemanticValues(t *testing.T) {
+	locales := []string{"en-us"}
+	_, err := NameValueFromOpenAPI(factoryapi.NameValue{
+		Type:    factoryapi.LOCALIZABLEASSET,
+		Value:   "Base description",
+		Locales: &locales,
+	})
+	if err == nil || !strings.Contains(err.Error(), "locales[0]") {
+		t.Fatalf("NameValueFromOpenAPI error = %v, want locales[0] diagnostic", err)
+	}
+}
+
 func assertExpandedConfigRoundTrip(t *testing.T, expanded, original *interfaces.FactoryConfig) {
 	t.Helper()
 

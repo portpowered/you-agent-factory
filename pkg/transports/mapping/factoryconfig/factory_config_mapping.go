@@ -165,6 +165,31 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	}
 }
 
+// NameValueAPIFromInternal maps a validated internal localized value into the
+// generated public contract without sharing mutable collection storage.
+func NameValueAPIFromInternal(value *interfaces.NameValueConfig) *factoryapi.NameValue {
+	if value == nil {
+		return nil
+	}
+	result := &factoryapi.NameValue{
+		Type:  factoryapi.NameValueType(value.Type),
+		Value: value.Value,
+		Id:    stringPtrIfNotEmpty(value.ID),
+	}
+	if len(value.Locales) > 0 {
+		locales := append([]string(nil), value.Locales...)
+		result.Locales = &locales
+	}
+	if len(value.Values) > 0 {
+		values := make(map[string]string, len(value.Values))
+		for locale, localized := range value.Values {
+			values[locale] = localized
+		}
+		result.Values = &values
+	}
+	return result
+}
+
 func invocationSignatureAPIFromInternal(value *interfaces.InvocationSignatureConfig) *factoryapi.FactoryInvocationSignature {
 	if value == nil {
 		return nil

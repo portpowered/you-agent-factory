@@ -2,6 +2,17 @@
 
 Use this map when changing the public REST contract.
 
+- `make api-smoke` regenerates twice and checks generated files against the Git
+  index. During an intentional contract change, stage the regenerated
+  `api/openapi.yaml`, Go server/client, and TypeScript outputs before running the
+  smoke target so the drift check detects nondeterminism rather than the
+  intended authored change.
+- Intentional Factory schema or mapper changes may require refreshing the
+  production-boundary SHA-256 entries in
+  `pkg/transports/mapping/factoryconfig/openapitests/parity_inventory_test.go`;
+  use the hashes reported by `TestProductionBoundarySources_UnchangedForParityLane`
+  only after reviewing the corresponding source changes.
+
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in
   `internal/contractopenapiconverter` must translate those pairs to numeric
