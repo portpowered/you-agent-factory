@@ -368,6 +368,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/transports/cli/resolvedinput`: its collection-based resolver and accessors
   use stable schema input IDs and canonical typed values, with no Cobra, public
   spelling, position, environment, filesystem, or process-global dependency.
+  Definitions supply typed source precedence explicitly; the resolved snapshot
+  retains the winning provenance and derives changed/default state from that
+  source instead of asking handlers to infer it.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure

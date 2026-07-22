@@ -9,22 +9,22 @@ import (
 
 func TestResolveRetainsEveryCanonicalValueKindByStableInputID(t *testing.T) {
 	definitions := []resolvedinput.Definition{
-		{ID: "command.flag.enabled", Kind: resolvedinput.ValueKindBool},
-		{ID: "command.flag.name", Kind: resolvedinput.ValueKindString},
-		{ID: "command.flag.count", Kind: resolvedinput.ValueKindInt},
-		{ID: "command.flag.limit", Kind: resolvedinput.ValueKindInt64},
-		{ID: "command.flag.labels", Kind: resolvedinput.ValueKindStringArray},
-		{ID: "command.flag.empty-labels", Kind: resolvedinput.ValueKindStringArray},
-		{ID: "command.arg.0", Kind: resolvedinput.ValueKindStringArray},
+		definition("command.flag.enabled", resolvedinput.ValueKindBool),
+		definition("command.flag.name", resolvedinput.ValueKindString),
+		definition("command.flag.count", resolvedinput.ValueKindInt),
+		definition("command.flag.limit", resolvedinput.ValueKindInt64),
+		definition("command.flag.labels", resolvedinput.ValueKindStringArray),
+		definition("command.flag.empty-labels", resolvedinput.ValueKindStringArray),
+		definition("command.arg.0", resolvedinput.ValueKindStringArray),
 	}
 	candidates := []resolvedinput.Candidate{
-		{InputID: "command.flag.enabled", Value: resolvedinput.BoolValue(true)},
-		{InputID: "command.flag.name", Value: resolvedinput.StringValue("factory")},
-		{InputID: "command.flag.count", Value: resolvedinput.IntValue(3)},
-		{InputID: "command.flag.limit", Value: resolvedinput.Int64Value(1 << 40)},
-		{InputID: "command.flag.labels", Value: resolvedinput.StringArrayValue([]string{"one", "two"})},
-		{InputID: "command.flag.empty-labels", Value: resolvedinput.StringArrayValue([]string{})},
-		{InputID: "command.arg.0", Value: resolvedinput.StringArrayValue([]string{"first", "second"})},
+		candidate("command.flag.enabled", resolvedinput.BoolValue(true)),
+		candidate("command.flag.name", resolvedinput.StringValue("factory")),
+		candidate("command.flag.count", resolvedinput.IntValue(3)),
+		candidate("command.flag.limit", resolvedinput.Int64Value(1<<40)),
+		candidate("command.flag.labels", resolvedinput.StringArrayValue([]string{"one", "two"})),
+		candidate("command.flag.empty-labels", resolvedinput.StringArrayValue([]string{})),
+		candidate("command.arg.0", resolvedinput.StringArrayValue([]string{"first", "second"})),
 	}
 
 	inputs, err := resolvedinput.Resolve(definitions, candidates)
@@ -47,8 +47,8 @@ func TestResolveRetainsEveryCanonicalValueKindByStableInputID(t *testing.T) {
 func TestResolveUsesOnlyStableIDsForSyntheticInputs(t *testing.T) {
 	const syntheticID = "synthetic.input.customer-defined"
 	inputs, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{{ID: syntheticID, Kind: resolvedinput.ValueKindString}},
-		[]resolvedinput.Candidate{{InputID: syntheticID, Value: resolvedinput.StringValue("resolved")}},
+		[]resolvedinput.Definition{definition(syntheticID, resolvedinput.ValueKindString)},
+		[]resolvedinput.Candidate{candidate(syntheticID, resolvedinput.StringValue("resolved"))},
 	)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -66,12 +66,20 @@ func TestResolveUsesOnlyStableIDsForSyntheticInputs(t *testing.T) {
 
 func TestResolveRejectsSchemaAndCandidateKindMismatch(t *testing.T) {
 	_, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{{ID: "command.flag.count", Kind: resolvedinput.ValueKindInt}},
-		[]resolvedinput.Candidate{{InputID: "command.flag.count", Value: resolvedinput.StringValue("3")}},
+		[]resolvedinput.Definition{definition("command.flag.count", resolvedinput.ValueKindInt)},
+		[]resolvedinput.Candidate{candidate("command.flag.count", resolvedinput.StringValue("3"))},
 	)
 	if err == nil {
 		t.Fatal("Resolve() error = nil, want value-kind rejection")
 	}
+}
+
+func definition(id string, kind resolvedinput.ValueKind) resolvedinput.Definition {
+	return resolvedinput.Definition{ID: id, Kind: kind, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}}
+}
+
+func candidate(id string, value resolvedinput.Value) resolvedinput.Candidate {
+	return resolvedinput.Candidate{InputID: id, Source: resolvedinput.SourceCLIFlag, Value: value}
 }
 
 func assertScalar[T comparable](t *testing.T, got T, err error, want T) {

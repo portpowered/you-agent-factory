@@ -6,66 +6,87 @@ import "fmt"
 // Public spellings and parser details deliberately do not participate in
 // resolution or lookup.
 type Definition struct {
-	ID   string
-	Kind ValueKind
+	ID         string
+	Kind       ValueKind
+	Precedence []Source
 }
 
-// Candidate is one already-collected value addressed by stable schema input ID.
-// Source collectors remain outside this pure transport model.
+// Candidate is one already-collected value and its source provenance, addressed
+// by stable schema input ID. Source collectors remain outside this pure model.
 type Candidate struct {
 	InputID string
+	Source  Source
 	Value   Value
 }
 
 // Inputs is a resolved CLI input snapshot keyed only by stable schema input ID.
 type Inputs struct {
-	values map[string]Value
+	entries map[string]entry
 }
 
-// Resolve validates schema definitions and retains at most one candidate for
-// each declared input. Source precedence is added separately when candidates
-// can contain more than one source observation.
+type entry struct {
+	value Value
+	state State
+}
+
+// Resolve validates schema definitions and resolves the first available source
+// in each definition's precedence order. It performs no IO and does not mutate
+// the supplied definitions or candidates.
 func Resolve(definitions []Definition, candidates []Candidate) (Inputs, error) {
-	kinds := make(map[string]ValueKind, len(definitions))
+	definitionsByID := make(map[string]Definition, len(definitions))
 	for _, definition := range definitions {
-		if definition.ID == "" {
-			return Inputs{}, fmt.Errorf("resolved CLI input definition has an empty stable ID")
+		if err := validateDefinition(definition, definitionsByID); err != nil {
+			return Inputs{}, err
 		}
-		if !definition.Kind.valid() {
-			return Inputs{}, fmt.Errorf("resolved CLI input %q has unsupported value kind %q", definition.ID, definition.Kind)
-		}
-		if _, exists := kinds[definition.ID]; exists {
-			return Inputs{}, fmt.Errorf("resolved CLI input definition repeats stable ID %q", definition.ID)
-		}
-		kinds[definition.ID] = definition.Kind
+		definitionsByID[definition.ID] = definition
 	}
 
-	values := make(map[string]Value, len(candidates))
+	byInput := make(map[string]map[Source]Value, len(candidates))
 	for _, candidate := range candidates {
-		kind, declared := kinds[candidate.InputID]
+		definition, declared := definitionsByID[candidate.InputID]
 		if !declared {
-			return Inputs{}, fmt.Errorf("resolved CLI input candidate references undeclared stable ID %q", candidate.InputID)
+			return Inputs{}, newResolutionError(ResolutionFailureUndeclaredInput, candidate.InputID, candidate.Source, "candidate references an undeclared stable input ID")
 		}
-		if _, exists := values[candidate.InputID]; exists {
-			return Inputs{}, fmt.Errorf("resolved CLI input %q has multiple candidates without a source policy", candidate.InputID)
+		if !containsSource(definition.Precedence, candidate.Source) {
+			return Inputs{}, newResolutionError(ResolutionFailureUndeclaredSource, candidate.InputID, candidate.Source, "candidate source is absent from the input precedence")
 		}
-		if candidate.Value.Kind() != kind {
-			return Inputs{}, fmt.Errorf(
-				"resolved CLI input %q requires value kind %q, got %q",
-				candidate.InputID,
-				kind,
-				candidate.Value.Kind(),
-			)
+		if candidate.Value.Kind() != definition.Kind {
+			return Inputs{}, newResolutionError(ResolutionFailureValueKind, candidate.InputID, candidate.Source,
+				fmt.Sprintf("requires value kind %q, got %q", definition.Kind, candidate.Value.Kind()))
 		}
-		values[candidate.InputID] = candidate.Value.clone()
+		if byInput[candidate.InputID] == nil {
+			byInput[candidate.InputID] = make(map[Source]Value)
+		}
+		if _, exists := byInput[candidate.InputID][candidate.Source]; exists {
+			return Inputs{}, newResolutionError(ResolutionFailureDuplicateSource, candidate.InputID, candidate.Source, "multiple candidates use the same source")
+		}
+		byInput[candidate.InputID][candidate.Source] = candidate.Value
 	}
-	return Inputs{values: values}, nil
+
+	entries := make(map[string]entry, len(byInput))
+	for _, definition := range definitions {
+		for _, source := range definition.Precedence {
+			value, found := byInput[definition.ID][source]
+			if !found {
+				continue
+			}
+			entries[definition.ID] = entry{value: value.clone(), state: stateFor(source)}
+			break
+		}
+	}
+	return Inputs{entries: entries}, nil
 }
 
 // Lookup returns a detached value by stable schema input ID.
 func (i Inputs) Lookup(inputID string) (Value, bool) {
-	value, ok := i.values[inputID]
-	return value.clone(), ok
+	resolved, ok := i.entries[inputID]
+	return resolved.value.clone(), ok
+}
+
+// State reports the winning provenance and its explicit/default classification.
+func (i Inputs) State(inputID string) (State, bool) {
+	resolved, ok := i.entries[inputID]
+	return resolved.state, ok
 }
 
 func (i Inputs) Bool(inputID string) (bool, error) {
@@ -96,14 +117,50 @@ func (i Inputs) StringArray(inputID string) ([]string, error) {
 }
 
 func (i Inputs) valueOfKind(inputID string, expected ValueKind) (Value, error) {
-	value, ok := i.values[inputID]
+	resolved, ok := i.entries[inputID]
 	if !ok {
 		return Value{}, fmt.Errorf("resolved CLI input %q is missing", inputID)
 	}
+	value := resolved.value
 	if value.Kind() != expected {
 		return Value{}, fmt.Errorf("resolved CLI input %q requires accessor kind %q, got %q", inputID, expected, value.Kind())
 	}
 	return value, nil
+}
+
+func validateDefinition(definition Definition, existing map[string]Definition) error {
+	if definition.ID == "" {
+		return newResolutionError(ResolutionFailureInvalidDefinition, "", "", "definition has an empty stable ID")
+	}
+	if !definition.Kind.valid() {
+		return newResolutionError(ResolutionFailureValueKind, definition.ID, "", fmt.Sprintf("has unsupported value kind %q", definition.Kind))
+	}
+	if _, exists := existing[definition.ID]; exists {
+		return newResolutionError(ResolutionFailureInvalidDefinition, definition.ID, "", "definition repeats the stable input ID")
+	}
+	if len(definition.Precedence) == 0 {
+		return newResolutionError(ResolutionFailureInvalidPrecedence, definition.ID, "", "precedence is empty")
+	}
+	seen := make(map[Source]bool, len(definition.Precedence))
+	for _, source := range definition.Precedence {
+		if !source.valid() {
+			return newResolutionError(ResolutionFailureInvalidPrecedence, definition.ID, source, "precedence contains an unsupported source")
+		}
+		if seen[source] {
+			return newResolutionError(ResolutionFailureInvalidPrecedence, definition.ID, source, "precedence repeats a source")
+		}
+		seen[source] = true
+	}
+	return nil
+}
+
+func containsSource(sources []Source, candidate Source) bool {
+	for _, source := range sources {
+		if source == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (k ValueKind) valid() bool {
