@@ -4,35 +4,52 @@ import (
 	"reflect"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorypackages "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
+var expectedCatalog = []struct {
+	name    string
+	project string
+}{
+	{name: "@you/deep-research", project: "builtin-deep-research"},
+	{name: "@you/fusion", project: "builtin-fusion"},
+	{name: "@you/goal", project: "builtin-goal"},
+	{name: "@you/quorum", project: "builtin-quorum"},
+	{name: "@you/review", project: "builtin-review"},
+	{name: "@you/subagent", project: "builtin-subagent"},
+	{name: "@you/tts", project: "builtin-tts"},
+}
+
+func TestCatalogPublicIdentitiesRemainStable(t *testing.T) {
+	for _, expected := range expectedCatalog {
+		definition, ok := factorypackages.Lookup(expected.name)
+		if !ok || definition.Name != expected.name || definition.Project != expected.project {
+			t.Errorf("Lookup(%q) identity = (%q, %q, found=%t), want (%q, %q, found=true)",
+				expected.name, definition.Name, definition.Project, ok, expected.name, expected.project)
+		}
+	}
+}
+
 func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
-	wantNames := []string{
-		factorydefinitions.PackagedDeepResearchFactoryName,
-		factorydefinitions.PackagedFusionFactoryName,
-		factorydefinitions.PackagedGoalFactoryName,
-		factorydefinitions.PackagedQuorumFactoryName,
-		factorydefinitions.PackagedReviewFactoryName,
-		factorydefinitions.PackagedSubagentFactoryName,
-		factorydefinitions.PackagedTTSFactoryName,
+	wantNames := make([]string, 0, len(expectedCatalog))
+	for _, expected := range expectedCatalog {
+		wantNames = append(wantNames, expected.name)
 	}
 	if got := factorypackages.Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}
 
-	for _, name := range wantNames {
-		t.Run(name, func(t *testing.T) {
-			definition, ok := factorypackages.Lookup(name)
+	for _, expected := range expectedCatalog {
+		t.Run(expected.name, func(t *testing.T) {
+			definition, ok := factorypackages.Lookup(expected.name)
 			if !ok {
-				t.Fatalf("Lookup(%q) did not find packaged definition", name)
+				t.Fatalf("Lookup(%q) did not find packaged definition", expected.name)
 			}
 			cfg, err := factorymapping.FactoryConfigFromOpenAPIJSON(definition.JSON)
 			if err != nil {
-				t.Fatalf("load packaged definition %q: %v", name, err)
+				t.Fatalf("load packaged definition %q: %v", expected.name, err)
 			}
 			if cfg.Name != definition.Name {
 				t.Fatalf("definition name = %q, loaded name = %q", definition.Name, cfg.Name)
@@ -42,12 +59,12 @@ func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
 			}
 			if interfaces.IsJavaScriptOrchestratorFactory(cfg) {
 				if cfg.Orchestrator.JavaScript == nil || cfg.Orchestrator.JavaScript.SourceRef == "" {
-					t.Fatalf("JavaScript packaged definition %q has no workflow source: %#v", name, cfg.Orchestrator)
+					t.Fatalf("JavaScript packaged definition %q has no workflow source: %#v", expected.name, cfg.Orchestrator)
 				}
 				return
 			}
 			if len(cfg.Workers) == 0 || len(cfg.Workstations) == 0 || len(cfg.WorkTypes) == 0 {
-				t.Fatalf("packaged definition %q is not runnable: %#v", name, cfg)
+				t.Fatalf("packaged definition %q is not runnable: %#v", expected.name, cfg)
 			}
 		})
 	}

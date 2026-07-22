@@ -44,7 +44,7 @@ const defaultCoverageJobs = 2
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
 	unitTestPatterns                          = []string{"./pkg/..."}
-	functionalTestPatterns                    = []string{"./tests/functional/..."}
+	functionalTestPatterns                    = []string{testlanes.FunctionalPackagePattern}
 	execCommand                               = exec.Command
 	commandRunner           commandRunnerFunc = func(invocation commandInvocation) (string, string, error) {
 		cmd := execCommand(invocation.name, invocation.args...)
@@ -432,7 +432,14 @@ func resolveTestPackages(cfg config) ([]string, error) {
 	case "", "unit":
 		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
 	case "functional":
-		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
+		packages, err := listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
+		if err != nil {
+			return nil, err
+		}
+		if err := testlanes.ValidateProviderFunctionalPackages(packages); err != nil {
+			return nil, fmt.Errorf("resolve go coverage lane: %w", err)
+		}
+		return packages, nil
 	default:
 		return nil, fmt.Errorf("resolve go coverage lane: unsupported suite %q", cfg.suite)
 	}
@@ -531,8 +538,7 @@ func isBackendCoveragePackage(importPath string) bool {
 }
 
 func isFunctionalTestPackage(importPath string) bool {
-	return strings.HasPrefix(importPath, modulePath+"/tests/functional/") &&
-		!strings.HasPrefix(importPath, modulePath+"/tests/functional/internal/")
+	return testlanes.IsRunnableFunctionalPackage(importPath)
 }
 
 func splitList(value string, separator string, filterEmpty bool) []string {

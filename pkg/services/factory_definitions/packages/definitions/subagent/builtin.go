@@ -1,17 +1,16 @@
 package builtinsubagent
 
 import (
-	"embed"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 )
 
-//go:embed factory.json
-var factoryJSON []byte
-
-//go:embed prompts/*.md
-var promptAssets embed.FS
+var (
+	factoryJSON  = authoredsource.MustFactoryJSON("subagent")
+	promptAssets = authoredsource.MustFactoryFS("subagent")
+)
 
 // BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged
 // factory payload assembled from authored factory.json and prompt files.

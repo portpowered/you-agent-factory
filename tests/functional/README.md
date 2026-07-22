@@ -43,6 +43,13 @@ wildcard `./tests/functional/...` path. The long lane runs the full behavior
 tree plus any `functionallong`-tagged files, so broad or slow scenarios stay
 available without widening the default feedback loop.
 
+The default and functional-coverage lanes share their runnable-package policy
+from `internal/testlanes`. Both lanes still execute every package returned by
+discovery rather than selecting from an allowlist. The same policy verifies
+that the provider contract, all eight built-in providers, script, mock-worker,
+and observability destinations remain present; a missing required destination
+fails discovery with the omitted import path.
+
 The coverage lanes intentionally use separate profiles. The
 `make test-functional-coverage` command executes only the maintained non-long
 functional packages while measuring backend-owned `cmd/factory` and `pkg/...`.
@@ -56,6 +63,10 @@ The lane enforces the current aggregate floor and an 80% target for every new
 backend package. Existing packages below 80% are explicitly grandfathered in
 the functional package baseline and should be removed from that file as their
 functional coverage reaches the target.
+Provider test destinations are test packages rather than measured backend
+packages, so adding an empty destination does not create a package-minimum
+manifest entry. Its scenarios still contribute to the shared backend profile
+as soon as tests are added there.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains
@@ -71,7 +82,12 @@ test results.
 | `workflow` | Core multi-step workflow behavior such as routing, review loops, and ordinary progression across workstations. |
 | `guards_batch` | Guard evaluation, dependency gating, fan-in or batch semantics, and request-batch behavior that should fail in one narrow behavior area. |
 | `runtime_api` | Runtime projections, HTTP API behavior, event or state queries, and other externally observable runtime read models. |
-| `providers` | Provider-backed worker execution behavior, provider retries, provider failures, and command-request shaping that remains user-visible. |
+| `providers` | Legacy aggregate provider coverage that remains runnable while scenarios migrate to the dedicated packages below. `make functional-boundary-check` requires the grandfathered inventory to match the remaining root-level tests exactly, so remove a migrated file and its exception together; do not add or reintroduce scenarios here. |
+| `providers/contract` | Provider-neutral extension behavior shared across provider identities. |
+| `providers/agy`, `providers/claude`, `providers/codex`, `providers/cursor`, `providers/gemini`, `providers/kiro`, `providers/opencode`, `providers/pi` | Behavior owned by the named built-in model provider. |
+| `providers/script` | Script-worker behavior, which is not model-provider behavior. |
+| `providers/mock_workers` | Mock-worker behavior, which is not model-provider behavior. |
+| `providers/observability` | Provider-facing logging and diagnostics behavior, which is not model-provider behavior. |
 | `replay_contracts` | Replay, event-history, and artifact reconstruction behavior that must stay stable across recording and playback surfaces. |
 | `bootstrap_portability` | Init, bootstrap, portability, current-factory activation, and checked-in factory portability flows. |
 
@@ -79,11 +95,18 @@ test results.
 
 - Cross-package functional helpers belong in `tests/functional/internal/support`.
 - `tests/functional/internal/support.StartFunctionalAPIServer` is the
-  canonical Wire-backed HTTP harness for backend transport regressions: it
-  builds the decomposed services through `wire.Build`, so runtime
+  canonical production-composed HTTP harness for backend transport regressions:
+  it builds the customer process through `root.BuildProcess` with exact typed
+  `edges.Edges` replacements, so runtime
   API smoke coverage for `/status`, `/models`, session routes, and factory
   activation should prefer that seam over hand-built HTTP doubles when the
   goal is startup-path parity.
+- Provider functional packages must obtain executable processes through
+  `tests/functional/internal/support.BuildProcess`; they must not import
+  `pkg/root`, `pkg/wire`, initializer or runtime composition internals, service
+  implementation/composition subpackages, or concrete built-in provider
+  implementations. Service-root contracts and the exact public external-effect
+  ports needed to populate typed `edges.Edges` replacements remain available.
 - Keep package-local helpers next to the tests until a second behavior package
   needs them, then promote them into the support package instead of importing
   or copying another package's `*_test.go` helpers.

@@ -67,6 +67,19 @@
   writers before canonicalizing repeated source blocks into one sorted profile;
   keep that ordering so concurrent packages cannot corrupt the shared profile
   and the uploaded artifact matches the totals enforced by the lane.
+  The default functional and functional-coverage lanes share dynamic package
+  selection through `internal/testlanes`: retain execution of the complete
+  `go list ./tests/functional/...` result, the shared-support exclusion, and
+  required provider-destination validation in both callers. Required package
+  validation protects topology but must not become an execution allowlist.
+  `make functional-boundary-check` also owns the deletion-only inventory of
+  grandfathered `tests/functional/providers/*_test.go` files: existing entries
+  must be removed in the same change as their files migrate so stale exceptions
+  cannot authorize reintroduction. New provider scenarios must begin in a
+  dedicated provider or provider-domain subpackage. The same boundary check
+  rejects all service implementation and composition subpackage imports from
+  dedicated provider packages, while retaining service-root contracts and the
+  exact public external-effect ports used by typed `edges.Edges` replacements.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
@@ -76,6 +89,19 @@
   Functional API tests should set the service-level provider and script
   overrides directly and assert the runner is invoked, rather than supplying
   a prebuilt worker application that bypasses this composition boundary.
+
+- `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
+  shipped first-party Factory documents. Keep it in the default `make lint`
+  aggregation: it requires exactly one root Factory document per authored
+  directory under `packages/packaged-factories/factories`, preserves the seven
+  shipped identities, and rejects `@you/*` root definitions elsewhere while
+  also rejecting production Go literals that embed a first-party definition.
+  Examples, fixtures, test data, generated output, and the customer-authored
+  repository `factory/` scaffold remain outside that classification.
+  The package's passive embedded-filesystem tests run in `make test-maintenance`,
+  matching the repository-boundary checker that protects its authored data
+  ownership.
+
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
   not put background commands behind live `while`/`tee` pipelines: on Windows,
