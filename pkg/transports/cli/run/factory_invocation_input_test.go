@@ -55,6 +55,22 @@ func TestFormatFactoryInvocationHelp_RendersTopLevelStructuredExamples(t *testin
 	}
 }
 
+func TestFormatInvocationExampleRendersStructuredStdin(t *testing.T) {
+	t.Parallel()
+
+	signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{Name: "body", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "STDIN"}}},
+	}}
+	example := interfaces.InvocationExampleConfig{
+		Name: "stdin",
+		Args: interfaces.InvocationExampleArguments{"body": "first line\nsecond line"},
+	}
+	output := formatInvocationExample("you run --factory factory.json", signature, example)
+	if !strings.Contains(output, "printf '%s\\n' 'first line\nsecond line' | you run --factory factory.json") {
+		t.Fatalf("stdin example output = %q", output)
+	}
+}
+
 // Work owns ambiguity detection. This transport test verifies only the stable
 // CLI representation and observability of the injected role's typed failure.
 func TestObserveInvocationRejection_AmbiguousInputRecordsStructuredLogAndMetrics(t *testing.T) {

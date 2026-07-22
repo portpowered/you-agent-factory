@@ -90,6 +90,32 @@ func TestNameValueRepresentationRoundTripsPreserveMetadata(t *testing.T) {
 	}
 }
 
+func TestInvocationExampleArgumentsRejectInvalidJSONAndYAMLValues(t *testing.T) {
+	t.Parallel()
+
+	var repeated InvocationExampleArguments
+	if err := json.Unmarshal([]byte(`{"tag":["alpha","beta"]}`), &repeated); err != nil {
+		t.Fatalf("json.Unmarshal(repeated args): %v", err)
+	}
+	if got := repeated["tag"]; !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("repeated args = %#v", got)
+	}
+
+	for _, payload := range []string{`{`, `{"count":3}`} {
+		var decoded InvocationExampleArguments
+		if err := json.Unmarshal([]byte(payload), &decoded); err == nil {
+			t.Fatalf("json.Unmarshal(%s) unexpectedly succeeded", payload)
+		}
+	}
+
+	for _, payload := range []string{"tag: [alpha, 3]\n", "count: 3\n"} {
+		var decoded InvocationExampleArguments
+		if err := yaml.Unmarshal([]byte(payload), &decoded); err == nil {
+			t.Fatalf("yaml.Unmarshal(%q) unexpectedly succeeded", payload)
+		}
+	}
+}
+
 func TestWorkerWorkstationCompatibilityPreservesLegacyAndStrictPairings(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
