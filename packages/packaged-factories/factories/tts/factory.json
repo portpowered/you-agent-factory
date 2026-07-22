@@ -1,0 +1,74 @@
+{
+  "name": "@you/tts",
+  "id": "builtin-tts",
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "name": "omnivoice-cache",
+      "type": "MODEL",
+      "capacity": 1,
+      "model": "OMNIVOICE_Q4_K_M",
+      "backend": "LLAMACPP",
+      "loadPolicy": "ON_DEMAND"
+    }
+  ],
+  "workers": [
+    {
+      "name": "tts-executor",
+      "type": "MODEL_WORKER",
+      "model": "OMNIVOICE_Q4_K_M",
+      "modelProvider": "CODEX",
+      "modelLocality": "LOCAL",
+      "command": "omnivoice-llamacpp",
+      "resources": [
+        {"name": "omnivoice-cache", "capacity": 1}
+      ],
+      "operations": [
+        {
+          "name": "TTS",
+          "inputs": [
+            {"name": "text", "contentTypes": ["TEXT"], "required": true}
+          ],
+          "outputs": [
+            {"name": "audio", "contentTypes": ["AUDIO"]}
+          ]
+        }
+      ],
+      "body": "You are the @you/tts built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-tts",
+      "type": "MODEL_INVOKE",
+      "worker": "tts-executor",
+      "operation": "TTS",
+      "operationBindings": [
+        {
+          "slot": "text",
+          "selector": {"type": "TEXT"}
+        }
+      ],
+      "inputs": [
+        {"workType": "task", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Convert the requested text into speech for {{ .WorkID }}."
+    }
+  ]
+}

@@ -219,6 +219,10 @@
       "minimum": 60.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource",
+      "minimum": 60.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/quorum",
       "exception": {
         "kind": "measurement",
