@@ -9,11 +9,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream/wire"
 )
+
+type memoryCursorStore struct {
+	checkpoint cursors.Checkpoint
+	found      bool
+}
+
+func (s *memoryCursorStore) Load(context.Context, cursors.StorageIdentity) (cursors.Checkpoint, bool, error) {
+	return s.checkpoint, s.found, nil
+}
+
+func (s *memoryCursorStore) Save(_ context.Context, _ cursors.StorageIdentity, checkpoint cursors.Checkpoint) error {
+	s.checkpoint, s.found = checkpoint, true
+	return nil
+}
+
+func (*memoryCursorStore) Close() error { return nil }
 
 type fixedClock struct{ now time.Time }
 
@@ -148,5 +166,41 @@ func TestService_ConstructionIsInertAndRejectsMissingEffects(t *testing.T) {
 	service := newService(t)
 	if store, err := service.NewEventStore("session-1", nil); err == nil || store != nil {
 		t.Fatalf("NewEventStore without clock = %#v, %v; want clock error", store, err)
+	}
+}
+
+func TestService_CursorPersistenceAndPublicationDiagnosticsUseInjectedEffects(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := &memoryCursorStore{}
+	tracker, err := service.NewCursorTracker(store, cursors.StorageIdentity{
+		BackendScopeID: "backend-1", FactorySessionID: "session-1",
+		StreamGenerationID: "stream-1", ConsumerID: "consumer-1",
+	})
+	if err != nil {
+		t.Fatalf("NewCursorTracker: %v", err)
+	}
+	sequence := 7
+	checkpoint := cursors.Checkpoint{AfterSequence: &sequence}
+	if err := tracker.Advance(context.Background(), checkpoint); err != nil {
+		t.Fatalf("Advance: %v", err)
+	}
+	restored, found, err := tracker.Restore(context.Background())
+	if err != nil || !found || restored.AfterSequence == nil || *restored.AfterSequence != sequence {
+		t.Fatalf("Restore = %#v, %t, %v; want sequence %d", restored, found, err, sequence)
+	}
+
+	registry, err := service.NewStreamRegistry(&fixedClock{now: time.Now().UTC()})
+	if err != nil {
+		t.Fatalf("NewStreamRegistry: %v", err)
+	}
+	stream := registry.Streams("session-1").Stream("dispatch-1")
+	var diagnosticCount atomic.Int64
+	publisher := service.NewPublisher(stream, func(responsestream.CompactionSummary) {
+		diagnosticCount.Add(1)
+	})
+	publisher.ReportCompaction(responsestream.CompactionSummary{Reason: responsestream.CompactionReasonTruncated})
+	if got := publisher.Diagnostics().CompactionCount; got != 1 || diagnosticCount.Load() != 1 {
+		t.Fatalf("diagnostics = %#v, observer count = %d; want one compaction", publisher.Diagnostics(), diagnosticCount.Load())
 	}
 }

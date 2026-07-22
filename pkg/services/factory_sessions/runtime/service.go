@@ -259,6 +259,17 @@ func (s *Service) Register(registration Registration) string {
 			}
 		}
 	}
+	session := s.newLiveSession(registration, sessionID, isDefault)
+	if session == nil {
+		return ""
+	}
+	session.Runtime = registration.Runtime
+	s.bindResponseEventCompletion(session, registration.AddEventTypeRecorder)
+	s.registry.Upsert(session, registration.Select)
+	return sessionID
+}
+
+func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *factorysessions.LiveSession {
 	session := factorysessions.NewLiveSession(
 		sessionID,
 		strings.TrimSpace(registration.FactoryDir),
@@ -273,19 +284,28 @@ func (s *Service) Register(registration Registration) string {
 		s.eventIDs,
 	)
 	if session == nil {
-		return ""
+		return nil
 	}
 	if s.responseEvents != nil {
 		responseEvents, err := s.responseEvents.NewEventStore(factorysessions.CanonicalFactorySessionID(session), s.clock)
 		if err != nil {
-			return ""
+			return nil
 		}
 		session.ResponseEvents = responseEvents
 	}
-	session.Runtime = registration.Runtime
-	factorysessions.BindResponseEventCompletion(session, registration.AddEventTypeRecorder)
-	s.registry.Upsert(session, registration.Select)
-	return sessionID
+	return session
+}
+
+func (s *Service) bindResponseEventCompletion(session *factorysessions.LiveSession, addRecorder func(func(interfaces.FactoryEventType))) {
+	if s.responseEvents != nil && addRecorder != nil {
+		addRecorder(func(eventType interfaces.FactoryEventType) {
+			if eventType == interfaces.FactoryEventTypeSessionCompleted {
+				s.responseEvents.Complete(session.ResponseEvents)
+			}
+		})
+	} else {
+		factorysessions.BindResponseEventCompletion(session, addRecorder)
+	}
 }
 
 // Unregister closes session-owned streams and removes the live session.

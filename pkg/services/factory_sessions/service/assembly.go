@@ -208,7 +208,11 @@ func (a *Assembly) Complete(
 		BackendScopeID: startupRuntime.BackendScope(),
 		RuntimeConfig:  runtimeConfig,
 	}
-	factorysessions.BindResponseEventCompletion(session, startupRuntime.AddEventTypeRecorder)
+	startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
+		if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
+			a.responseStreams.Complete(session.ResponseEvents)
+		}
+	})
 	a.registry.Upsert(session, true)
 
 	runtime := NewSessionRuntime(

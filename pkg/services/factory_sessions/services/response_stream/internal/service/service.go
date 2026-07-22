@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
@@ -98,6 +99,34 @@ func (s *ResponseStream) Complete(store *responseeventstore.SessionResponseEvent
 	if store != nil {
 		store.Complete()
 	}
+}
+
+func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	if store == nil {
+		return responseevents.FactoryResponseEvent{}, errors.New("Factory Session response-event store is required")
+	}
+	return store.Publish(event)
+}
+
+func (s *ResponseStream) NewPublisher(stream *responsestream.SessionResponseStream, observer responsestream.DiagnosticsObserver) *responsestreamservice.Publisher {
+	publisher := responsestream.NewPublisher(stream, observer)
+	return &responsestreamservice.Publisher{
+		PublishEvent:     publisher.Publish,
+		ReportCompaction: publisher.ReportCompaction,
+		ReadDiagnostics:  publisher.Diagnostics,
+	}
+}
+
+func (s *ResponseStream) NewCursorTracker(store cursors.Store, identity cursors.StorageIdentity) (*responsestreamservice.Tracker, error) {
+	tracker, err := cursors.NewTracker(store, identity)
+	if err != nil {
+		return nil, err
+	}
+	return &responsestreamservice.Tracker{
+		RestoreCursor: tracker.Restore,
+		AdvanceCursor: tracker.Advance,
+		CurrentCursor: tracker.Current,
+	}, nil
 }
 
 func (s *ResponseStream) Close(store *responseeventstore.SessionResponseEventStore) {

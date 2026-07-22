@@ -78,7 +78,7 @@ func NewWithResponseService(
 		host:           host,
 		liveOpener:     dataplane.NewLiveOpener(host),
 		liveLifecycle:  dataplane.NewLiveLifecycle(host),
-		streams:        stream.NewManagerWithDependencies(sessions, observer, responseStreams),
+		streams:        stream.NewManagerWithResponseService(sessions, observer, responseStreams, responseEvents),
 		reconnects:     reconnects,
 		results:        results,
 		responseEvents: responseEvents,

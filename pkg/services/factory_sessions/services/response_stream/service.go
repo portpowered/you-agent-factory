@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
@@ -44,12 +45,48 @@ func (c *Cursor) Drain() ([]responseevents.FactoryResponseEvent, error) {
 
 func (c *Cursor) Detach() { c.DetachCursor() }
 
+// Tracker coordinates one consumer's persisted acknowledged cursor without
+// exposing the concrete tracker implementation.
+type Tracker struct {
+	RestoreCursor func(context.Context) (cursors.Checkpoint, bool, error)
+	AdvanceCursor func(context.Context, cursors.Checkpoint) error
+	CurrentCursor func() (cursors.Checkpoint, bool)
+}
+
+func (t *Tracker) Restore(ctx context.Context) (cursors.Checkpoint, bool, error) {
+	return t.RestoreCursor(ctx)
+}
+
+func (t *Tracker) Advance(ctx context.Context, checkpoint cursors.Checkpoint) error {
+	return t.AdvanceCursor(ctx, checkpoint)
+}
+
+func (t *Tracker) Current() (cursors.Checkpoint, bool) { return t.CurrentCursor() }
+
+// Publisher owns one internal stream's publication and diagnostics callback.
+type Publisher struct {
+	PublishEvent     func(responsestream.Event) responsestream.Event
+	ReportCompaction func(responsestream.CompactionSummary)
+	ReadDiagnostics  func() responsestream.PublicationDiagnostics
+}
+
+func (p *Publisher) Publish(event responsestream.Event) responsestream.Event {
+	return p.PublishEvent(event)
+}
+
+func (p *Publisher) Diagnostics() responsestream.PublicationDiagnostics {
+	return p.ReadDiagnostics()
+}
+
 // Service owns response-event validation, retention, publication lifecycle,
 // subscriptions, reconnect cursor semantics, and internal stream allocation.
 type Service interface {
 	NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error)
 	NewStreamRegistry(factoryruntime.Clock) (*responsestream.Registry, error)
 	Subscribe(context.Context, *responseeventstore.SessionResponseEventStore, SubscriptionRequest) (*Cursor, error)
+	NewCursorTracker(cursors.Store, cursors.StorageIdentity) (*Tracker, error)
+	NewPublisher(*responsestream.SessionResponseStream, responsestream.DiagnosticsObserver) *Publisher
+	Publish(*responseeventstore.SessionResponseEventStore, responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error)
 	Complete(*responseeventstore.SessionResponseEventStore)
 	Close(*responseeventstore.SessionResponseEventStore)
 }

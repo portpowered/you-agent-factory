@@ -9,15 +9,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/fragmentmap"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	"go.uber.org/zap"
 )
 
 // Manager owns transient response-stream subscription, publication, cleanup, and
 // checkpoint access for live Factory Sessions.
 type Manager struct {
-	sessions SessionResolver
-	observer Observer
-	registry *responsestream.Registry
+	sessions  SessionResolver
+	observer  Observer
+	registry  *responsestream.Registry
+	responses responsestreamservice.Service
 }
 
 // NewManager constructs a stream manager with explicit host and registry dependencies.
@@ -32,10 +34,16 @@ func NewManagerWithRegistry(host Host, registry *responsestream.Registry) *Manag
 }
 
 func NewManagerWithDependencies(sessions SessionResolver, observer Observer, registry *responsestream.Registry) *Manager {
+	return NewManagerWithResponseService(sessions, observer, registry, nil)
+}
+
+// NewManagerWithResponseService routes publication, lifecycle, and diagnostics
+// through the owner-private response-stream capability.
+func NewManagerWithResponseService(sessions SessionResolver, observer Observer, registry *responsestream.Registry, responses responsestreamservice.Service) *Manager {
 	if registry == nil {
 		return nil
 	}
-	return &Manager{sessions: sessions, observer: observer, registry: registry}
+	return &Manager{sessions: sessions, observer: observer, registry: registry, responses: responses}
 }
 
 // Subscribe opens one dispatch-scoped response-stream subscription.
@@ -89,7 +97,11 @@ func (m *Manager) CloseAll(session *factorysessions.LiveSession) {
 	if m == nil || session == nil {
 		return
 	}
-	session.CloseResponseEvents()
+	if m.responses != nil {
+		m.responses.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
 	m.registry.Close(responseStreamSessionKey(session))
 }
 
@@ -163,7 +175,7 @@ func (m *Manager) inferenceProgressPublisher(
 				m.observeDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, fmt.Errorf("canonical response draft has type %T", fragment.CanonicalDraft))
 				return
 			}
-			if err := publishCanonicalDraft(session, draft); err != nil {
+			if err := m.publishCanonicalDraft(session, draft); err != nil {
 				m.observeDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, err)
 			}
 			return
@@ -178,14 +190,14 @@ func (m *Manager) inferenceProgressPublisher(
 			m.observeDegraded(session, normalizedSessionID, dispatchID, "STREAM_UNAVAILABLE", logger, nil)
 			return
 		}
-		publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+		publisher := m.newPublisher(stream, func(summary responsestream.CompactionSummary) {
 			if m.observer != nil {
 				m.observer.ObserveResponseStreamCompaction(session, normalizedSessionID, dispatchID, summary)
 			}
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		if err := publishCanonicalResponseEvents(session, stored, fragment.CanonicalEventAlreadyPublished); err != nil {
+		if err := m.publishCanonicalResponseEvents(session, stored, fragment.CanonicalEventAlreadyPublished); err != nil {
 			m.observeDegraded(
 				session,
 				normalizedSessionID,
@@ -207,14 +219,14 @@ func (m *Manager) observeDegraded(session *factorysessions.LiveSession, sessionI
 	}
 }
 
-func publishCanonicalDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
+func (m *Manager) publishCanonicalDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
 	if err := responseevents.ValidateDraft(draft); err != nil {
 		return fmt.Errorf("validate canonical response draft: %w", err)
 	}
-	_, err := session.ResponseEvents.Publish(responseevents.FactoryResponseEvent{
+	_, err := m.publishResponseEvent(session.ResponseEvents, responseevents.FactoryResponseEvent{
 		RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase, Provenance: draft.Provenance,
 		Payload: append([]byte(nil), draft.Payload...), DispatchID: draft.DispatchID, TurnID: draft.TurnID,
 		ItemID: draft.ItemID, ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
@@ -225,7 +237,7 @@ func publishCanonicalDraft(session *factorysessions.LiveSession, draft responsee
 	return nil
 }
 
-func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, skipCanonical bool) error {
+func (m *Manager) publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, skipCanonical bool) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
@@ -239,11 +251,27 @@ func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragme
 		return fmt.Errorf("map canonical response event: %w", err)
 	}
 	for _, event := range events {
-		if _, err := session.ResponseEvents.Publish(event); err != nil {
+		if _, err := m.publishResponseEvent(session.ResponseEvents, event); err != nil {
 			return fmt.Errorf("publish canonical response event: %w", err)
 		}
 	}
 	return nil
+}
+
+func (m *Manager) publishResponseEvent(store *factorysessions.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	if m != nil && m.responses != nil {
+		return m.responses.Publish(store, event)
+	}
+	return store.Publish(event)
+}
+
+func (m *Manager) newPublisher(stream *responsestream.SessionResponseStream, observer responsestream.DiagnosticsObserver) interface {
+	Publish(responsestream.Event) responsestream.Event
+} {
+	if m != nil && m.responses != nil {
+		return m.responses.NewPublisher(stream, observer)
+	}
+	return responsestream.NewPublisher(stream, observer)
 }
 
 func normalizeSessionID(sessionID string) string {
