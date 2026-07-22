@@ -23,7 +23,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
+func TestRun_RedirectedHumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	preserveRunGlobals(t)
 
 	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
@@ -49,14 +49,15 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	text := "prompt"
 	err := Run(context.Background(), RunConfig{
 		FactoryConfigPath: "/tmp/factory.json", InvocationPositionalText: &text,
-		InvocationOutputMode: InvocationOutputResponseStream, StdinIsTTY: func() bool { return true }, Output: &output,
+		InvocationOutputMode: InvocationOutputResponseStream, StdinIsTTY: func() bool { return true },
+		OutputIsTTY: false, Output: &output,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "[1] SESSION_STARTED\n" +
-		"[2] ORCHESTRATOR_PHASE_CHANGED\n" +
-		"[3] ORCHESTRATOR_CHECKPOINT_WRITTEN\n\n" +
+	want := "[1] Factory Session started\n" +
+		"[2] workflow phase synthesize: ACTIVE\n" +
+		"[3] workflow checkpoint written: draft-ready (RESUMABLE)\n\n" +
 		responseStreamPrimaryResultHeader + "\n" + answer
 	if got := output.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)

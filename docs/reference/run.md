@@ -180,6 +180,13 @@ primary-result mode:
 you run --named team-review --output response-stream "Review the release notes"
 ```
 
+Human lifecycle lines summarize Work acceptance, Factory Session start and
+completion, workstation queue/start/outcome, inference start/outcome,
+JavaScript phase and checkpoint changes, and final-output availability. They
+retain canonical event order without printing provider tokens, deltas,
+tool-call chunks, or provider-session chunks. Redirecting stdout preserves this
+human presentation; terminal detection does not silently select another format.
+
 ### NDJSON automation mode
 
 Add global `--json` with `--output response-stream` for newline-delimited

@@ -587,7 +587,7 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	if strings.Contains(got, "terminal output backlog") {
 		t.Fatalf("human output must not include terminal backlog notice:\n%s", got)
 	}
-	if !strings.Contains(got, "ORCHESTRATOR_PHASE_CHANGED") {
+	if !strings.Contains(got, "workflow phase") {
 		t.Fatalf("canonical Factory Event did not reach slow stdout:\n%s", got)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
@@ -596,7 +596,7 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	if strings.Count(got, text) != 1 {
 		t.Fatalf("final primary result must appear exactly once:\n%s", got)
 	}
-	assertNoProgressAfterFinalMarker(t, got, responseStreamPrimaryResultHeader, "ORCHESTRATOR_PHASE_CHANGED")
+	assertNoProgressAfterFinalMarker(t, got, responseStreamPrimaryResultHeader, "workflow phase")
 }
 
 func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T) {

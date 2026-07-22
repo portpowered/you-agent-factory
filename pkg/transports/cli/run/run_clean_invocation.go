@@ -673,14 +673,201 @@ func newHumanFactoryEventRenderer(
 	}
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
 		output,
-		func(event interfaces.FactoryEvent) ([]byte, bool) {
-			sequence := event.Context.Sequence
-			if event.Context.SessionSequence != nil {
-				sequence = *event.Context.SessionSequence
-			}
-			return []byte(fmt.Sprintf("[%d] %s", sequence, event.Type)), true
-		},
+		formatHumanFactoryEvent,
 	)}
+}
+
+func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
+	var message string
+	switch event.Type {
+	case interfaces.FactoryEventTypeWorkRequest:
+		message = formatHumanWorkAccepted(event)
+	case interfaces.FactoryEventTypeSessionStarted:
+		message = "Factory Session started"
+	case interfaces.FactoryEventTypeSessionCompleted:
+		message = formatHumanSessionCompleted(event)
+	case interfaces.FactoryEventTypeDispatchQueued:
+		message = formatHumanDispatchQueued(event)
+	case interfaces.FactoryEventTypeDispatchRequest:
+		message = formatHumanDispatchStarted(event)
+	case interfaces.FactoryEventTypeDispatchResponse:
+		message = formatHumanDispatchCompleted(event)
+	case interfaces.FactoryEventTypeDispatchInterrupted:
+		message = formatHumanDispatchInterrupted(event)
+	case interfaces.FactoryEventTypeInferenceRequest:
+		message = formatHumanInferenceStarted(event)
+	case interfaces.FactoryEventTypeInferenceResponse:
+		message = formatHumanInferenceCompleted(event)
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged:
+		message = formatHumanOrchestratorPhase(event)
+	case interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
+		message = formatHumanOrchestratorCheckpoint(event)
+	case interfaces.FactoryEventTypeSessionResultUpdated:
+		message = formatHumanResultUpdated(event)
+	default:
+		return nil, false
+	}
+	sequence := event.Context.Sequence
+	if event.Context.SessionSequence != nil {
+		sequence = *event.Context.SessionSequence
+	}
+	return []byte(fmt.Sprintf("[%d] %s", sequence, message)), true
+}
+
+func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
+	payload, ok := decodeFactoryEventPayload[work.WorkRequestEventPayload](event)
+	if !ok || len(payload.Works) == 0 {
+		return withHumanLifecycleSubject("work accepted", firstFactoryEventWorkID(event))
+	}
+	if len(payload.Works) > 1 {
+		return fmt.Sprintf("work accepted: %d items", len(payload.Works))
+	}
+	subject := payload.Works[0].Name
+	if strings.TrimSpace(subject) == "" {
+		subject = payload.Works[0].WorkID
+	}
+	return withHumanLifecycleSubject("work accepted", subject)
+}
+
+func formatHumanSessionCompleted(event interfaces.FactoryEvent) string {
+	payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionCompletedEventPayload](event)
+	if !ok || payload.FinalStatus == "" {
+		return "Factory Session completed"
+	}
+	message := "Factory Session completed: " + string(payload.FinalStatus)
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanDispatchQueued(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchQueuedEventPayload](event)
+	subject := stringPointerValue(payload.Label)
+	if subject == "" {
+		subject = stringPointerValue(event.Context.DispatchID)
+	}
+	return withHumanLifecycleSubject("workstation queued", subject)
+}
+
+func formatHumanDispatchStarted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchRequestEventPayload](event)
+	return withHumanLifecycleSubject("workstation started", payload.TransitionID)
+}
+
+func formatHumanDispatchCompleted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.DispatchResponseEventPayload](event)
+	label := "workstation completed"
+	if payload.Outcome == workerexecution.OutcomeFailed {
+		label = "workstation failed"
+	}
+	message := withHumanLifecycleSubject(label, payload.TransitionID)
+	if payload.Outcome != "" && payload.Outcome != workerexecution.OutcomeAccepted && payload.Outcome != workerexecution.OutcomeFailed {
+		message += " (" + string(payload.Outcome) + ")"
+	}
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanDispatchInterrupted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchInterruptedEventPayload](event)
+	return withHumanLifecycleFailure(
+		withHumanLifecycleSubject("workstation interrupted", stringPointerValue(event.Context.DispatchID)),
+		payload.Reason,
+	)
+}
+
+func formatHumanInferenceStarted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.InferenceRequestEventPayload](event)
+	return withHumanLifecycleAttempt("inference started", payload.Attempt)
+}
+
+func formatHumanInferenceCompleted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.InferenceResponseEventPayload](event)
+	label := "inference completed"
+	if payload.Outcome == workerexecution.InferenceOutcomeFailed {
+		label = "inference failed"
+	}
+	message := withHumanLifecycleAttempt(label, payload.Attempt)
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanOrchestratorPhase(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.OrchestratorPhaseChangedEventPayload](event)
+	message := "workflow phase"
+	if phase := boundedHumanProgressPayload(stringPointerValue(event.Context.PhaseName)); phase != "" {
+		message += " " + phase
+	}
+	if payload.PhaseStatus != "" {
+		message += ": " + string(payload.PhaseStatus)
+	}
+	return message
+}
+
+func formatHumanOrchestratorCheckpoint(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.OrchestratorCheckpointWrittenEventPayload](event)
+	message := withHumanLifecycleSubject("workflow checkpoint written", payload.Label)
+	if payload.ResumabilityStatus != "" {
+		message += " (" + string(payload.ResumabilityStatus) + ")"
+	}
+	return message
+}
+
+func formatHumanResultUpdated(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.FactorySessionResultUpdatedEventPayload](event)
+	message := "final output updated"
+	if payload.ResultStatus != "" {
+		message += ": " + string(payload.ResultStatus)
+	}
+	return message
+}
+
+func decodeFactoryEventPayload[T any](event interfaces.FactoryEvent) (T, bool) {
+	var payload T
+	if len(event.Payload) == 0 || json.Unmarshal(event.Payload, &payload) != nil {
+		return payload, false
+	}
+	return payload, true
+}
+
+func firstFactoryEventWorkID(event interfaces.FactoryEvent) string {
+	if event.Context.WorkIDs == nil || len(*event.Context.WorkIDs) == 0 {
+		return ""
+	}
+	return (*event.Context.WorkIDs)[0]
+}
+
+func withHumanLifecycleSubject(label, subject string) string {
+	if subject = boundedHumanProgressPayload(subject); subject != "" {
+		return label + ": " + subject
+	}
+	return label
+}
+
+func withHumanLifecycleAttempt(label string, attempt int) string {
+	if attempt > 0 {
+		return fmt.Sprintf("%s (attempt %d)", label, attempt)
+	}
+	return label
+}
+
+func withHumanLifecycleFailure(message, failure string) string {
+	if failure = boundedHumanProgressPayload(failure); failure != "" {
+		return message + " — " + failure
+	}
+	return message
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {

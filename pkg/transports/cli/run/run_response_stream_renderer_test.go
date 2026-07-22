@@ -17,6 +17,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -75,15 +76,17 @@ func assertCanonicalJavaScriptPresentation(t *testing.T, output string) {
 }
 
 func canonicalJavaScriptFactoryEvents() []interfaces.FactoryEvent {
-	types := []interfaces.FactoryEventType{
-		interfaces.FactoryEventTypeSessionStarted,
-		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
-		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+	phaseName := "synthesize"
+	events := []interfaces.FactoryEvent{
+		canonicalFactoryEventWithPayload(1, interfaces.FactoryEventTypeSessionStarted, interfaces.FactorySessionStartedEventPayload{}),
+		canonicalFactoryEventWithPayload(2, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.OrchestratorPhaseChangedEventPayload{
+			PhaseStatus: interfaces.OrchestratorPhaseStatusActive,
+		}),
+		canonicalFactoryEventWithPayload(3, interfaces.FactoryEventTypeOrchestratorCheckpointWritten, interfaces.OrchestratorCheckpointWrittenEventPayload{
+			Label: "draft-ready", ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
+		}),
 	}
-	events := make([]interfaces.FactoryEvent, len(types))
-	for i, eventType := range types {
-		events[i] = canonicalFactoryEventFixture(i+1, eventType)
-	}
+	events[1].Context.PhaseName = &phaseName
 	return events
 }
 
@@ -105,6 +108,65 @@ func canonicalFactoryEventFixture(sequence int, eventType interfaces.FactoryEven
 			EventTime: time.Unix(int64(sequence), 0).UTC(), Sequence: sequence,
 			SessionID: &sessionID, SessionSequence: &sessionSequence,
 		},
+	}
+}
+
+func canonicalFactoryEventWithPayload(sequence int, eventType interfaces.FactoryEventType, payload any) interfaces.FactoryEvent {
+	event := canonicalFactoryEventFixture(sequence, eventType)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	event.Payload = encoded
+	return event
+}
+
+func TestHumanFactoryEventRenderer_FailuresAreUnderstandable(t *testing.T) {
+	t.Parallel()
+
+	events := []interfaces.FactoryEvent{
+		canonicalFactoryEventWithPayload(1, interfaces.FactoryEventTypeInferenceResponse, workerexecution.InferenceResponseEventPayload{
+			Attempt: 2, Outcome: workerexecution.InferenceOutcomeFailed,
+			FailureDetail: &workerexecution.InferenceResponseFailureDetail{Message: "model request timed out"},
+		}),
+		canonicalFactoryEventWithPayload(2, interfaces.FactoryEventTypeDispatchResponse, workerexecution.DispatchResponseEventPayload{
+			TransitionID: "release review", Outcome: workerexecution.OutcomeFailed,
+			FailureDetail: &workerexecution.FailureDetail{Message: "worker timed out"},
+		}),
+	}
+	var output strings.Builder
+	renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
+	renderer.PresentFactoryEvents(events)
+	renderer.stopProgressRendering()
+	want := "[1] inference failed (attempt 2) — model request timed out\n" +
+		"[2] workstation failed: release review — worker timed out\n"
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestInvocationFactoryEventRenderer_HumanModeDoesNotDependOnStdoutTTY(t *testing.T) {
+	t.Parallel()
+
+	outputs := make([]string, 0, 2)
+	for _, outputIsTTY := range []bool{true, false} {
+		var output strings.Builder
+		renderer := invocationFactoryEventRenderer(RunConfig{
+			InvocationOutputMode: InvocationOutputResponseStream,
+			OutputIsTTY:          outputIsTTY,
+			Output:               &output,
+		}, testResponsePresentation())
+		renderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents())
+		if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+			Status:        interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+		}); err != nil {
+			t.Fatalf("writeFinalInvocationResult(outputIsTTY=%t): %v", outputIsTTY, err)
+		}
+		outputs = append(outputs, output.String())
+	}
+	if outputs[0] != outputs[1] {
+		t.Fatalf("TTY and redirected human output differ:\ntty=%q\nredirected=%q", outputs[0], outputs[1])
 	}
 }
 

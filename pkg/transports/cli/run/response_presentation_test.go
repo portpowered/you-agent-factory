@@ -4,18 +4,91 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
 	defaultResponseStreamProgressQueueCapacity = 64
 	responseStreamProgressDrainTimeout         = 250 * time.Millisecond
 )
+
+func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
+	t.Parallel()
+
+	phaseName := "synthesize"
+	label := "release review"
+	providerResponse := "SECRET_PROVIDER_RESPONSE"
+	providerOutput := "SECRET_PROVIDER_OUTPUT"
+	events := []factorydefinitions.FactoryEvent{
+		canonicalFactoryEventWithPayload(1, factorydefinitions.FactoryEventTypeWorkRequest, work.WorkRequestEventPayload{
+			Works: []work.WorkRequestEventWork{{Name: "Review release"}},
+		}),
+		canonicalFactoryEventWithPayload(2, factorydefinitions.FactoryEventTypeSessionStarted, factorydefinitions.FactorySessionStartedEventPayload{}),
+		canonicalFactoryEventWithPayload(3, factorydefinitions.FactoryEventTypeDispatchQueued, factorydefinitions.DispatchQueuedEventPayload{Label: &label}),
+		canonicalFactoryEventWithPayload(4, factorydefinitions.FactoryEventTypeDispatchRequest, factorydefinitions.DispatchRequestEventPayload{TransitionID: "release review"}),
+		canonicalFactoryEventWithPayload(5, factorydefinitions.FactoryEventTypeInferenceRequest, workerexecution.InferenceRequestEventPayload{Attempt: 1}),
+		canonicalFactoryEventWithPayload(6, factorydefinitions.FactoryEventTypeInferenceResponse, workerexecution.InferenceResponseEventPayload{
+			Attempt: 1, Outcome: workerexecution.InferenceOutcomeSucceeded, Response: &providerResponse,
+		}),
+		canonicalFactoryEventWithPayload(7, factorydefinitions.FactoryEventTypeDispatchResponse, workerexecution.DispatchResponseEventPayload{
+			TransitionID: "release review", Outcome: workerexecution.OutcomeAccepted, Output: &providerOutput,
+		}),
+		canonicalFactoryEventWithPayload(8, factorydefinitions.FactoryEventTypeOrchestratorPhaseChanged, factorydefinitions.OrchestratorPhaseChangedEventPayload{
+			PhaseStatus: factorydefinitions.OrchestratorPhaseStatusActive,
+		}),
+		canonicalFactoryEventWithPayload(9, factorydefinitions.FactoryEventTypeOrchestratorCheckpointWritten, factorydefinitions.OrchestratorCheckpointWrittenEventPayload{
+			Label: "draft-ready", ResumabilityStatus: factorydefinitions.CheckpointResumabilityStatusResumable,
+		}),
+		canonicalFactoryEventWithPayload(10, factorydefinitions.FactoryEventTypeSessionResultUpdated, factorydefinitions.FactorySessionResultUpdatedEventPayload{
+			ResultStatus: factorydefinitions.FactorySessionResultStatusFinal,
+		}),
+		canonicalFactoryEventWithPayload(11, factorydefinitions.FactoryEventTypeSessionCompleted, factorydefinitions.FactorySessionCompletedEventPayload{
+			FinalStatus: factorydefinitions.FactorySessionLifecycleStatusSucceeded,
+		}),
+	}
+	events[7].Context.PhaseName = &phaseName
+
+	var output strings.Builder
+	renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
+	renderer.PresentFactoryEvents(events)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status:        factorydefinitions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "approved"}},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	want := "[1] work accepted: Review release\n" +
+		"[2] Factory Session started\n" +
+		"[3] workstation queued: release review\n" +
+		"[4] workstation started: release review\n" +
+		"[5] inference started (attempt 1)\n" +
+		"[6] inference completed (attempt 1)\n" +
+		"[7] workstation completed: release review\n" +
+		"[8] workflow phase synthesize: ACTIVE\n" +
+		"[9] workflow checkpoint written: draft-ready (RESUMABLE)\n" +
+		"[10] final output updated: FINAL\n" +
+		"[11] Factory Session completed: SUCCEEDED\n\n" +
+		responseStreamPrimaryResultHeader + "\napproved"
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+	for _, forbidden := range []string{providerResponse, providerOutput, "INFERENCE_RESPONSE"} {
+		if strings.Contains(output.String(), forbidden) {
+			t.Fatalf("human lifecycle exposed private provider value %q: %s", forbidden, output.String())
+		}
+	}
+}
 
 // testResponsePresentation is the service-root test edge used by transport
 // encoding tests. Queue and attachment invariants are owned and tested in the

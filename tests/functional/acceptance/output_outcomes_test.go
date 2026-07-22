@@ -87,21 +87,26 @@ func TestStreamOutputMode_HumanMode_RendersCanonicalProgressAndTerminalPrimaryRe
 	session.RequireSuccess(t, "stream-human-output-named-goal", result, err)
 
 	assertHumanResponseStreamAvoidsLegacyDialect(t, result.Stdout)
+	lifecycleLines := 0
 	for _, line := range strings.Split(result.Stdout, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || trimmed == "--- primary result ---" {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "progress:") ||
-			strings.HasPrefix(trimmed, "reasoning:") ||
-			strings.HasPrefix(trimmed, "tool:") ||
-			strings.HasPrefix(trimmed, "stream gap:") {
+		if isCustomerFactoryLifecycleLine(trimmed) {
+			lifecycleLines++
 			continue
 		}
 		if trimmed == packagedGoalMockWorkerAcceptedSummary {
 			continue
 		}
-		t.Fatalf("unexpected human response-stream line %q outside canonical response-event contract", trimmed)
+		t.Fatalf("unexpected human response-stream line %q outside canonical Factory Event presentation", trimmed)
+	}
+	if lifecycleLines == 0 {
+		t.Fatalf("stdout has no customer Factory lifecycle lines:\n%s", result.Stdout)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(result.Stdout), packagedGoalMockWorkerAcceptedSummary) {
+		t.Fatalf("final response is not last on stdout:\n%s", result.Stdout)
 	}
 }
 
@@ -389,6 +394,25 @@ func assertHumanResponseStreamAvoidsLegacyDialect(t *testing.T, stdout string) {
 			t.Fatalf("human response-stream stdout contains legacy/internal term %q", forbidden)
 		}
 	}
+}
+
+func isCustomerFactoryLifecycleLine(line string) bool {
+	closingBracket := strings.Index(line, "] ")
+	if !strings.HasPrefix(line, "[") || closingBracket < 2 {
+		return false
+	}
+	message := line[closingBracket+2:]
+	for _, prefix := range []string{
+		"work accepted", "work moved", "Factory Session started", "Factory Session completed",
+		"workstation queued", "workstation started", "workstation completed", "workstation failed", "workstation interrupted",
+		"inference started", "inference completed", "inference failed", "workflow phase", "workflow checkpoint written",
+		"final output updated",
+	} {
+		if strings.HasPrefix(message, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {

@@ -50,14 +50,15 @@ primary-result behavior.
 
 Use this lane when changing `you run` stdout modes, `--output response-stream`,
 root `--json` NDJSON records, or packaged `you docs run` output-mode guidance.
-Supported one-shot factory invocations expose three modes; continuous, replay,
-`--work`, and other non-invocation run shapes do not offer response-stream output.
+Supported live and replayed one-shot factory invocations expose three modes;
+continuous, `--work`, and other non-invocation run shapes do not offer
+response-stream output.
 
 | Mode | Selection | Stdout contract |
 |---|---|---|
 | Primary-result (default) | `you run --factory …` or `you run --named …` without `--output response-stream` | Successful invocations write only the configured `primaryResult` to stdout |
-| Human response-stream | `you run --factory … --output response-stream` (no root `--json`) | Bounded human progress from canonical `FactoryResponseEvent` records, then `--- invocation outcome ---` with structured status/error fields and the primary result |
-| NDJSON automation | `you --json run --factory … --output response-stream` | Each non-empty stdout line is one JSON record: `recordType=response_event` with nested public `FactoryResponseEvent`, ending with exactly one terminal `recordType=invocation_result` |
+| Human response-stream | `you run --factory … --output response-stream` (no root `--json`) | Customer lifecycle summaries from ordered canonical `FactoryEvent` records, followed by the terminal primary result or invocation outcome |
+| NDJSON automation | `you --json run --factory … --output response-stream` | Each non-empty stdout line is one JSON record: `recordType=factory_event` with a nested canonical `FactoryEvent`, ending with at most one terminal `recordType=invocation_result` |
 
 **CLI boundary ownership**
 
@@ -66,24 +67,21 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (manual `you run --output response-stream` parsing after `DisableFlagParsing`)
 - `RunConfig.InvocationOutputMode`, validation, and error mapping:
   `pkg/transports/cli/run/invocation_error.go`
-- Session-owned canonical subscription, human progress draining, and lossless JSON
-  stdout ordering:
-  `pkg/transports/cli/run/invocation_observability.go`,
+- Session-owned canonical event collection, human lifecycle mapping, and
+  lossless JSON stdout ordering:
   `pkg/transports/cli/run/run_clean_invocation.go`,
-  `pkg/transports/cli/run/factory_invocation_input.go`
-- Shared bootstrap forward and post-invocation retained-window drain:
-  `service.InvocationBootstrap.SubscribeSessionResponseEventsFromLatest` via
-  `pkg/transports/cli/run/factory_invocation_input.go`
+  `pkg/transports/cli/run/factory_invocation_input.go`, and
+  `pkg/services/factory_sessions/runtimeopening/invocation/operation.go`
 
 **Shared observation contract**
 
-- Provider-neutral public event vocabulary:
-  `pkg/factory/sessions/responseevents/`
-- Session-scoped ephemeral store (CLI and API share the same records):
-  `pkg/factory/sessions/responseeventstore/`
-- Retained-window `STREAM_GAP` visibility applies to both human and NDJSON modes;
-  do not fall back to legacy provider-progress payloads when the canonical
-  subscription is unavailable
+- Canonical Factory Event vocabulary and sequence context:
+  `pkg/services/factory_definitions/contracts/factory_events.go`
+- Shared ordered output serialization and final-once terminal write:
+  `pkg/services/factory_visualization/factory_event_stream.go`
+- Keep provider-response chunks and ephemeral `FactoryResponseEvent` values out
+  of this presentation boundary; live and replay modes both present the detached
+  canonical event history returned by Factory Session invocation.
 
 **Packaged operator guidance**
 
