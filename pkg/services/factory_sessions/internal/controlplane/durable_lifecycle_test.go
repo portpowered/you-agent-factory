@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

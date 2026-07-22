@@ -15,7 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
 func TestFileStoreRestartResumesAtNextObservableEvent(t *testing.T) {

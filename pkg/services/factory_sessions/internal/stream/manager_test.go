@@ -10,7 +10,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"

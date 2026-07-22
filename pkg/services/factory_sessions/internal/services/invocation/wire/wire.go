@@ -8,10 +8,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 

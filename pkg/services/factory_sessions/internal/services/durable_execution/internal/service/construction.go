@@ -3,8 +3,8 @@ package service
 import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"

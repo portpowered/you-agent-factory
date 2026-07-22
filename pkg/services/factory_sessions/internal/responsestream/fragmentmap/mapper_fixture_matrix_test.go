@@ -8,7 +8,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"

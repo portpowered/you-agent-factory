@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
 var ErrDurableSessionListReaderRequired = errors.New("durable Factory Session list reader is required")

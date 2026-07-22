@@ -101,7 +101,7 @@ flowchart LR
     end
 
     subgraph currentSessions[Factory Session ownership]
-        currentSessionGateway[[pkg/services/factory_sessions/service]]
+        currentSessionGateway[[pkg/services/factory_sessions/internal/sessionservice]]
         currentControlPlane[[controlplane]]
         currentDataPlane[[dataplane]]
         currentExecution[[execution and durable lifecycle]]

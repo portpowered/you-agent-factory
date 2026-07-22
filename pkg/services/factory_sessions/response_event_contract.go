@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
 // Factory Session response-event contracts are published at the service root.

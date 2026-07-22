@@ -45,43 +45,43 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go",
       "owner": "backend-maintainers",
       "removalReason": "consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/fake_service_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_test.go",
       "owner": "backend-maintainers",
       "removalReason": "consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/fixtures/helpers_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/helpers_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_live_child_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/projection_consistency.go",
+      "target": "pkg/services/factory_sessions/internal/execution/projection_consistency.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/execution/resume.go",
+      "target": "pkg/services/factory_sessions/internal/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -309,37 +309,37 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "target": "pkg/services/factory_sessions/internal/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/construction.go#PrepareRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/runtimeopening/factory.go#NewFactory",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/factory.go#NewFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/open.go#openRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/service/assembly.go#Assembly.Complete",
+      "target": "pkg/services/factory_sessions/internal/sessionservice/assembly.go#Assembly.Complete",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/service/runtime_definitions.go#DefinitionCallbacks",
+      "target": "pkg/services/factory_sessions/internal/sessionservice/runtime_definitions.go#DefinitionCallbacks",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
@@ -543,129 +543,129 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/control.go#applyRuntimeAcceptedLifecycleControl",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_fixture.go#parseFakeScenarioFromFixture",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_fixture.go#sessionReadFromFixtureMap",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service.go#FakeService.applyLifecycleControl",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service.go#FakeService.mutateSessionForControl",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fake_service_test.go#TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fixtures/inspection_test.go#TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go#TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/lifecycle.go#EvaluateLifecycleControl",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/listing.go#MatchesDurableSessionListFilters",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/listing.go#matchesLifecycleTimeFilters",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution/resume.go#validateDurableResumeFacts",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/internal/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/control.go#applyRuntimeAcceptedLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_fixture.go#parseFakeScenarioFromFixture",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_fixture.go#sessionReadFromFixtureMap",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service.go#FakeService.applyLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service.go#FakeService.mutateSessionForControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_test.go#TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_test.go#TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_test.go#TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go#TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_live_child_test.go#TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/lifecycle.go#EvaluateLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/listing.go#MatchesDurableSessionListFilters",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/listing.go#matchesLifecycleTimeFilters",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/execution/resume.go#validateDurableResumeFacts",
+      "owner": "backend-maintainers",
+      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -699,19 +699,19 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/construction.go#PrepareRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/open.go#openRuntime",
+      "owner": "backend-maintainers",
+      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/projection_test.go#TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1239,43 +1239,43 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go",
       "owner": "backend-maintainers",
       "removalReason": "consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/fake_service_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_test.go",
       "owner": "backend-maintainers",
       "removalReason": "consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/fixtures/helpers_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/helpers_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_live_child_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_live_child_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/fixtures/runtime_restart_resume_test.go",
+      "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/projection_consistency.go",
+      "target": "pkg/services/factory_sessions/internal/execution/projection_consistency.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/execution/resume.go",
+      "target": "pkg/services/factory_sessions/internal/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -1467,49 +1467,49 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "target": "pkg/services/factory_sessions/internal/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/runtimeopening/construction.go#PrepareRuntime",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/construction.go#PrepareRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/runtimeopening/factory.go#NewFactory",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/factory.go#NewFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/runtimeopening/open.go#openRuntime",
+      "target": "pkg/services/factory_sessions/internal/runtimeopening/open.go#openRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/service/assembly.go#Assembly.Complete",
+      "target": "pkg/services/factory_sessions/internal/sessionservice/assembly.go#Assembly.Complete",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/service/runtime_definitions.go#DefinitionCallbacks",
+      "target": "pkg/services/factory_sessions/internal/sessionservice/runtime_definitions.go#DefinitionCallbacks",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },

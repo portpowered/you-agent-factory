@@ -1,6 +1,6 @@
 package factorysessions
 
-import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 
 // RequestPreparation is the exact Factory Sessions-owned operation used by
 // transports to hand decoded external fields to the domain for canonical

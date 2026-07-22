@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
 // SessionResponseEventStore retains immutable FactoryResponseEvent records for

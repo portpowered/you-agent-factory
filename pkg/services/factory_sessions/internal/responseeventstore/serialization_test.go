@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
 
@@ -80,7 +80,7 @@ func TestSessionResponseEventStore_OptionalEnvelopeUsesExactCanonicalByteBoundar
 func loadCanonicalResponseEventFixture(t *testing.T, name string) responseevents.FactoryResponseEvent {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "responseevents", "testdata", "fixtures", name+".json")
+	path := filepath.Join("..", "responseevents", "testdata", "fixtures", name+".json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture %q: %v", path, err)

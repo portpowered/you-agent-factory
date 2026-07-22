@@ -29,7 +29,7 @@ func TestRunRejectsUnapprovedPeerServiceSubpackageImport(t *testing.T) {
 	writeGoImportFile(
 		t,
 		repoRoot,
-		"pkg/services/factory_sessions/service/runtime.go",
+		"pkg/services/factory_sessions/internal/sessionservice/runtime.go",
 		"service",
 		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/contracts",
 	)
@@ -161,7 +161,7 @@ func TestRunAllowsRecordedPeerServiceMigrationEdge(t *testing.T) {
 		t.Fatalf("create services root: %v", err)
 	}
 	const (
-		filePath   = "pkg/services/factory_sessions/service/runtime.go"
+		filePath   = "pkg/services/factory_sessions/internal/sessionservice/runtime.go"
 		importPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/contracts"
 	)
 	writeGoImportFile(t, repoRoot, filePath, "service", importPath)
@@ -185,7 +185,7 @@ func TestRunRejectsStalePeerServiceMigrationEdge(t *testing.T) {
 		t.Fatalf("create services root: %v", err)
 	}
 	const (
-		filePath   = "pkg/services/factory_sessions/service/runtime.go"
+		filePath   = "pkg/services/factory_sessions/internal/sessionservice/runtime.go"
 		importPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/contracts"
 	)
 	writePeerServiceBaseline(t, repoRoot, filePath, importPath, "factory_sessions", "factory_runtime")
@@ -209,7 +209,7 @@ func TestRunRejectsUnrecordedCrossOwnerTestServiceInternal(t *testing.T) {
 		repoRoot,
 		"pkg/transports/cli/session/resume_test.go",
 		"session_test",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
 	)
 
 	stderr := &bytes.Buffer{}
@@ -219,7 +219,7 @@ func TestRunRejectsUnrecordedCrossOwnerTestServiceInternal(t *testing.T) {
 	}
 	for _, want := range []string{
 		"prohibited test import of service internals",
-		"pkg/services/factory_sessions/execution/runtimepersist",
+		"pkg/services/factory_sessions/internal/execution/runtimepersist",
 		"use the service root contract",
 	} {
 		if !strings.Contains(stderr.String(), want) {
@@ -251,7 +251,7 @@ func TestRunAllowsRecordedTestServiceInternalAndRejectsStaleEntry(t *testing.T) 
 
 	const (
 		filePath   = "pkg/transports/cli/session/resume_test.go"
-		importPath = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
+		importPath = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	)
 	t.Run("active", func(t *testing.T) {
 		repoRoot := t.TempDir()
@@ -286,11 +286,11 @@ func TestRunAllowsOwningServiceAndWireTestsToImportServiceInternals(t *testing.T
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	const importPath = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
+	const importPath = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	writeGoImportFile(
 		t,
 		repoRoot,
-		"pkg/services/factory_sessions/execution/harness_test.go",
+		"pkg/services/factory_sessions/internal/execution/harness_test.go",
 		"execution",
 		importPath,
 	)
@@ -306,8 +306,8 @@ func TestRunRejectsRetiredExecutionTestHarnessPackageAndImport(t *testing.T) {
 	t.Parallel()
 
 	const (
-		packagePath = "pkg/services/factory_sessions/execution/testharness"
-		importPath  = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/testharness"
+		packagePath = "pkg/services/factory_sessions/internal/execution/testharness"
+		importPath  = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/testharness"
 	)
 	t.Run("package", func(t *testing.T) {
 		repoRoot := t.TempDir()
@@ -422,7 +422,7 @@ func TestPeerServiceImportBaselineRejectsWildcardAndUnrecognizedMigrationContrac
 	}
 
 	entry.ImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
-	entry.FilePath = "pkg/services/factory_sessions/service.go"
+	entry.FilePath = "pkg/services/factory_sessions/internal/sessionservice.go"
 	entry.Stage = "unreviewed migration"
 	if err := validatePeerServiceImportBaselineEntry(entry); err == nil || !strings.Contains(err.Error(), "recognized peer-service migration contract") {
 		t.Fatalf("validate migration contract error = %v, want exact stage rejection", err)

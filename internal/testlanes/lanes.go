@@ -28,13 +28,13 @@ var specializedPackageSegments = map[string]Lane{
 }
 
 var explicitlyClassifiedPackages = map[string]Lane{
-	ModulePath + "/packages/packaged-factories":                      LaneMaintenance,
-	ModulePath + "/pkg/services/factory_sessions/execution/fixtures": LaneIntegration,
-	ModulePath + "/pkg/transports/cli/baseline":                      LaneFunctional,
-	ModulePath + "/pkg/transports/cli/clicontract":                   LaneContract,
-	ModulePath + "/pkg/transports/cli/cliinputs":                     LaneFunctional,
-	ModulePath + "/pkg/transports/cli/climanifestgen":                LaneContract,
-	ModulePath + "/pkg/transports/cli/commandidentity":               LaneFunctional,
+	ModulePath + "/packages/packaged-factories":                               LaneMaintenance,
+	ModulePath + "/pkg/services/factory_sessions/internal/execution/fixtures": LaneIntegration,
+	ModulePath + "/pkg/transports/cli/baseline":                               LaneFunctional,
+	ModulePath + "/pkg/transports/cli/clicontract":                            LaneContract,
+	ModulePath + "/pkg/transports/cli/cliinputs":                              LaneFunctional,
+	ModulePath + "/pkg/transports/cli/climanifestgen":                         LaneContract,
+	ModulePath + "/pkg/transports/cli/commandidentity":                        LaneFunctional,
 }
 
 // ForImportPath returns the primary lane for a repository package. Packages

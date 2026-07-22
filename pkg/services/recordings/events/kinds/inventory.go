@@ -80,7 +80,7 @@ func ExcludedNonPublicFactoryEventKinds() []ExcludedNonPublicKind {
 		{
 			Name:     "FactoryResponseEvent",
 			Category: "response-stream",
-			Evidence: "FactoryResponseEvent is an ephemeral Factory Session observation stream with its own OpenAPI schema family under api/components/schemas/response-events/. It is intentionally separate from canonical FactoryEvent replay state; see pkg/services/factory_sessions/responseevents/types.go and pkg/services/factory_sessions/internal/responsestream/types.go.",
+			Evidence: "FactoryResponseEvent is an ephemeral Factory Session observation stream with its own OpenAPI schema family under api/components/schemas/response-events/. It is intentionally separate from canonical FactoryEvent replay state; see pkg/services/factory_sessions/internal/responseevents/types.go and pkg/services/factory_sessions/internal/responsestream/types.go.",
 		},
 		{
 			Name:     "responsestream.EventKind",

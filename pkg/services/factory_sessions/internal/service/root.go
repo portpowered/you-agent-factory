@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
-	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
 // Root retains process-scoped Factory Sessions dependencies. It is inert until

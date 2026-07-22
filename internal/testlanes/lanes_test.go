@@ -23,7 +23,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "root contracts", importPath: ModulePath + "/contracts", want: LaneContract, wantOK: true},
 		{name: "CLI production baseline", importPath: ModulePath + "/pkg/transports/cli/baseline", want: LaneFunctional, wantOK: true},
 		{name: "CLI generated drift", importPath: ModulePath + "/pkg/transports/cli/climanifestgen", want: LaneContract, wantOK: true},
-		{name: "runtime execution fixtures", importPath: ModulePath + "/pkg/services/factory_sessions/execution/fixtures", want: LaneIntegration, wantOK: true},
+		{name: "runtime execution fixtures", importPath: ModulePath + "/pkg/services/factory_sessions/internal/execution/fixtures", want: LaneIntegration, wantOK: true},
 		{name: "functional", importPath: ModulePath + "/tests/functional/runtime_api", want: LaneFunctional, wantOK: true},
 		{name: "functional support", importPath: ModulePath + "/tests/functional/internal/support", want: LaneMaintenance, wantOK: true},
 		{name: "stress", importPath: ModulePath + "/tests/stress/runtime", want: LaneStress, wantOK: true},

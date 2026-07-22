@@ -3,7 +3,7 @@ package factorysessions
 import (
 	"io/fs"
 
-	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
 // ExecutionOpeningFileSystem is the exact host-filesystem capability used to

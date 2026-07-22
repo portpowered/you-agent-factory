@@ -31,8 +31,8 @@ func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *te
 	// registries, concrete stores, projections, and runtime state remain forbidden.
 	allowedFactorySessionLeaves := map[string]struct{}{
 		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors":        {},
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations":   {},
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents": {},
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations":            {},
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents": {},
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		if _, allowed := allowedFactorySessionLeaves[dep]; allowed {

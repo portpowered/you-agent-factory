@@ -14,7 +14,7 @@ func TestScanRejectsInitializerImplementationAndTransportConstruction(t *testing
 	root := fixtureRepository(t, map[string]string{
 		"pkg/initializer/application/build.go": `package application
 import (
-  execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+  execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
   runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 func build() {
@@ -42,7 +42,7 @@ func coordinate(open Open) (sessions.ExecutionService, error) {
   return open(context.Background())
 }`,
 		"pkg/wire/wire.go": `package wire
-import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 func inject() { _ = execution.NewService() }`,
 	})
 

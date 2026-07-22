@@ -543,15 +543,15 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution",
       "minimum": 45.56
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/livechild",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild",
       "minimum": 77.38
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/recordingreplay",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -561,7 +561,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
       "minimum": 67.34
     },
     {
@@ -599,7 +599,7 @@
       "minimum": 70.21
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents",
       "minimum": 100.00
     },
     {
@@ -637,19 +637,19 @@
       "minimum": 70.49
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
       "minimum": 58.72
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/invocation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
       "minimum": 4.10
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/operatordefaults",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
       "minimum": 73.13
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
       "minimum": 44.15
     },
     {

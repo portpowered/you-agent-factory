@@ -3109,26 +3109,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/execution",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/responseevents",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/runtimeopening",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/service",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/globalconfiginventory",
       "target": "pkg/services/operator_settings"
     },

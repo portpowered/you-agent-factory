@@ -264,7 +264,7 @@ test-maintenance:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/loading/runtimetests ./pkg/services/factory_definitions/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/loading/runtimetests ./pkg/services/factory_definitions/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/factory_runtime/ingest -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
