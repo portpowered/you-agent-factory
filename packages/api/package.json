@@ -1,6 +1,6 @@
 {
   "name": "@you-agent-factory/api",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Raw JSON and YAML contract artifacts for you-agent-factory consumers.",
   "license": "MIT",
   "repository": {

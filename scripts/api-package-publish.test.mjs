@@ -13,7 +13,7 @@ import { RECONCILIATION_OUTCOMES } from "./api-package-registry.mjs";
 
 const evidence = {
 	packageName: "@you-agent-factory/api",
-	candidateVersion: "0.0.0-dev.42.0123456789ab",
+	candidateVersion: "0.0.2-dev.42.0123456789ab",
 	sourceCommit: "0123456789abcdef0123456789abcdef01234567",
 	contractDigest: `sha256:${"a".repeat(64)}`,
 	artifactDigest: `sha256:${"b".repeat(64)}`,

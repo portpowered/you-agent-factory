@@ -1,6 +1,6 @@
 {
   "name": "@you-agent-factory/components",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Domain-free React components, design tokens, and utilities for public visualizers.",
   "license": "MIT",
   "repository": {
@@ -111,6 +111,7 @@
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",
+    "prepack": "bun run build",
     "storybook": "storybook dev -p 6017",
     "test": "bun run test:unit && bun run check:package-boundary && bun run check:package-dependency-direction",
     "test:build": "bun run build && vitest run --config vitest.build.config.ts",

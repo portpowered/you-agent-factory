@@ -29,7 +29,7 @@ async function candidateFixture(t) {
 		tarballPath,
 		evidence: {
 			packageName: "@you-agent-factory/api",
-			candidateVersion: "0.0.0-dev.42.0123456789ab",
+			candidateVersion: "0.0.2-dev.42.0123456789ab",
 			sourceCommit,
 			contractDigest: digest("contract manifest"),
 			artifactDigest: digest(contents),

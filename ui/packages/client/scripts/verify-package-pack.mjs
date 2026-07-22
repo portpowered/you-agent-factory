@@ -68,7 +68,6 @@ async function runPack(destination) {
       ...npm.args,
       "pack",
       "--json",
-      "--ignore-scripts",
       "--pack-destination",
       destination,
       packageRoot,
@@ -122,11 +121,7 @@ async function verifyRuntimeBoundary(actualFiles, manifest) {
 }
 
 export async function packAndVerify(destination) {
-  await execFileAsync(
-    process.execPath,
-    [path.join(packageRoot, "scripts", "build-package.mjs")],
-    { cwd: packageRoot, maxBuffer: 10 * 1024 * 1024 },
-  );
+  await rm(path.join(packageRoot, "dist"), { force: true, recursive: true });
   await mkdir(destination, { recursive: true });
   const report = await runPack(destination);
   const actualFiles = report.files.map(({ path: file }) => file).sort();

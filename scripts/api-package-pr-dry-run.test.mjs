@@ -22,7 +22,7 @@ test("pull request dry run verifies the exact prepared candidate without a regis
 	const tarballPath = join(outputDirectory, "candidate.tgz");
 	const evidence = {
 		packageName: "@you-agent-factory/api",
-		candidateVersion: "0.0.0-dev.42.0123456789ab",
+		candidateVersion: "0.0.2-dev.42.0123456789ab",
 		sourceCommit,
 		contractDigest: `sha256:${"a".repeat(64)}`,
 		artifactDigest: `sha256:${"b".repeat(64)}`,

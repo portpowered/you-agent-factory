@@ -109,13 +109,14 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Prepare the canonical frontend package release candidates
+      - name: Prepare all canonical npm package release candidates
         run: >-
           make ui-public-package-publish-prepare
           PACKAGE_VERSION="${{ needs.resolve-release-tag.outputs.release_version }}"
           PACKAGE_OUTPUT=".artifacts/public-release-candidate"
+          PACKAGE_PREPARE_ARGS="--include-release-packages"
 
-      - name: Publish and verify the canonical frontend package family
+      - name: Publish and verify all canonical npm packages
         working-directory: ui
         run: >-
           npm run publish:public-packages --

@@ -640,7 +640,7 @@ ui-public-package-release:
 	cd ui && $(UI_SCRIPT) verify:public-packages
 
 ui-public-package-publish-prepare:
-	cd ui && $(UI_SCRIPT) publish:public-packages:prepare -- --version "$(PACKAGE_VERSION)" --output-directory "$(abspath $(or $(PACKAGE_OUTPUT),.artifacts/public-packages))"
+	cd ui && $(UI_SCRIPT) publish:public-packages:prepare -- --version "$(PACKAGE_VERSION)" --output-directory "$(abspath $(or $(PACKAGE_OUTPUT),.artifacts/public-packages))" $(PACKAGE_PREPARE_ARGS)
 
 clean:
 	$(GO) clean ./...

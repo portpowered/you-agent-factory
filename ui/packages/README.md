@@ -226,7 +226,7 @@ make ui-public-package-publish-prepare \
 ```
 
 Pull requests run the same candidate preparation as a dry run. Successful
-protected-main builds publish an immutable `0.0.0-dev.<run>.<commit>` family
+protected-main builds publish an immutable `0.0.2-dev.<run>.<commit>` family
 under the npm `dev` tag. A successful `vX.Y.Z` release-candidate workflow lets
 the release workflow publish all five packages at `X.Y.Z` under `latest` using
 npm trusted publishing. Internal package dependency and peer-dependency pins

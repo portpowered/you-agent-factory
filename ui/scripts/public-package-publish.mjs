@@ -12,20 +12,71 @@ const semverPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export const PUBLIC_PACKAGES = Object.freeze([
-  { name: "@you-agent-factory/client", directory: "client" },
-  { name: "@you-agent-factory/factory-replay", directory: "factory-replay" },
+  { name: "@you-agent-factory/client", directory: "client", build: true },
+  {
+    name: "@you-agent-factory/factory-replay",
+    directory: "factory-replay",
+    build: true,
+  },
   {
     name: "@you-agent-factory/factory-emulator",
     directory: "factory-emulator",
+    build: true,
   },
-  { name: "@you-agent-factory/components", directory: "components" },
+  {
+    name: "@you-agent-factory/components",
+    directory: "components",
+    build: true,
+  },
   {
     name: "@you-agent-factory/factory-visualizers",
     directory: "factory-visualizers",
+    build: true,
   },
 ]);
 
-const publicPackageNames = new Set(PUBLIC_PACKAGES.map(({ name }) => name));
+export const RELEASE_PUBLIC_PACKAGES = Object.freeze([
+  {
+    name: "@you-agent-factory/api",
+    directory: "api",
+    sourceDirectory: "../packages/api",
+    build: false,
+  },
+  {
+    name: "@you-agent-factory/packaged-factories",
+    directory: "packaged-factories",
+    sourceDirectory: "../packages/packaged-factories",
+    build: false,
+  },
+  ...PUBLIC_PACKAGES,
+]);
+
+const publicPackageNames = new Set(
+  RELEASE_PUBLIC_PACKAGES.map(({ name }) => name),
+);
+
+function collectExportTargets(exports) {
+  if (typeof exports === "string") return [exports.replace(/^\.\//, "")];
+  if (!exports || typeof exports !== "object") return [];
+  return Object.values(exports).flatMap(collectExportTargets);
+}
+
+function matchesExportTarget(file, target) {
+  if (!target.includes("*")) return file === target;
+  const [prefix, suffix] = target.split("*", 2);
+  return file.startsWith(prefix) && file.endsWith(suffix);
+}
+
+export function assertPackedExportTargets(packageName, exports, files) {
+  const packedFiles = new Set(
+    (files ?? []).map(({ path: file }) => file?.replaceAll("\\", "/")),
+  );
+  for (const target of collectExportTargets(exports)) {
+    if (![...packedFiles].some((file) => matchesExportTarget(file, target))) {
+      throw new Error(`${packageName} candidate omits export target ${target}`);
+    }
+  }
+}
 
 export function assertPublishVersion(version) {
   if (typeof version !== "string" || !semverPattern.test(version)) {
@@ -89,9 +140,14 @@ function runNpm(args, options = {}) {
 }
 
 async function stagePackage({ packageSpec, version, stagingRoot }) {
-  const sourceDirectory = path.join(uiRoot, "packages", packageSpec.directory);
+  const sourceDirectory = path.resolve(
+    uiRoot,
+    packageSpec.sourceDirectory ?? `packages/${packageSpec.directory}`,
+  );
   const stagedDirectory = path.join(stagingRoot, packageSpec.directory);
-  await run("bun", ["run", "build"], { cwd: sourceDirectory });
+  if (packageSpec.build) {
+    await run("bun", ["run", "build"], { cwd: sourceDirectory });
+  }
   await cp(sourceDirectory, stagedDirectory, {
     recursive: true,
     filter: (entry) => !entry.split(path.sep).includes("node_modules"),
@@ -105,12 +161,13 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
     );
   }
   await writeFile(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
-  return stagedDirectory;
+  return { manifest: patched, stagedDirectory };
 }
 
 export async function preparePublicPackageCandidates({
   version,
   outputDirectory,
+  includeReleasePackages = false,
 }) {
   assertPublishVersion(version);
   const resolvedOutput = path.resolve(outputDirectory);
@@ -121,10 +178,13 @@ export async function preparePublicPackageCandidates({
   await run("bun", ["run", "link:public-package-dependencies"], {
     cwd: uiRoot,
   });
+  const packageSpecs = includeReleasePackages
+    ? RELEASE_PUBLIC_PACKAGES
+    : PUBLIC_PACKAGES;
   const candidates = [];
   try {
-    for (const packageSpec of PUBLIC_PACKAGES) {
-      const stagedDirectory = await stagePackage({
+    for (const packageSpec of packageSpecs) {
+      const { manifest, stagedDirectory } = await stagePackage({
         packageSpec,
         version,
         stagingRoot,
@@ -134,6 +194,7 @@ export async function preparePublicPackageCandidates({
           "pack",
           stagedDirectory,
           "--json",
+          "--ignore-scripts",
           "--pack-destination",
           resolvedOutput,
         ],
@@ -145,6 +206,7 @@ export async function preparePublicPackageCandidates({
           `npm pack returned unexpected identity for ${packageSpec.name}`,
         );
       }
+      assertPackedExportTargets(report.name, manifest.exports, report.files);
       candidates.push({
         name: report.name,
         version: report.version,
@@ -153,7 +215,11 @@ export async function preparePublicPackageCandidates({
         shasum: report.shasum,
       });
     }
-    const evidence = { version, packages: candidates };
+    const evidence = {
+      version,
+      scope: includeReleasePackages ? "release" : "ui",
+      packages: candidates,
+    };
     await writeFile(
       path.join(resolvedOutput, "public-package-candidates.json"),
       `${JSON.stringify(evidence, null, 2)}\n`,
@@ -216,7 +282,13 @@ export async function publishPublicPackageCandidates({
     ),
   );
   assertPublishVersion(evidence.version);
-  if (evidence.packages.length !== PUBLIC_PACKAGES.length) {
+  const packageSpecs =
+    evidence.scope === "release"
+      ? RELEASE_PUBLIC_PACKAGES
+      : evidence.scope === "ui"
+        ? PUBLIC_PACKAGES
+        : null;
+  if (!packageSpecs || evidence.packages.length !== packageSpecs.length) {
     throw new Error("Public package candidate set is incomplete");
   }
   if (
@@ -227,7 +299,7 @@ export async function publishPublicPackageCandidates({
       "Public package candidate set contains duplicate package names",
     );
   }
-  for (const packageSpec of PUBLIC_PACKAGES) {
+  for (const packageSpec of packageSpecs) {
     const candidate = evidence.packages.find(
       ({ name }) => name === packageSpec.name,
     );
@@ -272,6 +344,7 @@ async function main() {
       version: { type: "string" },
       "output-directory": { type: "string" },
       "candidate-directory": { type: "string" },
+      "include-release-packages": { type: "boolean", default: false },
       tag: { type: "string" },
       provenance: { type: "boolean", default: false },
     },
@@ -282,6 +355,7 @@ async function main() {
       ? await preparePublicPackageCandidates({
           version: values.version,
           outputDirectory: values["output-directory"],
+          includeReleasePackages: values["include-release-packages"],
         })
       : values.action === "publish"
         ? await publishPublicPackageCandidates({

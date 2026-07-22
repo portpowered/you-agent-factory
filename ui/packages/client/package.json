@@ -1,6 +1,6 @@
 {
   "name": "@you-agent-factory/client",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Transport-neutral Factory contracts and recording utilities.",
   "license": "MIT",
   "repository": {
@@ -34,6 +34,7 @@
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:generated": "node scripts/generate-contracts.mjs --check",
     "generate": "node scripts/generate-contracts.mjs",
+    "prepack": "bun run build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "verify": "bun run check:generated && bun run typecheck && bun run test && bun run build && bun run check:pack && bun run check:installed-consumer"

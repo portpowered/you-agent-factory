@@ -80,7 +80,7 @@ test("preparation packs one attributable candidate without mutating package sour
 	assert.deepEqual(await readFile(contractManifestPath), contractManifestBefore);
 	assert.deepEqual(result.evidence, {
 		packageName: "@you-agent-factory/api",
-		candidateVersion: "0.0.0-dev.9876543210.0123456789ab",
+		candidateVersion: "0.0.2-dev.9876543210.0123456789ab",
 		sourceCommit,
 		contractDigest: digest(contractManifestBefore),
 		artifactDigest: digest(await readFile(result.tarballPath)),

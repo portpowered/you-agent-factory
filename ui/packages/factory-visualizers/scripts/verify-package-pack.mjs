@@ -39,15 +39,8 @@ async function npmCommand() {
 }
 
 export async function packAndVerify(destination) {
-  await execFileAsync(
-    process.execPath,
-    [path.join(packageRoot, "scripts", "build-package.mjs")],
-    {
-      cwd: packageRoot,
-      maxBuffer: 20 * 1024 * 1024,
-    },
-  );
   await verifyPackageBoundary();
+  await rm(path.join(packageRoot, "dist"), { force: true, recursive: true });
   const npm = await npmCommand();
   const { stdout } = await execFileAsync(
     npm.executable,
@@ -55,7 +48,6 @@ export async function packAndVerify(destination) {
       ...npm.args,
       "pack",
       "--json",
-      "--ignore-scripts",
       "--pack-destination",
       destination,
       packageRoot,

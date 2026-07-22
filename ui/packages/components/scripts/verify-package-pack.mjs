@@ -171,22 +171,7 @@ export async function validatePackedInventory({
   return actualFiles;
 }
 
-async function runBuild(packageRoot) {
-  try {
-    await execFileAsync(
-      process.execPath,
-      [path.join(packageRoot, "scripts", "build-package.mjs")],
-      { cwd: packageRoot, maxBuffer: 10 * 1024 * 1024 },
-    );
-  } catch (error) {
-    throw new Error(
-      `[components-package-pack] package build failed\n${error.stderr?.trim() ?? error.message}`,
-      { cause: error },
-    );
-  }
-}
-
-async function runNpmPack(packageRoot, packDestination) {
+async function runNpmPack(packageRoot, packDestination, ignoreScripts) {
   let npmExecutable = "npm";
   let npmArguments = [];
   if (process.platform === "win32") {
@@ -211,7 +196,7 @@ async function runNpmPack(packageRoot, packDestination) {
         ...npmArguments,
         "pack",
         "--json",
-        "--ignore-scripts",
+        ...(ignoreScripts ? ["--ignore-scripts"] : []),
         "--pack-destination",
         packDestination,
         packageRoot,
@@ -235,9 +220,11 @@ export async function packAndVerify({
   const packageRoot = path.resolve(packageDirectory);
   const destination = path.resolve(packDestination);
   await mkdir(destination, { recursive: true });
-  if (build) await runBuild(packageRoot);
+  if (build) {
+    await rm(path.join(packageRoot, "dist"), { force: true, recursive: true });
+  }
 
-  const stdout = await runNpmPack(packageRoot, destination);
+  const stdout = await runNpmPack(packageRoot, destination, !build);
   let reports;
   try {
     reports = JSON.parse(stdout);

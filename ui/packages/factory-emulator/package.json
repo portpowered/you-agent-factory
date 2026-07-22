@@ -1,6 +1,6 @@
 {
   "name": "@you-agent-factory/factory-emulator",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Deterministic Factory emulator contracts and caller-owned event sinks.",
   "license": "MIT",
   "repository": {
@@ -39,6 +39,7 @@
     "check:runtime-reference-conformance": "node scripts/check-runtime-reference-conformance.mjs",
     "generate": "node scripts/generate-scenario-schema.mjs",
     "lint": "biome check src scripts vitest.config.ts",
+    "prepack": "bun run build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "verify": "bun run verify:release && bun run check:changed-paths",
@@ -49,7 +50,7 @@
     "ajv-formats": "^3.0.1"
   },
   "peerDependencies": {
-    "@you-agent-factory/client": "0.0.0"
+    "@you-agent-factory/client": "0.0.2"
   },
   "peerDependenciesMeta": {
     "@you-agent-factory/client": {

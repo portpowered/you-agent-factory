@@ -9,7 +9,7 @@
         "vitest": "4.1.3",
       },
       "peerDependencies": {
-        "@you-agent-factory/client": "0.0.0",
+        "@you-agent-factory/client": "0.0.2",
       },
       "optionalPeers": [
         "@you-agent-factory/client",
