@@ -3348,7 +3348,7 @@ func phaseEventStatuses(t *testing.T, events []json.RawMessage) []string {
 		if err := json.Unmarshal(raw, &event); err != nil {
 			t.Fatalf("decode phase event: %v", err)
 		}
-		if event.Context.PhaseID != nil {
+		if event.Context.PhaseID != nil && event.Payload.PhaseStatus != "" {
 			statuses = append(statuses, *event.Context.PhaseID+":"+event.Payload.PhaseStatus)
 		}
 	}
@@ -3389,6 +3389,76 @@ func TestJavaScriptRuntimeService_FactoryEventObserverDeliversOnlyUnseenEvents(t
 	}
 	service.unregisterFactoryEventConsumer("missing-session")
 	service.presentCurrentFactoryEvents("missing-session")
+}
+
+func TestRuntimeRecordEvents_ReconcileAppendOnlyPhaseCheckpointPhaseHistory(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 7, 22, 20, 0, 0, 0, time.UTC)
+	const sessionID = "dur-sess-append-only-events-001"
+	records := []factory.JavaScriptRuntimeRecord{
+		{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "plan"}},
+		{Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{ID: "checkpoint-plan", Label: "plan-ready"}},
+		{Sequence: 3, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "execute"}},
+	}
+	state := &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID: sessionID, Status: LifecycleStatusRunning,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+			Dialect:          "you-workflow-v1", SourceHash: "sha256:append-only",
+			Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		result: ResultReadResult{
+			SessionID: sessionID, SessionStatus: LifecycleStatusRunning,
+			ResultStatus: ResultStatusNotReady,
+		},
+		checkpointSummary: &factory.JavaScriptCheckpointSummary{
+			CheckpointID: "checkpoint-plan", CreatedAt: startedAt.Add(time.Second),
+		},
+		runtimeRecords: append(append([]factory.JavaScriptRuntimeRecord(nil), records...), records...),
+		eventConsumer:  func([]interfaces.FactoryEvent) {},
+	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	running := rebuildRuntimeSessionCanonicalEvents(state)
+	assertStrictCanonicalSequences(t, running)
+	if got, want := phaseEventStatuses(t, running), []string{"plan:ACTIVE", "plan:COMPLETED", "execute:ACTIVE"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("running phase transitions = %v, want %v", got, want)
+	}
+
+	state.events = running
+	state.session.Status = LifecycleStatusSucceeded
+	state.result.SessionStatus = LifecycleStatusSucceeded
+	state.result.ResultStatus = ResultStatusFinal
+	terminal := rebuildRuntimeSessionCanonicalEvents(state)
+	assertStrictCanonicalSequences(t, terminal)
+	if got, want := phaseEventStatuses(t, terminal), []string{"plan:ACTIVE", "plan:COMPLETED", "execute:ACTIVE", "execute:COMPLETED"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("terminal phase transitions = %v, want %v", got, want)
+	}
+	if len(terminal) <= len(running) {
+		t.Fatalf("terminal events = %d, want append beyond %d running events", len(terminal), len(running))
+	}
+	for index := range running {
+		if string(terminal[index]) != string(running[index]) {
+			t.Fatalf("published event %d was mutated:\nrunning=%s\nterminal=%s", index, running[index], terminal[index])
+		}
+	}
+}
+
+func assertStrictCanonicalSequences(t *testing.T, events []json.RawMessage) {
+	t.Helper()
+	previousSequence := 0
+	previousSessionSequence := -1
+	for index, raw := range events {
+		var event interfaces.FactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatalf("decode event %d: %v", index, err)
+		}
+		if event.Context.Sequence <= previousSequence || event.Context.SessionSequence == nil ||
+			*event.Context.SessionSequence <= previousSessionSequence {
+			t.Fatalf("event %d sequence context is not increasing: %#v", index, event.Context)
+		}
+		previousSequence = event.Context.Sequence
+		previousSessionSequence = *event.Context.SessionSequence
+	}
 }
 
 func TestFakeService_ResumeInterruptedSession_ReturnsUnsupported(t *testing.T) {

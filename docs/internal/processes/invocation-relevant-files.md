@@ -85,6 +85,13 @@ response-stream output.
   execution publishes canonical phase/checkpoint updates through the same
   invocation-local callback, and finite replay history enters that consumer
   before the separate terminal response is finalized.
+- JavaScript canonical history must remain append-only while an invocation-local
+  consumer is attached. Build phase/checkpoint events in runtime-record order,
+  represent phase completion as a distinct immutable transition, and assign
+  sequence context only when appending; never resequence or replace a record
+  that may already have reached stdout. Prove changes with a real
+  phase → checkpoint → phase execution whose live events exactly equal its
+  durable replay in IDs, types, payloads, and strictly increasing sequence data.
 - Preserve the canonical event envelope and sequence context, but recursively
   omit provider response, diagnostic, Provider Session, delta, and tool-call
   fields from the JSON presentation payload before encoding. Keep this pure

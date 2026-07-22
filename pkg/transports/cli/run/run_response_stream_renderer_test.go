@@ -19,7 +19,7 @@ import (
 )
 
 func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *testing.T) {
-	events := canonicalJavaScriptFactoryEvents()
+	events := canonicalJavaScriptPhaseCheckpointPhaseEvents()
 
 	outputs := make([]string, 0, 2)
 	for _, source := range []struct {
@@ -37,7 +37,13 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				if target.ReplayPath != source.replayPath {
 					t.Fatalf("ReplayPath = %q, want %q", target.ReplayPath, source.replayPath)
 				}
-				consume(events)
+				if source.name == "live" {
+					consume(events[:2])
+					consume(events[2:4])
+					consume(events[4:])
+				} else {
+					consume(events)
+				}
 				return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
 					RequestID: "request-js", Status: interfaces.InvocationTerminalStatusCompleted,
 					PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
@@ -54,11 +60,58 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				t.Fatalf("run Factory invocation: %v", err)
 			}
 			outputs = append(outputs, output.String())
-			assertCanonicalJavaScriptPresentation(t, output.String())
+			assertPhaseCheckpointPhasePresentation(t, output.String())
 		})
 	}
 	if outputs[0] != outputs[1] {
 		t.Fatalf("live and replay presentation differ:\nlive=%s\nreplay=%s", outputs[0], outputs[1])
+	}
+}
+
+func assertPhaseCheckpointPhasePresentation(t *testing.T, output string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 7 {
+		t.Fatalf("records = %d, want six Factory Events and one terminal result:\n%s", len(lines), output)
+	}
+	wantTypes := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+	}
+	previousSequence := 0
+	previousSessionSequence := 0
+	for index, wantType := range wantTypes {
+		var record factoryEventJSONRecord
+		if err := json.Unmarshal([]byte(lines[index]), &record); err != nil {
+			t.Fatalf("decode Factory Event record %d: %v", index, err)
+		}
+		if record.RecordType != factoryEventJSONRecordType || record.Event.Type != wantType {
+			t.Fatalf("record %d = %#v, want %s %s", index, record, factoryEventJSONRecordType, wantType)
+		}
+		if record.Event.Context.Sequence <= previousSequence || record.Event.Context.SessionSequence == nil ||
+			*record.Event.Context.SessionSequence <= previousSessionSequence {
+			t.Fatalf("record %d sequence context is not strictly increasing: %#v", index, record.Event.Context)
+		}
+		previousSequence = record.Event.Context.Sequence
+		previousSessionSequence = *record.Event.Context.SessionSequence
+	}
+	var terminalPhase interfaces.OrchestratorPhaseChangedEventPayload
+	var terminalRecord factoryEventJSONRecord
+	if err := json.Unmarshal([]byte(lines[len(wantTypes)-1]), &terminalRecord); err != nil {
+		t.Fatalf("decode terminal phase record: %v", err)
+	}
+	if err := json.Unmarshal(terminalRecord.Event.Payload, &terminalPhase); err != nil {
+		t.Fatalf("decode terminal phase payload: %v", err)
+	}
+	if terminalPhase.PhaseStatus != interfaces.OrchestratorPhaseStatusCompleted {
+		t.Fatalf("terminal phase status = %q, want COMPLETED", terminalPhase.PhaseStatus)
+	}
+	if !strings.Contains(lines[6], `"recordType":"invocation_result"`) {
+		t.Fatalf("terminal invocation record = %q", lines[6])
 	}
 }
 
@@ -268,6 +321,25 @@ func canonicalJavaScriptFactoryEvents() []interfaces.FactoryEvent {
 		}),
 	}
 	events[1].Context.PhaseName = &phaseName
+	return events
+}
+
+func canonicalJavaScriptPhaseCheckpointPhaseEvents() []interfaces.FactoryEvent {
+	plan := "plan"
+	execute := "execute"
+	events := []interfaces.FactoryEvent{
+		canonicalFactoryEventWithPayload(1, interfaces.FactoryEventTypeSessionStarted, interfaces.FactorySessionStartedEventPayload{}),
+		canonicalFactoryEventWithPayload(2, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.OrchestratorPhaseChangedEventPayload{PhaseStatus: interfaces.OrchestratorPhaseStatusActive}),
+		canonicalFactoryEventWithPayload(3, interfaces.FactoryEventTypeOrchestratorCheckpointWritten, interfaces.OrchestratorCheckpointWrittenEventPayload{Label: "plan-ready", ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable}),
+		canonicalFactoryEventWithPayload(4, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.OrchestratorPhaseChangedEventPayload{PhaseStatus: interfaces.OrchestratorPhaseStatusCompleted}),
+		canonicalFactoryEventWithPayload(5, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.OrchestratorPhaseChangedEventPayload{PhaseStatus: interfaces.OrchestratorPhaseStatusActive}),
+		canonicalFactoryEventWithPayload(6, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.OrchestratorPhaseChangedEventPayload{PhaseStatus: interfaces.OrchestratorPhaseStatusCompleted}),
+	}
+	events[1].Context.PhaseName = &plan
+	events[2].Context.PhaseName = &plan
+	events[3].Context.PhaseName = &plan
+	events[4].Context.PhaseName = &execute
+	events[5].Context.PhaseName = &execute
 	return events
 }
 

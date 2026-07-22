@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -15,6 +16,64 @@ import (
 	"strings"
 	"time"
 )
+
+func reconcileAppendOnlyCanonicalEvents(previous, projected []json.RawMessage) []json.RawMessage {
+	if len(previous) == 0 {
+		return resequenceCanonicalEvents(cloneRawMessages(projected))
+	}
+	result := cloneRawMessages(previous)
+	seen := make(map[string]struct{}, len(result))
+	for _, raw := range result {
+		if id := canonicalEventID(raw); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	for _, raw := range projected {
+		id := canonicalEventID(raw)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, resequenceCanonicalEvent(raw, len(result)))
+	}
+	return result
+}
+
+func canonicalEventID(raw json.RawMessage) string {
+	var event struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(raw, &event) != nil {
+		return ""
+	}
+	return strings.TrimSpace(event.ID)
+}
+
+func resequenceCanonicalEvent(raw json.RawMessage, index int) json.RawMessage {
+	var event canonicalFactoryEvent
+	if json.Unmarshal(raw, &event) != nil {
+		return append(json.RawMessage(nil), raw...)
+	}
+	event.Context.Sequence = index + 1
+	event.Context.Tick = index + 1
+	event.Context.SessionSequence = intPtr(index)
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return append(json.RawMessage(nil), raw...)
+	}
+	return encoded
+}
+
+func cloneRawMessages(events []json.RawMessage) []json.RawMessage {
+	cloned := make([]json.RawMessage, len(events))
+	for index, event := range events {
+		cloned[index] = append(json.RawMessage(nil), event...)
+	}
+	return cloned
+}
 
 // ErrServiceNotConfigured reports an application composition graph that did
 // not supply its required durable Factory Session execution collaborator.
@@ -67,10 +126,14 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 	if err != nil {
 		return err
 	}
-	candidate.events = mergePreservedDispatchInterruptedEvents(
+	projected := mergePreservedDispatchInterruptedEvents(
 		events,
 		extractDispatchInterruptedEvents(candidate.events),
 	)
+	candidate.events = projected
+	if target.eventConsumer != nil {
+		candidate.events = reconcileAppendOnlyCanonicalEvents(target.events, projected)
+	}
 	if err := s.persistTerminalSessionState(candidate); err != nil {
 		return err
 	}

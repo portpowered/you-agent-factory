@@ -305,6 +305,7 @@ type RuntimeDispatchEventInput struct {
 	DispatchJavaScript        map[string]DispatchJavaScriptProjection
 	Artifacts                 []ArtifactSummary
 	CheckpointEvents          []RuntimeCheckpointEventProjection
+	RuntimeRecords            []factory.JavaScriptRuntimeRecord
 }
 
 // RuntimeCheckpointEventProjection carries replay-safe checkpoint lineage for one
@@ -328,6 +329,7 @@ func runtimeDispatchEventInputFromState(state *runtimeSessionState) RuntimeDispa
 		DispatchJavaScript:        state.dispatchJavaScript,
 		Artifacts:                 state.artifacts,
 		CheckpointEvents:          checkpointEventsFromRuntimeState(state),
+		RuntimeRecords:            uniqueRuntimeRecords(state.runtimeRecords),
 	}
 }
 
@@ -480,7 +482,11 @@ func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.Raw
 		state.result,
 		runtimeDispatchEventInputFromState(state),
 	)
-	return mergePreservedDispatchInterruptedEvents(projected, preserved)
+	projected = mergePreservedDispatchInterruptedEvents(projected, preserved)
+	if state.eventConsumer == nil {
+		return projected
+	}
+	return reconcileAppendOnlyCanonicalEvents(state.events, projected)
 }
 
 type dispatchQueuedEventPayload struct {
