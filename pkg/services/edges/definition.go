@@ -4,6 +4,7 @@
 package edges
 
 import (
+	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -123,6 +124,7 @@ type Edges struct {
 	RecordingRemovePath                recordings.RecordingRemovePath
 	RecordingRenamePath                recordings.RecordingRenamePath
 	APIServerStarter                   platformhttpserver.Starter
+	BrowserOpener                      platformbrowser.Opener
 	InvocationMetricsRecorder          factorysessions.InvocationMetricsRecorder
 	RuntimeHostObserver                factorysessions.RuntimeHostObserver
 	ModelPullMetricsRecorder           models.PullMetricsRecorder
@@ -446,6 +448,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.APIServerStarter != nil {
 		defaults.APIServerStarter = replacements.APIServerStarter
+	}
+	if replacements.BrowserOpener != nil {
+		defaults.BrowserOpener = replacements.BrowserOpener
 	}
 	if replacements.InvocationMetricsRecorder != nil {
 		defaults.InvocationMetricsRecorder = replacements.InvocationMetricsRecorder

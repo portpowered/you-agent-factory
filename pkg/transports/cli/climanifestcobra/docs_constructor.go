@@ -73,28 +73,6 @@ func validateGenericHandlers(plan []plannedCommand, bindings GenericBindings) er
 	return nil
 }
 
-func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindings GenericBindings) {
-	if !record.Runnable {
-		return
-	}
-	handler := bindings.Handlers[record.Handler.ID]
-	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
-	cmd.RunE = func(command *cobra.Command, args []string) error {
-		values, err := InputValues(command)
-		if err != nil {
-			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
-		}
-		if cobraHandler != nil {
-			persistentInputs, err := ResolvedPersistentInputs(command)
-			if err != nil {
-				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
-			}
-			return cobraHandler(command, args, values, persistentInputs)
-		}
-		return handler(command.Context(), values)
-	}
-}
-
 func validateGenericPresentation(plan []plannedCommand, bindings GenericBindings) error {
 	if err := validateSiblingCommandIdentities(plan); err != nil {
 		return err

@@ -51,6 +51,52 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	assertProjectedArgumentCompletion(t, alpha, &dynamicCalls)
 }
 
+func TestNewCommandTreeProjectsRootNoArgumentHelpWithoutDispatch(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	bindings := genericBindingsForManifest(manifest)
+	handlerCalls := 0
+	for handlerID := range bindings.Handlers {
+		bindings.Handlers[handlerID] = func(context.Context, map[string]any) error {
+			handlerCalls++
+			return nil
+		}
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	output := stdout.String()
+	if handlerCalls != 0 {
+		t.Fatalf("root handler calls = %d, want 0", handlerCalls)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	for _, expected := range []string{
+		"Run and manage CPN-based workflow factories",
+		"Available Commands:",
+		"session",
+		"--server",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("stdout omitted %q:\n%s", expected, output)
+		}
+	}
+	if strings.Contains(output, "How to use:") {
+		t.Fatalf("stdout included long-form help instead of concise discovery help:\n%s", output)
+	}
+}
+
 func TestNewCommandTreeProjectsMatchingInheritedPresentation(t *testing.T) {
 	tests := []struct {
 		name       string

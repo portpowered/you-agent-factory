@@ -59,7 +59,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v3 := provideCLIRunDefaults(liveRecordingTargetPlanner)
 	batchInputFileSystem := provideBatchInputFileSystem()
 	directoryCreator := provideRunDirectoryCreator()
-	opener := provideBrowserOpener()
+	opener := provideBrowserOpener(edges2)
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
 	configDecoder := provideOperatorConfigDecoder()
 	defaultsResolver := provideOperatorDefaultsResolver(fileSystem, configDecoder)

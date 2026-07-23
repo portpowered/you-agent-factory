@@ -21,6 +21,11 @@ primary-result behavior.
   manifests are its public input boundary; keep those cases limited to
   observable Cobra construction, parsing, help, completion, and dispatch
   behavior. Do not use source inspection or inventory scans to raise coverage.
+- Manifest-owned root no-argument discovery is projected by the generic Cobra
+  constructor before handler dispatch. Prove its inert behavior through
+  `root.BuildProcess` with exact Factory-loading/materialization, listener,
+  runtime-host, provider, and browser edges; do not substitute source-shape
+  assertions for observable help output and zero effect calls.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.

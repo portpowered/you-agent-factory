@@ -455,6 +455,39 @@ func projectCommand(record climanifest.Command, arguments []climanifest.Argument
 	}
 }
 
+func projectRootNoArgumentHelp(command *cobra.Command, args []string, record climanifest.Command) bool {
+	if record.RootLifecycle == nil || len(args) != 0 {
+		return false
+	}
+	command.Print(command.Short, "\n\n", command.UsageString())
+	return true
+}
+
+func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindings GenericBindings) {
+	if !record.Runnable {
+		return
+	}
+	handler := bindings.Handlers[record.Handler.ID]
+	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
+	cmd.RunE = func(command *cobra.Command, args []string) error {
+		if projectRootNoArgumentHelp(command, args, record) {
+			return nil
+		}
+		values, err := InputValues(command)
+		if err != nil {
+			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+		}
+		if cobraHandler != nil {
+			persistentInputs, err := ResolvedPersistentInputs(command)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			return cobraHandler(command, args, values, persistentInputs)
+		}
+		return handler(command.Context(), values)
+	}
+}
+
 func planCommandFlags(plan []plannedCommand) error {
 	type declaration struct {
 		flag        climanifest.Flag

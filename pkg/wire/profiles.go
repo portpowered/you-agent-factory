@@ -90,7 +90,10 @@ func provideRunDirectoryCreator() platformfilesystem.DirectoryCreator {
 	return platformfilesystem.Local{}
 }
 
-func provideBrowserOpener() platformbrowser.Opener {
+func provideBrowserOpener(edges serviceedges.Edges) platformbrowser.Opener {
+	if edges.BrowserOpener != nil {
+		return edges.BrowserOpener
+	}
 	return platformbrowser.NewHost(runtime.GOOS).Open
 }
 
