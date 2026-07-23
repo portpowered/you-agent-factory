@@ -51,12 +51,14 @@ async function main() {
 	const { values } = parseArgs({
 		options: {
 			"candidate-directory": { type: "string" },
+			"expected-source-commit": { type: "string" },
 			"workspace-directory": { type: "string" },
 		},
 		strict: true,
 	});
 	const result = await publishCandidateDirectory({
 		candidateDirectory: values["candidate-directory"],
+		expectedSourceCommit: values["expected-source-commit"],
 		workspaceDirectory: values["workspace-directory"],
 	});
 	process.stdout.write(`${JSON.stringify(result)}\n`);

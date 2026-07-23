@@ -148,6 +148,14 @@
   digest verification, immutable-version reconciliation, publish-at-most-once
   behavior, bounded visibility retries, and timeout/authentication/permission
   diagnostics.
+  The tagged Release workflow prepares API and Packaged Factories candidates
+  together from the successful release-candidate workflow's exact head commit,
+  uploads them under separate artifact names, and publishes only those
+  downloaded directories after rechecking their source commit. Local
+  maintainers can isolate generation, drift, script tests, exact packing,
+  pull-request dry-run, and clean-consumer behavior through the focused
+  `packaged-factory-*` Make targets documented in
+  `docs/internal/development/cli-release-policy.md`.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
