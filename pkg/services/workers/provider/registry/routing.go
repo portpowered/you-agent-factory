@@ -10,6 +10,11 @@ import (
 
 const legacyCursorRunnerID = workers.RunnerIDCursorCLI
 
+var legacyNativeProviderAliases = map[string]string{
+	"anthropic": "claude",
+	"openai":    "codex",
+}
+
 // ResolveRunnerSelection applies the existing runner precedence while using
 // registry identity and selectability as the authority for every non-empty
 // provider value.
@@ -30,6 +35,10 @@ func (r *Registry) ResolveRunnerSelection(
 		if strings.TrimSpace(candidate.identity) == "" {
 			continue
 		}
+		if candidate.source == workers.RunnerSelectionSourceLegacyProvider &&
+			isUnresolvedProviderTemplate(candidate.identity) {
+			continue
+		}
 		runnerID, err := r.RunnerID(candidate.identity)
 		if err != nil {
 			return workers.ResolvedRunnerSelection{}, err
@@ -46,12 +55,20 @@ func (r *Registry) ResolveRunnerSelection(
 	}, nil
 }
 
+func isUnresolvedProviderTemplate(identity string) bool {
+	trimmed := strings.TrimSpace(identity)
+	return strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}")
+}
+
 // RunnerID resolves a provider canonical ID or alias to the stable native
 // runner ID retained by the current execution path.
 func (r *Registry) RunnerID(identity string) (string, error) {
 	lookup := strings.TrimSpace(identity)
 	if normalize(lookup) == legacyCursorRunnerID {
 		lookup = "cursor"
+	}
+	if target, ok := legacyNativeProviderAliases[normalize(lookup)]; ok {
+		lookup = target
 	}
 	entry, err := r.Lookup(lookup)
 	if err != nil {

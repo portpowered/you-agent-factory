@@ -50,6 +50,18 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 			wantSource: workers.RunnerSelectionSourceFactory,
 		},
 		{
+			name:       "legacy public model provider alias",
+			worker:     "openai",
+			wantID:     workers.RunnerIDCodex,
+			wantSource: workers.RunnerSelectionSourceLegacyProvider,
+		},
+		{
+			name:       "legacy anthropic model provider alias",
+			worker:     "anthropic",
+			wantID:     "claude",
+			wantSource: workers.RunnerSelectionSourceLegacyProvider,
+		},
+		{
 			name:       "legacy cursor runner compatibility",
 			worker:     workers.RunnerIDCursorCLI,
 			wantID:     workers.RunnerIDCursorCLI,
@@ -57,6 +69,12 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 		},
 		{
 			name:       "default",
+			wantID:     workers.RunnerIDCodex,
+			wantSource: workers.RunnerSelectionSourceDefault,
+		},
+		{
+			name:       "unresolved authored provider template defers to runtime default",
+			worker:     "${branchProvider}",
 			wantID:     workers.RunnerIDCodex,
 			wantSource: workers.RunnerSelectionSourceDefault,
 		},
