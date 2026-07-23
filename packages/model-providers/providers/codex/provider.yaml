@@ -26,9 +26,9 @@ maximumResponseFidelityCapabilities:
   reasoningSummaries: true
   toolLifecycle: true
   toolOutputDeltas: true
-  fileChanges: false
-  plans: false
-  usage: false
+  fileChanges: true
+  plans: true
+  usage: true
   stableItemIds: true
   providerReconnect: false
 discovery:

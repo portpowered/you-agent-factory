@@ -141,17 +141,17 @@
         "worktree": true
       },
       "maximumResponseFidelityCapabilities": {
-        "fileChanges": false,
+        "fileChanges": true,
         "messageDeltas": false,
         "messageSnapshots": true,
         "nativeStreaming": true,
-        "plans": false,
+        "plans": true,
         "providerReconnect": false,
         "reasoningSummaries": true,
         "stableItemIds": true,
         "toolLifecycle": true,
         "toolOutputDeltas": true,
-        "usage": false
+        "usage": true
       },
       "technicalSupportLevel": "production"
     },
@@ -359,7 +359,7 @@
         "stableItemIds": true,
         "toolLifecycle": false,
         "toolOutputDeltas": false,
-        "usage": false
+        "usage": true
       },
       "technicalSupportLevel": "experimental"
     },

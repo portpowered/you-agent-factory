@@ -28,7 +28,7 @@ maximumResponseFidelityCapabilities:
   toolOutputDeltas: false
   fileChanges: false
   plans: false
-  usage: false
+  usage: true
   stableItemIds: true
   providerReconnect: false
 discovery:
