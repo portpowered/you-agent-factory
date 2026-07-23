@@ -39,8 +39,6 @@ func (fake commandServiceFake) Pull(cfg PullConfig) error       { return fake.pu
 
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
-	jsonOutput := true
-	debug := true
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
 
@@ -57,10 +55,6 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 			}
 			return nil
 		}},
-		&server,
-		&jsonOutput,
-		func() bool { return true },
-		&debug,
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -73,22 +67,42 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	)
 
 	cmd := &cobra.Command{Use: "invoke"}
-	cmd.Flags().String("operation", "TTS", "")
-	cmd.Flags().String("text", "", "")
-	cmd.Flags().String("output", "", "")
-	_ = cmd.Flags().Set("text", "hello")
-	_ = cmd.Flags().Set("output", "speech.wav")
 	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/factory"))
 	cmd.SetOut(io.Discard)
-	if err := handler.Invoke(cmd, []string{"OMNIVOICE_Q4_K_M"}); err != nil {
+	invokeInputs, inherited := resolvedInvokeHandlerInputs(t, server)
+	if err := handler.Invoke(cmd, invokeInputs, inherited); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 }
 
+func resolvedInvokeHandlerInputs(
+	t *testing.T,
+	server string,
+) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	t.Helper()
+	local, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
+			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+		},
+		[]resolvedinput.Candidate{
+			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
+			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
+			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
+			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, inherited := resolvedModelsHandlerInputs(t, server)
+	return local, inherited
+}
+
 func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 	server := "http://127.0.0.1:7437"
-	jsonOutput := true
-	debug := true
 	called := map[string]bool{}
 	handler := NewCommandHandler(
 		commandServiceFake{
@@ -114,10 +128,6 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 				return nil
 			},
 		},
-		&server,
-		&jsonOutput,
-		func() bool { return true },
-		&debug,
 		func(*cobra.Command) io.Writer { return io.Discard },
 		nil,
 		nil,

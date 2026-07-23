@@ -20,7 +20,9 @@ func (modelsHandlerStub) List(*cobra.Command, resolvedinput.Inputs, resolvedinpu
 func (modelsHandlerStub) Inspect(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
-func (modelsHandlerStub) Invoke(*cobra.Command, []string) error { return nil }
+func (modelsHandlerStub) Invoke(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
 func (modelsHandlerStub) Pull(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
@@ -244,6 +246,88 @@ func TestGenericModelsPullDispatchResolvesLocalAndInheritedInputs(t *testing.T) 
 	})
 }
 
+func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelsRecord, err := manifest.CommandByID("you.models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invokeRecord, err := manifest.CommandByID("you.models.invoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Commands = map[string]climanifest.Command{
+		rootRecord.ID:   rootRecord,
+		modelsRecord.ID: modelsRecord,
+		invokeRecord.ID: invokeRecord,
+	}
+
+	var local, inherited resolvedinput.Inputs
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			invokeRecord.Handler.ID: func(
+				_ *cobra.Command,
+				gotLocal resolvedinput.Inputs,
+				gotInherited resolvedinput.Inputs,
+			) error {
+				local, inherited = gotLocal, gotInherited
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{
+		"--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--text", "  hello  ", "--output", "  speech.wav  ",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(models invoke) error = %v", err)
+	}
+	for inputID, want := range map[string]string{
+		"you.models.invoke.arg.0":          "OMNIVOICE_Q4_K_M",
+		"you.models.invoke.flag.operation": "TTS",
+		"you.models.invoke.flag.text":      "hello",
+		"you.models.invoke.flag.output":    "speech.wav",
+	} {
+		got, valueErr := local.String(inputID)
+		if valueErr != nil || got != want {
+			t.Fatalf("resolved %s = %q, %v; want %q", inputID, got, valueErr, want)
+		}
+	}
+	assertResolvedState(t, local, "you.models.invoke.arg.0", resolvedinput.State{
+		Provenance: resolvedinput.SourcePositionalArgument, Changed: true,
+	})
+	assertResolvedState(t, local, "you.models.invoke.flag.operation", resolvedinput.State{
+		Provenance: resolvedinput.SourceManifestDefault, Default: true,
+	})
+	assertResolvedState(t, local, "you.models.invoke.flag.text", resolvedinput.State{
+		Provenance: resolvedinput.SourceCLIFlag, Changed: true,
+	})
+	textObservation, found := local.Observe("you.models.invoke.flag.text")
+	if !found || textObservation.Value != resolvedinput.RedactedValue {
+		t.Fatalf("text observation = %#v, %t; want redacted value", textObservation, found)
+	}
+	assertResolvedState(t, inherited, "you.flag.json", resolvedinput.State{
+		Provenance: resolvedinput.SourceCLIFlag, Changed: true,
+	})
+}
+
 func assertResolvedState(
 	t *testing.T,
 	inputs resolvedinput.Inputs,
@@ -282,5 +366,8 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 		if getErr != nil || got != want {
 			t.Fatalf("flag %s = %q, %v; want %q", name, got, getErr, want)
 		}
+	}
+	if err := invoke.ParseFlags([]string{"--operation", "INVALID"}); err == nil {
+		t.Fatal("invalid manifest operation choice was accepted")
 	}
 }

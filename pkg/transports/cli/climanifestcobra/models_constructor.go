@@ -90,9 +90,8 @@ func NewModelsCommand(handler commandregistry.ModelsHandler) (*cobra.Command, er
 	return NewModelsCommandFromManifest(manifest, handler)
 }
 
-// NewModelsCommandFromManifest projects list, inspect, and pull through the generic
-// constructor while retaining narrow legacy dispatch only for the later
-// invoke migration slice.
+// NewModelsCommandFromManifest projects the complete Models family through the
+// generic manifest constructor.
 func NewModelsCommandFromManifest(
 	manifest climanifest.Manifest,
 	handler commandregistry.ModelsHandler,
@@ -111,7 +110,6 @@ func NewModelsCommandFromManifest(
 	if parentRecord.Runnable {
 		return nil, fmt.Errorf("build models command: %q must remain non-runnable", parentRecord.ID)
 	}
-	familyManifest := manifest
 	listRecord, err := manifest.CommandByID("you.models.list")
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
@@ -124,6 +122,10 @@ func NewModelsCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
 	}
+	invokeRecord, err := manifest.CommandByID("you.models.invoke")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
 	parent, err := buildResolvedModelsParent(
 		manifest,
 		rootRecord,
@@ -131,12 +133,10 @@ func NewModelsCommandFromManifest(
 		listRecord,
 		inspectRecord,
 		pullRecord,
+		invokeRecord,
 		handler,
 	)
 	if err != nil {
-		return nil, err
-	}
-	if err := attachLegacyModelsLeaves(parent, familyManifest, handler); err != nil {
 		return nil, err
 	}
 	return parent, nil
@@ -149,6 +149,7 @@ func buildResolvedModelsParent(
 	listRecord climanifest.Command,
 	inspectRecord climanifest.Command,
 	pullRecord climanifest.Command,
+	invokeRecord climanifest.Command,
 	handler commandregistry.ModelsHandler,
 ) (*cobra.Command, error) {
 	manifest.Commands = map[string]climanifest.Command{
@@ -157,6 +158,7 @@ func buildResolvedModelsParent(
 		listRecord.ID:    listRecord,
 		inspectRecord.ID: inspectRecord,
 		pullRecord.ID:    pullRecord,
+		invokeRecord.ID:  invokeRecord,
 	}
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
@@ -166,6 +168,7 @@ func buildResolvedModelsParent(
 			listRecord.Handler.ID:    handler.List,
 			inspectRecord.Handler.ID: handler.Inspect,
 			pullRecord.Handler.ID:    handler.Pull,
+			invokeRecord.Handler.ID:  handler.Invoke,
 		},
 	})
 	if err != nil {
@@ -176,7 +179,7 @@ func buildResolvedModelsParent(
 		return nil, fmt.Errorf("build models command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
-	for _, id := range []string{listRecord.ID, inspectRecord.ID, pullRecord.ID} {
+	for _, id := range []string{listRecord.ID, inspectRecord.ID, pullRecord.ID, invokeRecord.ID} {
 		command, _, findErr := parent.Find([]string{strings.TrimPrefix(id, parentRecord.ID+".")})
 		if findErr != nil {
 			return nil, fmt.Errorf("build models command: find %q: %w", id, findErr)
@@ -208,99 +211,4 @@ func preserveModelsExactArgumentDiagnostic(
 		}
 		return validate(cmd, args)
 	}
-}
-
-func attachLegacyModelsLeaves(
-	parent *cobra.Command,
-	manifest climanifest.Manifest,
-	handler commandregistry.ModelsHandler,
-) error {
-	registry, err := commandregistry.NewModelsRegistry(handler)
-	if err != nil {
-		return err
-	}
-	for _, id := range []string{"you.models.invoke"} {
-		commandRecord, commandErr := manifest.CommandByID(id)
-		if commandErr != nil {
-			return fmt.Errorf("build models command: %w", commandErr)
-		}
-		leaf, leafErr := buildRunnableModelsLeaf(commandRecord, registry)
-		if leafErr != nil {
-			return leafErr
-		}
-		parent.AddCommand(leaf)
-	}
-	return nil
-}
-
-func buildRunnableModelsLeaf(record climanifest.Command, registry *commandregistry.Registry) (*cobra.Command, error) {
-	if !strings.HasPrefix(record.ID, "you.models.") || !record.Runnable {
-		return nil, fmt.Errorf("build models command: %q must be a runnable models command", record.ID)
-	}
-	cmd := commandFromManifest(record, false)
-	cmd.Args = positionalArgsFromManifest(record)
-	cmd.PreRunE = rejectDeprecatedPortFlag
-	if err := registerManifestLocalFlags(cmd, record); err != nil {
-		return nil, fmt.Errorf("build models command: %w", err)
-	}
-	if err := registry.AttachRunE(cmd, record.ID); err != nil {
-		return nil, fmt.Errorf("build models command: %w", err)
-	}
-	return cmd, nil
-}
-
-func commandFromManifest(record climanifest.Command, includeLong bool) *cobra.Command {
-	cmd := &cobra.Command{
-		Use: record.Usage.Line, Short: record.Documentation.Documentation.Title.CanonicalEnglish,
-		Aliases: append([]string(nil), record.Aliases...),
-	}
-	if includeLong {
-		cmd.Long = record.Documentation.Documentation.Description.CanonicalEnglish
-	}
-	cmd.Hidden = record.Visibility == "hidden"
-	return cmd
-}
-
-func registerManifestLocalFlags(cmd *cobra.Command, record climanifest.Command) error {
-	var deprecatedPort int
-	for _, flag := range sortedFlags(record.Flags) {
-		if flag.Scope != "local" {
-			continue
-		}
-		if flag.Long == "port" {
-			registerDeprecatedPortFlag(cmd, &deprecatedPort)
-			if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
-				return err
-			}
-			continue
-		}
-		target, err := manifestFlagTarget(flag)
-		if err != nil {
-			return err
-		}
-		if err := registerFlag(cmd.Flags(), flag, target, manifestFlagUsage(flag)); err != nil {
-			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
-		}
-		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
-			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
-		}
-	}
-	return nil
-}
-
-func manifestFlagTarget(flag climanifest.Flag) (flagTarget, error) {
-	switch flag.ValueType {
-	case "string":
-		return flagTarget{stringValue: new(string)}, nil
-	case "bool":
-		return flagTarget{boolValue: new(bool)}, nil
-	case "int":
-		return flagTarget{intValue: new(int)}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported manifest value type %q for flag %q", flag.ValueType, flag.Long)
-	}
-}
-
-func manifestFlagUsage(flag climanifest.Flag) string {
-	return "value for --" + flag.Long
 }

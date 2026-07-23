@@ -169,6 +169,40 @@ func TestProductionModelsPullRejectsInvalidInputsBeforeService(t *testing.T) {
 	}
 }
 
+func TestProductionModelsInvokeRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "invoke"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "invoke", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "invoke", "model-a", "--unknown"}, want: "unknown flag: --unknown"},
+		{name: "invalid operation", args: []string{"models", "invoke", "model-a", "--operation", "INVALID"}, want: "not one of the declared choices"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				invoke: func(modelscli.InvokeConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid invoke input invoked Models service")
+			}
+		})
+	}
+}
+
 func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

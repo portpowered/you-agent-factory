@@ -576,6 +576,12 @@ response-stream output.
   projection, reject duplicate handler ownership, and invoke the selected
   stable-ID handler with a detached normalized `InputValues` snapshot. Public
   command paths and aliases must not participate in executable lookup.
+  The detached Models family projection in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go` uses this resolved
+  handler boundary for every leaf. Model-name positionals and invoke-local
+  operation, text, output, and compatibility-port flags are canonical inputs;
+  adapters consume their typed local snapshot plus the inherited root snapshot
+  and must not fall back to Cobra arguments or mutable flag targets.
   `GenericConstructor.Construct` is the strict stateless transport role for
   functional projection evidence; keep `NewCommandTree` as the convenience
   constructor while later family migrations remain outside this foundation

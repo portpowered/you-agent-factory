@@ -947,10 +947,6 @@ func newProductionModelsCommand(
 	}
 	handler := modelscli.NewCommandHandler(
 		rootOptions.ModelsCLI,
-		&globals.server,
-		&globals.json,
-		diagnostics.verboseEnabled,
-		&diagnostics.debug,
 		diagnostics.writer,
 		rootOptions.homeDir,
 		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {

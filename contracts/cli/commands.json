@@ -9780,6 +9780,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": true,
           "minCardinality": 1,
           "maxCardinality": 1,
@@ -9787,9 +9788,17 @@
           "enum": [],
           "pattern": "",
           "completion": "none",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.models.invoke.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -9939,96 +9948,135 @@
           }
         },
         "you.models.invoke.flag.port": {
-          "id": "you.models.invoke.flag.port",
-          "long": "port",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "int",
-          "required": false,
-          "default": "0",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "hidden",
+          "defaultValue": {
+            "int": 0
+          },
+          "handlerBindingId": "you.models.invoke.binding.port",
+          "id": "you.models.invoke.flag.port",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.port",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "port",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "deprecated compatibility port override",
+          "valueType": "int",
+          "visibility": "hidden"
         },
         "you.models.invoke.flag.operation": {
-          "id": "you.models.invoke.flag.operation",
-          "long": "operation",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "TTS",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "completion": "static",
+          "defaultValue": {
+            "string": "TTS"
+          },
+          "enum": [
+            "TTS"
+          ],
+          "handlerBindingId": "you.models.invoke.binding.operation",
+          "id": "you.models.invoke.flag.operation",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.operation",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "operation",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "uppercase model operation to invoke",
+          "valueType": "string",
+          "visibility": "visible"
         },
         "you.models.invoke.flag.text": {
-          "id": "you.models.invoke.flag.text",
-          "long": "text",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.models.invoke.binding.text",
+          "id": "you.models.invoke.flag.text",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.text",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "text",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "sensitive",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "text input for the selected model operation",
+          "valueType": "string",
+          "visibility": "visible"
         },
         "you.models.invoke.flag.output": {
-          "id": "you.models.invoke.flag.output",
-          "long": "output",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.models.invoke.binding.output",
+          "id": "you.models.invoke.flag.output",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.output",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "output",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "path for streamed model output",
+          "valueType": "string",
+          "visibility": "visible"
         }
       },
       "precedence": {
@@ -10058,6 +10106,28 @@
           "stdout",
           "stderr"
         ]
+      },
+      "handlerBindings": {
+        "you.models.invoke.binding.model-name": {
+          "id": "you.models.invoke.binding.model-name",
+          "inputId": "you.models.invoke.arg.0"
+        },
+        "you.models.invoke.binding.operation": {
+          "id": "you.models.invoke.binding.operation",
+          "inputId": "you.models.invoke.flag.operation"
+        },
+        "you.models.invoke.binding.output": {
+          "id": "you.models.invoke.binding.output",
+          "inputId": "you.models.invoke.flag.output"
+        },
+        "you.models.invoke.binding.port": {
+          "id": "you.models.invoke.binding.port",
+          "inputId": "you.models.invoke.flag.port"
+        },
+        "you.models.invoke.binding.text": {
+          "id": "you.models.invoke.binding.text",
+          "inputId": "you.models.invoke.flag.text"
+        }
       },
       "outputs": {
         "you.models.invoke.output.human": {

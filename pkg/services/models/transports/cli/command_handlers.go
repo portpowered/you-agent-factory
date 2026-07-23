@@ -15,10 +15,6 @@ import (
 // `you models` family. The top-level CLI only attaches these methods by ID.
 type CommandHandler struct {
 	models                  Service
-	server                  *string
-	json                    *bool
-	verbose                 func() bool
-	debug                   *bool
 	diagnosticsWriter       func(*cobra.Command) io.Writer
 	homeDir                 func() (string, error)
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error)
@@ -28,24 +24,23 @@ type CommandHandler struct {
 // NewCommandHandler constructs the Models-owned CLI handler from injected dependencies.
 func NewCommandHandler(
 	models Service,
-	server *string,
-	json *bool,
-	verbose func() bool,
-	debug *bool,
 	diagnosticsWriter func(*cobra.Command) io.Writer,
 	homeDir func() (string, error),
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error),
 	buildLogger func() (*zap.Logger, error),
 ) *CommandHandler {
 	return &CommandHandler{
-		models: models, server: server, json: json, verbose: verbose, debug: debug,
-		diagnosticsWriter: diagnosticsWriter, homeDir: homeDir,
+		models: models, diagnosticsWriter: diagnosticsWriter, homeDir: homeDir,
 		resolveOperatorDefaults: resolveOperatorDefaults, buildLogger: buildLogger,
 	}
 }
 
 const (
 	modelsInspectNameInputID = "you.models.inspect.arg.0"
+	modelsInvokeNameInputID  = "you.models.invoke.arg.0"
+	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
+	modelsInvokeTextID       = "you.models.invoke.flag.text"
+	modelsInvokeOutputID     = "you.models.invoke.flag.output"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
 	serverInputID            = "you.flag.server"
 	jsonInputID              = "you.flag.json"
@@ -115,7 +110,11 @@ func (h *CommandHandler) applyResolvedCommon(
 	return nil
 }
 
-func (h *CommandHandler) Invoke(cmd *cobra.Command, args []string) error {
+func (h *CommandHandler) Invoke(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
 	if h == nil || h.models == nil {
 		return fmt.Errorf("models invoke service is required")
 	}
@@ -127,6 +126,22 @@ func (h *CommandHandler) Invoke(cmd *cobra.Command, args []string) error {
 	}
 	if h.resolveOperatorDefaults == nil {
 		return fmt.Errorf("model invocation operator defaults resolver is required")
+	}
+	modelName, err := inputs.String(modelsInvokeNameInputID)
+	if err != nil {
+		return fmt.Errorf("read models invoke model name: %w", err)
+	}
+	operation, err := inputs.String(modelsInvokeOperationID)
+	if err != nil {
+		return fmt.Errorf("read models invoke operation: %w", err)
+	}
+	text, err := inputs.String(modelsInvokeTextID)
+	if err != nil {
+		return fmt.Errorf("read models invoke text: %w", err)
+	}
+	outputPath, err := inputs.String(modelsInvokeOutputID)
+	if err != nil {
+		return fmt.Errorf("read models invoke output: %w", err)
 	}
 	logger, err := h.buildLogger()
 	if err != nil {
@@ -141,23 +156,14 @@ func (h *CommandHandler) Invoke(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	cfg := InvokeConfig{
-		Context: cmd.Context(), Operation: "TTS", Output: cmd.OutOrStdout(),
+		Context: cmd.Context(), ModelName: modelName, Operation: operation,
+		Text: text, OutputPath: outputPath, Output: cmd.OutOrStdout(),
 		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
 		OperatorDefaults: defaults, Logger: logger,
 	}
-	if len(args) == 1 {
-		cfg.ModelName = args[0]
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
-	if value, flagErr := cmd.Flags().GetString("operation"); flagErr == nil {
-		cfg.Operation = value
-	}
-	if value, flagErr := cmd.Flags().GetString("text"); flagErr == nil {
-		cfg.Text = value
-	}
-	if value, flagErr := cmd.Flags().GetString("output"); flagErr == nil {
-		cfg.OutputPath = value
-	}
-	h.applyCommon(cmd, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
 	return h.models.Invoke(cfg)
 }
 
@@ -180,27 +186,4 @@ func (h *CommandHandler) Pull(
 		return fmt.Errorf("resolve models pull inputs: %w", err)
 	}
 	return h.models.Pull(cfg)
-}
-
-func (h *CommandHandler) applyCommon(
-	cmd *cobra.Command,
-	server *string,
-	json, verbose, debug *bool,
-	diagnostics *io.Writer,
-) {
-	if h.server != nil {
-		*server = *h.server
-	}
-	if h.json != nil {
-		*json = *h.json
-	}
-	if h.verbose != nil {
-		*verbose = h.verbose()
-	}
-	if h.debug != nil {
-		*debug = *h.debug
-	}
-	if h.diagnosticsWriter != nil {
-		*diagnostics = h.diagnosticsWriter(cmd)
-	}
 }
