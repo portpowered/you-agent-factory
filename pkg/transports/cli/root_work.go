@@ -3,13 +3,16 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -26,9 +29,15 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative handler registry: %v", err))
 	}
-	components, err := climanifestcobra.NewRepresentativeFamilyComponents(
+	sessionRegistry, sessionBindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build session handler registry: %v", err))
+	}
+	root, err := newGenericRepresentativeFamily(
 		registry,
+		sessionRegistry,
 		representativePersistentFlagBindings(globals, diagnostics, operatorDefaults),
+		sessionBindings,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
@@ -45,10 +54,231 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	}
 	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 
-	root := components.Root
 	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
 		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, b12,
 	)})
+}
+
+func newGenericRepresentativeFamily(
+	representativeRegistry *commandregistry.Registry,
+	sessionRegistry *commandregistry.Registry,
+	flagBindings climanifestcobra.PersistentFlagBindings,
+	sessionBindings climanifestcobra.SessionFamilyBindings,
+) (*cobra.Command, error) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return nil, err
+	}
+	sessionManifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		return nil, err
+	}
+	for commandID, record := range sessionManifest.Commands {
+		manifest.Commands[commandID] = record
+	}
+	handlers := make(climanifestcobra.CobraHandlerRegistry)
+	for commandID, record := range manifest.Commands {
+		if !record.Runnable {
+			continue
+		}
+		registry := sessionRegistry
+		if commandID == "you" {
+			registry = representativeRegistry
+		}
+		registered, lookupErr := registry.LookupHandlers(commandID)
+		if lookupErr != nil {
+			return nil, lookupErr
+		}
+		handlers[record.Handler.ID] = productionGenericCobraHandler(
+			commandID,
+			registered,
+			flagBindings,
+		)
+	}
+	inputs := representativeInputBindings(flagBindings)
+	for inputID, binding := range sessionInputBindings(sessionBindings) {
+		inputs[inputID] = binding
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		CobraHandlers: handlers,
+		Inputs:        inputs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	root.SilenceUsage = true
+	for name, usage := range flagBindings.FlagUsages {
+		if flag := root.PersistentFlags().Lookup(name); flag != nil {
+			flag.Usage = usage
+		}
+	}
+	applySessionGenericFlagUsages(root, manifest, sessionBindings.FlagUsages)
+	return root, nil
+}
+
+func representativeInputBindings(
+	bindings climanifestcobra.PersistentFlagBindings,
+) climanifestcobra.InputBindingRegistry {
+	targets := map[string]any{
+		"you.flag.debug":                         bindings.Debug,
+		"you.flag.default-worker-model":          bindings.DefaultWorkerModel,
+		"you.flag.default-worker-model-provider": bindings.DefaultWorkerModelProvider,
+		"you.flag.json":                          bindings.JSON,
+		"you.flag.server":                        bindings.Server,
+		"you.flag.verbose":                       bindings.Verbose,
+	}
+	result := make(climanifestcobra.InputBindingRegistry, len(targets))
+	for inputID, target := range targets {
+		stableID, bindingTarget := inputID, target
+		result[stableID] = func(value any) error {
+			return assignRepresentativeGenericValue(
+				map[string]any{stableID: value},
+				stableID,
+				bindingTarget,
+			)
+		}
+	}
+	return result
+}
+
+func sessionInputBindings(
+	bindings climanifestcobra.SessionFamilyBindings,
+) climanifestcobra.InputBindingRegistry {
+	targets := map[string]any{
+		"you.session.create.flag.dir":              &bindings.Create.Dir,
+		"you.session.create.flag.init-new-factory": &bindings.Create.InitNewFactory,
+		"you.session.create.flag.port":             &bindings.Create.Port,
+		"you.session.create.flag.target-kind":      &bindings.Create.TargetKind,
+		"you.session.create.flag.target-name":      &bindings.Create.TargetName,
+		"you.session.create.flag.validate-only":    &bindings.Create.ValidateOnly,
+		"you.session.delete.flag.port":             &bindings.Delete.Port,
+		"you.session.dispatches.flag.phase":        &bindings.Dispatches.Phase,
+		"you.session.dispatches.flag.status":       &bindings.Dispatches.Status,
+		"you.session.list.flag.port":               &bindings.List.Port,
+		"you.session.list.flag.scope":              &bindings.List.Scope,
+	}
+	result := make(climanifestcobra.InputBindingRegistry, len(targets))
+	for inputID, target := range targets {
+		stableID, bindingTarget := inputID, target
+		result[stableID] = func(value any) error {
+			return assignRepresentativeGenericValue(
+				map[string]any{stableID: value},
+				stableID,
+				bindingTarget,
+			)
+		}
+	}
+	return result
+}
+
+func applySessionGenericFlagUsages(
+	root *cobra.Command,
+	manifest climanifest.Manifest,
+	usages map[string]string,
+) {
+	for commandID, record := range manifest.Commands {
+		if !strings.HasPrefix(commandID, "you.session") {
+			continue
+		}
+		command, _, err := root.Find(strings.Fields(strings.TrimPrefix(record.Path, "you ")))
+		if err != nil || command == nil {
+			continue
+		}
+		for _, flag := range record.Flags {
+			usage := usages[commandID+"."+flag.Long]
+			if usage == "" {
+				usage = usages[flag.Long]
+			}
+			if registered := command.Flags().Lookup(flag.Long); registered != nil && usage != "" {
+				registered.Usage = usage
+			}
+		}
+	}
+}
+
+func productionGenericCobraHandler(
+	commandID string,
+	handlers commandregistry.CommandHandlers,
+	bindings climanifestcobra.PersistentFlagBindings,
+) climanifestcobra.CobraHandler {
+	return func(cmd *cobra.Command, args []string, values map[string]any) error {
+		if err := applyRepresentativeGenericValues(values, bindings); err != nil {
+			return fmt.Errorf("bind %s generic inputs: %w", commandID, err)
+		}
+		if genericSessionUsesDeprecatedPort(commandID) {
+			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
+				return err
+			}
+		}
+		if handlers.PreRunE != nil {
+			if err := handlers.PreRunE(cmd, args); err != nil {
+				return err
+			}
+		}
+		return handlers.RunE(cmd, args)
+	}
+}
+
+func genericSessionUsesDeprecatedPort(commandID string) bool {
+	switch commandID {
+	case "you.session.show", "you.session.pause", "you.session.resume", "you.session.dispatches":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyRepresentativeGenericValues(
+	values map[string]any,
+	bindings climanifestcobra.PersistentFlagBindings,
+) error {
+	targets := map[string]any{
+		"debug":                         bindings.Debug,
+		"default-worker-model":          bindings.DefaultWorkerModel,
+		"default-worker-model-provider": bindings.DefaultWorkerModelProvider,
+		"json":                          bindings.JSON,
+		"server":                        bindings.Server,
+		"verbose":                       bindings.Verbose,
+	}
+	for name, target := range targets {
+		if err := assignRepresentativeGenericValue(values, "you.flag."+name, target); err != nil {
+			return err
+		}
+		if err := assignRepresentativeGenericValue(values, "you.session.show.flag."+name, target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func assignRepresentativeGenericValue(values map[string]any, inputID string, target any) error {
+	value, exists := values[inputID]
+	if !exists {
+		return nil
+	}
+	switch typed := target.(type) {
+	case *bool:
+		resolved, ok := value.(bool)
+		if !ok || typed == nil {
+			return fmt.Errorf("input %q has incompatible boolean binding", inputID)
+		}
+		*typed = resolved
+	case *string:
+		resolved, ok := value.(string)
+		if !ok || typed == nil {
+			return fmt.Errorf("input %q has incompatible string binding", inputID)
+		}
+		*typed = resolved
+	case *int:
+		resolved, ok := value.(int)
+		if !ok || typed == nil {
+			return fmt.Errorf("input %q has incompatible integer binding", inputID)
+		}
+		*typed = resolved
+	default:
+		return fmt.Errorf("input %q has unsupported production binding", inputID)
+	}
+	return nil
 }
 
 // RootSubcommands contains the already-constructed top-level command families
@@ -69,10 +299,9 @@ func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcomma
 // session, workflow/MCP, and run/submit migrations. Each field is constructed
 // once through its family-local generated/legacy cutover seam.
 type b12ProductionFamilies struct {
-	Session *cobra.Command
-	MCP     *cobra.Command
-	Run     *cobra.Command
-	Submit  *cobra.Command
+	MCP    *cobra.Command
+	Run    *cobra.Command
+	Submit *cobra.Command
 }
 
 func newB12ProductionFamilies(
@@ -83,27 +312,10 @@ func newB12ProductionFamilies(
 ) b12ProductionFamilies {
 	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
 	return b12ProductionFamilies{
-		Session: productionSessionCommand(globals, diagnostics, options),
-		MCP:     newMCPCommand(options),
-		Run:     runSubmit.Run,
-		Submit:  runSubmit.Submit,
+		MCP:    newMCPCommand(options),
+		Run:    runSubmit.Run,
+		Submit: runSubmit.Submit,
 	}
-}
-
-func productionSessionCommand(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	options CommandFactory,
-) *cobra.Command {
-	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
-	if err != nil {
-		panic(fmt.Sprintf("build session handler registry: %v", err))
-	}
-	session, err := climanifestcobra.NewSessionFamilyCommand(registry, bindings)
-	if err != nil {
-		panic(fmt.Sprintf("build session family command: %v", err))
-	}
-	return session
 }
 
 func productionRootSubcommands(
@@ -124,7 +336,6 @@ func productionRootSubcommands(
 		modelsCmd,
 		b12.Run,
 		b12.Submit,
-		b12.Session,
 		productionWorkCommand(globals, diagnostics, options),
 	}
 }
@@ -191,23 +402,6 @@ func representativePersistentFlagBindings(
 			),
 			"default-worker-model": "default worker model for model workers with omitted model",
 		},
-	}
-}
-
-func handwrittenSessionSubcommands(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	options CommandFactory,
-	generatedShow *cobra.Command,
-) []*cobra.Command {
-	return []*cobra.Command{
-		newSessionListCommand(globals, diagnostics, options),
-		generatedShow,
-		newSessionDispatchesCommand(globals, diagnostics, options),
-		newSessionPauseCommand(globals, diagnostics, options),
-		newSessionResumeCommand(globals, diagnostics, options),
-		newSessionCreateCommand(diagnostics, options),
-		newSessionDeleteCommand(diagnostics, options),
 	}
 }
 

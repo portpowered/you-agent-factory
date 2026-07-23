@@ -7,9 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -407,6 +405,59 @@ func TestCanonicalFlagNormalizationDispatchesDefaultsAndExplicitValues(t *testin
 	}
 }
 
+func TestCanonicalFlagsRejectUnsupportedNoOptionDefaultTypes(t *testing.T) {
+	integer, integer64 := 7, int64(9)
+	repeated := []string{"worker"}
+	tests := []struct {
+		name         string
+		valueType    string
+		defaultValue *climanifest.InputValue
+		noOption     *climanifest.InputValue
+		maximum      int
+		repeatable   bool
+	}{
+		{
+			name: "int", valueType: "int",
+			defaultValue: &climanifest.InputValue{Int: &integer},
+			noOption:     &climanifest.InputValue{Int: &integer}, maximum: 1,
+		},
+		{
+			name: "int64", valueType: "int64",
+			defaultValue: &climanifest.InputValue{Int64: &integer64},
+			noOption:     &climanifest.InputValue{Int64: &integer64}, maximum: 1,
+		},
+		{
+			name: "stringArray", valueType: "stringArray",
+			defaultValue: &climanifest.InputValue{StringArray: &repeated},
+			noOption:     &climanifest.InputValue{StringArray: &repeated},
+			maximum:      -1, repeatable: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := feedbackManifest()
+			delete(manifest.Commands, "feedback.zeta")
+			alpha := manifest.Commands["feedback.alpha"]
+			flag := canonicalNormalizedFlag(
+				"feedback.alpha.flag.value",
+				"value",
+				test.valueType,
+				"",
+				test.defaultValue,
+				nil,
+			)
+			flag.NoOptionValue = test.noOption
+			flag.MaxCardinality = test.maximum
+			flag.Repeatable = test.repeatable
+			alpha.Flags = map[string]climanifest.Flag{flag.ID: flag}
+			completeFeedbackCanonicalCommandContract(&alpha)
+			manifest.Commands[alpha.ID] = alpha
+
+			assertFeedbackConstructionFailure(t, manifest, "no-option default")
+		})
+	}
+}
+
 func TestRelationshipSetsRejectDuplicatesContradictionsAndCyclesBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -667,57 +718,6 @@ func feedbackBindings(manifest climanifest.Manifest, handler GenericHandler) Gen
 	return bindings
 }
 
-func TestLocalBindingTargetParsesIntDefaults(t *testing.T) {
-	target, err := localBindingTarget(climanifest.Flag{
-		Long:      "count",
-		ValueType: "int",
-		Default:   "3",
-	})
-	if err != nil {
-		t.Fatalf("localBindingTarget() error = %v", err)
-	}
-	if target.intValue == nil || *target.intValue != 3 {
-		t.Fatalf("int binding = %#v, want 3", target.intValue)
-	}
-}
-
-func TestSessionLocalBindingTargetsRejectInheritedJSON(t *testing.T) {
-	flag := climanifest.Flag{Long: "json"}
-	tests := []struct {
-		name   string
-		target func() error
-	}{
-		{
-			name: "create",
-			target: func() error {
-				_, err := sessionCreateFlagTarget(flag, &sessioncli.CreateConfig{})
-				return err
-			},
-		},
-		{
-			name: "list",
-			target: func() error {
-				_, err := sessionListFlagTarget(flag, &sessioncli.ListConfig{})
-				return err
-			},
-		},
-		{
-			name: "delete",
-			target: func() error {
-				_, err := sessionDeleteFlagTarget(flag, &sessioncli.DeleteConfig{})
-				return err
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.target(); err == nil || !strings.Contains(err.Error(), "unsupported") {
-				t.Fatalf("local JSON target error = %v, want unsupported inherited flag", err)
-			}
-		})
-	}
-}
-
 func TestRegisterFlagSupportsBoolStringAndInt(t *testing.T) {
 	t.Run("bool shorthand", func(t *testing.T) {
 		var value bool
@@ -832,26 +832,6 @@ func TestRegisterManifestLocalFlagsRejectsUnsupportedValueType(t *testing.T) {
 	}
 }
 
-func TestBuildCommandFromRecordAppliesHiddenVisibility(t *testing.T) {
-	cmd, err := buildCommandFromRecord(climanifest.Command{
-		ID:         "you.session.show",
-		Usage:      climanifest.Usage{Line: "show"},
-		Visibility: "hidden",
-		Documentation: climanifest.Documentation{
-			Documentation: climanifest.DocumentationCopy{
-				Title:       climanifest.DocumentationField{CanonicalEnglish: "title"},
-				Description: climanifest.DocumentationField{CanonicalEnglish: "description"},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildCommandFromRecord() error = %v", err)
-	}
-	if !cmd.Hidden {
-		t.Fatal("hidden command must set cmd.Hidden")
-	}
-}
-
 func TestApplyFlagContractSetsHiddenAndNoOptDefault(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	flags.Bool("json", false, "json")
@@ -868,79 +848,12 @@ func TestApplyFlagContractSetsHiddenAndNoOptDefault(t *testing.T) {
 	}
 }
 
-func TestRegisterLocalFlagsRegistersDeprecatedPort(t *testing.T) {
-	cmd := &cobra.Command{Use: "show"}
-	if err := registerLocalFlags(cmd, climanifest.Command{
-		ID: "you.session.show",
-		Flags: map[string]climanifest.Flag{
-			"you.session.show.flag.port": {
-				Long:       "port",
-				Scope:      "local",
-				ValueType:  "int",
-				Default:    "0",
-				Visibility: "hidden",
-			},
-		},
-	}, PersistentFlagBindings{}); err != nil {
-		t.Fatalf("registerLocalFlags() error = %v", err)
-	}
-	portFlag := cmd.Flags().Lookup("port")
-	if portFlag == nil || !portFlag.Hidden {
-		t.Fatalf("port flag = %#v, want hidden deprecated local flag", portFlag)
-	}
-}
-
-func TestRegisterPersistentFlagsRegistersRootBindings(t *testing.T) {
-	root := &cobra.Command{Use: "you"}
-	bindings := PersistentFlagBindings{
-		Verbose:                    boolPtr(false),
-		Debug:                      boolPtr(false),
-		Server:                     stringPtr("http://localhost:7437"),
-		JSON:                       boolPtr(false),
-		DefaultWorkerModelProvider: stringPtr(""),
-		DefaultWorkerModel:         stringPtr(""),
-	}
-	if err := registerPersistentFlags(root, climanifest.Command{
-		ID: "you",
-		Flags: map[string]climanifest.Flag{
-			"you.flag.verbose": {Long: "verbose", Shorthand: "v", Scope: "persistent", ValueType: "bool", Default: "false"},
-			"you.flag.server":  {Long: "server", Scope: "persistent", ValueType: "string", Default: "http://localhost:7437"},
-		},
-	}, bindings); err != nil {
-		t.Fatalf("registerPersistentFlags() error = %v", err)
-	}
-	if root.PersistentFlags().Lookup("verbose") == nil || root.PersistentFlags().Lookup("server") == nil {
-		t.Fatal("expected root persistent flags to register")
-	}
-}
-
 func TestRejectDeprecatedPortFlagAllowsUnsetPort(t *testing.T) {
 	cmd := &cobra.Command{Use: "show"}
 	var port int
 	registerDeprecatedPortFlag(cmd, &port)
 	if err := rejectDeprecatedPortFlag(cmd, nil); err != nil {
 		t.Fatalf("rejectDeprecatedPortFlag() unset port error = %v", err)
-	}
-}
-
-func TestRepresentativeManifestRecordsRejectsMissingCommand(t *testing.T) {
-	manifest := climanifest.Manifest{
-		Commands: map[string]climanifest.Command{
-			"you": {ID: "you"},
-		},
-	}
-	if _, _, _, err := representativeManifestRecords(manifest); err == nil {
-		t.Fatal("representativeManifestRecords() missing commands = nil, want error")
-	}
-}
-
-func boolPtr(value bool) *bool { return &value }
-
-func stringPtr(value string) *string { return &value }
-
-func TestPersistentBindingTargetRejectsUnknownFlag(t *testing.T) {
-	if _, err := persistentBindingTarget("unknown-flag", PersistentFlagBindings{}); err == nil {
-		t.Fatal("persistentBindingTarget() unknown flag = nil, want error")
 	}
 }
 
@@ -952,39 +865,6 @@ func TestRegisterFlagRejectsMissingBindings(t *testing.T) {
 		Default:   "false",
 	}, flagTarget{}, "help"); err == nil {
 		t.Fatal("registerFlag() missing bool binding = nil, want error")
-	}
-}
-
-func TestNewRepresentativeFamilyComponentsLoadsEmbeddedManifest(t *testing.T) {
-	registry := commandregistry.NewRegistry()
-	if err := registry.Register("you", func(cmd *cobra.Command, args []string) error { return nil }); err != nil {
-		t.Fatalf("Register(you) error = %v", err)
-	}
-	if err := registry.Register("you.session.show", func(cmd *cobra.Command, args []string) error { return nil }); err != nil {
-		t.Fatalf("Register(you.session.show) error = %v", err)
-	}
-	components, err := NewRepresentativeFamilyComponents(registry, PersistentFlagBindings{
-		Verbose:                    boolPtr(false),
-		Debug:                      boolPtr(false),
-		Server:                     stringPtr("http://localhost:7437"),
-		JSON:                       boolPtr(false),
-		DefaultWorkerModelProvider: stringPtr(""),
-		DefaultWorkerModel:         stringPtr(""),
-	})
-	if err != nil {
-		t.Fatalf("NewRepresentativeFamilyComponents() error = %v", err)
-	}
-	if components.Show == nil {
-		t.Fatal("expected show component from generated manifest")
-	}
-}
-
-func TestLocalBindingTargetRejectsUnsupportedValueType(t *testing.T) {
-	if _, err := localBindingTarget(climanifest.Flag{
-		Long:      "name",
-		ValueType: "string",
-	}); err == nil {
-		t.Fatal("localBindingTarget(string) = nil, want error")
 	}
 }
 

@@ -1,7 +1,6 @@
 package climanifestcobra
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -17,25 +16,6 @@ import (
 const supportedLifecycleFormatVersion = "1.0.0"
 
 var lifecycleVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$`)
-
-// CompletionRegistry maps stable manifest input IDs to transport-edge dynamic
-// completion callbacks.
-type CompletionRegistry map[string]cobra.CompletionFunc
-
-// GenericHandler receives one invocation's normalized inputs keyed by stable
-// manifest input ID. It remains independent of Cobra and public command names.
-type GenericHandler func(context.Context, map[string]any) error
-
-// HandlerRegistry maps stable manifest handler IDs to transport-edge behavior.
-type HandlerRegistry map[string]GenericHandler
-
-// GenericBindings supplies executable transport bindings used while projecting
-// a generic manifest. Additional stable-ID registries can be added here without
-// coupling manifest records to public command or input spellings.
-type GenericBindings struct {
-	Completions CompletionRegistry
-	Handlers    HandlerRegistry
-}
 
 func resolveGenericBindings(bindingSets []GenericBindings) (GenericBindings, error) {
 	if len(bindingSets) > 1 {
@@ -73,7 +53,16 @@ func validateGenericHandlers(plan []plannedCommand, bindings GenericBindings) er
 			)
 		}
 		owners[handler.ID] = item.record.ID
-		if bindings.Handlers == nil || bindings.Handlers[handler.ID] == nil {
+		genericHandler := bindings.Handlers[handler.ID]
+		cobraHandler := bindings.CobraHandlers[handler.ID]
+		if genericHandler != nil && cobraHandler != nil {
+			return fmt.Errorf(
+				"command %q handler ID %q has multiple executable bindings",
+				item.record.ID,
+				handler.ID,
+			)
+		}
+		if genericHandler == nil && cobraHandler == nil {
 			return fmt.Errorf(
 				"command %q handler ID %q has no registered executable binding",
 				item.record.ID,
@@ -89,10 +78,14 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 		return
 	}
 	handler := bindings.Handlers[record.Handler.ID]
-	cmd.RunE = func(command *cobra.Command, _ []string) error {
+	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
+	cmd.RunE = func(command *cobra.Command, args []string) error {
 		values, err := InputValues(command)
 		if err != nil {
 			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+		}
+		if cobraHandler != nil {
+			return cobraHandler(command, args, values)
 		}
 		return handler(command.Context(), values)
 	}

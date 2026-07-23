@@ -11,9 +11,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -32,286 +29,10 @@ func registerDeprecatedPortFlag(cmd *cobra.Command, target *int) {
 	_ = cmd.Flags().MarkHidden("port")
 }
 
-// RepresentativeFamilyComponents holds detached representative-family commands
-// before the session/show subtree is attached to the generated root.
-type RepresentativeFamilyComponents struct {
-	Root    *cobra.Command
-	Session *cobra.Command
-	Show    *cobra.Command
-}
-
-// NewRepresentativeFamilyCommand builds the representative you → session → show tree
-// from generated metadata and attaches handwritten handlers by stable command ID.
-// Only contracted representative-family commands are constructed.
-func NewRepresentativeFamilyCommand(registry *commandregistry.Registry, bindings PersistentFlagBindings) (*cobra.Command, error) {
-	components, err := NewRepresentativeFamilyComponents(registry, bindings)
-	if err != nil {
-		return nil, err
-	}
-	components.Session.AddCommand(components.Show)
-	components.Root.AddCommand(components.Session)
-	return components.Root, nil
-}
-
-// NewRepresentativeFamilyComponents builds detached representative-family commands
-// so production wiring can attach additional handwritten session siblings in order.
-func NewRepresentativeFamilyComponents(registry *commandregistry.Registry, bindings PersistentFlagBindings) (RepresentativeFamilyComponents, error) {
-	manifest, err := generated.RepresentativeFamilyManifest()
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	return NewRepresentativeFamilyComponentsFromManifest(manifest, registry, bindings)
-}
-
-// NewRepresentativeFamilyCommandFromManifest builds the representative tree from one
-// generated manifest snapshot. Manifest command IDs must stay within the representative family.
-func NewRepresentativeFamilyCommandFromManifest(
-	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings PersistentFlagBindings,
-) (*cobra.Command, error) {
-	components, err := NewRepresentativeFamilyComponentsFromManifest(manifest, registry, bindings)
-	if err != nil {
-		return nil, err
-	}
-	components.Session.AddCommand(components.Show)
-	components.Root.AddCommand(components.Session)
-	return components.Root, nil
-}
-
-// NewRepresentativeFamilyComponentsFromManifest builds detached representative-family
-// commands from one generated manifest snapshot.
-func NewRepresentativeFamilyComponentsFromManifest(
-	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings PersistentFlagBindings,
-) (RepresentativeFamilyComponents, error) {
-	if registry == nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: registry is required")
-	}
-	if err := validateBindings(bindings); err != nil {
-		return RepresentativeFamilyComponents{}, err
-	}
-	if err := validateRepresentativeManifest(manifest); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-
-	rootRecord, sessionRecord, showRecord, err := representativeManifestRecords(manifest)
-	if err != nil {
-		return RepresentativeFamilyComponents{}, err
-	}
-
-	root, err := buildCommandFromRecord(rootRecord)
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	root.SilenceUsage = true
-	if err := registerPersistentFlags(root, rootRecord, bindings); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	if err := registry.AttachRunE(root, rootRecord.ID); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-
-	session, err := buildCommandFromRecord(sessionRecord)
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	if sessionRecord.Runnable {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %q must remain non-runnable", sessionRecord.ID)
-	}
-
-	show, err := buildCommandFromRecord(showRecord)
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	show.Args = positionalArgsFromManifest(showRecord)
-	show.PreRunE = rejectDeprecatedPortFlag
-	if err := registerLocalFlags(show, showRecord, bindings); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	if err := registry.AttachRunE(show, showRecord.ID); err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-
-	return RepresentativeFamilyComponents{
-		Root:    root,
-		Session: session,
-		Show:    show,
-	}, nil
-}
-
-func representativeManifestRecords(manifest climanifest.Manifest) (root, session, show climanifest.Command, err error) {
-	root, err = manifest.CommandByID("you")
-	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	session, err = manifest.CommandByID("you.session")
-	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	show, err = manifest.CommandByID("you.session.show")
-	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	return root, session, show, nil
-}
-
-func validateRepresentativeManifest(manifest climanifest.Manifest) error {
-	if len(manifest.Commands) != len(climanifestgen.RepresentativeFamilyCommandIDs) {
-		return fmt.Errorf(
-			"manifest command count = %d, want %d representative-family commands",
-			len(manifest.Commands),
-			len(climanifestgen.RepresentativeFamilyCommandIDs),
-		)
-	}
-	for commandID := range manifest.Commands {
-		if err := climanifestgen.AssertRepresentativeFamilyCommandID(commandID); err != nil {
-			return err
-		}
-	}
-	for _, commandID := range climanifestgen.RepresentativeFamilyCommandIDs {
-		if _, ok := manifest.Commands[commandID]; !ok {
-			return fmt.Errorf("manifest missing representative-family command %q", commandID)
-		}
-	}
-	return nil
-}
-
-func validateBindings(bindings PersistentFlagBindings) error {
-	required := []struct {
-		name string
-		ok   bool
-	}{
-		{"Verbose", bindings.Verbose != nil},
-		{"Debug", bindings.Debug != nil},
-		{"Server", bindings.Server != nil},
-		{"JSON", bindings.JSON != nil},
-		{"DefaultWorkerModelProvider", bindings.DefaultWorkerModelProvider != nil},
-		{"DefaultWorkerModel", bindings.DefaultWorkerModel != nil},
-	}
-	for _, field := range required {
-		if !field.ok {
-			return fmt.Errorf("build representative family command: bindings.%s is required", field.name)
-		}
-	}
-	return nil
-}
-
-func buildCommandFromRecord(record climanifest.Command) (*cobra.Command, error) {
-	if err := climanifestgen.AssertRepresentativeFamilyCommandID(record.ID); err != nil {
-		return nil, err
-	}
-	cmd := &cobra.Command{
-		Use:     record.Usage.Line,
-		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
-		Long:    record.Documentation.Documentation.Description.CanonicalEnglish,
-		Example: record.Usage.Example,
-		Aliases: append([]string(nil), record.Aliases...),
-	}
-	if record.Visibility == "hidden" {
-		cmd.Hidden = true
-	}
-	return cmd, nil
-}
-
-func registerPersistentFlags(root *cobra.Command, record climanifest.Command, bindings PersistentFlagBindings) error {
-	flags := sortedFlags(record.Flags)
-	for _, flag := range flags {
-		if flag.Scope != "persistent" {
-			continue
-		}
-		target, err := persistentBindingTarget(flag.Long, bindings)
-		if err != nil {
-			return err
-		}
-		usage := flagUsage(bindings, flag.Long)
-		if err := registerFlag(root.PersistentFlags(), flag, target, usage); err != nil {
-			return fmt.Errorf("register root persistent flag %q: %w", flag.Long, err)
-		}
-		if err := applyFlagContract(root.PersistentFlags().Lookup(flag.Long), flag); err != nil {
-			return fmt.Errorf("apply root persistent flag %q contract: %w", flag.Long, err)
-		}
-	}
-	return nil
-}
-
-func registerLocalFlags(cmd *cobra.Command, record climanifest.Command, bindings PersistentFlagBindings) error {
-	var deprecatedPort int
-	flags := sortedFlags(record.Flags)
-	for _, flag := range flags {
-		if flag.Scope != "local" {
-			continue
-		}
-		if flag.Long == "port" {
-			registerDeprecatedPortFlag(cmd, &deprecatedPort)
-			if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
-				return fmt.Errorf("apply port flag contract: %w", err)
-			}
-			continue
-		}
-		target, err := localBindingTarget(flag)
-		if err != nil {
-			return err
-		}
-		usage := flagUsage(bindings, flag.Long)
-		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
-			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
-		}
-		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
-			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
-		}
-	}
-	return nil
-}
-
-func flagUsage(bindings PersistentFlagBindings, longName string) string {
-	if bindings.FlagUsages == nil {
-		return ""
-	}
-	return bindings.FlagUsages[longName]
-}
-
 type flagTarget struct {
 	boolValue   *bool
 	stringValue *string
 	intValue    *int
-}
-
-func persistentBindingTarget(longName string, bindings PersistentFlagBindings) (flagTarget, error) {
-	switch longName {
-	case "verbose":
-		return flagTarget{boolValue: bindings.Verbose}, nil
-	case "debug":
-		return flagTarget{boolValue: bindings.Debug}, nil
-	case "server":
-		return flagTarget{stringValue: bindings.Server}, nil
-	case "json":
-		return flagTarget{boolValue: bindings.JSON}, nil
-	case "default-worker-model-provider":
-		return flagTarget{stringValue: bindings.DefaultWorkerModelProvider}, nil
-	case "default-worker-model":
-		return flagTarget{stringValue: bindings.DefaultWorkerModel}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported root persistent flag %q", longName)
-	}
-}
-
-func localBindingTarget(flag climanifest.Flag) (flagTarget, error) {
-	switch flag.ValueType {
-	case "int":
-		value, err := strconv.Atoi(flag.Default)
-		if err != nil {
-			return flagTarget{}, fmt.Errorf("parse default for local flag %q: %w", flag.Long, err)
-		}
-		heap := value
-		return flagTarget{intValue: &heap}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported local flag %q with value type %q", flag.Long, flag.ValueType)
-	}
 }
 
 func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flagTarget, usage string) error {
@@ -477,7 +198,7 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		built[item.record.Path] = projectCommand(item.record, item.arguments)
 	}
 	for _, item := range plan {
-		if err := projectFlags(built[item.record.Path], item, targets); err != nil {
+		if err := projectFlags(built[item.record.Path], item, targets, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
 		projectArgumentAndRelationshipRules(built[item.record.Path], item)
@@ -858,20 +579,8 @@ func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error 
 	if err != nil {
 		return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
 	}
-	if hasGenericFlagDefault(flag) {
-		if isCanonicalFlagRecord(flag) {
-			count := genericInputValueCount(defaultValue)
-			if count < flag.MinCardinality ||
-				(flag.MaxCardinality != -1 && count > flag.MaxCardinality) {
-				return genericFlagError(commandID, flag.ID, "typed default count is outside declared cardinality")
-			}
-		}
-		if normalized := normalizeGenericInput(defaultValue, flag.Normalization); !reflect.DeepEqual(normalized, defaultValue) {
-			return genericFlagError(commandID, flag.ID, "typed default is not in declared normalized form")
-		}
-		if err := validateEnumValue(flag, defaultValue); err != nil {
-			return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
-		}
+	if err := validateGenericFlagDefaultValue(commandID, flag, defaultValue); err != nil {
+		return err
 	}
 	if flag.NoOptionValue == nil && flag.NoOptionDefault == "" {
 		return nil
@@ -880,14 +589,38 @@ func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error 
 	if err != nil {
 		return genericFlagError(commandID, flag.ID, "invalid no-option default: %v", err)
 	}
-	if flag.ValueType == "stringArray" {
-		return genericFlagError(commandID, flag.ID, "no-option default is incompatible with repeated-string flags")
+	if flag.ValueType != "bool" && flag.ValueType != "string" {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"no-option default is supported only for boolean and string flags",
+		)
 	}
 	if normalized := normalizeGenericInput(noOptionValue, flag.Normalization); !reflect.DeepEqual(normalized, noOptionValue) {
 		return genericFlagError(commandID, flag.ID, "no-option default is not in declared normalized form")
 	}
 	if err := validateEnumValue(flag, noOptionValue); err != nil {
 		return genericFlagError(commandID, flag.ID, "invalid no-option default: %v", err)
+	}
+	return nil
+}
+
+func validateGenericFlagDefaultValue(commandID string, flag climanifest.Flag, value any) error {
+	if !hasGenericFlagDefault(flag) {
+		return nil
+	}
+	if isCanonicalFlagRecord(flag) {
+		count := genericInputValueCount(value)
+		if count < flag.MinCardinality ||
+			(flag.MaxCardinality != -1 && count > flag.MaxCardinality) {
+			return genericFlagError(commandID, flag.ID, "typed default count is outside declared cardinality")
+		}
+	}
+	if normalized := normalizeGenericInput(value, flag.Normalization); !reflect.DeepEqual(normalized, value) {
+		return genericFlagError(commandID, flag.ID, "typed default is not in declared normalized form")
+	}
+	if err := validateEnumValue(flag, value); err != nil {
+		return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
 	}
 	return nil
 }
@@ -924,7 +657,12 @@ func genericInputValueCount(value any) int {
 	return 1
 }
 
-func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*genericFlagValue) error {
+func projectFlags(
+	cmd *cobra.Command,
+	plan plannedCommand,
+	targets map[string]*genericFlagValue,
+	bindings GenericBindings,
+) error {
 	if cmd.Annotations == nil {
 		cmd.Annotations = make(map[string]string)
 	}
@@ -936,7 +674,7 @@ func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*g
 			}
 			continue
 		}
-		value, err := newGenericFlagValue(item.record)
+		value, err := newGenericFlagValue(item.record, bindings.Inputs[item.record.ID])
 		if err != nil {
 			return genericFlagError(plan.record.ID, item.record.ID, "allocate typed storage: %v", err)
 		}

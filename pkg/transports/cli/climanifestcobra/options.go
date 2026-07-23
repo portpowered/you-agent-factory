@@ -13,8 +13,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// PersistentFlagBindings supplies live variables for root persistent flags declared
-// in generated representative-family metadata.
+// PersistentFlagBindings supplies live variables for root persistent flags.
 type PersistentFlagBindings struct {
 	Verbose                    *bool
 	Debug                      *bool
@@ -22,8 +21,7 @@ type PersistentFlagBindings struct {
 	JSON                       *bool
 	DefaultWorkerModelProvider *string
 	DefaultWorkerModel         *string
-	// FlagUsages supplies Cobra help text for persistent flags when the manifest
-	// does not yet carry per-flag usage descriptions.
+	// FlagUsages supplies help text while metadata lacks per-flag descriptions.
 	FlagUsages map[string]string
 }
 
@@ -140,9 +138,10 @@ type genericFlagValue struct {
 	enum          map[string]struct{}
 	value         any
 	arrayChanged  bool
+	binding       InputBinding
 }
 
-func newGenericFlagValue(flag climanifest.Flag) (*genericFlagValue, error) {
+func newGenericFlagValue(flag climanifest.Flag, binding InputBinding) (*genericFlagValue, error) {
 	value, err := genericFlagDefault(flag)
 	if err != nil {
 		return nil, err
@@ -156,6 +155,7 @@ func newGenericFlagValue(flag climanifest.Flag) (*genericFlagValue, error) {
 		normalization: flag.Normalization,
 		enum:          choices,
 		value:         cloneGenericInputValue(normalizeGenericInput(value, flag.Normalization)),
+		binding:       binding,
 	}, nil
 }
 
@@ -170,16 +170,16 @@ func (v *genericFlagValue) Set(raw string) error {
 	}
 	if v.valueType != "stringArray" {
 		v.value = value
-		return nil
+		return v.bind()
 	}
 	item := value.([]string)[0]
 	if !v.arrayChanged {
 		v.value = []string{item}
 		v.arrayChanged = true
-		return nil
+		return v.bind()
 	}
 	v.value = append(v.value.([]string), item)
-	return nil
+	return v.bind()
 }
 
 func (v *genericFlagValue) Type() string {
@@ -207,7 +207,7 @@ func (v *genericFlagValue) Append(raw string) error {
 		return err
 	}
 	v.value = append(v.value.([]string), item)
-	return nil
+	return v.bind()
 }
 
 func (v *genericFlagValue) Replace(values []string) error {
@@ -221,7 +221,14 @@ func (v *genericFlagValue) Replace(values []string) error {
 	}
 	v.value = replacement
 	v.arrayChanged = true
-	return nil
+	return v.bind()
+}
+
+func (v *genericFlagValue) bind() error {
+	if v.binding == nil {
+		return nil
+	}
+	return v.binding(cloneGenericInputValue(v.value))
 }
 
 func (v *genericFlagValue) GetSlice() []string {

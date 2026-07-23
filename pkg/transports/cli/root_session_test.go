@@ -205,7 +205,7 @@ func TestSessionDispatchesCommand_HelpDocumentsDurableInspection(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"dispatches [session-id]",
+		"dispatches <session-id>",
 		"dur-sess-",
 		"FactorySession",
 		"Dispatch",

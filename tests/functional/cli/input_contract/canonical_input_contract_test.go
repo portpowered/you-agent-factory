@@ -68,43 +68,192 @@ func TestCanonicalFactoryGroupRejectsUnknownSubcommand(t *testing.T) {
 	}
 }
 
-func TestCanonicalSchemaProjectionIsObservableThroughApplicationRoot(t *testing.T) {
+func TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot(t *testing.T) {
 	var observation cliobservation.Result
 	process := support.BuildProcess(t, serviceedges.Edges{
 		CLIObserver: cliobservation.Capture(&observation),
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you",
-		"run",
-		"--factory",
-		"factory.json",
-		"--output",
-		"response-stream",
+		"--server",
+		"http://localhost:9090",
+		"--json",
+		"session",
+		"show",
+		"session-customer",
 	})
 
 	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(run observation) error = %v", err)
+		t.Fatalf("Process.Execute(session show observation) error = %v", err)
 	}
 	if observation.Snapshot.Commands.RootPath != "you" {
 		t.Fatalf("observed root path = %q, want you", observation.Snapshot.Commands.RootPath)
 	}
-	run, found := observedCommand(observation, "you.run")
+	show, found := observedCommand(observation, "you.session.show")
 	if !found {
-		t.Fatal("application-root observation omitted stable command you.run")
+		t.Fatal("application-root observation omitted stable command you.session.show")
 	}
-	if run.Path != "you run" || !run.Runnable || !run.HandlerPresent {
-		t.Fatalf("observed run command = %#v, want runnable stable-ID handler projection", run)
+	if show.Path != "you session show" || !show.Runnable || !show.HandlerPresent {
+		t.Fatalf("observed session show command = %#v, want runnable stable-ID generic handler projection", show)
 	}
-	factory, found := cliobservation.Flag(observation.Parse, "factory")
-	if !found || !factory.Changed || factory.Value != "factory.json" {
-		t.Fatalf("observed --factory parse = %#v found=%v", factory, found)
+	server, found := cliobservation.Flag(observation.Parse, "server")
+	if !found || !server.Changed || server.Value != "http://localhost:9090" {
+		t.Fatalf("observed --server parse = %#v found=%v", server, found)
 	}
-	output, found := cliobservation.Flag(observation.Parse, "output")
-	if !found || !output.Changed || output.Value != "response-stream" {
-		t.Fatalf("observed --output parse = %#v found=%v", output, found)
+	jsonOutput, found := cliobservation.Flag(observation.Parse, "json")
+	if !found || !jsonOutput.Changed || jsonOutput.Value != "true" {
+		t.Fatalf("observed --json parse = %#v found=%v", jsonOutput, found)
 	}
-	if observation.Parse.CommandPath != "you run" {
-		t.Fatalf("observed parse command path = %q, want you run", observation.Parse.CommandPath)
+	if observation.Parse.CommandPath != "you session show" ||
+		len(observation.Parse.Positionals) != 1 ||
+		observation.Parse.Positionals[0] != "session-customer" {
+		t.Fatalf("observed session show parse = %#v", observation.Parse)
+	}
+
+	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(help.Input); err != nil {
+		t.Fatalf("Process.Execute(session show help) error = %v", err)
+	}
+	for _, marker := range []string{
+		"Show one live factory session",
+		"you session show [session-id]",
+		"--server",
+		"--json",
+	} {
+		if !strings.Contains(help.Stdout(), marker) {
+			t.Fatalf("session show help omitted %q:\n%s", marker, help.Stdout())
+		}
+	}
+}
+
+func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "required positional",
+			args: []string{"you", "session", "dispatches"},
+			want: "requires at least 1 arg",
+		},
+		{
+			name: "required flag",
+			args: []string{"you", "session", "create"},
+			want: `required flag(s) "--dir" not set`,
+		},
+		{
+			name: "relationship",
+			args: []string{"you", "session", "create", "--dir", ".", "--init-new-factory", "--validate-only"},
+			want: "cannot be used together",
+		},
+		{
+			name: "enumerated choice",
+			args: []string{"you", "session", "list", "--scope", "unknown"},
+			want: "scope must be live, persisted, or all",
+		},
+		{
+			name: "deprecated input before dispatch",
+			args: []string{"you", "session", "show", "--port", "9090"},
+			want: "--port is no longer supported",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inputs := support.FakeInputs(t.Context(), test.args)
+			err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Process.Execute(%v) error = %v, want %q", test.args, err, test.want)
+			}
+		})
+	}
+}
+
+func TestGenericSessionProjectionParsesVariadicInputsThroughApplicationRoot(t *testing.T) {
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "session", "list", "workspace-a", "workspace-b", "--scope", "all",
+	})
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(session list observation) error = %v", err)
+	}
+	if observation.Parse.CommandPath != "you session list" ||
+		len(observation.Parse.Positionals) != 2 ||
+		observation.Parse.Positionals[0] != "workspace-a" ||
+		observation.Parse.Positionals[1] != "workspace-b" {
+		t.Fatalf("observed session list parse = %#v", observation.Parse)
+	}
+	scope, found := cliobservation.Flag(observation.Parse, "scope")
+	if !found || !scope.Changed || scope.Value != "all" {
+		t.Fatalf("observed --scope parse = %#v found=%v", scope, found)
+	}
+}
+
+func TestGenericSessionProjectionCoversProductionCommandShapes(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		path string
+	}{
+		{
+			name: "root boolean shorthand and string options",
+			args: []string{
+				"you", "-v", "--debug", "--default-worker-model-provider", "openai",
+				"--default-worker-model", "gpt-test", "session", "list",
+			},
+			path: "you session list",
+		},
+		{
+			name: "list default scope",
+			args: []string{"you", "session", "list"},
+			path: "you session list",
+		},
+		{
+			name: "dispatch filters",
+			args: []string{
+				"you", "session", "dispatches", "missing-session",
+				"--phase", "queued", "--status", "active",
+			},
+			path: "you session dispatches",
+		},
+		{
+			name: "delete required id",
+			args: []string{"you", "session", "delete", "missing-session"},
+			path: "you session delete",
+		},
+		{
+			name: "pause optional id",
+			args: []string{"you", "session", "pause", "missing-session"},
+			path: "you session pause",
+		},
+		{
+			name: "resume optional id",
+			args: []string{"you", "session", "resume", "missing-session"},
+			path: "you session resume",
+		},
+		{
+			name: "show omitted optional id",
+			args: []string{"you", "session", "show"},
+			path: "you session show",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var observation cliobservation.Result
+			process := support.BuildProcess(t, serviceedges.Edges{
+				CLIObserver: cliobservation.Capture(&observation),
+			})
+			inputs := support.FakeInputs(t.Context(), test.args)
+			_ = process.Execute(inputs.Input)
+			if observation.Parse.CommandPath != test.path {
+				t.Fatalf("observed command path = %q, want %q", observation.Parse.CommandPath, test.path)
+			}
+		})
 	}
 }
 
