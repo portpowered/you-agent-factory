@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
 
 // CurrentFactoryName is the domain identifier for the current Factory selector.
@@ -50,7 +51,7 @@ func NewLiveSession(
 	if err := EnsureRuntimeFactorySessionID(session, generateSessionID); err != nil {
 		return nil
 	}
-	session.ResponseEvents = NewSessionResponseEventStore(CanonicalFactorySessionID(session), clock, eventIDs)
+	session.ResponseEvents = responseeventstore.NewSessionResponseEventStore(CanonicalFactorySessionID(session), clock, eventIDs)
 	return session
 }
 

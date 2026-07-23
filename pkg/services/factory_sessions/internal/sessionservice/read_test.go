@@ -8,6 +8,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
@@ -52,7 +53,7 @@ func TestService_SubscribeFactoryResponseEvents_UsesExactSessionWithoutDefaultFa
 		sessions: map[string]*factorysessions.LiveSession{
 			factorysessions.DefaultSessionID: {
 				ID:             factorysessions.DefaultSessionID,
-				ResponseEvents: factorysessions.NewSessionResponseEventStore(factorysessions.DefaultSessionID, serviceTestClock, func() string { return "response-event-test-id" }),
+				ResponseEvents: responseeventstore.NewSessionResponseEventStore(factorysessions.DefaultSessionID, serviceTestClock, func() string { return "response-event-test-id" }),
 			},
 		},
 	})

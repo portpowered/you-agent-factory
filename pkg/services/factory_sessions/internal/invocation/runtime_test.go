@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -21,11 +22,11 @@ import (
 func newInvocationTestSessionState() *sessionruntime.Service {
 	clock := platformclock.Real{}
 	newStream := func() *factorysessions.SessionResponseStream {
-		return factorysessions.NewSessionResponseStream(clock)
+		return responsestream.NewSessionResponseStream(clock)
 	}
 	return sessionruntime.New(
 		sessionregistry.New(),
-		factorysessions.NewResponseStreamRegistry(newStream, clock),
+		responsestream.NewRegistry(newStream, clock),
 		nil,
 		clock,
 		func() string { return "response-event-test-id" },

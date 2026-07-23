@@ -299,14 +299,21 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 }
 
 func (s *Service) bindResponseEventCompletion(session *factorysessions.LiveSession, addRecorder func(func(interfaces.FactoryEventType))) {
-	if s.responseEvents != nil && addRecorder != nil {
+	if session == nil || addRecorder == nil {
+		return
+	}
+	if s.responseEvents != nil {
 		addRecorder(func(eventType interfaces.FactoryEventType) {
 			if eventType == interfaces.FactoryEventTypeSessionCompleted {
 				s.responseEvents.Complete(session.ResponseEvents)
 			}
 		})
 	} else {
-		factorysessions.BindResponseEventCompletion(session, addRecorder)
+		addRecorder(func(eventType interfaces.FactoryEventType) {
+			if eventType == interfaces.FactoryEventTypeSessionCompleted {
+				session.CompleteResponseEvents()
+			}
+		})
 	}
 }
 

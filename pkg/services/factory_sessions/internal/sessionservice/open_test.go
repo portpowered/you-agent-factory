@@ -21,11 +21,11 @@ import (
 var serviceTestClock = platformclock.Real{}
 
 func newServiceTestResponseStream() *factorysessions.SessionResponseStream {
-	return factorysessions.NewSessionResponseStream(serviceTestClock)
+	return responsestream.NewSessionResponseStream(serviceTestClock)
 }
 
 func newServiceTestGateway(host factorysessionservice.LegacyHost) *factorysessionservice.Service {
-	registry := factorysessions.NewResponseStreamRegistry(newServiceTestResponseStream, serviceTestClock)
+	registry := responsestream.NewRegistry(newServiceTestResponseStream, serviceTestClock)
 	return factorysessionservice.New(host, registry)
 }
 

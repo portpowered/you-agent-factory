@@ -25,11 +25,11 @@ func streamResponseEventID() string {
 }
 
 func newTestResponseStream() *factorysessions.SessionResponseStream {
-	return factorysessions.NewSessionResponseStream(streamTestClock)
+	return responsestream.NewSessionResponseStream(streamTestClock)
 }
 
 func newTestResponseStreamRegistry() *factorysessions.ResponseStreamRegistry {
-	return factorysessions.NewResponseStreamRegistry(newTestResponseStream, streamTestClock)
+	return responsestream.NewRegistry(newTestResponseStream, streamTestClock)
 }
 
 func newTestManager(host stream.Host) *stream.Manager {
@@ -91,7 +91,7 @@ func (h *streamTestHost) GetLiveSession(_ string) *factorysessions.LiveSession {
 
 func (h *streamTestHost) ResponseStreams(_ *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
 	if h.streams == nil {
-		h.streams = factorysessions.NewSessionResponseStreamSetWithFactory(newTestResponseStream, streamTestClock)
+		h.streams = responsestream.NewStreamSetWithFactory(newTestResponseStream, streamTestClock)
 	}
 	return h.streams
 }

@@ -28,7 +28,7 @@ func responseFragment(dispatchID, payload string) workers.ProgressFragment {
 
 func (h *streamGatewayHost) ResponseStreams(_ *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
 	if h.streams == nil {
-		h.streams = factorysessions.NewSessionResponseStreamSetWithFactory(newServiceTestResponseStream, serviceTestClock)
+		h.streams = responsestream.NewStreamSetWithFactory(newServiceTestResponseStream, serviceTestClock)
 	}
 	return h.streams
 }

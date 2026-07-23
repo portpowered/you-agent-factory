@@ -170,22 +170,6 @@ func (s *LiveSession) CloseResponseEvents() {
 	s.ResponseEvents.Close()
 }
 
-// BindResponseEventCompletion completes the session-owned response-event store
-// when its canonical FactoryEvent history observes terminal session completion.
-func BindResponseEventCompletion(
-	session *LiveSession,
-	addRecorder func(func(interfaces.FactoryEventType)),
-) {
-	if session == nil || addRecorder == nil {
-		return
-	}
-	addRecorder(func(eventType interfaces.FactoryEventType) {
-		if eventType == interfaces.FactoryEventTypeSessionCompleted {
-			session.CompleteResponseEvents()
-		}
-	})
-}
-
 // SessionResponseEventStore retains immutable FactoryResponseEvent records for
 // one live Factory Session runtime. It is separate from canonical factory event
 // history and from service-coordinator state.
@@ -221,12 +205,6 @@ var (
 // dispatch identity.
 func WithResponseEventDispatchFilter(dispatchID string) ResponseEventSubscribeOption {
 	return responseeventstore.WithDispatchFilter(dispatchID)
-}
-
-// NewSessionResponseEventStore allocates an empty response-event store owned
-// by one live Factory Session runtime using the supplied process clock.
-func NewSessionResponseEventStore(factorySessionID string, clock factory.Clock, generateEventID ResponseEventIDGenerator) *SessionResponseEventStore {
-	return responseeventstore.NewSessionResponseEventStore(factorySessionID, clock, generateEventID)
 }
 
 // SessionResponseStream keeps ordered internal provider progress for one live
@@ -268,30 +246,6 @@ type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
 // SessionResponseStreamRetentionAccounting summarizes retained stream bytes,
 // event count, and oldest event timestamp for retention decisions.
 type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounting
-
-// NewSessionResponseStream allocates an empty internal response stream owned by
-// one live Factory Session runtime using the supplied process clock.
-func NewSessionResponseStream(clock factory.Clock) *SessionResponseStream {
-	return responsestream.NewSessionResponseStream(clock)
-}
-
-// NewResponseStreamRegistry allocates an empty runtime-scoped response-stream
-// registry from explicit stream and clock dependencies.
-func NewResponseStreamRegistry(
-	newStream func() *SessionResponseStream,
-	clock factory.Clock,
-) *ResponseStreamRegistry {
-	return responsestream.NewRegistry(newStream, clock)
-}
-
-// NewSessionResponseStreamSetWithFactory allocates a dispatch-keyed stream set
-// using the supplied stream constructor and process clock.
-func NewSessionResponseStreamSetWithFactory(
-	newStream func() *SessionResponseStream,
-	clock factory.Clock,
-) *SessionResponseStreamSet {
-	return responsestream.NewStreamSetWithFactory(newStream, clock)
-}
 
 // SessionResponseStreamSubscription is an internal live-session response-stream
 // cursor that can read retained and live dispatch progress.

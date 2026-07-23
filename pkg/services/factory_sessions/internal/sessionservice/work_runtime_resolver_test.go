@@ -9,6 +9,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -18,11 +19,11 @@ import (
 func newWorkResolverSessionState() *sessionruntime.Service {
 	clock := platformclock.Real{}
 	newStream := func() *factorysessions.SessionResponseStream {
-		return factorysessions.NewSessionResponseStream(clock)
+		return responsestream.NewSessionResponseStream(clock)
 	}
 	return sessionruntime.New(
 		sessionregistry.New(),
-		factorysessions.NewResponseStreamRegistry(newStream, clock),
+		responsestream.NewRegistry(newStream, clock),
 		nil,
 		clock,
 		func() string { return "response-event-test-id" },

@@ -1825,11 +1825,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "BindResponseEventCompletion"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
       "target": "CanonicalFactorySessionID"
     },
     {
@@ -1841,26 +1836,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/types.go",
       "target": "IsUUIDFactorySessionID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "NewResponseStreamRegistry"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "NewSessionResponseEventStore"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "NewSessionResponseStream"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "NewSessionResponseStreamSetWithFactory"
     },
     {
       "rule": "service-root-exported-function",
