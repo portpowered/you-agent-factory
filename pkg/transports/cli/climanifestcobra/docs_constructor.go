@@ -939,8 +939,12 @@ func commandExamples(record climanifest.Command) string {
 }
 
 func commandLong(record climanifest.Command) string {
-	return record.Documentation.Documentation.Title.CanonicalEnglish + "\n\n" +
-		record.Documentation.Documentation.Description.CanonicalEnglish
+	title := record.Documentation.Documentation.Title.CanonicalEnglish
+	description := record.Documentation.Documentation.Description.CanonicalEnglish
+	if strings.HasPrefix(description, title) {
+		return description
+	}
+	return title + "\n\n" + description
 }
 
 func equalStrings(left, right []string) bool {

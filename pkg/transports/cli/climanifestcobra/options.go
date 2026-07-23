@@ -768,6 +768,7 @@ func projectArgumentAndRelationshipRules(cmd *cobra.Command, plan plannedCommand
 			return assignArgumentValues(command, plan, raw)
 		}
 	}
+	projectCobraFlagGroupAnnotations(cmd, plan.relationships)
 	if len(plan.flags) == 0 && len(plan.relationships) == 0 {
 		return
 	}
@@ -983,17 +984,4 @@ func participantPresent(cmd *cobra.Command, participant plannedParticipant) bool
 	encoded := cmd.Annotations[genericArgumentAnnotationPrefix+participant.id]
 	var value encodedArgumentValue
 	return json.Unmarshal([]byte(encoded), &value) == nil && value.Present
-}
-
-func relationshipError(relationship plannedRelationship, message string) error {
-	names := make([]string, len(relationship.participants))
-	for index, participant := range relationship.participants {
-		names[index] = participant.public
-	}
-	return fmt.Errorf(
-		"input relationship %q: %s %s",
-		relationship.record.ID,
-		message,
-		strings.Join(names, ", "),
-	)
 }

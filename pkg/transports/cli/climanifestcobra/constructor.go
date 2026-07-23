@@ -686,6 +686,11 @@ func projectFlags(
 		if err := registerGenericFlag(flagSet, item.record, value); err != nil {
 			return genericFlagError(plan.record.ID, item.record.ID, "register flag: %v", err)
 		}
+		if item.record.Required && len(item.record.Aliases) == 0 {
+			if err := cmd.MarkFlagRequired(item.record.Long); err != nil {
+				return genericFlagError(plan.record.ID, item.record.ID, "mark required: %v", err)
+			}
+		}
 	}
 	return nil
 }
@@ -695,6 +700,9 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 	registered := flagSet.Lookup(record.Long)
 	registered.Hidden = record.Visibility == "hidden"
 	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}
+	if record.Required {
+		registered.Annotations["infinite-you/required"] = []string{"true"}
+	}
 	if record.NoOptionValue != nil || record.NoOptionDefault != "" {
 		noOption, err := genericNoOptionValue(record)
 		if err != nil {
@@ -726,4 +734,41 @@ func validateRequiredGenericFlags(cmd *cobra.Command, plan plannedCommand) error
 	nextFlag:
 	}
 	return nil
+}
+
+func projectCobraFlagGroupAnnotations(cmd *cobra.Command, relationships []plannedRelationship) {
+	for _, relationship := range relationships {
+		names := make([]string, 0, len(relationship.participants))
+		for _, participant := range relationship.participants {
+			if participant.kind != "flag" {
+				names = nil
+				break
+			}
+			names = append(names, strings.TrimPrefix(participant.public, "--"))
+		}
+		if len(names) == 0 {
+			continue
+		}
+		switch relationship.record.Kind {
+		case "mutually-exclusive", "conflict":
+			cmd.MarkFlagsMutuallyExclusive(names...)
+		case "required-together":
+			cmd.MarkFlagsRequiredTogether(names...)
+		case "at-least-one":
+			cmd.MarkFlagsOneRequired(names...)
+		}
+	}
+}
+
+func relationshipError(relationship plannedRelationship, message string) error {
+	names := make([]string, len(relationship.participants))
+	for index, participant := range relationship.participants {
+		names[index] = participant.public
+	}
+	return fmt.Errorf(
+		"input relationship %q: %s %s",
+		relationship.record.ID,
+		message,
+		strings.Join(names, ", "),
+	)
 }
