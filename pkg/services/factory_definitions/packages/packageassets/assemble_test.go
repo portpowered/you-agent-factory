@@ -166,6 +166,46 @@ func TestAssemble_RejectsScriptTargetOutsideCanonicalScriptRoot(t *testing.T) {
 	assertAssetError(t, err, definition.Package, "factory/docs/setup.sh")
 }
 
+func TestAssemble_RejectsPortableAssetTargetsOutsideCanonicalTypeRoots(t *testing.T) {
+	tests := []struct {
+		name       string
+		fileType   string
+		targetPath string
+		wantRoot   string
+	}{
+		{
+			name:       "document",
+			fileType:   interfaces.BundledFileTypeDoc,
+			targetPath: "factory/inputs/guide.md",
+			wantRoot:   "factory/docs/",
+		},
+		{
+			name:       "input",
+			fileType:   interfaces.BundledFileTypeInput,
+			targetPath: "factory/docs/request.json",
+			wantRoot:   "factory/inputs/",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			definition := Definition{
+				Package: "@you/example",
+				FactoryJSON: []byte(`{"name":"@you/example","supportingFiles":{"bundledFiles":[{` +
+					`"id":"outside","type":"` + test.fileType + `","targetPath":"` + test.targetPath + `",` +
+					`"content":{"encoding":"utf-8","inline":"content"}}]}}`),
+				Assets: fstest.MapFS{},
+			}
+
+			_, err := Assemble(definition)
+			assertAssetError(t, err, definition.Package, test.targetPath)
+			if !strings.Contains(err.Error(), test.wantRoot) {
+				t.Fatalf("error = %q, want canonical root %q", err, test.wantRoot)
+			}
+		})
+	}
+}
+
 func TestAssemble_RejectsDuplicateDiscoveredAndAuthoredTarget(t *testing.T) {
 	const target = "factory/scripts/setup.sh"
 	definition := Definition{

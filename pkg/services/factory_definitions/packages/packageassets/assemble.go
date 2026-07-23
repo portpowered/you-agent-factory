@@ -245,16 +245,11 @@ func assetBundledEntry(asset scriptAsset) map[string]any {
 }
 
 func supportedTargetRoot(fileType string) string {
-	switch fileType {
-	case interfaces.BundledFileTypeScript:
-		return scriptTargetRoot
-	case interfaces.BundledFileTypeDoc:
-		return docTargetRoot
-	case interfaces.BundledFileTypeInput:
-		return inputTargetRoot
-	default:
-		return ""
-	}
+	return map[string]string{
+		interfaces.BundledFileTypeScript: scriptTargetRoot,
+		interfaces.BundledFileTypeDoc:    docTargetRoot,
+		interfaces.BundledFileTypeInput:  inputTargetRoot,
+	}[fileType]
 }
 
 func validateBundledTarget(target string) error {
