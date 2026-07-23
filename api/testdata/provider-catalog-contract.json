@@ -1,0 +1,117 @@
+{
+  "formatVersion": "1.0.0",
+  "providers": [
+    {
+      "id": "example-alpha",
+      "aliases": [
+        "alpha"
+      ],
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Example Alpha"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Example provider used only to prove the public metadata contract."
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://example.com/providers/alpha"
+        }
+      ],
+      "technicalSupportLevel": "experimental",
+      "implementationAvailability": "externally-supplied",
+      "maximumExecutionCapabilities": {
+        "promptSubmission": true,
+        "imageInput": false,
+        "sessionResume": true,
+        "structuredOutput": true,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "nativeStreaming": true,
+        "messageDeltas": true,
+        "messageSnapshots": true,
+        "reasoningSummaries": false,
+        "toolLifecycle": true,
+        "toolOutputDeltas": false,
+        "fileChanges": false,
+        "plans": false,
+        "usage": true,
+        "stableItemIds": true,
+        "providerReconnect": true
+      },
+      "discovery": {
+        "executableNames": [
+          "example-alpha"
+        ],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "configurationKeys": [
+          "providers.example-alpha.enabled"
+        ]
+      },
+      "deprecation": {
+        "deprecatedSince": "2026-07-23",
+        "reason": {
+          "type": "LOCALIZABLE_ASSET",
+          "value": "Use Example Next for new integrations."
+        },
+        "replacementProviderId": "example-next"
+      }
+    },
+    {
+      "id": "example-next",
+      "aliases": [],
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Example Next"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Replacement example provider used only for contract verification."
+      },
+      "documentation": [
+        {
+          "kind": "homepage",
+          "url": "https://example.com/providers/next"
+        }
+      ],
+      "technicalSupportLevel": "production",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "promptSubmission": true,
+        "imageInput": true,
+        "sessionResume": true,
+        "structuredOutput": true,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": true
+      },
+      "maximumResponseFidelityCapabilities": {
+        "nativeStreaming": true,
+        "messageDeltas": true,
+        "messageSnapshots": true,
+        "reasoningSummaries": true,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "fileChanges": true,
+        "plans": true,
+        "usage": true,
+        "stableItemIds": true,
+        "providerReconnect": true
+      },
+      "discovery": {
+        "executableNames": [
+          "example-next"
+        ],
+        "endpointKinds": [],
+        "configurationKeys": []
+      }
+    }
+  ]
+}

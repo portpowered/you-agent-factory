@@ -1,0 +1,39 @@
+id: codex
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Codex
+description:
+  type: LOCALIZABLE_ASSET
+  value: OpenAI Codex CLI integration.
+documentation:
+  - kind: reference
+    url: https://developers.openai.com/codex/cli/reference/
+technicalSupportLevel: production
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: true
+  sessionResume: true
+  structuredOutput: true
+  toolExecution: true
+  workingDirectory: true
+  worktree: true
+maximumResponseFidelityCapabilities:
+  nativeStreaming: true
+  messageDeltas: false
+  messageSnapshots: true
+  reasoningSummaries: true
+  toolLifecycle: true
+  toolOutputDeltas: true
+  fileChanges: true
+  plans: true
+  usage: true
+  stableItemIds: true
+  providerReconnect: false
+discovery:
+  executableNames:
+    - codex
+  endpointKinds:
+    - stdio
+  configurationKeys: []

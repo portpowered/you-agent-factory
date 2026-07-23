@@ -1,0 +1,41 @@
+{
+  "name": "@you-agent-factory/model-providers",
+  "version": "0.0.0",
+  "description": "Typed, data-only model-provider catalog and JSON Schemas.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git"
+  },
+  "files": [
+    "README.md",
+    "LICENSE.md",
+    "generated/catalog.json",
+    "generated/provider-manifest.schema.json",
+    "generated/provider-catalog.schema.json",
+    "metadata/manifest.json",
+    "types/index.d.ts",
+    "types/catalog.d.ts",
+    "types/json-schema.d.ts",
+    "types/publication-manifest.d.ts"
+  ],
+  "exports": {
+    "./manifest": {
+      "types": "./types/publication-manifest.d.ts",
+      "default": "./metadata/manifest.json"
+    },
+    "./catalog": {
+      "types": "./types/catalog.d.ts",
+      "default": "./generated/catalog.json"
+    },
+    "./schemas/provider-manifest": {
+      "types": "./types/json-schema.d.ts",
+      "default": "./generated/provider-manifest.schema.json"
+    },
+    "./schemas/provider-catalog": {
+      "types": "./types/json-schema.d.ts",
+      "default": "./generated/provider-catalog.schema.json"
+    },
+    "./types": "./types/index.d.ts"
+  }
+}

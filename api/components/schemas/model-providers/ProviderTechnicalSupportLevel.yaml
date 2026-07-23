@@ -1,0 +1,9 @@
+type: string
+description: >-
+  Maintainer-verified technical support posture for a provider integration.
+  This value does not describe whether the provider is installed or ready on
+  the current machine.
+enum:
+  - production
+  - experimental
+  - not-supported

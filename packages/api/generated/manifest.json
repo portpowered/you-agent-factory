@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "1021c7a189ede77ec9e82b7ec604fa9ca42271101e434d3637178e6af1f220fd",
+      "artifactHash": "12a410b6ad25b8eac90306fa58142f7dfbc152a0d214416c321c49cb01f5217e",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "1021c7a189ede77ec9e82b7ec604fa9ca42271101e434d3637178e6af1f220fd",
+        "sourceHash": "12a410b6ad25b8eac90306fa58142f7dfbc152a0d214416c321c49cb01f5217e",
         "visibility": "public"
       },
       "family": "openapi",
@@ -372,5 +372,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "ec5aa7cc0efbc7ddf0507ec9f51fb90136bb8c41"
+  "sourceCommit": "6e6c5ea8b3bc206db1ec6f207c7171240220a7d7"
 }

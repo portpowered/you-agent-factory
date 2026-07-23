@@ -1,0 +1,367 @@
+{
+  "$defs": {
+    "NameValue": {
+      "additionalProperties": false,
+      "description": "A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.",
+      "properties": {
+        "id": {
+          "description": "Optional stable metadata identifier; consumers must not render it as display copy.",
+          "type": "string"
+        },
+        "locales": {
+          "description": "Canonical BCP 47 locales for which the base value was authored.",
+          "items": {
+            "minLength": 2,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "type": {
+          "description": "Discriminator for localized customer-facing metadata.",
+          "enum": [
+            "LOCALIZABLE_ASSET"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "description": "Required base value returned when no exact locale override exists.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Exact canonical BCP 47 locale tags mapped to localized overrides.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ProviderDeprecation": {
+      "additionalProperties": false,
+      "description": "Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.",
+      "properties": {
+        "deprecatedSince": {
+          "description": "UTC calendar date on which the catalog began marking the provider deprecated.",
+          "format": "date",
+          "type": "string"
+        },
+        "reason": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Localizable explanation of why the provider is deprecated."
+        },
+        "replacementProviderId": {
+          "description": "Canonical ID of a different, non-deprecated replacement provider in this catalog.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deprecatedSince",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ProviderDiscoveryEndpointKind": {
+      "description": "Static endpoint transport kind that may be checked without credentials.",
+      "enum": [
+        "local-http",
+        "remote-http",
+        "stdio",
+        "unix-socket"
+      ],
+      "type": "string"
+    },
+    "ProviderDiscoveryPrerequisites": {
+      "additionalProperties": false,
+      "description": "Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.",
+      "properties": {
+        "configurationKeys": {
+          "description": "Required configuration-key names only; configuration and environment values are forbidden.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9._-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "endpointKinds": {
+          "description": "Credential-free endpoint transport kinds; addresses and live status are not published.",
+          "items": {
+            "$ref": "#/$defs/ProviderDiscoveryEndpointKind"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "executableNames": {
+          "description": "Executable basenames that may supply the provider integration.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "executableNames",
+        "endpointKinds",
+        "configurationKeys"
+      ],
+      "type": "object"
+    },
+    "ProviderDocumentationLink": {
+      "additionalProperties": false,
+      "description": "One stable public documentation resource for a provider.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ProviderDocumentationLinkKind"
+        },
+        "url": {
+          "description": "Public HTTPS documentation URL with a DNS hostname. Machine-local, IP-address, and credential-bearing URLs are invalid.",
+          "format": "uri",
+          "minLength": 1,
+          "pattern": "^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#].*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url"
+      ],
+      "type": "object"
+    },
+    "ProviderDocumentationLinkKind": {
+      "description": "Purpose of one stable public provider documentation link.",
+      "enum": [
+        "homepage",
+        "setup",
+        "reference",
+        "support"
+      ],
+      "type": "string"
+    },
+    "ProviderExecutionCapabilities": {
+      "additionalProperties": false,
+      "description": "Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.",
+      "properties": {
+        "imageInput": {
+          "description": "Accepts image content as invocation input.",
+          "type": "boolean"
+        },
+        "promptSubmission": {
+          "description": "Accepts authored prompt input for execution.",
+          "type": "boolean"
+        },
+        "sessionResume": {
+          "description": "Can continue an identified provider session.",
+          "type": "boolean"
+        },
+        "structuredOutput": {
+          "description": "Can constrain authoritative output using a structured schema.",
+          "type": "boolean"
+        },
+        "toolExecution": {
+          "description": "Can execute provider-managed tools during an invocation.",
+          "type": "boolean"
+        },
+        "workingDirectory": {
+          "description": "Can execute with an explicit working directory.",
+          "type": "boolean"
+        },
+        "worktree": {
+          "description": "Can execute against an isolated source-control worktree.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "promptSubmission",
+        "imageInput",
+        "sessionResume",
+        "structuredOutput",
+        "toolExecution",
+        "workingDirectory",
+        "worktree"
+      ],
+      "type": "object"
+    },
+    "ProviderImplementationAvailability": {
+      "description": "How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.",
+      "enum": [
+        "bundled",
+        "externally-supplied",
+        "catalog-only"
+      ],
+      "type": "string"
+    },
+    "ProviderResponseFidelityCapabilities": {
+      "additionalProperties": false,
+      "description": "Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.",
+      "properties": {
+        "fileChanges": {
+          "description": "Emits observed file changes.",
+          "type": "boolean"
+        },
+        "messageDeltas": {
+          "description": "Emits incremental assistant-message deltas.",
+          "type": "boolean"
+        },
+        "messageSnapshots": {
+          "description": "Emits assistant-message snapshots.",
+          "type": "boolean"
+        },
+        "nativeStreaming": {
+          "description": "Exposes native streaming observations.",
+          "type": "boolean"
+        },
+        "plans": {
+          "description": "Emits plan updates.",
+          "type": "boolean"
+        },
+        "providerReconnect": {
+          "description": "Supports reconnecting an interrupted provider response stream.",
+          "type": "boolean"
+        },
+        "reasoningSummaries": {
+          "description": "Emits reasoning summaries or reasoning deltas.",
+          "type": "boolean"
+        },
+        "stableItemIds": {
+          "description": "Assigns stable item identifiers across response events.",
+          "type": "boolean"
+        },
+        "toolLifecycle": {
+          "description": "Emits correlated tool lifecycle metadata.",
+          "type": "boolean"
+        },
+        "toolOutputDeltas": {
+          "description": "Emits incremental tool-output deltas.",
+          "type": "boolean"
+        },
+        "usage": {
+          "description": "Emits usage accounting.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "nativeStreaming",
+        "messageDeltas",
+        "messageSnapshots",
+        "reasoningSummaries",
+        "toolLifecycle",
+        "toolOutputDeltas",
+        "fileChanges",
+        "plans",
+        "usage",
+        "stableItemIds",
+        "providerReconnect"
+      ],
+      "type": "object"
+    },
+    "ProviderTechnicalSupportLevel": {
+      "description": "Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.",
+      "enum": [
+        "production",
+        "experimental",
+        "not-supported"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public, data-only metadata for one model-provider integration. A manifest describes evidenced maximum behavior and publication posture; it never reports current-machine installation, authentication, readiness, pricing, or runtime registration.",
+  "properties": {
+    "aliases": {
+      "description": "Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias.",
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "deprecation": {
+      "$ref": "#/$defs/ProviderDeprecation"
+    },
+    "description": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NameValue"
+        }
+      ],
+      "description": "Localizable customer-facing provider summary."
+    },
+    "discovery": {
+      "$ref": "#/$defs/ProviderDiscoveryPrerequisites"
+    },
+    "displayName": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NameValue"
+        }
+      ],
+      "description": "Localizable customer-facing provider name."
+    },
+    "documentation": {
+      "description": "Stable public documentation links for this provider.",
+      "items": {
+        "$ref": "#/$defs/ProviderDocumentationLink"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "id": {
+      "description": "Stable canonical lowercase provider identifier.",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "implementationAvailability": {
+      "$ref": "#/$defs/ProviderImplementationAvailability"
+    },
+    "maximumExecutionCapabilities": {
+      "$ref": "#/$defs/ProviderExecutionCapabilities"
+    },
+    "maximumResponseFidelityCapabilities": {
+      "$ref": "#/$defs/ProviderResponseFidelityCapabilities"
+    },
+    "technicalSupportLevel": {
+      "$ref": "#/$defs/ProviderTechnicalSupportLevel"
+    }
+  },
+  "required": [
+    "id",
+    "aliases",
+    "displayName",
+    "description",
+    "documentation",
+    "technicalSupportLevel",
+    "implementationAvailability",
+    "maximumExecutionCapabilities",
+    "maximumResponseFidelityCapabilities",
+    "discovery"
+  ],
+  "type": "object"
+}

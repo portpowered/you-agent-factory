@@ -2194,6 +2194,28 @@ components:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
+    ProviderCatalog:
+      $ref: './components/schemas/model-providers/ProviderCatalog.yaml'
+    ProviderManifest:
+      $ref: './components/schemas/model-providers/ProviderManifest.yaml'
+    ProviderTechnicalSupportLevel:
+      $ref: './components/schemas/model-providers/ProviderTechnicalSupportLevel.yaml'
+    ProviderImplementationAvailability:
+      $ref: './components/schemas/model-providers/ProviderImplementationAvailability.yaml'
+    ProviderDocumentationLink:
+      $ref: './components/schemas/model-providers/ProviderDocumentationLink.yaml'
+    ProviderDocumentationLinkKind:
+      $ref: './components/schemas/model-providers/ProviderDocumentationLinkKind.yaml'
+    ProviderExecutionCapabilities:
+      $ref: './components/schemas/model-providers/ProviderExecutionCapabilities.yaml'
+    ProviderResponseFidelityCapabilities:
+      $ref: './components/schemas/model-providers/ProviderResponseFidelityCapabilities.yaml'
+    ProviderDiscoveryPrerequisites:
+      $ref: './components/schemas/model-providers/ProviderDiscoveryPrerequisites.yaml'
+    ProviderDiscoveryEndpointKind:
+      $ref: './components/schemas/model-providers/ProviderDiscoveryEndpointKind.yaml'
+    ProviderDeprecation:
+      $ref: './components/schemas/model-providers/ProviderDeprecation.yaml'
     WorkerModelLocality:
       $ref: './components/schemas/data-models/WorkerModelLocality.yaml'
     WorkerProvider:
