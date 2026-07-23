@@ -1041,6 +1041,10 @@
       "minimum": 81.70
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput",
+      "minimum": 86.06
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
       "minimum": 79.19
     },
