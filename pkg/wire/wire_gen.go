@@ -340,22 +340,26 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	flattenFactoryConfigOperation := provideFlattenFactoryConfigOperation(v35)
 	expandFactoryConfigOperation := provideExpandFactoryConfigOperation(v35)
 	packagedInstallationFileSystem := provideFactoryDefinitionPackagedInstallationFileSystem(edges2)
-	inspectPath := provideSystemInitializationInspectPath(edges2)
-	legacyFactoryMigrationFileSystem := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v35, packagedInstallationFileSystem, configLoader, backendScopeEnsurer, inspectPath, legacyFactoryMigrationFileSystem)
+	v54, err := providePackagedFactoryDefinitions()
 	if err != nil {
 		return nil, err
 	}
-	v54 := configinitcmd.NewInitializer(systeminitializationService)
-	initSystemConfigOperation := provideInitSystemConfigOperation(v54)
+	inspectPath := provideSystemInitializationInspectPath(edges2)
+	legacyFactoryMigrationFileSystem := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v35, packagedInstallationFileSystem, v54, configLoader, backendScopeEnsurer, inspectPath, legacyFactoryMigrationFileSystem)
+	if err != nil {
+		return nil, err
+	}
+	v55 := configinitcmd.NewInitializer(systeminitializationService)
+	initSystemConfigOperation := provideInitSystemConfigOperation(v55)
 	queryFactoryOperation := provideQueryFactoryOperation(wireStandardCLIHTTPProtocol)
 	listFactoriesOperation := provideListFactoriesOperation(v)
-	v55 := provideSubmittedDefinitionValidationOperation(validationService)
-	validateFactoryOperation := provideValidateFactoryOperation(v55, authoredFactorySourceLoader)
-	v56 := provideNamedFactoryPersistenceOperation(v35)
-	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v56, authoredFactorySourceLoader)
+	v56 := provideSubmittedDefinitionValidationOperation(validationService)
+	validateFactoryOperation := provideValidateFactoryOperation(v56, authoredFactorySourceLoader)
+	v57 := provideNamedFactoryPersistenceOperation(v35)
+	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v57, authoredFactorySourceLoader)
 	replaceFactoryCurrentOperation := provideReplaceFactoryCurrentOperation(wireStandardCLIHTTPProtocol)
-	updateFactoryFromFileOperation := provideUpdateFactoryFromFileOperation(v56, authoredFactorySourceLoader)
+	updateFactoryFromFileOperation := provideUpdateFactoryFromFileOperation(v57, authoredFactorySourceLoader)
 	deleteFactoryOperation := provideDeleteFactoryOperation(v)
 	listRequestPreparation := work.NewListRequestPreparation()
 	listWorkOperation := provideListWorkOperation(wireStandardCLIHTTPProtocol, listRequestPreparation)
@@ -376,8 +380,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v57 := provideRuntimeInputResolver(edges2, clockResolver)
-	v58 := provideRuntimeOpener(v45)
+	v58 := provideRuntimeInputResolver(edges2, clockResolver)
+	v59 := provideRuntimeOpener(v45)
 	factory_visualizationRuntimeFactory := provideFactoryVisualizationFactory()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	contentPreparation := work.NewContentPreparation()
@@ -394,31 +398,31 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v53)
-	handler, err := application2.NewHandler(httpBinder, contentPreparation, v55, contentStagingService, requestPreparationService, requestPreparation)
+	handler, err := application2.NewHandler(httpBinder, contentPreparation, v56, contentStagingService, requestPreparationService, requestPreparation)
 	if err != nil {
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v59, err := provideApplicationRuntimeAdapter(factory_visualizationRuntimeFactory, handler, runnerFactory)
+	v60, err := provideApplicationRuntimeAdapter(factory_visualizationRuntimeFactory, handler, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v60 := wire.NewLifecyclePlanOperation()
-	v61, err := wire.NewApplicationService(v57, v58, v59, v60)
+	v61 := wire.NewLifecyclePlanOperation()
+	v62, err := wire.NewApplicationService(v58, v59, v60, v61)
 	if err != nil {
 		return nil, err
 	}
-	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v61)
+	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v62)
 	if err != nil {
 		return nil, err
 	}
 	responsePresentation := provideResponsePresentation()
-	v62 := provideDirectJavaScriptSyncRunner()
-	v63, err := wire.NewDirectJavaScriptRunOperation(v51, v62, v14)
+	v63 := provideDirectJavaScriptSyncRunner()
+	v64, err := wire.NewDirectJavaScriptRunOperation(v51, v63, v14)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v52, responsePresentation, v63)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v52, responsePresentation, v64)
 	if err != nil {
 		return nil, err
 	}
@@ -472,17 +476,17 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v64 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v53, workflowPreviewOperation)
+	v65 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v53, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v65 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v53)
-	v66, err := wire.NewStdioOpeningService(v50, v64, v65)
+	v66 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v53)
+	v67, err := wire.NewStdioOpeningService(v50, v65, v66)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v66)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v67)
 	if err != nil {
 		return nil, err
 	}
@@ -709,6 +713,7 @@ var BundleSet = wire2.NewSet(
 	factoryDefinitionsServicesSet,
 	workerServiceSet,
 	cliCommandOperationsSet,
+	providePackagedFactoryDefinitions,
 	provideSystemInitializationService, configinitcmd.NewInitializer, provideRuntimeOpener,
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,

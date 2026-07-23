@@ -138,22 +138,30 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           timeout: uiInteractionTimeoutMs,
         });
 
-        const workerSelectionLabels = await graphViewport
-          .getByRole("button", { name: / worker$/ })
-          .evaluateAll((elements) =>
-            elements
-              .map(
-                (element) => element.getAttribute("aria-label")?.trim() ?? "",
-              )
-              .filter((label) => label.length > 0),
-          );
+        const workerSelectionLabels = await Promise.all([
+          processorWorkerButton.getAttribute("aria-label"),
+          workspaceSetupWorkerButton.getAttribute("aria-label"),
+        ]);
         expect(workerSelectionLabels).toEqual(
           expect.arrayContaining([
             "Select processor worker",
             "Select workspace-setup worker",
           ]),
         );
-        expect(workerSelectionLabels).not.toContain("Select  worker");
+        await expect
+          .poll(
+            async () =>
+              graphViewport
+                .getByRole("button", {
+                  exact: true,
+                  name: "Select  worker",
+                })
+                .count(),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
+          .toBe(0);
 
         await processorWorkerButton.scrollIntoViewIfNeeded();
         await processorWorkerButton.click();
@@ -170,8 +178,7 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
         await workspaceSetupWorkerButton.click();
         await expect
           .poll(
-            async () =>
-              workspaceSetupWorkerButton.getAttribute("aria-pressed"),
+            async () => workspaceSetupWorkerButton.getAttribute("aria-pressed"),
             {
               timeout: uiInteractionTimeoutMs,
             },

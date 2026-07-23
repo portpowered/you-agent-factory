@@ -110,7 +110,7 @@ mode.
 
 ## Where to author responses
 
-- Packaged `@you/goal` authored prompts: `pkg/services/factory_definitions/packages/definitions/goal/prompts/`
+- Packaged `@you/goal` authored prompts: `packages/packaged-factories/factories/goal/prompts/`
 - Checker or review-style prompts in other packaged goal factories should use
   this envelope shape and the decision vocabulary that matches their routing
   mode.

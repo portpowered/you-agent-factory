@@ -12,11 +12,29 @@ primary-result behavior.
 - Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
   as production code. Keep topology fixtures readable by delegating independent
   identity, routing, and validation assertions to named test helpers.
-- Adding an embedded packaged-factory definition also adds two measured backend
-  packages to the unit and functional coverage manifests: record the definition
-  package's observed numeric floor and the wrapper package's documented
-  measurement exception when it has no executable statements. Verify both with
-  `make test-unit-coverage` and `make test-functional-coverage`.
+- Generated packaged Factory definitions have no per-Factory Go wrapper or
+  handwritten registration package. Add authored sources under
+  `packages/packaged-factories/factories/`, regenerate the publication, and let
+  `internal/packagedfactorycatalog` derive membership from its manifest.
+- `packages/packaged-factories.Published()` is the inert, read-only Go boundary
+  for the exact `factories/`, `generated/`, and `schemas/` trees included in the
+  npm package. Backend catalog consumers should read the generated manifest and
+  its referenced artifacts through that filesystem instead of embedding or
+  reconstructing publication bytes elsewhere; `Source()` remains the authored
+  source compatibility boundary.
+- `internal/packagedfactorycatalog.LoadPublishedDefinitionCatalog()` is the
+  fail-closed backend projection of that publication. It validates the manifest,
+  schema identity, locators, hashes, unique identities, both generated formats,
+  canonical Factory mapping, and Factory Definitions validation before exposing
+  detached exact JSON definitions. Use `LoadDefinitionCatalog(fs.FS)` only for
+  inert fixture injection and consumer tests; lifecycle and installation effects
+  remain outside the catalog.
+- `pkg/wire.providePackagedFactoryDefinitions()` loads that validated catalog
+  while constructing the inert process graph and supplies detached definitions
+  to the existing System Initialization service. Keep packaged installation and
+  non-overwrite policy in Factory Definitions and lifecycle activation in
+  Initializer; the embedded publication package and catalog must not acquire
+  either responsibility.
 - The customer-implementable provider inference contract lives in
   `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
@@ -828,8 +846,8 @@ response-stream output.
   inside `make verify-tests`.
   Later S24 scenario stories should compose scenario assertions on top of this
   package rather than re-building binary/home/log wiring in each test file.
-- `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
-  payload sources live under `pkg/factory/packages/definitions/`, and config
+- `packages/packaged-factories/factories/` owns authored Factory sources and
+  `internal/packagedfactorycatalog` owns manifest-derived backend lookup; config
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
@@ -863,7 +881,7 @@ response-stream output.
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to
   `goal:init`, and worker or workstation failure routes to `goal:failed`.
-  `pkg/factory/packages/definitions/goal/` owns the authored factory and concise
+  `packages/packaged-factories/factories/goal/` owns the authored factory and concise
   executor prompt. Both `goal-executor` and `execute-goal` declare that shared
   package-relative asset and use the package-neutral prompt assembler; goal does
   not own a JSON walker or name-to-prompt map.
@@ -880,17 +898,16 @@ response-stream output.
   `output`, rejection returns to `init` with feedback, and failures route to
   `failed`. Keep this approval-only topology and explicit return policy aligned
   when changing packaged-factory plumbing.
-- `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
-  scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
-  and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`
+- `packages/packaged-factories/factories/subagent/` owns the authored
+  `@you/subagent` one-pass Factory scaffold (`factory.json`, prompt files), and
+  the generated manifest registers it for every package consumer. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
   `you config init` installs `@you/subagent` under the global named-factory root
   before named invocation can resolve it.
-- `pkg/factory/packages/subagent/` owns packaged subagent factory metadata constants,
-  topology validation coverage, materialization/edit-safe identity tests, response
-  shaping helpers for terminal `task:complete` work content, and primary-result
-  selection tests for the one-pass built-in factory JSON.
+- `pkg/services/factory_definitions/packages/subagent/` retains only packaged
+  subagent metadata and response-shaping behavior; shared catalog validation,
+  installation tests, and public functional outcomes own definition evidence.
 - Hermetic no-server named `@you/subagent` package proof lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
@@ -1041,19 +1058,19 @@ response-stream output.
   belong in `docs/reference/authoring-factories.md`. Prefer `INFERENCE_WORKER` /
   `INFERENCE_RUN` terminology in retained guidance while documenting
   `MODEL_WORKER` / `MODEL_INVOKE` as migration aliases.
-- `pkg/factory/packages/tts/observability.go` classifies packaged TTS loading,
+- `pkg/services/factory_definitions/packages/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.
 - `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
+- `pkg/services/factory_definitions/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
-- `pkg/factory/packages/catalog.go` is the single registration point for
-  shipped named factories. A new package needs a catalog definition plus a
-  directly-loadable factory payload; `you config init` materializes every
-  catalog entry without separate CLI registration. Customer-facing packaged
-  invocation guidance belongs in `docs/reference/run.md`.
+- `packages/packaged-factories/generated/manifest.json` is the single
+  registration point for shipped named Factories. Regeneration derives it from
+  authored Factory directories, and `you config init` materializes every
+  validated manifest entry without separate Go registration. Customer-facing
+  packaged invocation guidance belongs in `docs/reference/run.md`.
 - Invocation-interpolated worker `modelProvider` and `model` fields are resolved
   at dispatch time. A packaged factory that must be runnable without role flags
   should declare parameter `defaultValue`s in its invocation signature; operator

@@ -1,11 +1,5 @@
 package goal
 
-import builtingoal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/goal"
-
-// BuiltInFactoryJSON is the canonical runnable @you/goal definition owned by
-// the factory packages family.
-var BuiltInFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
-
 const (
 	// PackagedFactoryName is the canonical named factory identifier for @you/goal.
 	PackagedFactoryName = "@you/goal"
