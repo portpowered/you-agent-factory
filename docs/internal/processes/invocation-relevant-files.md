@@ -59,6 +59,13 @@ primary-result behavior.
 
 ## CLI run and submit command contracts
 
+- Portable invocation selection carries two distinct values: the concrete
+  authored source selected by `--factory` and its asset directory. Keep the
+  source path through `runconfig.Config`, `factorysessions.InvocationTarget`,
+  and `factorydefinitions.RuntimeOpeningRequest`; resolving only the directory
+  can silently replace an explicit YAML selection with `factory.json` or lose
+  strict missing/ambiguity diagnostics. Named and default runtime selection
+  continue to resolve through the current-Factory directory policy.
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
   in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
   source precedence, conflicts, no-option defaults, output modes, effects, and

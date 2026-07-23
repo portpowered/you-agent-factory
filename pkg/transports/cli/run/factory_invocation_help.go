@@ -13,15 +13,15 @@ import (
 
 func ResolveFactoryInvocationSignature(
 	load interfaces.FactoryConfigFileLoader,
-	dir string,
+	sourcePath string,
 ) (*interfaces.InvocationSignatureConfig, error) {
-	if strings.TrimSpace(dir) == "" {
+	if strings.TrimSpace(sourcePath) == "" {
 		return nil, nil
 	}
 	if load == nil {
 		return nil, fmt.Errorf("Factory Definitions config file loader is required")
 	}
-	cfg, err := load(filepath.Join(dir, interfaces.FactoryConfigFile))
+	cfg, err := load(sourcePath)
 	if err != nil {
 		return nil, err
 	}

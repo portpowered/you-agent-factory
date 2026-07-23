@@ -32,6 +32,7 @@ type (
 // invocation. Operations remain consumer-owned interfaces.
 type InvocationTarget struct {
 	FactoryDir                       string
+	FactorySourcePath                string
 	RunnerID                         string
 	OperatorDefaults                 operatorsettings.ResolvedDefaults
 	ExecutionBaseDir                 string

@@ -269,7 +269,7 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err := l.validate(); err != nil {
 		return nil, err
 	}
-	data, sourcePath, _, _, err := l.readFactoryConfigSource(factoryDir)
+	data, sourcePath, resolvedFactoryDir, _, err := l.readFactoryConfigSource(factoryDir)
 	if err != nil {
 		return nil, err
 	}
@@ -280,18 +280,18 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err := l.blockingLoadError(factoryConfig); err != nil {
 		return nil, err
 	}
-	if err := l.validateManifest(factoryDir, factoryConfig); err != nil {
+	if err := l.validateManifest(resolvedFactoryDir, factoryConfig); err != nil {
 		return nil, err
 	}
 	replacements, err := l.materializePortableFiles(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
 	if err := l.applyPortableFiles(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 		false,
 		false,
@@ -299,7 +299,7 @@ func (l *Loader) LoadSourceFromFactoryDir(
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 		hasInlineRuntimeDefinitions(factoryConfig),
 		workstationLoader,
@@ -308,7 +308,7 @@ func (l *Loader) LoadSourceFromFactoryDir(
 		return nil, err
 	}
 	return l.newSource(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 		runtimeDefinitions,
 		append([]factorydefinitions.PortableBundledFileReplacement(nil), replacements...),

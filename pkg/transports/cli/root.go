@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -654,7 +655,14 @@ func resolveRunFactoryPrompt(
 		return nil
 	}
 
-	signature, err := runcli.ResolveFactoryInvocationSignature(cfg.LoadFactoryConfigFile, cfg.Dir)
+	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		signatureSource = cfg.FactoryConfigPath
+	}
+	signature, err := runcli.ResolveFactoryInvocationSignature(
+		cfg.LoadFactoryConfigFile,
+		signatureSource,
+	)
 	if err != nil {
 		return err
 	}

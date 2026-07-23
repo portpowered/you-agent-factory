@@ -99,7 +99,17 @@ func PrepareRuntime(
 	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, prepared.Recordings.ReplayPath, root.BaseLogger); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
-	if prepared.Recordings.ReplayPath == "" {
+	selectedDefinitionPath := prepared.Definition.Directory
+	if prepared.Recordings.ReplayPath == "" && prepared.Definition.SourcePath != "" {
+		selectedDefinitionPath, err = logicaltarget.AbsolutizeFactoryDirectory(
+			prepared.Definition.SourcePath,
+			resolveHome,
+		)
+		if err != nil {
+			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil,
+				fmt.Errorf("resolve factory source: %w", err)
+		}
+	} else if prepared.Recordings.ReplayPath == "" {
 		if namedPaths == nil {
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("named Factory path resolver is required")
 		}
@@ -111,9 +121,10 @@ func PrepareRuntime(
 		if err != nil {
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
+		selectedDefinitionPath = prepared.Definition.Directory
 	}
 	load, err = LoadRuntime(
-		prepared.Definition.Directory,
+		selectedDefinitionPath,
 		prepared.Definition.ExecutionBaseDir,
 		prepared.Recordings.ReplayPath,
 		prepared.OperatorDefaults,

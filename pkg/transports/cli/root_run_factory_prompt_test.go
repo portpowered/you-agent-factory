@@ -86,8 +86,10 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if flag.DefValue != "" {
 		t.Fatalf("--factory default = %q, want empty", flag.DefValue)
 	}
-	if !strings.Contains(flag.Usage, "factory.json") {
-		t.Fatalf("--factory usage = %q, want factory.json guidance", flag.Usage)
+	for _, want := range []string{"JSON", "YAML", "directory"} {
+		if !strings.Contains(flag.Usage, want) {
+			t.Fatalf("--factory usage = %q, want %s guidance", flag.Usage, want)
+		}
 	}
 	if !strings.Contains(runCmd.Long, "--factory") {
 		t.Fatal("expected run command long help text to document --factory")

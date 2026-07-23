@@ -40,8 +40,11 @@ func NewFactoryConfigRootResolver(source FactoryConfigPathSource) FactoryConfigR
 			}
 			return "", fmt.Errorf("find factory config file %s: %w", trimmed, err)
 		}
+		if info.IsDir() {
+			return resolved, nil
+		}
 		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("factory config path must be a file: %s", trimmed)
+			return "", fmt.Errorf("factory config path must be a file or directory: %s", trimmed)
 		}
 		return filepath.Dir(resolved), nil
 	}

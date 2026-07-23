@@ -564,6 +564,7 @@ func (o *operation) open(
 func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions.RuntimeOpeningRequest {
 	config := factorysessions.RuntimeOpeningRequest{}
 	config.FactoryDefinition.Directory = target.FactoryDir
+	config.FactoryDefinition.SourcePath = target.FactorySourcePath
 	config.FactoryDefinition.ExecutionBaseDir = target.ExecutionBaseDir
 	config.OperatorDefaults = target.OperatorDefaults
 	config.FactoryRuntime.Mode = factorydefinitions.RuntimeModeService

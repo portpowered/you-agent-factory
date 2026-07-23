@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestFactoryConfigRootResolverValidatesSelectedFile(t *testing.T) {
+func TestFactoryConfigRootResolverAcceptsSelectedFileOrDirectory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, FactoryConfigFile)
 	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
@@ -19,8 +19,9 @@ func TestFactoryConfigRootResolverValidatesSelectedFile(t *testing.T) {
 	if err != nil || root != dir {
 		t.Fatalf("result = (%q, %v), want (%q, nil)", root, err, dir)
 	}
-	if _, err := NewFactoryConfigRootResolver(osFS{})(dir); err == nil || !strings.Contains(err.Error(), "must be a file") {
-		t.Fatalf("directory error = %v", err)
+	root, err = NewFactoryConfigRootResolver(osFS{})(dir)
+	if err != nil || root != dir {
+		t.Fatalf("directory result = (%q, %v), want (%q, nil)", root, err, dir)
 	}
 }
 

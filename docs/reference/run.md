@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-16
+last-modified: 2026-07-23
 doc-id: agent-factory/guides/run
 ---
 
@@ -16,7 +16,7 @@ continuous, and mock-worker run tasks.
 |------|-----------|
 | Run the current `./factory` with initial Work | `you run --work <batch.json>` |
 | Start a Factory directory | `you run --dir <factory-dir> --work <batch.json>` |
-| Invoke one portable or named Factory | `you run --factory <factory.json> <text>` or `you run --named <name> <text>` |
+| Invoke one portable or named Factory | `you run --factory <factory-file-or-directory> <text>` or `you run --named <name> <text>` |
 | Execute a JavaScript workflow as a Factory Session | `you run --factory <workflow.js>` |
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
@@ -43,11 +43,14 @@ you run --dir ./factory --work ./docs/examples/startup-work.json
 
 ## Invoke one Factory
 
-Use `--factory` for a portable `factory.json` and supply one logical invocation
-input as positional text:
+Use `--factory` for an explicit `.json`, `.yaml`, or `.yml` document, or a
+directory containing exactly one `factory.json`, `factory.yaml`, or
+`factory.yml`, and supply one logical invocation input as positional text:
 
 ```bash
 you run --factory ./factory.json "Review the release notes"
+you run --factory ./factory.yaml "Review the release notes"
+you run --factory ./factory "Review the release notes"
 ```
 
 Non-interactive stdin is the alternative input source:
@@ -59,7 +62,7 @@ printf '%s\n' 'Review the release notes' | you run --factory ./factory.json
 Do not supply positional text and stdin together. Factories with an
 `invocationSignature` may instead define named, file-path, repeated, or
 defaulted arguments. Inspect their exact input boundary with
-`you run --factory ./factory.json --help`.
+`you run --factory ./factory.yaml --help`.
 
 Use `--named` for a persisted Factory and still provide its required input:
 
