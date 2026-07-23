@@ -19,15 +19,18 @@ func Decode(data []byte) (operatorsettings.Config, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
-	var generated factoryapi.GlobalConfig
+	var generated *factoryapi.GlobalConfig
 	if err := decoder.Decode(&generated); err != nil {
 		return operatorsettings.Config{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+	if generated == nil {
+		return operatorsettings.Config{}, fmt.Errorf("decode generated global config: expected a JSON object")
 	}
 	if err := requireEOF(decoder); err != nil {
 		return operatorsettings.Config{}, err
 	}
 
-	return mapConfig(generated).Normalize()
+	return mapConfig(*generated).Normalize()
 }
 
 func requireEOF(decoder *json.Decoder) error {

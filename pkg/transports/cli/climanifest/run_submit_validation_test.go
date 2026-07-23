@@ -58,7 +58,7 @@ func TestValidateRunSubmitFamily_RejectsIncompleteAndContradictoryContracts(t *t
 			name: "batch stdin outranks explicit input",
 			mutate: func(manifest climanifest.Manifest) {
 				record := manifest.Commands["you.submit.batch"]
-				record.Precedence.Order = []string{"stdin", "flags", "args", "env", "config", "defaults"}
+				record.Precedence.Order = []string{"stdin", "cli", "environment", "operator-config", "manifest-default", "factory-signature-default"}
 				manifest.Commands[record.ID] = record
 			},
 			wantError: "contradictory input precedence",

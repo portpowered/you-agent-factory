@@ -319,7 +319,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)
 	visualizationOperation := provideWorkVisualizationOperation()
 	visualizeWorkOperation := provideVisualizeWorkOperation(visualizationOperation)
-	responseEventValidator := provideResponseEventValidator()
 	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
 	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
@@ -327,7 +326,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	runtimeOpeningRequestFactory := provideRuntimeOpeningRequestFactory()
-	runOpener := provideRunOpener(responseEventValidator, singleWorkTargetPreparation, mockWorkersConfigLoader, runtimeOpeningRequestFactory)
+	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigLoader, runtimeOpeningRequestFactory)
 	managedRunnerFactory := provideManagedRunnerFactory()
 	runtimeRunnerBuilder, err := application.NewRuntimeRunnerBuilder(managedRunnerFactory)
 	if err != nil {
@@ -667,7 +666,6 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationService, configinitcmd.NewInitializer, provideRuntimeOpener,
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
-	provideResponseEventValidator,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,

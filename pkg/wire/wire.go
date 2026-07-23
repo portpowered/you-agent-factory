@@ -284,7 +284,6 @@ var BundleSet = wire.NewSet(
 	provideRuntimeOpener,
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
-	provideResponseEventValidator,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,

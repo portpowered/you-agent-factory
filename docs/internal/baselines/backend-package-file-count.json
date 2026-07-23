@@ -27,7 +27,7 @@
     { "packagePath": "pkg/transports/cli/climanifestcobra", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate Cobra manifest adapters by command responsibility." },
     { "packagePath": "pkg/transports/cli/commandregistry", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Separate registry contracts from command construction." },
     { "packagePath": "pkg/transports/cli/factory", "fileCount": 21, "owner": "cli-maintainers", "removalReason": "Split factory commands by lifecycle responsibility." },
-    { "packagePath": "pkg/transports/cli/run", "fileCount": 23, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
+    { "packagePath": "pkg/transports/cli/run", "fileCount": 22, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
     { "packagePath": "pkg/transports/cli/session", "fileCount": 17, "owner": "cli-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
     { "packagePath": "pkg/transports/cli/submit", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate submit command cases or extract stable input behavior." },
     { "packagePath": "pkg/transports/http", "fileCount": 17, "owner": "http-transport-maintainers", "removalReason": "Separate HTTP composition from endpoint behavior." },

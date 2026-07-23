@@ -1,11 +1,14 @@
 package run
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -37,33 +40,65 @@ func (e *InvocationError) Unwrap() error {
 	return e.Cause
 }
 
-type invocationErrorPayload struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
 // WriteInvocationError renders the stable clean-invocation failure contract to
 // stderr. It returns true when err matched an invocation contract error.
-func WriteInvocationError(w io.Writer, err error, jsonOutput bool) bool {
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
+func WriteInvocationError(w io.Writer, err error, _ bool) bool {
+	payload, ok := invocationErrorResponse(err)
+	if !ok {
 		return false
 	}
 	if w == nil {
 		return true
 	}
-	if jsonOutput {
-		data, marshalErr := json.Marshal(invocationErrorPayload{
-			Code:    invocationErr.Code,
-			Message: invocationErr.Message,
-		})
-		if marshalErr == nil {
-			_, _ = fmt.Fprintln(w, string(data))
-			return true
-		}
+	data, marshalErr := json.Marshal(payload)
+	if marshalErr == nil {
+		_, _ = fmt.Fprintln(w, string(data))
 	}
-	_, _ = fmt.Fprintln(w, invocationErr.Error())
 	return true
+}
+
+func invocationErrorResponse(err error) (factoryapi.ErrorResponse, bool) {
+	var invocationErr *InvocationError
+	if errors.As(err, &invocationErr) {
+		return newInvocationErrorResponse(invocationErr.Code, invocationErr.Message), true
+	}
+
+	var cliErr invocationCLIError
+	if errors.As(err, &cliErr) {
+		return newInvocationErrorResponse(cliErr.Code, cliErr.responseMessage()), true
+	}
+	return factoryapi.ErrorResponse{}, false
+}
+
+func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = InvocationErrorCodeFailed
+	}
+	return factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCode(code),
+		Family:  factoryapi.ErrorFamilyInternalServerError,
+		Message: strings.TrimSpace(message),
+	}
+}
+
+// MapInvocationFailure preserves authored invocation errors and classifies
+// pre-terminal failures that occurred before an InvocationResponse existed.
+func MapInvocationFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := invocationErrorResponse(err); ok {
+		return err
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return &InvocationError{Code: InvocationErrorCodeTimeout, Message: "clean invocation timed out", Cause: err}
+	case errors.Is(err, context.Canceled):
+		return &InvocationError{Code: InvocationErrorCodeCancelled, Message: "clean invocation cancelled", Cause: err}
+	default:
+		return &InvocationError{Code: InvocationErrorCodeFailed, Message: strings.TrimSpace(err.Error()), Cause: err}
+	}
 }
 
 const (
@@ -104,12 +139,6 @@ func isResponseStreamOutputMode(mode string) bool {
 func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
 		return nil
-	}
-	if strings.TrimSpace(cfg.ReplayPath) != "" {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
-			Message: "response-stream output requires a live runtime owned by this CLI invocation; replay mode has no internal response stream",
-		}
 	}
 	if cfg.Continuously {
 		return &InvocationError{

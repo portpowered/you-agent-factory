@@ -118,14 +118,15 @@ func TestVerifySessionRunnableCoverageRejectsMissingAndInvalidHandlerIDs(t *test
 func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 	var diagnostic bytes.Buffer
 	createCfg := sessioncli.CreateConfig{}
+	jsonOutput := true
 	createRunE := commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
-		Config: &createCfg,
+		Config: &createCfg, JSON: &jsonOutput,
 		SessionDiagnosticsBinding: commandregistry.SessionDiagnosticsBinding{
 			Verbose: func() bool { return true }, Debug: boolPtr(true),
 			DiagnosticsWriter: func(*cobra.Command) io.Writer { return &diagnostic },
 		},
 		CreateSession: func(cfg sessioncli.CreateConfig) error {
-			if cfg.Dir != "factory" || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
+			if cfg.Dir != "factory" || !cfg.JSON || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
 				t.Fatalf("create config = %#v", cfg)
 			}
 			return nil
@@ -140,9 +141,9 @@ func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 
 	deleteCfg := sessioncli.DeleteConfig{}
 	deleteRunE := commandregistry.SessionDeleteRunE(commandregistry.SessionDeleteBinding{
-		Config: &deleteCfg,
+		Config: &deleteCfg, JSON: &jsonOutput,
 		DeleteSession: func(cfg sessioncli.DeleteConfig) error {
-			if cfg.SessionID != "session-beta" {
+			if cfg.SessionID != "session-beta" || !cfg.JSON {
 				t.Fatalf("delete session ID = %q", cfg.SessionID)
 			}
 			return nil
@@ -156,6 +157,7 @@ func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
 	listCfg := sessioncli.ListConfig{Context: context.Background(), Scope: "persisted"}
 	server := "https://factory.example.test"
+	jsonOutput := true
 	prepared := false
 	root := &cobra.Command{Use: "you"}
 	root.PersistentFlags().String("server", "", "")
@@ -167,13 +169,14 @@ func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
 	runE := commandregistry.SessionListRunE(commandregistry.SessionListBinding{
 		Config: &listCfg,
 		Server: &server,
+		JSON:   &jsonOutput,
 		Prepare: func(_ context.Context, cfg *sessioncli.ListConfig) error {
 			prepared = true
 			cfg.Scope = "all"
 			return nil
 		},
 		ListSessions: func(cfg sessioncli.ListConfig) error {
-			if cfg.Scope != "all" || cfg.Server != server || cfg.Output == nil {
+			if cfg.Scope != "all" || cfg.Server != server || !cfg.JSON || cfg.Output == nil {
 				t.Fatalf("list config = %#v", cfg)
 			}
 			return nil

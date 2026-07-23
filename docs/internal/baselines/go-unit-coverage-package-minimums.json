@@ -915,6 +915,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract/testkit",
+      "minimum": 76.13
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
       "minimum": 84.41
     },

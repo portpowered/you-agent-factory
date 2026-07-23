@@ -170,6 +170,7 @@ func CLIRegistry() Registry {
 			{Path: "contracts/testdata/cli/valid-conditional-relationship.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-precedence.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-handler-binding.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-canonical-input-kinds.json", SchemaID: commandManifestID},
 		},
 	})
 }

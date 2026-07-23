@@ -90,19 +90,6 @@ var IsAuthoritativeResponseEventMessageSnapshot = responseevents.IsAuthoritative
 var ValidateResponseEventDraft = responseevents.ValidateDraft
 var ValidateFactoryResponseEvent = responseevents.ValidateEvent
 
-// ResponseEventValidator is the exact Factory Sessions-owned semantic
-// validation operation injected into response-event consumers at transport
-// edges.
-type ResponseEventValidator func(FactoryResponseEvent) error
-
-// Validate applies the owner-defined Factory response-event contract.
-func (validate ResponseEventValidator) Validate(event FactoryResponseEvent) error {
-	if validate == nil {
-		return errors.New("Factory response-event validator is required")
-	}
-	return validate(event)
-}
-
 // ResponseEventSubscriptionRequest selects one Factory Session response-event
 // cursor. Session lookup, reconnect position, dispatch selection, kind
 // filtering, and retained-then-live ordering are Factory Sessions policy.
