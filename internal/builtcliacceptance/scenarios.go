@@ -50,32 +50,16 @@ func S24Scenarios() []Scenario {
 			TestName: "TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider",
 		},
 		{
-			ID:    "s24-invalid-goal",
-			Title: "Invalid goal",
-			DocumentedOutcome: "Unknown named factory or invalid topology fails non-zero with explicit operator-visible " +
-				"graph-reference or resolve guidance.",
-			TestName: "TestInvalidGoal_UnknownNamedFactory_RejectsWithDocumentedError",
+			ID:                "s24-invalid-goal",
+			Title:             "Invalid goal",
+			DocumentedOutcome: "Unknown named factories fail with a non-zero operating-system exit in default and quiet modes.",
+			TestName:          "TestInvalidGoal_OutputModesExitNonZero",
 		},
 		{
-			ID:    "s24-quiet",
-			Title: "Quiet mode",
-			DocumentedOutcome: "Quiet success suppresses operator chatter while preserving the authoritative primary " +
-				"result; quiet operational failures stay terminal-mute.",
-			TestName: "TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrimaryResult",
-		},
-		{
-			ID:    "s24-primary-output",
-			Title: "Primary output",
-			DocumentedOutcome: "Default primary mode writes only the authoritative primary result text for a successful " +
-				"named @you/goal mock-worker run.",
-			TestName: "TestPrimaryOutputMode_SuccessfulNamedGoal_WritesAuthoritativePrimaryResultOnly",
-		},
-		{
-			ID:    "s24-stream-output",
-			Title: "Stream output",
-			DocumentedOutcome: "Response-stream JSON emits canonical response_event/invocation_result NDJSON with exactly " +
-				"one terminal record and documented terminal invocation result.",
-			TestName: "TestStreamOutputMode_JSONMode_EmitsCanonicalNDJSONRecordsWithTerminalInvocationResult",
+			ID:                "s24-terminal-failure-exit",
+			Title:             "Terminal invocation failure",
+			DocumentedOutcome: "A terminal invocation failure exits the built CLI with a non-zero operating-system status.",
+			TestName:          "TestInvocationOutput_TerminalFailureExitsNonZero",
 		},
 		{
 			ID:    "s24-local-model-invoke",
@@ -90,13 +74,6 @@ func S24Scenarios() []Scenario {
 			DocumentedOutcome: "Repeated named @you/goal JSON runs assign distinct requestId/traceId while reusing the " +
 				"installed global factory copy without cross-run home/log contamination.",
 			TestName: "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy",
-		},
-		{
-			ID:    "s24-subagent",
-			Title: "Subagent",
-			DocumentedOutcome: "Named @you/subagent invocation returns the documented primary JSON terminal outcome and " +
-				"matches response-stream terminal parity on the same mock-worker fixture.",
-			TestName: "TestSubagentInvocation_PrimaryAndResponseStreamAgreeOnTerminalOutcome",
 		},
 	}
 }

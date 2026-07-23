@@ -98,68 +98,11 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 }
 
-func TestRun_NamedGoalCanonicalResponseStreamWorksInShortSuite(t *testing.T) {
-	goalText := "short-suite canonical response-stream prompt"
-	stdout, listenerStarts := runHermeticNamedInvocationWithOutput(
-		t,
-		packagedGoalFactoryName,
-		goalText,
-		workers.MockWorkersConfig{
-			UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      "goal-executor",
-				WorkstationName: packagedGoalExecuteWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-		true,
-	)
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	var factoryEvents int
-	for index, line := range lines {
-		var record struct {
-			RecordType string `json:"recordType"`
-		}
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			t.Fatalf("decode response-stream line %d: %v\nstdout:\n%s", index, err, stdout)
-		}
-		switch record.RecordType {
-		case "factory_event":
-			if index == len(lines)-1 {
-				t.Fatal("Factory Event appeared after the terminal record")
-			}
-			factoryEvents++
-		case "invocation_result":
-			if index != len(lines)-1 {
-				t.Fatalf("terminal record index = %d, want %d", index, len(lines)-1)
-			}
-		default:
-			t.Fatalf("unexpected response-stream record type %q", record.RecordType)
-		}
-	}
-	if factoryEvents == 0 {
-		t.Fatalf("stdout contains no canonical Factory Event records:\n%s", stdout)
-	}
-	if listenerStarts != 0 {
-		t.Fatalf("HTTP listener start calls = %d, want 0", listenerStarts)
-	}
-}
-
 func runHermeticNamedInvocation(
 	t *testing.T,
 	factoryName string,
 	requestText string,
 	mockWorkers workers.MockWorkersConfig,
-) (string, int) {
-	return runHermeticNamedInvocationWithOutput(t, factoryName, requestText, mockWorkers, false)
-}
-
-func runHermeticNamedInvocationWithOutput(
-	t *testing.T,
-	factoryName string,
-	requestText string,
-	mockWorkers workers.MockWorkersConfig,
-	responseStream bool,
 ) (string, int) {
 	t.Helper()
 
@@ -191,13 +134,6 @@ func runHermeticNamedInvocationWithOutput(
 		"you", "run", "--named", factoryName,
 		"--with-mock-workers", "--no-record", "--quiet",
 		mockWorkersPath, requestText,
-	}
-	if responseStream {
-		args = []string{
-			"you", "--json", "run", "--named", factoryName,
-			"--with-mock-workers", "--no-record", "--output", "response-stream",
-			mockWorkersPath, requestText,
-		}
 	}
 	stdout, stderr := executeCustomerCommand(
 		t,

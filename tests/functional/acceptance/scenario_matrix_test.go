@@ -14,13 +14,10 @@ var acceptanceScenarioTests = map[string]struct{}{
 	"TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance":             {},
 	"TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath":          {},
 	"TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider":                  {},
-	"TestInvalidGoal_UnknownNamedFactory_RejectsWithDocumentedError":                        {},
-	"TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrimaryResult":  {},
-	"TestPrimaryOutputMode_SuccessfulNamedGoal_WritesAuthoritativePrimaryResultOnly":        {},
-	"TestStreamOutputMode_JSONMode_EmitsCanonicalNDJSONRecordsWithTerminalInvocationResult": {},
+	"TestInvalidGoal_OutputModesExitNonZero":                                                {},
+	"TestInvocationOutput_TerminalFailureExitsNonZero":                                      {},
 	"TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance":            {},
 	"TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy": {},
-	"TestSubagentInvocation_PrimaryAndResponseStreamAgreeOnTerminalOutcome":                 {},
 }
 
 func TestS24ScenarioMatrix_EveryDocumentedScenarioHasFocusedAcceptanceTest(t *testing.T) {

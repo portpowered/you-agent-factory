@@ -148,8 +148,10 @@ response-stream output.
   `pkg/transports/cli/run/run_wire_api_test.go`
 - Packaged topic smoke markers:
   `tests/functional/smoke/cli_docs_smoke_test.go` (`run` topic)
-- End-to-end response-stream boundary with real CLI and API:
-  `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`
+- Built-executable coverage for this lane is limited to operating-system exit
+  status in `tests/functional/acceptance/output_outcomes_test.go` and
+  `tests/functional/acceptance/invalid_quiet_outcomes_test.go`; stdout, stderr,
+  and event-presentation behavior belongs to the canonical raw packages above.
 
 **Maintainer verification commands**
 
@@ -794,22 +796,16 @@ response-stream output.
   postures are asserted in
   `tests/functional/acceptance/provider_outcomes_test.go` via built-CLI
   operator-default resolution and named `@you/goal` mock-worker runs; invalid-goal
-  and quiet-mode customer outcomes are asserted in
-  `tests/functional/acceptance/invalid_quiet_outcomes_test.go` via unknown
-  named-factory rejection, invalid topology graph-reference guidance, quiet
-  operational-failure terminal mute, and quiet successful primary-result-only
-  named `@you/goal` mock-worker runs; primary-only and human/JSON response-stream
-  output customer outcomes are asserted in
-  `tests/functional/acceptance/output_outcomes_test.go` via built-CLI primary
-  result-only stdout, canonical response-stream NDJSON records, human
-  response-stream vocabulary, and primary-only versus response-stream terminal
-  `InvocationResponse` parity on the same mock-worker fixture; local-model invoke,
-  goal-repeat, and subagent customer outcomes are asserted in
+  process exit status and unrelated invalid-topology guidance are asserted in
+  `tests/functional/acceptance/invalid_quiet_outcomes_test.go`, while terminal
+  invocation failure exit status is asserted in
+  `tests/functional/acceptance/output_outcomes_test.go`. Presentation bytes and
+  event shapes are intentionally owned by the raw Factory-run suites. Local-model
+  invoke and goal-repeat customer outcomes are asserted in
   `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go` via
   built-CLI `models invoke` bootstrap readiness failures, repeated named
   `@you/goal` JSON invocations with distinct `requestId`/`traceId` and stable
-  installed-factory reuse, and named `@you/subagent` primary JSON plus
-  primary-only versus response-stream terminal parity on mock-worker fixtures.
+  installed-factory reuse.
   S24 scenario-to-outcome mapping is canonical in `internal/builtcliacceptance/scenarios.go`
   (`S24Scenarios`) and locked by `tests/functional/acceptance/scenario_matrix_test.go`;
   PR verification runs the focused suite through `make test-built-cli-acceptance`
@@ -983,49 +979,12 @@ response-stream output.
   `SESSION_LIFECYCLE_CONTROL` replay events. Reuse
   `writePackagedGoalSlowPlannerTopologyMockWorkers` when ordered drain timing
   needs observable separation between buffered submissions.
-- Named `@you/goal` response-stream boundary smoke coverage lives in
-  `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
-  proving real CLI `--output response-stream` still returns the packaged
-  `primaryResult`, JSON response-stream NDJSON contains canonical `response_event`
-  records wrapping public `FactoryResponseEvent` values and ends with exactly one
-  `invocation_result` record, primary-only and response-stream terminal
-  `InvocationResponse` outcomes match for the same successful fixture, JSON
-  NDJSON rejects retired private `recordType` values (`progress`, `stream_gap`,
-  `compaction`, `primary_result`), human stdout uses canonical response-event
-  formatting and avoids legacy provider fragment dialect, durable `FactoryEvent`
-  history omits internal response-stream terms,
-  and generated public API artifacts stay internal-only. Reuse
-  `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
-  and `support.StartFunctionalAPIServer` when extending boundary verification.
-  Stream-responses gate audit intake and blocking residuals are recorded in
-  `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`.
-  Story-002 goal stream integration evidence is recorded in
-  `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`.
-- Named `@you/subagent` response-stream boundary smoke coverage lives in
-  `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go`,
-  proving real CLI `--output response-stream` on the one-pass subagent factory
-  reuses the shared canonical response-stream renderer contract proven for
-  `@you/goal`: human stdout uses canonical response-event formatting and avoids
-  legacy fragment dialect, JSON NDJSON uses `response_event` and
-  `invocation_result` records with validated `FactoryResponseEvent` values,
-  exactly one terminal `invocation_result` wraps the shared `InvocationResponse`,
-  and primary-only versus response-stream terminal outcomes match for the same
-  successful fixture. Reuse `writePackagedSubagentMockWorkers` and the goal
-  stream NDJSON helpers when extending subagent stream verification.
-  Story-003 subagent stream integration evidence is recorded in
-  `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`.
-- API/CLI response-stream terminal parity smoke coverage lives in
-  `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`,
-  proving live session `POST /factory-sessions/{session_id}/invocations`
-  `InvocationResponse` outcomes match CLI JSON response-stream terminal
-  `primary_result` records for the same successful `@you/goal` and
-  `@you/subagent` fixtures. Reuse `materializeNamedGoalFactoryForRoutingSmoke`,
-  `materializeNamedSubagentFactoryForSmoke`, `startNamedGoalRoutingAPIServer`,
-  `postNamedGoalRoutingInvocationOnServer`, and the goal/subagent response-stream
-  CLI helpers when extending API/CLI stream parity verification. Story-004 gate
-  evidence for canonical `FactoryResponseEvent` SSE payload encoding parity and
-  terminal outcome parity is recorded in
-  `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`.
+- Canonical CLI event/output presentation coverage lives only under
+  `tests/functional/cli/factory_run/output` and
+  `tests/functional/cli/factory_run/events`. Older goal, subagent, API-parity,
+  and private-record functional smoke matrices were retired when this raw
+  customer-boundary owner was established; the development-plan documents remain
+  historical records, not active test-ownership maps.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text

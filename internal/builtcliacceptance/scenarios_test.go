@@ -10,8 +10,8 @@ func TestS24Scenarios_RegistryIsCompleteAndUnique(t *testing.T) {
 	t.Parallel()
 
 	scenarios := S24Scenarios()
-	if len(scenarios) != 12 {
-		t.Fatalf("scenario count = %d, want 12 S24 matrix entries", len(scenarios))
+	if len(scenarios) != 9 {
+		t.Fatalf("scenario count = %d, want 9 S24 matrix entries", len(scenarios))
 	}
 
 	seenIDs := make(map[string]struct{}, len(scenarios))
@@ -49,12 +49,9 @@ func TestS24Scenarios_RegistryIsCompleteAndUnique(t *testing.T) {
 		"s24-configured-provider",
 		"s24-discovered-provider",
 		"s24-invalid-goal",
-		"s24-quiet",
-		"s24-primary-output",
-		"s24-stream-output",
+		"s24-terminal-failure-exit",
 		"s24-local-model-invoke",
 		"s24-goal-repeat",
-		"s24-subagent",
 	}
 	for _, id := range wantIDs {
 		if _, ok := seenIDs[id]; !ok {
@@ -92,12 +89,9 @@ func TestS24Scenarios_OrderMatchesPriorityMatrix(t *testing.T) {
 		"s24-configured-provider",
 		"s24-discovered-provider",
 		"s24-invalid-goal",
-		"s24-quiet",
-		"s24-primary-output",
-		"s24-stream-output",
+		"s24-terminal-failure-exit",
 		"s24-local-model-invoke",
 		"s24-goal-repeat",
-		"s24-subagent",
 	}
 	if !slices.Equal(ids, wantOrder) {
 		t.Fatalf("scenario order = %v, want %v", ids, wantOrder)

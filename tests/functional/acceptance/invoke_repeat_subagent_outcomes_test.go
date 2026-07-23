@@ -14,11 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
 
 func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(t *testing.T) {
 	if testing.Short() {
@@ -145,90 +142,6 @@ func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseIns
 	}
 }
 
-func TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow built-CLI subagent primary JSON acceptance")
-	}
-
-	session, mockWorkersPath := prepareNamedSubagentAcceptanceSession(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	requestText := fmt.Sprintf("acceptance-subagent-primary-%d", time.Now().UnixNano())
-	result, err := session.Run(ctx, namedSubagentJSONRunArgs(session, "", mockWorkersPath, requestText)...)
-	session.RequireSuccess(t, "subagent-primary-json", result, err)
-
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(result.Stdout)), &response); decodeErr != nil {
-		t.Fatalf("decode subagent JSON stdout: %v\nstdout:\n%s", decodeErr, result.Stdout)
-	}
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("status = %q, want COMPLETED", response.Status)
-	}
-	if got := invocationPrimaryResultText(t, response); got != packagedSubagentMockWorkerAcceptedSummary {
-		t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentMockWorkerAcceptedSummary)
-	}
-	if strings.Contains(result.Stdout, requestText) {
-		t.Fatalf("stdout echoed submitted request text %q", requestText)
-	}
-}
-
-func TestSubagentInvocation_PrimaryAndResponseStreamAgreeOnTerminalOutcome(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow built-CLI subagent primary vs response-stream parity acceptance")
-	}
-
-	session, mockWorkersPath := prepareNamedSubagentAcceptanceSession(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	requestText := fmt.Sprintf("acceptance-subagent-stream-parity-%d", time.Now().UnixNano())
-
-	primaryResult, primaryErr := session.Run(ctx, namedSubagentJSONRunArgs(session, "", mockWorkersPath, requestText)...)
-	session.RequireSuccess(t, "subagent-parity-primary-json", primaryResult, primaryErr)
-	primaryResponse := decodeInvocationResponse(t, primaryResult.Stdout)
-
-	streamResult, streamErr := session.Run(ctx, namedSubagentJSONRunArgs(session, "response-stream", mockWorkersPath, requestText)...)
-	session.RequireSuccess(t, "subagent-parity-response-stream-json", streamResult, streamErr)
-
-	records, parseErr := parseResponseStreamNDJSONRecords(streamResult.Stdout)
-	if parseErr != nil {
-		t.Fatalf("parse response-stream NDJSON: %v\nstdout:\n%s", parseErr, streamResult.Stdout)
-	}
-	streamTerminal, terminalErr := responseStreamTerminalInvocation(records)
-	if terminalErr != nil {
-		t.Fatalf("response-stream terminal invocation: %v\nstdout:\n%s", terminalErr, streamResult.Stdout)
-	}
-
-	assertInvocationTerminalOutcomeParity(t, primaryResponse, streamTerminal)
-}
-
-func prepareNamedSubagentAcceptanceSession(t *testing.T) (*builtcliacceptance.Session, string) {
-	t.Helper()
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t).WithNoExternalServer(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	_, initOutcome := initializeConfig(t, ctx, session, "subagent-config-init")
-	configPath := initOutcome.ConfigPath
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if writeErr := os.WriteFile(configPath, configBody, 0o600); writeErr != nil {
-		t.Fatalf("WriteFile(%q): %v", configPath, writeErr)
-	}
-
-	return session, writePackagedSubagentMockWorkersConfig(t)
-}
-
 func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, goalText string) []string {
 	args := append([]string{"--json"}, session.RuntimeLogDirFlags()...)
 	args = append(args, session.ServerFlags()...)
@@ -242,52 +155,6 @@ func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, 
 		goalText,
 	)
 	return args
-}
-
-func namedSubagentJSONRunArgs(
-	session *builtcliacceptance.Session,
-	outputMode string,
-	mockWorkersPath string,
-	requestText string,
-) []string {
-	args := append([]string{"--json"}, session.RuntimeLogDirFlags()...)
-	args = append(args, session.ServerFlags()...)
-	args = append(args,
-		"run",
-		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers",
-		"--no-record",
-		"--quiet",
-	)
-	if outputMode == "response-stream" {
-		args = append(args, "--output", "response-stream")
-	}
-	args = append(args, mockWorkersPath, requestText)
-	return args
-}
-
-func writePackagedSubagentMockWorkersConfig(t *testing.T) string {
-	t.Helper()
-
-	cfg := workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
-				WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal packaged subagent mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-subagent-acceptance.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write packaged subagent mock-workers config: %v", err)
-	}
-	return path
 }
 
 func materializedNamedFactoryDir(t *testing.T, initialized configInitOutcome, factoryName string) string {
@@ -313,4 +180,17 @@ func decodeInvocationResponse(t *testing.T, stdout string) factoryapi.Invocation
 		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, stdout)
 	}
 	return response
+}
+
+func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+	t.Helper()
+
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	return part.Text
 }
