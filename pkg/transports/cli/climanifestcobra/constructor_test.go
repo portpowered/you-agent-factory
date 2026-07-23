@@ -1,6 +1,7 @@
 package climanifestcobra_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -322,6 +323,297 @@ func TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID(t *testing.T) {
+	manifest := syntheticFlagManifest()
+	root, err := climanifestcobra.NewCommandTree(manifest)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{
+		"alpha",
+		"--enable",
+		"--nebula-label", "  unfamiliar value  ",
+		"-c", "7",
+		"--generation", "9223372036854775000",
+		"--tag", " first ",
+		"--tag", "second",
+		"--mode",
+	})
+	err = root.Execute()
+	if err == nil || !strings.Contains(err.Error(), `command "stable.alpha" has no executable handler attached`) {
+		t.Fatalf("Execute() error = %v, want only the expected unbound-handler error", err)
+	}
+
+	alpha := root.Commands()[0]
+	values, err := climanifestcobra.InputValues(alpha)
+	if err != nil {
+		t.Fatalf("InputValues(alpha) error = %v", err)
+	}
+	want := map[string]any{
+		"stable.alpha.flag.activate": true,
+		"stable.alpha.flag.label":    "unfamiliar value",
+		"stable.alpha.flag.attempts": 7,
+		"stable.alpha.flag.epoch":    int64(9223372036854775000),
+		"stable.alpha.flag.tags":     []string{"first", "second"},
+		"stable.alpha.flag.mode":     "safe",
+		"stable.alpha.flag.secret":   "",
+	}
+	if !reflect.DeepEqual(values, want) {
+		t.Fatalf("InputValues(alpha) = %#v, want %#v", values, want)
+	}
+	if flag := alpha.Flags().Lookup("secret-code"); flag == nil || !flag.Hidden {
+		t.Fatalf("hidden flag = %#v, want registered and hidden", flag)
+	}
+}
+
+func TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	if _, err := climanifestcobra.NewCommandTree(manifest); err != nil {
+		t.Fatalf("NewCommandTree(RepresentativeFamilyManifest()) error = %v", err)
+	}
+}
+
+func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testing.T) {
+	t.Run("typed defaults", func(t *testing.T) {
+		root, err := climanifestcobra.NewCommandTree(syntheticFlagManifest())
+		if err != nil {
+			t.Fatalf("NewCommandTree() error = %v", err)
+		}
+		root.SetArgs([]string{"alpha", "--label", "present"})
+		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "no executable handler") {
+			t.Fatalf("Execute() error = %v, want unbound-handler error", err)
+		}
+		values, err := climanifestcobra.InputValues(root.Commands()[0])
+		if err != nil {
+			t.Fatalf("InputValues(alpha) error = %v", err)
+		}
+		if values["stable.alpha.flag.attempts"] != 3 ||
+			values["stable.alpha.flag.epoch"] != int64(42) ||
+			!reflect.DeepEqual(values["stable.alpha.flag.tags"], []string{"base"}) {
+			t.Fatalf("typed defaults = %#v", values)
+		}
+	})
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "required", args: []string{"alpha"}, wantErr: `required flag(s) "--nebula-label" not set`},
+		{name: "enum", args: []string{"alpha", "--label", "present", "--mode=dangerous"}, wantErr: `value "dangerous" is not one of the declared choices`},
+		{name: "typed parse", args: []string{"alpha", "--label", "present", "--attempts", "many"}, wantErr: `invalid syntax`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root, err := climanifestcobra.NewCommandTree(syntheticFlagManifest())
+			if err != nil {
+				t.Fatalf("NewCommandTree() error = %v", err)
+			}
+			root.SetArgs(test.args)
+			if err := root.Execute(); err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want error containing %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestNewCommandTreeRejectsInvalidFlagRecordsBeforeReturningTree(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*climanifest.Manifest)
+		wantErr string
+	}{
+		{
+			name: "unsupported value type",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticFlag(manifest, "stable.alpha", "stable.alpha.flag.attempts", func(flag *climanifest.Flag) {
+					flag.ValueType = "float"
+				})
+			},
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.attempts": unsupported value type "float"`,
+		},
+		{
+			name: "invalid typed default",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticFlag(manifest, "stable.alpha", "stable.alpha.flag.attempts", func(flag *climanifest.Flag) {
+					value := "three"
+					flag.DefaultValue = &climanifest.InputValue{String: &value}
+				})
+			},
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.attempts": invalid typed default`,
+		},
+		{
+			name: "missing inheritance target",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticFlag(manifest, "stable.alpha", "stable.alpha.flag.activate", func(flag *climanifest.Flag) {
+					flag.InheritedFromID = "stable.root.flag.missing"
+				})
+			},
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.activate": inherited input "stable.root.flag.missing"`,
+		},
+		{
+			name: "incompatible repeatability",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticFlag(manifest, "stable.alpha", "stable.alpha.flag.attempts", func(flag *climanifest.Flag) {
+					flag.Repeatable = true
+				})
+			},
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.attempts": repeatable=true is incompatible`,
+		},
+		{
+			name: "incompatible inherited metadata",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticFlag(manifest, "stable.alpha", "stable.alpha.flag.activate", func(flag *climanifest.Flag) {
+					flag.Long = "different"
+				})
+			},
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.activate": inheritance target "stable.root.flag.activate" has incompatible flag metadata`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticFlagManifest()
+			test.mutate(&manifest)
+			root, err := climanifestcobra.NewCommandTree(manifest)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("NewCommandTree() = (%v, %v), want nil error containing %q", root, err, test.wantErr)
+			}
+			if root != nil {
+				t.Fatalf("NewCommandTree() root = %v after validation failure, want nil", root)
+			}
+		})
+	}
+}
+
+func syntheticFlagManifest() climanifest.Manifest {
+	manifest := syntheticTreeManifest()
+	delete(manifest.Commands, "stable.zeta")
+	delete(manifest.Commands, "stable.leaf")
+
+	root := manifest.Commands["stable.root"]
+	root.Flags = map[string]climanifest.Flag{
+		"stable.root.flag.activate": {
+			ID:            "stable.root.flag.activate",
+			Long:          "activate",
+			Shorthand:     "a",
+			Aliases:       []string{"enable"},
+			Scope:         "persistent",
+			ValueType:     "bool",
+			DefaultValue:  boolInputValue(false),
+			NoOptionValue: boolInputValue(true),
+			Visibility:    "visible",
+		},
+	}
+	manifest.Commands[root.ID] = root
+
+	alpha := manifest.Commands["stable.alpha"]
+	alpha.Flags = map[string]climanifest.Flag{
+		"stable.alpha.flag.activate": {
+			ID:              "stable.alpha.flag.activate",
+			Long:            "activate",
+			Shorthand:       "a",
+			Aliases:         []string{"enable"},
+			Scope:           "inherited",
+			InheritedFromID: "stable.root.flag.activate",
+			ValueType:       "bool",
+			DefaultValue:    boolInputValue(false),
+			NoOptionValue:   boolInputValue(true),
+			Visibility:      "visible",
+		},
+		"stable.alpha.flag.label": {
+			ID:            "stable.alpha.flag.label",
+			Long:          "nebula-label",
+			Aliases:       []string{"label"},
+			Scope:         "local",
+			ValueType:     "string",
+			Default:       "",
+			Required:      true,
+			Normalization: "trim",
+			Visibility:    "visible",
+		},
+		"stable.alpha.flag.attempts": {
+			ID:           "stable.alpha.flag.attempts",
+			Long:         "attempts",
+			Shorthand:    "c",
+			Scope:        "local",
+			ValueType:    "int",
+			DefaultValue: intInputValue(3),
+			Visibility:   "visible",
+		},
+		"stable.alpha.flag.epoch": {
+			ID:           "stable.alpha.flag.epoch",
+			Long:         "generation",
+			Scope:        "local",
+			ValueType:    "int64",
+			DefaultValue: int64InputValue(42),
+			Visibility:   "visible",
+		},
+		"stable.alpha.flag.tags": {
+			ID:            "stable.alpha.flag.tags",
+			Long:          "tag",
+			Scope:         "local",
+			ValueType:     "stringArray",
+			Repeatable:    true,
+			DefaultValue:  stringArrayInputValue([]string{"base"}),
+			Normalization: "trim",
+			Visibility:    "visible",
+		},
+		"stable.alpha.flag.mode": {
+			ID:              "stable.alpha.flag.mode",
+			Long:            "mode",
+			Scope:           "local",
+			ValueType:       "string",
+			Enum:            []string{"safe", "fast"},
+			Default:         "fast",
+			NoOptionDefault: "safe",
+			Visibility:      "visible",
+		},
+		"stable.alpha.flag.secret": {
+			ID:         "stable.alpha.flag.secret",
+			Long:       "secret-code",
+			Scope:      "local",
+			ValueType:  "string",
+			Default:    "",
+			Visibility: "hidden",
+		},
+	}
+	manifest.Commands[alpha.ID] = alpha
+	return manifest
+}
+
+func updateSyntheticFlag(
+	manifest *climanifest.Manifest,
+	commandID string,
+	inputID string,
+	update func(*climanifest.Flag),
+) {
+	command := manifest.Commands[commandID]
+	flag := command.Flags[inputID]
+	update(&flag)
+	command.Flags[inputID] = flag
+	manifest.Commands[commandID] = command
+}
+
+func intInputValue(value int) *climanifest.InputValue {
+	return &climanifest.InputValue{Int: &value}
+}
+
+func boolInputValue(value bool) *climanifest.InputValue {
+	return &climanifest.InputValue{Boolean: &value}
+}
+
+func int64InputValue(value int64) *climanifest.InputValue {
+	return &climanifest.InputValue{Int64: &value}
+}
+
+func stringArrayInputValue(value []string) *climanifest.InputValue {
+	return &climanifest.InputValue{StringArray: &value}
 }
 
 func syntheticTreeManifest() climanifest.Manifest {

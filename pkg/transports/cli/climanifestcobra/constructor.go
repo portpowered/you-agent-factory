@@ -438,6 +438,12 @@ const supportedManifestFormatVersion = "1.0.0"
 type plannedCommand struct {
 	record     climanifest.Command
 	parentPath string
+	flags      []plannedFlag
+}
+
+type plannedFlag struct {
+	record      climanifest.Flag
+	canonicalID string
 }
 
 // NewCommandTree constructs a detached Cobra tree from one resolved CLI
@@ -450,8 +456,14 @@ func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
 	}
 
 	built := make(map[string]*cobra.Command, len(plan))
+	targets := make(map[string]*genericFlagValue)
 	for _, item := range plan {
 		built[item.record.Path] = projectCommand(item.record)
+	}
+	for _, item := range plan {
+		if err := projectFlags(built[item.record.Path], item, targets); err != nil {
+			return nil, fmt.Errorf("build generic command tree: %w", err)
+		}
 	}
 	for _, item := range plan {
 		if item.parentPath == "" {
@@ -475,6 +487,9 @@ func planCommandTree(manifest climanifest.Manifest) ([]plannedCommand, error) {
 		return nil, err
 	}
 	sortCommandPlan(plan)
+	if err := planCommandFlags(plan); err != nil {
+		return nil, err
+	}
 	return plan, nil
 }
 
@@ -670,4 +685,293 @@ func projectCommand(record climanifest.Command) *cobra.Command {
 		}
 	}
 	return cmd
+}
+
+func planCommandFlags(plan []plannedCommand) error {
+	type declaration struct {
+		flag        climanifest.Flag
+		commandPath string
+	}
+	declarations := make(map[string]declaration)
+	inputOwners := make(map[string]string)
+	for index := range plan {
+		for _, mapID := range sortedFlagMapKeys(plan[index].record.Flags) {
+			record := plan[index].record.Flags[mapID]
+			if mapID != record.ID {
+				return fmt.Errorf(
+					"command %q flag map key %q does not match input id %q",
+					plan[index].record.ID,
+					mapID,
+					record.ID,
+				)
+			}
+		}
+		records := sortedFlags(plan[index].record.Flags)
+		seenNames := make(map[string]string)
+		seenShorthands := make(map[string]string)
+		for _, record := range records {
+			if owner, exists := inputOwners[record.ID]; exists {
+				return genericFlagError(plan[index].record.ID, record.ID, "stable input ID is already declared by command %q", owner)
+			}
+			inputOwners[record.ID] = plan[index].record.ID
+			if err := validateGenericFlag(plan[index].record.ID, record, seenNames, seenShorthands); err != nil {
+				return err
+			}
+			flagPlan := plannedFlag{record: record, canonicalID: record.ID}
+			switch record.Scope {
+			case "local", "persistent":
+				if _, exists := declarations[record.ID]; exists {
+					return genericFlagError(plan[index].record.ID, record.ID, "stable input ID is duplicated")
+				}
+				declarations[record.ID] = declaration{flag: record, commandPath: plan[index].record.Path}
+			case "inherited":
+				target, exists := declarations[record.InheritedFromID]
+				if !exists {
+					return genericFlagError(
+						plan[index].record.ID,
+						record.ID,
+						"inherited input %q does not reference a declared ancestor flag",
+						record.InheritedFromID,
+					)
+				}
+				if target.flag.Scope != "persistent" ||
+					!strings.HasPrefix(plan[index].record.Path, target.commandPath+" ") {
+					return genericFlagError(
+						plan[index].record.ID,
+						record.ID,
+						"inheritance target %q is not persistent on an ancestor command",
+						record.InheritedFromID,
+					)
+				}
+				if err := validateInheritedFlag(record, target.flag); err != nil {
+					return genericFlagError(plan[index].record.ID, record.ID, "%v", err)
+				}
+				flagPlan.canonicalID = target.flag.ID
+			}
+			plan[index].flags = append(plan[index].flags, flagPlan)
+		}
+	}
+	return nil
+}
+
+func sortedFlagMapKeys(flags map[string]climanifest.Flag) []string {
+	keys := make([]string, 0, len(flags))
+	for key := range flags {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func validateGenericFlag(
+	commandID string,
+	flag climanifest.Flag,
+	seenNames map[string]string,
+	seenShorthands map[string]string,
+) error {
+	if strings.TrimSpace(flag.ID) == "" {
+		return genericFlagError(commandID, flag.ID, "stable input ID is required")
+	}
+	if strings.TrimSpace(flag.Long) == "" || strings.ContainsAny(flag.Long, " \t\r\n") {
+		return genericFlagError(commandID, flag.ID, "long name %q must be one non-empty segment", flag.Long)
+	}
+	switch flag.Scope {
+	case "local", "persistent":
+		if flag.InheritedFromID != "" {
+			return genericFlagError(commandID, flag.ID, "scope %q cannot declare inheritance target %q", flag.Scope, flag.InheritedFromID)
+		}
+	case "inherited":
+		if flag.InheritedFromID == "" {
+			return genericFlagError(commandID, flag.ID, "inherited scope requires inheritedFromInputId")
+		}
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported scope %q", flag.Scope)
+	}
+	if err := validateGenericFlagNames(commandID, flag, seenNames, seenShorthands); err != nil {
+		return err
+	}
+	if err := validateGenericFlagShape(commandID, flag); err != nil {
+		return err
+	}
+	return validateGenericFlagDefaults(commandID, flag)
+}
+
+func validateGenericFlagNames(
+	commandID string,
+	flag climanifest.Flag,
+	seenNames map[string]string,
+	seenShorthands map[string]string,
+) error {
+	names := append([]string{flag.Long}, flag.Aliases...)
+	for _, name := range names {
+		if strings.TrimSpace(name) == "" || strings.ContainsAny(name, " \t\r\n") {
+			return genericFlagError(commandID, flag.ID, "flag name or alias %q must be one non-empty segment", name)
+		}
+		if owner, exists := seenNames[name]; exists {
+			return genericFlagError(commandID, flag.ID, "public name %q conflicts with input %q", name, owner)
+		}
+		if name == "help" {
+			return genericFlagError(commandID, flag.ID, "public name %q is reserved by Cobra", name)
+		}
+		seenNames[name] = flag.ID
+	}
+	if flag.Shorthand != "" && len([]rune(flag.Shorthand)) != 1 {
+		return genericFlagError(commandID, flag.ID, "shorthand %q must be one character", flag.Shorthand)
+	}
+	if flag.Shorthand == "h" {
+		return genericFlagError(commandID, flag.ID, "shorthand %q is reserved by Cobra", flag.Shorthand)
+	}
+	if owner, exists := seenShorthands[flag.Shorthand]; flag.Shorthand != "" && exists {
+		return genericFlagError(commandID, flag.ID, "shorthand %q conflicts with input %q", flag.Shorthand, owner)
+	}
+	if flag.Shorthand != "" {
+		seenShorthands[flag.Shorthand] = flag.ID
+	}
+	return nil
+}
+
+func validateGenericFlagShape(commandID string, flag climanifest.Flag) error {
+	switch flag.ValueType {
+	case "bool", "string", "int", "int64", "stringArray":
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported value type %q", flag.ValueType)
+	}
+	if flag.Repeatable != (flag.ValueType == "stringArray") {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"repeatable=%t is incompatible with value type %q",
+			flag.Repeatable,
+			flag.ValueType,
+		)
+	}
+	switch flag.Normalization {
+	case "":
+	case "trim":
+		if flag.ValueType != "string" && flag.ValueType != "stringArray" {
+			return genericFlagError(commandID, flag.ID, "normalization %q is incompatible with value type %q", flag.Normalization, flag.ValueType)
+		}
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported normalization %q", flag.Normalization)
+	}
+	switch flag.Visibility {
+	case "", "visible", "hidden":
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported visibility %q", flag.Visibility)
+	}
+	if len(flag.Enum) > 0 && flag.ValueType != "string" && flag.ValueType != "stringArray" {
+		return genericFlagError(commandID, flag.ID, "enumerated choices are incompatible with value type %q", flag.ValueType)
+	}
+	return nil
+}
+
+func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error {
+	defaultValue, err := genericFlagDefault(flag)
+	if err != nil {
+		return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
+	}
+	if hasGenericFlagDefault(flag) {
+		if err := validateEnumValue(flag, defaultValue); err != nil {
+			return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
+		}
+	}
+	if flag.NoOptionValue == nil && flag.NoOptionDefault == "" {
+		return nil
+	}
+	noOptionValue, err := genericNoOptionValue(flag)
+	if err != nil {
+		return genericFlagError(commandID, flag.ID, "invalid no-option default: %v", err)
+	}
+	if flag.ValueType == "stringArray" {
+		return genericFlagError(commandID, flag.ID, "no-option default is incompatible with repeated-string flags")
+	}
+	if err := validateEnumValue(flag, noOptionValue); err != nil {
+		return genericFlagError(commandID, flag.ID, "invalid no-option default: %v", err)
+	}
+	return nil
+}
+
+func validateInheritedFlag(inherited, declared climanifest.Flag) error {
+	if inherited.Long != declared.Long ||
+		inherited.ValueType != declared.ValueType ||
+		inherited.Repeatable != declared.Repeatable ||
+		inherited.Normalization != declared.Normalization {
+		return fmt.Errorf("inheritance target %q has incompatible flag metadata", declared.ID)
+	}
+	return nil
+}
+
+func genericFlagError(commandID, inputID, format string, args ...any) error {
+	return fmt.Errorf("command %q input %q: %s", commandID, inputID, fmt.Sprintf(format, args...))
+}
+
+func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*genericFlagValue) error {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	for _, item := range plan.flags {
+		cmd.Annotations[genericInputAnnotationPrefix+item.record.ID] = item.record.Long
+		if item.record.Scope == "inherited" {
+			if targets[item.canonicalID] == nil {
+				return genericFlagError(plan.record.ID, item.record.ID, "canonical inherited storage %q is unavailable", item.canonicalID)
+			}
+			continue
+		}
+		value, err := newGenericFlagValue(item.record)
+		if err != nil {
+			return genericFlagError(plan.record.ID, item.record.ID, "allocate typed storage: %v", err)
+		}
+		targets[item.canonicalID] = value
+		flagSet := cmd.Flags()
+		if item.record.Scope == "persistent" {
+			flagSet = cmd.PersistentFlags()
+		}
+		if err := registerGenericFlag(flagSet, item.record, value); err != nil {
+			return genericFlagError(plan.record.ID, item.record.ID, "register flag: %v", err)
+		}
+	}
+	if len(plan.flags) > 0 {
+		cmd.PreRunE = func(command *cobra.Command, _ []string) error {
+			return validateRequiredGenericFlags(command, plan)
+		}
+	}
+	return nil
+}
+
+func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value *genericFlagValue) error {
+	flagSet.VarP(value, record.Long, record.Shorthand, "")
+	registered := flagSet.Lookup(record.Long)
+	registered.Hidden = record.Visibility == "hidden"
+	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}
+	if record.NoOptionValue != nil || record.NoOptionDefault != "" {
+		noOption, err := genericNoOptionValue(record)
+		if err != nil {
+			return err
+		}
+		registered.NoOptDefVal = genericFlagString(noOption)
+	}
+	for _, alias := range record.Aliases {
+		flagSet.Var(value, alias, "")
+		aliasFlag := flagSet.Lookup(alias)
+		aliasFlag.Hidden = true
+		aliasFlag.NoOptDefVal = registered.NoOptDefVal
+	}
+	return nil
+}
+
+func validateRequiredGenericFlags(cmd *cobra.Command, plan plannedCommand) error {
+	for _, item := range plan.flags {
+		if !item.record.Required {
+			continue
+		}
+		names := append([]string{item.record.Long}, item.record.Aliases...)
+		for _, name := range names {
+			if flag := lookupCommandFlag(cmd, name); flag != nil && flag.Changed {
+				goto nextFlag
+			}
+		}
+		return fmt.Errorf("required flag(s) %q not set", "--"+item.record.Long)
+	nextFlag:
+	}
+	return nil
 }

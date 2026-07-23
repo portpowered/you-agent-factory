@@ -375,6 +375,13 @@ response-stream output.
   Runtime handler bindings for an inherited flag must read the persistent
   ancestor's live storage; do not leave execution dependent on retired
   command-local storage after canonicalizing an input as inherited.
+  Generic Cobra projection lives in
+  `pkg/transports/cli/climanifestcobra/constructor.go`, while its invocation-local
+  typed flag values and stable-ID `InputValues` access live with the package's
+  other binding state in `pkg/transports/cli/climanifestcobra/options.go`.
+  Validate the complete input and inheritance plan before registering any pflag
+  values, and register inherited records against their persistent ancestor's
+  canonical storage rather than allocating command-local copies.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
