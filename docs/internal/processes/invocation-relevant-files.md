@@ -81,6 +81,22 @@ primary-result behavior.
 
 ## CLI run and submit command contracts
 
+- Portable invocation selection carries two distinct values: the concrete
+  authored source selected by `--factory` and its asset directory. Keep the
+  source path through `runconfig.Config`, `factorysessions.InvocationTarget`,
+  and `factorydefinitions.RuntimeOpeningRequest`; resolving only the directory
+  can silently replace an explicit YAML selection with `factory.json` or lose
+  strict missing/ambiguity diagnostics. Named and default runtime selection
+  continue to resolve through the current-Factory directory policy.
+- `pkg/services/factory_definitions/loading/loader.go` must retain the complete
+  `AuthoredFactorySource` after root selection and wrap every source-backed
+  mapping, validation, portability, discovery, merge, and normalization failure
+  with its selected path and format using `%w`. The CLI formatter in
+  `pkg/transports/cli/factoryload/operator_error.go` must preserve that outer
+  context when rendering typed blocking findings and recovery guidance.
+  Behavioral coverage belongs in Factory Definitions loading tests and a
+  `root.BuildProcess` functional invocation, with assertions for source
+  identity, original validation targets, and zero provider execution.
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
   in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
   source precedence, conflicts, no-option defaults, output modes, effects, and

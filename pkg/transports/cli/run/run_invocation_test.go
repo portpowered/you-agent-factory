@@ -143,11 +143,18 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	t.Parallel()
 
 	target := invocationTarget(RunConfig{
-		Dir:  "/tmp/factory",
-		Port: 7437,
+		Dir:               "/tmp/factory",
+		FactoryConfigPath: "/tmp/factory/factory.yaml",
+		Port:              7437,
 	}, zap.NewNop(), nil)
 	if target.FactoryDir != "/tmp/factory" {
 		t.Fatalf("FactoryDir = %q, want /tmp/factory", target.FactoryDir)
+	}
+	if target.FactorySourcePath != "/tmp/factory/factory.yaml" {
+		t.Fatalf(
+			"FactorySourcePath = %q, want /tmp/factory/factory.yaml",
+			target.FactorySourcePath,
+		)
 	}
 }
 

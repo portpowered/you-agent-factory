@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -51,7 +52,7 @@ func createFromFileWithScriptedPersistence(
 	return CreateFromFileWithServices(
 		config,
 		scriptedNamedFactoryPersistence(t, result, operationErr, inspect),
-		factorydefinitions.AuthoredFactorySourceLoader(os.ReadFile),
+		readAuthoredTestSource,
 	)
 }
 
@@ -69,6 +70,24 @@ func updateFromFileWithScriptedPersistence(
 	return UpdateFromFileWithServices(
 		config,
 		scriptedNamedFactoryPersistence(t, result, operationErr, inspect),
-		factorydefinitions.AuthoredFactorySourceLoader(os.ReadFile),
+		readAuthoredTestSource,
 	)
+}
+
+func readAuthoredTestSource(
+	path string,
+) (factorydefinitions.AuthoredFactorySource, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return factorydefinitions.AuthoredFactorySource{}, err
+	}
+	format := factorydefinitions.AuthoredFactoryFormatJSON
+	if filepath.Ext(path) != ".json" {
+		format = factorydefinitions.AuthoredFactoryFormatYAML
+	}
+	return factorydefinitions.AuthoredFactorySource{
+		Path:   path,
+		Format: format,
+		Data:   data,
+	}, nil
 }

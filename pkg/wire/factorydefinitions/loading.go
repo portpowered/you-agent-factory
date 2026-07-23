@@ -33,6 +33,7 @@ func Loader(
 	)
 	return factoryloading.New(
 		loadingFileSystem,
+		factoryauthoredlayout.NewFactorySourceLoader(fileSystem),
 		namedPaths.ResolveCurrentDir,
 		LoadedFactorySourceFactory(),
 		factorymapping.ExpandFactoryConfigForRuntimeLoad,

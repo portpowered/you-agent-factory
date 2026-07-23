@@ -111,6 +111,7 @@ func (c Composition) Loader() *factoryloading.Loader {
 	}
 	return factoryloading.New(
 		c.effects.Loading,
+		factoryauthoredlayout.NewFactorySourceLoader(c.effects.AuthoredReader),
 		mustNamedPaths(c.effects.NamedPaths).ResolveCurrentDir,
 		loadedFactorySourceFactory(),
 		representation.DecodeFactory,

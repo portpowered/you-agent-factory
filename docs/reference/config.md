@@ -49,11 +49,14 @@ Validate a portable file or split directory without persisting it:
 
 ```bash
 you factory config validate ./factory/factory.json
+you factory config validate ./factory/factory.yaml
 you factory config validate ./factory
 ```
 
 Add global `--json` for structured validation output. Validation uses the same
-validate-only Factory contract as `POST /factory-validations`.
+validate-only Factory contract as `POST /factory-validations`. A directory must
+contain exactly one of `factory.json`, `factory.yaml`, or `factory.yml`; missing
+and ambiguous roots are rejected instead of choosing a precedence.
 
 Flatten a split Factory directory into canonical, camelCase JSON on stdout:
 

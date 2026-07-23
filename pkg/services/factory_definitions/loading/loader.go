@@ -20,6 +20,7 @@ import (
 // parsing remains an adapter selected by Wire.
 type Loader struct {
 	fileSystem               factorydefinitions.LoadingFileSystem
+	loadAuthoredSource       factorydefinitions.AuthoredFactorySourceLoader
 	resolveCurrentDir        factorydefinitions.CurrentFactoryDirectoryResolver
 	newSource                factorydefinitions.LoadedFactorySourceFactory
 	decodeFactory            func([]byte) (*factorydefinitions.FactoryConfig, error)
@@ -46,6 +47,7 @@ type Loader struct {
 // filesystem capabilities.
 func New(
 	fileSystem factorydefinitions.LoadingFileSystem,
+	loadAuthoredSource factorydefinitions.AuthoredFactorySourceLoader,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	newSource factorydefinitions.LoadedFactorySourceFactory,
 	decodeFactory func([]byte) (*factorydefinitions.FactoryConfig, error),
@@ -69,6 +71,7 @@ func New(
 ) *Loader {
 	return &Loader{
 		fileSystem:               fileSystem,
+		loadAuthoredSource:       loadAuthoredSource,
 		resolveCurrentDir:        resolveCurrentDir,
 		newSource:                newSource,
 		decodeFactory:            decodeFactory,
@@ -102,14 +105,14 @@ func (l *Loader) FlattenFactoryConfig(path string) ([]byte, error) {
 		return nil, fmt.Errorf("factory path is required")
 	}
 
-	data, sourcePath, factoryDir, requireSplitDefinitions, err :=
+	source, factoryDir, requireSplitDefinitions, err :=
 		l.readFactoryConfigSource(path)
 	if err != nil {
 		return nil, err
 	}
-	factoryConfig, err := l.decodeAuthoredLayout(data)
+	factoryConfig, err := l.decodeAuthoredLayout(source.Data)
 	if err != nil {
-		return nil, fmt.Errorf("parse factory config %s: %w", sourcePath, err)
+		return nil, sourceContextError(source, "parse factory config", err)
 	}
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
 		factoryDir,
@@ -118,14 +121,14 @@ func (l *Loader) FlattenFactoryConfig(path string) ([]byte, error) {
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "load runtime definitions", err)
 	}
 	effectiveFactory, err := runtimeconfig.Merge(factoryConfig, runtimeDefinitions)
 	if err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "merge runtime definitions", err)
 	}
 	if err := l.blockingLoadError(effectiveFactory); err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "validate factory config", err)
 	}
 	if err := l.applyPortableFiles(
 		factoryDir,
@@ -133,24 +136,28 @@ func (l *Loader) FlattenFactoryConfig(path string) ([]byte, error) {
 		true,
 		true,
 	); err != nil {
-		return nil, fmt.Errorf(
-			"collect portable bundled files %s: %w",
-			factoryDir,
-			err,
+		return nil, sourceContextError(
+			source,
+			"collect portable bundled files",
+			fmt.Errorf("%s: %w", factoryDir, err),
 		)
 	}
 	if err := l.applyStarterWork(factoryDir, effectiveFactory); err != nil {
-		return nil, fmt.Errorf(
-			"collect shared factory starter work %s: %w",
-			factoryDir,
-			err,
+		return nil, sourceContextError(
+			source,
+			"collect shared factory starter work",
+			fmt.Errorf("%s: %w", factoryDir, err),
 		)
 	}
 	flattened, err := l.encodeFactory(effectiveFactory)
 	if err != nil {
-		return nil, fmt.Errorf("flatten factory config %s: %w", sourcePath, err)
+		return nil, sourceContextError(source, "flatten factory config", err)
 	}
-	return formatCanonicalFactoryJSON(flattened, sourcePath)
+	formatted, err := formatCanonicalFactoryJSON(flattened, source.Path)
+	if err != nil {
+		return nil, sourceContextError(source, "format canonical factory config", err)
+	}
+	return formatted, nil
 }
 
 // PrepareFactoryLayoutExpansion reads one canonical Factory source and returns
@@ -172,29 +179,34 @@ func (l *Loader) PrepareFactoryLayoutExpansion(
 		return "", "", "", nil, nil,
 			fmt.Errorf("factory config path is required")
 	}
-	data, sourcePath, _, _, err := l.readFactoryConfigSource(path)
+	source, _, _, err := l.readFactoryConfigSource(path)
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
 	info, err := l.fileSystem.Stat(path)
 	if err != nil {
 		return "", "", "", nil, nil,
-			fmt.Errorf("find factory config target %s: %w", path, err)
+			sourceContextError(
+				source,
+				"find factory config target",
+				fmt.Errorf("%s: %w", path, err),
+			)
 	}
-	targetDir := filepath.Dir(sourcePath)
+	targetDir := filepath.Dir(source.Path)
 	if info.IsDir() {
 		targetDir = path
 	}
-	factoryConfig, err := l.decodeAuthoredLayout(data)
+	factoryConfig, err := l.decodeAuthoredLayout(source.Data)
 	if err != nil {
 		return "", "", "", nil, nil,
-			fmt.Errorf("parse factory config %s: %w", sourcePath, err)
+			sourceContextError(source, "parse factory config", err)
 	}
 	if err := l.validateCanonicalFiles(
-		filepath.Dir(sourcePath),
+		filepath.Dir(source.Path),
 		factoryConfig,
 	); err != nil {
-		return "", "", "", nil, nil, err
+		return "", "", "", nil, nil,
+			sourceContextError(source, "validate canonical portable files", err)
 	}
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
 		targetDir,
@@ -204,10 +216,10 @@ func (l *Loader) PrepareFactoryLayoutExpansion(
 	)
 	if err != nil {
 		return "", "", "", nil, nil,
-			fmt.Errorf(
-				"load split runtime definitions for expand %s: %w",
-				targetDir,
-				err,
+			sourceContextError(
+				source,
+				"load split runtime definitions for expand",
+				fmt.Errorf("%s: %w", targetDir, err),
 			)
 	}
 	effectiveFactory, err := runtimeconfig.Merge(
@@ -215,26 +227,24 @@ func (l *Loader) PrepareFactoryLayoutExpansion(
 		runtimeDefinitions,
 	)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return "", "", "", nil, nil,
+			sourceContextError(source, "merge runtime definitions", err)
 	}
 	if err := l.blockingLoadError(effectiveFactory); err != nil {
-		return "", "", "", nil, nil, err
+		return "", "", "", nil, nil,
+			sourceContextError(source, "validate factory config", err)
 	}
 	authoredFactory, err := l.normalizeAuthored(effectiveFactory)
 	if err != nil {
 		return "", "", "", nil, nil,
-			fmt.Errorf(
-				"normalize authored factory config %s: %w",
-				sourcePath,
-				err,
-			)
+			sourceContextError(source, "normalize authored factory config", err)
 	}
 	canonical, err := l.encodeFactory(authoredFactory)
 	if err != nil {
 		return "", "", "", nil, nil,
-			fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
+			sourceContextError(source, "normalize factory config", err)
 	}
-	return targetDir, filepath.Dir(sourcePath), sourcePath, effectiveFactory,
+	return targetDir, filepath.Dir(source.Path), source.Path, effectiveFactory,
 		canonical, nil
 }
 
@@ -266,50 +276,54 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err := l.validate(); err != nil {
 		return nil, err
 	}
-	data, err := l.fileSystem.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
+	source, resolvedFactoryDir, _, err := l.readFactoryConfigSource(factoryDir)
 	if err != nil {
 		return nil, err
 	}
-	factoryConfig, err := l.decodeFactory(data)
+	factoryConfig, err := l.decodeFactory(source.Data)
 	if err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "parse factory config", err)
 	}
 	if err := l.blockingLoadError(factoryConfig); err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "validate factory config", err)
 	}
-	if err := l.validateManifest(factoryDir, factoryConfig); err != nil {
-		return nil, err
+	if err := l.validateManifest(resolvedFactoryDir, factoryConfig); err != nil {
+		return nil, sourceContextError(source, "validate portable resource manifest", err)
 	}
 	replacements, err := l.materializePortableFiles(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
+		return nil, sourceContextError(source, "materialize portable bundled files", err)
 	}
 	if err := l.applyPortableFiles(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 		false,
 		false,
 	); err != nil {
-		return nil, fmt.Errorf("collect portable bundled files: %w", err)
+		return nil, sourceContextError(source, "collect portable bundled files", err)
 	}
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
-		factoryDir,
+		resolvedFactoryDir,
 		factoryConfig,
 		hasInlineRuntimeDefinitions(factoryConfig),
 		workstationLoader,
 	)
 	if err != nil {
-		return nil, err
+		return nil, sourceContextError(source, "load runtime definitions", err)
 	}
-	return l.newSource(
-		factoryDir,
+	loadedSource, err := l.newSource(
+		resolvedFactoryDir,
 		factoryConfig,
 		runtimeDefinitions,
 		append([]factorydefinitions.PortableBundledFileReplacement(nil), replacements...),
 	)
+	if err != nil {
+		return nil, sourceContextError(source, "build loaded factory source", err)
+	}
+	return loadedSource, nil
 }
 
 // LoadSourceFromCanonicalJSON normalizes one canonical representation and
@@ -353,22 +367,20 @@ func (l *Loader) ValidateFactoryDirReadOnly(
 	if err := l.validate(); err != nil {
 		return err
 	}
-	data, err := l.fileSystem.ReadFile(
-		filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile),
-	)
+	source, _, _, err := l.readFactoryConfigSource(factoryDir)
 	if err != nil {
 		return err
 	}
-	factoryConfig, err := l.decodeFactory(data)
+	factoryConfig, err := l.decodeFactory(source.Data)
 	if err != nil {
-		return err
+		return sourceContextError(source, "parse factory config", err)
 	}
 	if err := l.blockingLoadError(factoryConfig); err != nil {
-		return err
+		return sourceContextError(source, "validate factory config", err)
 	}
 	if validatePortableFiles != nil {
 		if err := validatePortableFiles(factoryDir, factoryConfig); err != nil {
-			return fmt.Errorf("validate portable bundled files: %w", err)
+			return sourceContextError(source, "validate portable bundled files", err)
 		}
 	}
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
@@ -378,10 +390,13 @@ func (l *Loader) ValidateFactoryDirReadOnly(
 		workstationLoader,
 	)
 	if err != nil {
-		return err
+		return sourceContextError(source, "load runtime definitions", err)
 	}
 	_, err = runtimeconfig.Merge(factoryConfig, runtimeDefinitions)
-	return err
+	if err != nil {
+		return sourceContextError(source, "merge runtime definitions", err)
+	}
+	return nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
@@ -391,6 +406,8 @@ func (l *Loader) validate() error {
 		return fmt.Errorf("Factory Definitions loader is required")
 	case l.fileSystem == nil:
 		return fmt.Errorf("Factory Definitions loading filesystem is required")
+	case l.loadAuthoredSource == nil:
+		return fmt.Errorf("Factory Definitions authored source loader is required")
 	case l.resolveCurrentDir == nil:
 		return fmt.Errorf("current Factory directory resolver is required")
 	case l.newSource == nil:
@@ -454,37 +471,42 @@ func (l *Loader) validateFlatten() error {
 
 func (l *Loader) readFactoryConfigSource(
 	path string,
-) ([]byte, string, string, bool, error) {
+) (factorydefinitions.AuthoredFactorySource, string, bool, error) {
 	if l == nil || l.fileSystem == nil {
-		return nil, "", "", false, fmt.Errorf(
+		return factorydefinitions.AuthoredFactorySource{}, "", false, fmt.Errorf(
 			"Factory Definitions loading filesystem is required",
 		)
 	}
 	info, err := l.fileSystem.Stat(path)
 	if err != nil {
-		return nil, "", "", false, fmt.Errorf(
+		return factorydefinitions.AuthoredFactorySource{}, "", false, fmt.Errorf(
 			"find factory config source %s: %w",
 			path,
 			err,
 		)
 	}
-	sourcePath := path
 	factoryDir := filepath.Dir(path)
 	requireSplitDefinitions := false
 	if info.IsDir() {
-		sourcePath = filepath.Join(path, factorydefinitions.FactoryConfigFile)
 		factoryDir = path
 		requireSplitDefinitions = true
 	}
-	data, err := l.fileSystem.ReadFile(sourcePath)
+	source, err := l.loadAuthoredSource(path)
 	if err != nil {
-		return nil, "", "", false, fmt.Errorf(
-			"read factory config %s: %w",
-			sourcePath,
-			err,
-		)
+		return factorydefinitions.AuthoredFactorySource{}, "", false, err
 	}
-	return data, sourcePath, factoryDir, requireSplitDefinitions, nil
+	return source, factoryDir, requireSplitDefinitions, nil
+}
+
+func sourceContextError(
+	source factorydefinitions.AuthoredFactorySource,
+	operation string,
+	err error,
+) error {
+	if source.Format == "" {
+		return fmt.Errorf("%s %s: %w", operation, source.Path, err)
+	}
+	return fmt.Errorf("%s %s (%s): %w", operation, source.Path, source.Format, err)
 }
 
 func formatCanonicalFactoryJSON(data []byte, sourcePath string) ([]byte, error) {

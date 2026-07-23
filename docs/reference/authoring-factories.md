@@ -221,18 +221,19 @@ Return REJECTED with concrete feedback when another pass is needed.
 
 ### 3. Start the factory
 
-For a portable `factory.json` and a single customer prompt, mark one work type
-with `handlingBehavior: ["DEFAULT"]` in `factory.json` (see
-`you docs config`) and run:
+For a portable JSON or YAML Factory and a single customer prompt, mark one work
+type with `handlingBehavior: ["DEFAULT"]` (see `you docs config`) and run:
 
 ```bash
 you run --factory ./factory.json "Fix the lint issues"
+you run --factory ./factory.yaml "Fix the lint issues"
 ```
 
-The command resolves the factory root from the config file path, submits the
-quoted prompt as raw text to the `DEFAULT` work type, and exits after batch idle
-completion. You cannot combine `--factory` with `--dir` or `--work` on the same
-invocation.
+The command preserves the explicitly selected file and resolves its asset
+directory, submits the quoted prompt as raw text to the `DEFAULT` work type,
+and exits after batch idle completion. `--factory` also accepts a directory
+containing exactly one supported root. You cannot combine `--factory` with
+`--dir` or `--work` on the same invocation.
 
 Use mock workers for the first routing check with the directory layout:
 
@@ -246,8 +247,9 @@ Or combine `--factory` with mock workers when testing a portable config:
 you run --factory ./factory.json --with-mock-workers ./docs/examples/mock-workers.json "Fix the lint issues"
 ```
 
-The command loads `factory.json`, resolves the split `AGENTS.md` files, starts
-continuous mode, and exposes the dashboard and API on the configured port.
+The command loads the selected JSON or YAML definition, resolves the split
+`AGENTS.md` files, and performs the one-shot invocation without starting a
+listening server.
 
 Live runs record a replay-compatible artifact by default. Use `--no-record`,
 `--record <path>`, or `--replay <path>` when you need to override capture or

@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestFactoryConfigRootResolverValidatesSelectedFile(t *testing.T) {
+func TestFactoryConfigRootResolverAcceptsSelectedFileOrDirectory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, FactoryConfigFile)
 	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
@@ -19,19 +20,31 @@ func TestFactoryConfigRootResolverValidatesSelectedFile(t *testing.T) {
 	if err != nil || root != dir {
 		t.Fatalf("result = (%q, %v), want (%q, nil)", root, err, dir)
 	}
-	if _, err := NewFactoryConfigRootResolver(osFS{})(dir); err == nil || !strings.Contains(err.Error(), "must be a file") {
-		t.Fatalf("directory error = %v", err)
+	root, err = NewFactoryConfigRootResolver(osFS{})(dir)
+	if err != nil || root != dir {
+		t.Fatalf("directory result = (%q, %v), want (%q, nil)", root, err, dir)
+	}
+	resolver := NewFactoryConfigRootResolver(factoryConfigPathSourceStub{
+		info: factoryConfigPathInfoStub{mode: fs.ModeNamedPipe},
+	})
+	if _, err := resolver("factory.pipe"); err == nil ||
+		!strings.Contains(err.Error(), "must be a file or directory") {
+		t.Fatalf("non-regular path error = %v", err)
 	}
 }
 
 func TestFactoryConfigFileLoaderPreservesReadAndParseContext(t *testing.T) {
 	want := &FactoryConfig{Name: "alpha"}
 	load := NewFactoryConfigFileLoader(
-		func(path string) ([]byte, error) {
+		func(path string) (AuthoredFactorySource, error) {
 			if path == "missing.json" {
-				return nil, fs.ErrNotExist
+				return AuthoredFactorySource{}, fs.ErrNotExist
 			}
-			return []byte("payload"), nil
+			return AuthoredFactorySource{
+				Path:   path,
+				Format: AuthoredFactoryFormatJSON,
+				Data:   []byte("payload"),
+			}, nil
 		},
 		func(payload []byte) (*FactoryConfig, error) {
 			if string(payload) != "payload" {
@@ -48,7 +61,16 @@ func TestFactoryConfigFileLoaderPreservesReadAndParseContext(t *testing.T) {
 		t.Fatalf("missing error = %v", err)
 	}
 	parseErr := errors.New("invalid")
-	load = NewFactoryConfigFileLoader(func(string) ([]byte, error) { return []byte("bad"), nil }, func([]byte) (*FactoryConfig, error) { return nil, parseErr })
+	load = NewFactoryConfigFileLoader(
+		func(path string) (AuthoredFactorySource, error) {
+			return AuthoredFactorySource{
+				Path:   path,
+				Format: AuthoredFactoryFormatJSON,
+				Data:   []byte("bad"),
+			}, nil
+		},
+		func([]byte) (*FactoryConfig, error) { return nil, parseErr },
+	)
 	if _, err := load("factory.json"); !errors.Is(err, parseErr) {
 		t.Fatalf("parse error = %v", err)
 	}
@@ -57,3 +79,20 @@ func TestFactoryConfigFileLoaderPreservesReadAndParseContext(t *testing.T) {
 type osFS struct{}
 
 func (osFS) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
+
+type factoryConfigPathSourceStub struct {
+	info fs.FileInfo
+}
+
+func (s factoryConfigPathSourceStub) Stat(string) (fs.FileInfo, error) { return s.info, nil }
+
+type factoryConfigPathInfoStub struct {
+	mode fs.FileMode
+}
+
+func (factoryConfigPathInfoStub) Name() string        { return "factory.pipe" }
+func (factoryConfigPathInfoStub) Size() int64         { return 0 }
+func (i factoryConfigPathInfoStub) Mode() fs.FileMode { return i.mode }
+func (factoryConfigPathInfoStub) ModTime() time.Time  { return time.Time{} }
+func (i factoryConfigPathInfoStub) IsDir() bool       { return i.mode.IsDir() }
+func (factoryConfigPathInfoStub) Sys() any            { return nil }

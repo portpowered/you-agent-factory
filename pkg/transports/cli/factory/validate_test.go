@@ -6,11 +6,111 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func TestValidateAcceptsDecodedExplicitJSONYAMLAndYMLSources(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"factory.json", "factory.yaml", "factory.yml"} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			var output strings.Builder
+			err := ValidateWithServices(
+				ValidateConfig{Context: context.Background(), Path: path, Output: &output},
+				testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+				func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+					return testAuthoredSource(path, []byte(`{"name":"supported"}`)), nil
+				},
+			)
+			if err != nil {
+				t.Fatalf("ValidateWithServices(%s): %v", path, err)
+			}
+			if !strings.Contains(output.String(), "Factory validation passed.") {
+				t.Fatalf("output = %q", output.String())
+			}
+		})
+	}
+}
+
+func TestValidateFailureReportsSourcePathAndFormat(t *testing.T) {
+	t.Parallel()
+
+	for path, format := range map[string]string{
+		"customer/factory.json": "JSON",
+		"customer/factory.yaml": "YAML",
+		"customer/factory.yml":  "YAML",
+	} {
+		path := path
+		format := format
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateWithServices(
+				ValidateConfig{Context: context.Background(), Path: path, Output: &strings.Builder{}},
+				testTopologyFactoryDefinitionValidator(testFactoryDefinitionValidationFailure(
+					factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+					"incompatible taxonomy",
+					"worker",
+				)),
+				func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+					return testAuthoredSource(path, []byte(`{"name":"invalid"}`)), nil
+				},
+			)
+			if err == nil {
+				t.Fatal("expected blocking validation error")
+			}
+			for _, want := range []string{path, format, "validation"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want substring %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateDirectoryFailureReportsSelectedYAMLRoot(t *testing.T) {
+	t.Parallel()
+
+	const directory = "customer/factory"
+	selectedPath := directory + "/factory.yaml"
+	err := ValidateWithServices(
+		ValidateConfig{
+			Context: context.Background(),
+			Path:    directory,
+			Output:  &strings.Builder{},
+		},
+		testTopologyFactoryDefinitionValidator(testFactoryDefinitionValidationFailure(
+			factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+			"incompatible taxonomy",
+			"worker",
+		)),
+		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+			if path != directory {
+				t.Fatalf("source path = %q, want %q", path, directory)
+			}
+			return testAuthoredSource(
+				selectedPath,
+				[]byte(`{"name":"invalid"}`),
+			), nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected blocking validation error")
+	}
+	for _, want := range []string{selectedPath, "YAML", "validation"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), directory+" (") {
+		t.Fatalf("error used directory instead of selected source: %q", err)
+	}
+}
 
 func TestValidateUsesInjectedAuthoredSourceLoader(t *testing.T) {
 	wantErr := errors.New("injected source failure")
@@ -18,12 +118,12 @@ func TestValidateUsesInjectedAuthoredSourceLoader(t *testing.T) {
 	err := ValidateWithServices(
 		ValidateConfig{Context: context.Background(), Path: "customer/factory", Output: &strings.Builder{}},
 		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
-		func(path string) ([]byte, error) {
+		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
 			calls++
 			if path != "customer/factory" {
 				t.Fatalf("source path = %q, want customer/factory", path)
 			}
-			return nil, wantErr
+			return factorydefinitions.AuthoredFactorySource{}, wantErr
 		},
 	)
 	if !errors.Is(err, wantErr) {
@@ -174,11 +274,30 @@ func validateFixture(
 	body string,
 ) (string, factorydefinitions.AuthoredFactorySourceLoader) {
 	const path = "injected/factory.json"
-	return path, func(gotPath string) ([]byte, error) {
+	return path, func(gotPath string) (factorydefinitions.AuthoredFactorySource, error) {
 		if gotPath != path {
-			return nil, fmt.Errorf("source path = %q, want %q", gotPath, path)
+			return factorydefinitions.AuthoredFactorySource{}, fmt.Errorf(
+				"source path = %q, want %q",
+				gotPath,
+				path,
+			)
 		}
-		return []byte(body), nil
+		return testAuthoredSource(path, []byte(body)), nil
+	}
+}
+
+func testAuthoredSource(
+	path string,
+	data []byte,
+) factorydefinitions.AuthoredFactorySource {
+	format := factorydefinitions.AuthoredFactoryFormatJSON
+	if filepath.Ext(path) != ".json" {
+		format = factorydefinitions.AuthoredFactoryFormatYAML
+	}
+	return factorydefinitions.AuthoredFactorySource{
+		Path:   path,
+		Format: format,
+		Data:   data,
 	}
 }
 

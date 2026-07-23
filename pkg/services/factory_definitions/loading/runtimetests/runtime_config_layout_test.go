@@ -2,12 +2,88 @@ package runtimetests
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func TestLoadRuntimeConfig_SourceContextPreservesBlockingValidationTargets(t *testing.T) {
+	for _, test := range []struct {
+		rootName string
+		format   string
+		body     string
+	}{
+		{rootName: "factory.json", format: "(JSON)", body: invalidRuntimeTopologyJSON},
+		{rootName: "factory.yaml", format: "(YAML)", body: invalidRuntimeTopologyYAML},
+	} {
+		test := test
+		t.Run(test.rootName, func(t *testing.T) {
+			factoryDir := t.TempDir()
+			sourcePath := filepath.Join(factoryDir, test.rootName)
+			if err := os.WriteFile(sourcePath, []byte(test.body), 0o600); err != nil {
+				t.Fatalf("WriteFile(%s): %v", sourcePath, err)
+			}
+
+			_, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil)
+			if err == nil {
+				t.Fatal("LoadDirectory() error = nil")
+			}
+			if !containsAll(err.Error(), sourcePath, test.format, "validate factory config") {
+				t.Fatalf("error = %q, want selected source path and format", err)
+			}
+			if !errors.Is(err, interfaces.ErrInvalidNamedFactory) {
+				t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
+			}
+			loadErr, ok := interfaces.AsBlockingFactoryLoadError(err)
+			if !ok || len(loadErr.Targets) == 0 {
+				t.Fatalf("error = %v, want blocking validation targets", err)
+			}
+			if !containsAll(loadErr.Targets[0].Code, "danglingReference") ||
+				!strings.Contains(loadErr.Targets[0].Message, "missing-worker") {
+				t.Fatalf("target = %#v, want original dangling worker detail", loadErr.Targets[0])
+			}
+		})
+	}
+}
+
+func TestLoadRuntimeConfig_SourceContextPreservesMappingFailure(t *testing.T) {
+	for _, test := range []struct {
+		rootName string
+		format   string
+		body     string
+	}{
+		{rootName: "factory.json", format: "(JSON)", body: `{"name":["invalid"]}`},
+		{rootName: "factory.yaml", format: "(YAML)", body: "name:\n  - invalid\n"},
+	} {
+		test := test
+		t.Run(test.rootName, func(t *testing.T) {
+			factoryDir := t.TempDir()
+			sourcePath := filepath.Join(factoryDir, test.rootName)
+			if err := os.WriteFile(sourcePath, []byte(test.body), 0o600); err != nil {
+				t.Fatalf("WriteFile(%s): %v", sourcePath, err)
+			}
+
+			_, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil)
+			if err == nil {
+				t.Fatal("LoadDirectory() error = nil")
+			}
+			if !containsAll(
+				err.Error(),
+				sourcePath,
+				test.format,
+				"parse factory config",
+				"name",
+				"cannot unmarshal",
+			) {
+				t.Fatalf("error = %q, want source context and original mapping detail", err)
+			}
+		})
+	}
+}
 
 func TestLoadRuntimeConfig_AllowsMissingPortableLayout(t *testing.T) {
 	factoryDir := t.TempDir()
@@ -38,6 +114,45 @@ Implement {{ .WorkID }}.
 		t.Fatal("expected worker definition to load without layout metadata")
 	}
 }
+
+const invalidRuntimeTopologyJSON = `{
+	"name":"invalid",
+	"workTypes":[{
+		"name":"task",
+		"states":[
+			{"name":"init","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]
+	}],
+	"workstations":[{
+		"name":"execute",
+		"worker":"missing-worker",
+		"inputs":[{"workType":"task","state":"init"}],
+		"outputs":[{"workType":"task","state":"complete"}],
+		"onFailure":[{"workType":"task","state":"failed"}],
+		"type":"MODEL_WORKSTATION"
+	}]
+}`
+
+const invalidRuntimeTopologyYAML = `name: invalid
+workTypes:
+  - name: task
+    states:
+      - {name: init, type: INITIAL}
+      - {name: complete, type: TERMINAL}
+      - {name: failed, type: FAILED}
+workstations:
+  - name: execute
+    worker: missing-worker
+    inputs:
+      - {workType: task, state: init}
+    outputs:
+      - {workType: task, state: complete}
+    onFailure:
+      - {workType: task, state: failed}
+    type: MODEL_WORKSTATION
+`
 
 func TestLoadRuntimeConfig_IgnoresMalformedPortableLayoutMetadata(t *testing.T) {
 	factoryDir := t.TempDir()

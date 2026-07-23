@@ -68,6 +68,10 @@ func ConfigValidateRecoveryCommandForCLI(cliName, factoryPath string) string {
 
 func FormatOperatorDiagnostic(factoryPath string, err error) string {
 	var builder strings.Builder
+	if context := blockingErrorContext(err); context != "" {
+		builder.WriteString(context)
+		builder.WriteString("\n")
+	}
 	builder.WriteString(factorydefinitions.ErrInvalidNamedFactory.Error())
 	builder.WriteString(": factory topology contains invalid graph references")
 	if findings := blockingFindings(err); len(findings) > 0 {
@@ -80,6 +84,14 @@ func FormatOperatorDiagnostic(factoryPath string, err error) string {
 	builder.WriteString("\nRecovery:\n  ")
 	builder.WriteString(ConfigValidateRecoveryCommand(factoryPath))
 	return builder.String()
+}
+
+func blockingErrorContext(err error) string {
+	loadErr, ok := factorydefinitions.AsBlockingFactoryLoadError(err)
+	if !ok || err == loadErr {
+		return ""
+	}
+	return strings.TrimSuffix(err.Error(), ": "+loadErr.Error())
 }
 
 type finding struct {

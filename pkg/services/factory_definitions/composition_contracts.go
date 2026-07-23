@@ -4,6 +4,7 @@ package factorydefinitions
 // values used while opening a Factory Session runtime.
 type RuntimeOpeningRequest struct {
 	Directory        string
+	SourcePath       string
 	ExecutionBaseDir string
 }
 

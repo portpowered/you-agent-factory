@@ -40,8 +40,11 @@ func NewFactoryConfigRootResolver(source FactoryConfigPathSource) FactoryConfigR
 			}
 			return "", fmt.Errorf("find factory config file %s: %w", trimmed, err)
 		}
+		if info.IsDir() {
+			return resolved, nil
+		}
 		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("factory config path must be a file: %s", trimmed)
+			return "", fmt.Errorf("factory config path must be a file or directory: %s", trimmed)
 		}
 		return filepath.Dir(resolved), nil
 	}
@@ -62,16 +65,21 @@ func NewFactoryConfigFileLoader(
 		if parse == nil {
 			return nil, fmt.Errorf("Factory Definitions config parser is required")
 		}
-		data, err := loadSource(trimmed)
+		source, err := loadSource(trimmed)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil, fmt.Errorf("factory config file not found: %s", trimmed)
 			}
 			return nil, fmt.Errorf("read factory config file %s: %w", trimmed, err)
 		}
-		cfg, err := parse(data)
+		cfg, err := parse(source.Data)
 		if err != nil {
-			return nil, fmt.Errorf("parse factory config %s: %w", trimmed, err)
+			return nil, fmt.Errorf(
+				"parse factory config %s (%s): %w",
+				source.Path,
+				source.Format,
+				err,
+			)
 		}
 		return cfg, nil
 	}
