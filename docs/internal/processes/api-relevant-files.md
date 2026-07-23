@@ -111,7 +111,10 @@ Use this map when changing the public REST contract.
   `packages/api/generated/schemas/factory.schema.json`, and YAML must be
   serialized from that same parsed schema value rather than maintained as a
   second contract. Keep both paths in the generation/check allowlist and the
-  packaged Go and npm source surfaces.
+  packaged Go and npm source surfaces. Regenerate through
+  `make contracts-generate` and verify through `make contracts-check`;
+  `make contracts-smoke` proves repeated byte stability and is the packaged
+  contract gate run by the development-package CI workflow.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, standalone JSON Schema projections from
   canonical bundled OpenAPI component graphs, and the package contract
