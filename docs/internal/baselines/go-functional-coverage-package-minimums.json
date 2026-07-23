@@ -201,60 +201,6 @@
       "minimum": 77.41
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages",
-      "minimum": 94.11
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/deepresearch",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/fusion",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/goal",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/quorum",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/review",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/tts",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/fusion",
       "exception": {
         "kind": "measurement",

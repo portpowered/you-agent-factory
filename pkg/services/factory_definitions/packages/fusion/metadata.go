@@ -4,12 +4,7 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	builtinfusion "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/fusion"
 )
-
-// BuiltInFactoryJSON is the canonical runnable @you/fusion definition owned
-// by the factory packages family.
-var BuiltInFactoryJSON = builtinfusion.BuiltInFactoryJSON
 
 const (
 	// PackagedFactoryName is the canonical named factory identifier for @you/fusion.

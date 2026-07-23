@@ -18,7 +18,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
-	factorypackages "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
@@ -161,7 +160,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 		EnsurePackagedFactories(
 			t.Context(),
 			interfaces.NamedFactoriesRoot(homeDir),
-			[]factorypackages.Definition{definition},
+			[]interfaces.PackagedDefinition{definition},
 		)
 	if err != nil {
 		t.Fatalf("Initialize(create): %v", err)
@@ -189,7 +188,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 		EnsurePackagedFactories(
 			t.Context(),
 			interfaces.NamedFactoriesRoot(homeDir),
-			[]factorypackages.Definition{definition},
+			[]interfaces.PackagedDefinition{definition},
 		)
 	if err != nil {
 		t.Fatalf("Initialize(rerun): %v", err)
@@ -200,7 +199,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	assertDirectorySnapshotUnchanged(t, factoryDir, beforeRerun)
 }
 
-func assembledScriptPackageDefinition(t *testing.T) factorypackages.Definition {
+func assembledScriptPackageDefinition(t *testing.T) interfaces.PackagedDefinition {
 	t.Helper()
 
 	payload, err := packageassets.Assemble(packageassets.Definition{
@@ -219,7 +218,7 @@ func assembledScriptPackageDefinition(t *testing.T) factorypackages.Definition {
 	if err != nil {
 		t.Fatalf("packageassets.Assemble: %v", err)
 	}
-	return factorypackages.Definition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
+	return interfaces.PackagedDefinition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
 }
 
 func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string) {

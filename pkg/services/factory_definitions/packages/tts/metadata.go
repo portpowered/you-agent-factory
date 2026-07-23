@@ -3,10 +3,7 @@ package tts
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
-	builtin "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/tts"
 )
-
-var BuiltInFactoryJSON = builtin.BuiltInFactoryJSON
 
 const (
 	PackagedFactoryProject        = factorydefinitions.PackagedTTSFactoryProject
