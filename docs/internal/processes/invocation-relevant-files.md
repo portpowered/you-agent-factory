@@ -382,6 +382,12 @@ response-stream output.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.
+  The same constructor plans positional inputs in position order, rejects gaps
+  and non-terminal variadics before Cobra mutation, and records parsed typed
+  values on the invocation-local command for stable-ID handler access.
+  Relationship evaluation uses stable flag or argument references and explicit
+  CLI presence, runs in Cobra's pre-handler phase, and reports public input
+  spellings without exposing input values.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable

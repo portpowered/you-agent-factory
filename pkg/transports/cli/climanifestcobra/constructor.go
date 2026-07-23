@@ -436,9 +436,11 @@ func positionalArgsFromManifest(record climanifest.Command) cobra.PositionalArgs
 const supportedManifestFormatVersion = "1.0.0"
 
 type plannedCommand struct {
-	record     climanifest.Command
-	parentPath string
-	flags      []plannedFlag
+	record        climanifest.Command
+	parentPath    string
+	flags         []plannedFlag
+	arguments     []climanifest.Argument
+	relationships []plannedRelationship
 }
 
 type plannedFlag struct {
@@ -464,6 +466,7 @@ func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
 		if err := projectFlags(built[item.record.Path], item, targets); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
+		projectArgumentAndRelationshipRules(built[item.record.Path], item)
 	}
 	for _, item := range plan {
 		if item.parentPath == "" {
@@ -488,6 +491,9 @@ func planCommandTree(manifest climanifest.Manifest) ([]plannedCommand, error) {
 	}
 	sortCommandPlan(plan)
 	if err := planCommandFlags(plan); err != nil {
+		return nil, err
+	}
+	if err := planCommandArgumentsAndRelationships(plan); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -928,11 +934,6 @@ func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*g
 		}
 		if err := registerGenericFlag(flagSet, item.record, value); err != nil {
 			return genericFlagError(plan.record.ID, item.record.ID, "register flag: %v", err)
-		}
-	}
-	if len(plan.flags) > 0 {
-		cmd.PreRunE = func(command *cobra.Command, _ []string) error {
-			return validateRequiredGenericFlags(command, plan)
 		}
 	}
 	return nil

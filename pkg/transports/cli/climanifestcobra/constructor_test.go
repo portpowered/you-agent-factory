@@ -666,3 +666,292 @@ func commandNames(commands []*cobra.Command) []string {
 	}
 	return names
 }
+
+func TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID(t *testing.T) {
+	manifest := syntheticArgumentManifest()
+	root, err := climanifestcobra.NewCommandTree(manifest)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	command := root.Commands()[0]
+	command.RunE = func(*cobra.Command, []string) error { return nil }
+	root.SetArgs([]string{"shape", "7", "label", "11", "12"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	values, err := climanifestcobra.InputValues(command)
+	if err != nil {
+		t.Fatalf("InputValues() error = %v", err)
+	}
+	want := map[string]any{
+		"stable.shape.arg.count": 7,
+		"stable.shape.arg.label": "label",
+		"stable.shape.arg.ids":   []int64{11, 12},
+	}
+	if !reflect.DeepEqual(values, want) {
+		t.Fatalf("InputValues() = %#v, want %#v", values, want)
+	}
+}
+
+func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) {
+	manifest := syntheticArgumentManifest()
+	command := manifest.Commands["stable.shape"]
+	label := command.Arguments["stable.shape.arg.label"]
+	defaultLabel := "fallback"
+	label.DefaultValue = &climanifest.InputValue{String: &defaultLabel}
+	command.Arguments[label.ID] = label
+	ids := command.Arguments["stable.shape.arg.ids"]
+	ids.MinCardinality = 2
+	ids.MaxCardinality = 2
+	ids.Variadic = false
+	ids.Required = true
+	command.Arguments[ids.ID] = ids
+	manifest.Commands[command.ID] = command
+
+	root, err := climanifestcobra.NewCommandTree(manifest)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	shape := root.Commands()[0]
+	shape.RunE = func(*cobra.Command, []string) error { return nil }
+	root.SetArgs([]string{"shape", "7", "11", "12"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	values, err := climanifestcobra.InputValues(shape)
+	if err != nil {
+		t.Fatalf("InputValues() error = %v", err)
+	}
+	if values["stable.shape.arg.label"] != "fallback" ||
+		!reflect.DeepEqual(values["stable.shape.arg.ids"], []int64{11, 12}) {
+		t.Fatalf("InputValues() = %#v, want typed default and fixed repeated values", values)
+	}
+}
+
+func TestNewCommandTreeEnforcesEveryRelationshipKindBeforeHandler(t *testing.T) {
+	tests := []struct {
+		name         string
+		relationship climanifest.Relationship
+		accepted     []string
+		rejected     []string
+		wantInputs   string
+	}{
+		{
+			name:         "mutually exclusive flags",
+			relationship: groupRelationship("rel.mutex", "mutually-exclusive", flagRef("flag.alpha"), flagRef("flag.beta")),
+			accepted:     []string{"--alpha"},
+			rejected:     []string{"--alpha", "--beta"},
+			wantInputs:   "--alpha, --beta",
+		},
+		{
+			name:         "required together mixed inputs",
+			relationship: groupRelationship("rel.together", "required-together", flagRef("flag.alpha"), argumentRef("arg.target")),
+			accepted:     []string{"--alpha", "destination"},
+			rejected:     []string{"--alpha"},
+			wantInputs:   "--alpha, target",
+		},
+		{
+			name:         "at least one mixed inputs",
+			relationship: groupRelationship("rel.one", "at-least-one", flagRef("flag.alpha"), argumentRef("arg.target")),
+			accepted:     []string{"destination"},
+			rejected:     nil,
+			wantInputs:   "--alpha, target",
+		},
+		{
+			name:         "dependency",
+			relationship: directedRelationship("rel.dependency", "dependency", flagRef("flag.alpha"), argumentRef("arg.target")),
+			accepted:     []string{"--alpha", "destination"},
+			rejected:     []string{"--alpha"},
+			wantInputs:   "target",
+		},
+		{
+			name:         "conditional",
+			relationship: directedRelationship("rel.conditional", "conditional", argumentRef("arg.target"), flagRef("flag.alpha")),
+			accepted:     []string{"--alpha", "destination"},
+			rejected:     []string{"destination"},
+			wantInputs:   "--alpha",
+		},
+		{
+			name:         "conflict mixed inputs",
+			relationship: groupRelationship("rel.conflict", "conflict", flagRef("flag.alpha"), argumentRef("arg.target")),
+			accepted:     []string{"--alpha"},
+			rejected:     []string{"--alpha", "destination"},
+			wantInputs:   "--alpha, target",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertRelationshipInvocation(t, test.relationship, test.accepted, true, "")
+			assertRelationshipInvocation(t, test.relationship, test.rejected, false, test.wantInputs)
+		})
+	}
+}
+
+func assertRelationshipInvocation(
+	t *testing.T,
+	relationship climanifest.Relationship,
+	args []string,
+	accepted bool,
+	wantInputs string,
+) {
+	t.Helper()
+	root, err := climanifestcobra.NewCommandTree(syntheticRelationshipManifest(relationship))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	called := 0
+	root.Commands()[0].RunE = func(*cobra.Command, []string) error {
+		called++
+		return nil
+	}
+	root.SetArgs(append([]string{"check"}, args...))
+	err = root.Execute()
+	if accepted {
+		if err != nil || called != 1 {
+			t.Fatalf("accepted invocation = (error %v, calls %d), want nil and one handler call", err, called)
+		}
+		return
+	}
+	if err == nil || !strings.Contains(err.Error(), wantInputs) || called != 0 {
+		t.Fatalf("rejected invocation = (error %v, calls %d), want inputs %q and zero handler calls", err, called, wantInputs)
+	}
+}
+
+func TestNewCommandTreeRejectsInvalidArgumentAndRelationshipRecords(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*climanifest.Manifest)
+		wantErr string
+	}{
+		{
+			name: "impossible position",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticArgument(manifest, "arg.target", func(argument *climanifest.Argument) {
+					argument.Position = 1
+				})
+			},
+			wantErr: `argument "arg.target": position 1 leaves an impossible positional layout`,
+		},
+		{
+			name: "incompatible typed default",
+			mutate: func(manifest *climanifest.Manifest) {
+				updateSyntheticArgument(manifest, "arg.target", func(argument *climanifest.Argument) {
+					value := 9
+					argument.DefaultValue = &climanifest.InputValue{Int: &value}
+				})
+			},
+			wantErr: `argument "arg.target": invalid typed default`,
+		},
+		{
+			name: "unknown relationship participant",
+			mutate: func(manifest *climanifest.Manifest) {
+				command := manifest.Commands["stable.check"]
+				relationship := command.Relationships["rel.mutex"]
+				relationship.Participants[0].ID = "flag.missing"
+				command.Relationships[relationship.ID] = relationship
+				manifest.Commands[command.ID] = command
+			},
+			wantErr: `relationship "rel.mutex" references unknown participant "flag.missing"`,
+		},
+		{
+			name: "unsupported relationship shape",
+			mutate: func(manifest *climanifest.Manifest) {
+				command := manifest.Commands["stable.check"]
+				relationship := command.Relationships["rel.mutex"]
+				relationship.When = &climanifest.ParticipantRef{Type: "flag", ID: "flag.alpha"}
+				command.Relationships[relationship.ID] = relationship
+				manifest.Commands[command.ID] = command
+			},
+			wantErr: `relationship "rel.mutex" has incompatible when trigger`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticRelationshipManifest(
+				groupRelationship("rel.mutex", "mutually-exclusive", flagRef("flag.alpha"), flagRef("flag.beta")),
+			)
+			test.mutate(&manifest)
+			root, err := climanifestcobra.NewCommandTree(manifest)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) || root != nil {
+				t.Fatalf("NewCommandTree() = (%v, %v), want nil and error containing %q", root, err, test.wantErr)
+			}
+		})
+	}
+}
+
+func syntheticArgumentManifest() climanifest.Manifest {
+	manifest := syntheticTreeManifest()
+	delete(manifest.Commands, "stable.zeta")
+	delete(manifest.Commands, "stable.alpha")
+	delete(manifest.Commands, "stable.leaf")
+	command := syntheticCommand("stable.shape", "shape", "forge shape", true)
+	command.Arguments = map[string]climanifest.Argument{
+		"stable.shape.arg.count": {
+			ID: "stable.shape.arg.count", Name: "count", Position: 0, Kind: "positional",
+			ValueType: "int", Required: true, MinCardinality: 1, MaxCardinality: 1,
+		},
+		"stable.shape.arg.label": {
+			ID: "stable.shape.arg.label", Name: "label", Position: 1, Kind: "positional",
+			ValueType: "string", MinCardinality: 0, MaxCardinality: 1,
+		},
+		"stable.shape.arg.ids": {
+			ID: "stable.shape.arg.ids", Name: "ids", Position: 2, Kind: "positional",
+			ValueType: "int64", MinCardinality: 0, MaxCardinality: -1, Variadic: true,
+		},
+	}
+	manifest.Commands[command.ID] = command
+	return manifest
+}
+
+func syntheticRelationshipManifest(relationship climanifest.Relationship) climanifest.Manifest {
+	manifest := syntheticTreeManifest()
+	delete(manifest.Commands, "stable.zeta")
+	delete(manifest.Commands, "stable.alpha")
+	delete(manifest.Commands, "stable.leaf")
+	command := syntheticCommand("stable.check", "check", "forge check", true)
+	command.Flags = map[string]climanifest.Flag{
+		"flag.alpha": {ID: "flag.alpha", Long: "alpha", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
+		"flag.beta":  {ID: "flag.beta", Long: "beta", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
+	}
+	command.Arguments = map[string]climanifest.Argument{
+		"arg.target": {
+			ID: "arg.target", Name: "target", Position: 0, Kind: "positional",
+			ValueType: "string", MinCardinality: 0, MaxCardinality: 1,
+		},
+	}
+	command.Relationships = map[string]climanifest.Relationship{relationship.ID: relationship}
+	manifest.Commands[command.ID] = command
+	return manifest
+}
+
+func updateSyntheticArgument(
+	manifest *climanifest.Manifest,
+	inputID string,
+	update func(*climanifest.Argument),
+) {
+	command := manifest.Commands["stable.check"]
+	argument := command.Arguments[inputID]
+	update(&argument)
+	command.Arguments[inputID] = argument
+	manifest.Commands[command.ID] = command
+}
+
+func flagRef(id string) climanifest.ParticipantRef {
+	return climanifest.ParticipantRef{Type: "flag", ID: id}
+}
+
+func argumentRef(id string) climanifest.ParticipantRef {
+	return climanifest.ParticipantRef{Type: "argument", ID: id}
+}
+
+func groupRelationship(id, kind string, participants ...climanifest.ParticipantRef) climanifest.Relationship {
+	return climanifest.Relationship{ID: id, Kind: kind, Participants: participants}
+}
+
+func directedRelationship(
+	id, kind string,
+	when climanifest.ParticipantRef,
+	participants ...climanifest.ParticipantRef,
+) climanifest.Relationship {
+	return climanifest.Relationship{ID: id, Kind: kind, When: &when, Participants: participants}
+}
