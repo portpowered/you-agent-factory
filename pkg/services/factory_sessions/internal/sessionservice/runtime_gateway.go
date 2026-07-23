@@ -152,13 +152,14 @@ func newSessionGatewayService(fs *SessionRuntime) *Service {
 	}
 	state := fs.sessionState
 	streams := state.ResponseStreams()
-	return NewWithReconnectValidation(
+	return NewWithResponseService(
 		SessionServiceHost(fs),
 		state,
 		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
 		streams,
 		fs.ReconnectCursorValidator(),
 		fs.sessionResultProjection,
+		state.ResponseEventService(),
 	)
 }
 

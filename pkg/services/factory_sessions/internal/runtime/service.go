@@ -211,6 +211,15 @@ func (s *Service) ResponseStreams() *responsestream.Registry {
 	return s.responses
 }
 
+// ResponseEventService returns the injected response-event owner paired with
+// this live runtime so runtime-created gateways retain the canonical policy.
+func (s *Service) ResponseEventService() responsestreamservice.Service {
+	if s == nil {
+		return nil
+	}
+	return s.responseEvents
+}
+
 // ResponseStreamsForSession returns the canonical registry-owned stream set
 // for one live session.
 func (s *Service) ResponseStreamsForSession(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {

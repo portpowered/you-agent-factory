@@ -37,26 +37,22 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	if session.ResponseEvents == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
-	if s.responseEvents != nil {
-		cursor, err := s.responseEvents.Subscribe(ctx, session.ResponseEvents, responsestreamservice.SubscriptionRequest{
-			AfterSequence: request.AfterSequence,
-			DispatchID:    request.DispatchID,
-			Kinds:         request.Kinds,
-		})
-		switch {
-		case errors.Is(err, responsestreamservice.ErrInvalidCursor):
-			return nil, factorysessions.ErrInvalidResponseEventCursor
-		case errors.Is(err, responsestreamservice.ErrInvalidFilter):
-			return nil, factorysessions.ErrInvalidResponseEventFilter
-		default:
-			return cursor, err
-		}
+	if s.responseEvents == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
-	return factorysessions.SubscribeFactoryResponseEvents(
-		ctx,
-		session,
-		request,
-	)
+	cursor, err := s.responseEvents.Subscribe(ctx, session.ResponseEvents, responsestreamservice.SubscriptionRequest{
+		AfterSequence: request.AfterSequence,
+		DispatchID:    request.DispatchID,
+		Kinds:         request.Kinds,
+	})
+	switch {
+	case errors.Is(err, responsestreamservice.ErrInvalidCursor):
+		return nil, factorysessions.ErrInvalidResponseEventCursor
+	case errors.Is(err, responsestreamservice.ErrInvalidFilter):
+		return nil, factorysessions.ErrInvalidResponseEventFilter
+	default:
+		return cursor, err
+	}
 }
 
 // ListFactorySessions returns live workspace session summaries through control-plane read policy.

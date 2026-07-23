@@ -1794,11 +1794,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/response_event_contract.go",
-      "target": "SubscribeFactoryResponseEvents"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/session_listing.go",
       "target": "ListScopedSessions"
     },
@@ -1826,11 +1821,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/types.go",
       "target": "IsUUIDFactorySessionID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "WithResponseEventDispatchFilter"
     },
     {
       "rule": "service-root-exported-function",

@@ -188,10 +188,6 @@ type ResponseEventCursor interface {
 	Detach()
 }
 
-// ResponseEventSubscribeOption configures one Factory Session response-event
-// subscription without exposing the concrete store package to consumers.
-type ResponseEventSubscribeOption = responseeventstore.SubscribeOption
-
 var (
 	// ErrResponseEventStoreExpired reports that a completed response-event
 	// stream is outside its late-subscription retention window.
@@ -200,12 +196,6 @@ var (
 	// was detached or its owning store was closed.
 	ErrResponseEventSubscriptionClosed = responseeventstore.ErrSubscriptionClosed
 )
-
-// WithResponseEventDispatchFilter limits a response-event subscription to one
-// dispatch identity.
-func WithResponseEventDispatchFilter(dispatchID string) ResponseEventSubscribeOption {
-	return responseeventstore.WithDispatchFilter(dispatchID)
-}
 
 // SessionResponseStream keeps ordered internal provider progress for one live
 // Factory Session runtime. It is separate from canonical factory event history

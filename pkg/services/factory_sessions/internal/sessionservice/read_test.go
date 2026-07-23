@@ -67,6 +67,32 @@ func TestService_SubscribeFactoryResponseEvents_UsesExactSessionWithoutDefaultFa
 	}
 }
 
+func TestService_SubscribeFactoryResponseEvents_RequiresInjectedResponseOwner(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "session-without-response-owner"
+	gateway := newServiceTestGateway(&openTestHost{
+		sessions: map[string]*factorysessions.LiveSession{
+			sessionID: {
+				ID: sessionID,
+				ResponseEvents: responseeventstore.NewSessionResponseEventStore(
+					sessionID,
+					serviceTestClock,
+					func() string { return "response-event-test-id" },
+				),
+			},
+		},
+	})
+
+	_, err := gateway.SubscribeFactoryResponseEvents(
+		context.Background(),
+		factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID},
+	)
+	if !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("SubscribeFactoryResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
+	}
+}
+
 func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivateService(t *testing.T) {
 	t.Parallel()
 	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" })

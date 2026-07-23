@@ -633,6 +633,13 @@ guard remains useful as resurrection protection even after production no
 longer declares the symbol; remove only allowlist entries that permitted the
 retired root construction shape.
 
+When a runtime-created gateway needs an owner-private capability, retain that
+capability on the runtime state and pass the same injected instance into the
+gateway. Do not preserve a duplicate root policy function as a fallback for a
+missing private service; an incomplete internal construction path should fail
+with the existing typed unavailable outcome instead of silently selecting a
+second implementation.
+
 Live Factory Session record construction is owner-private under
 `pkg/services/factory_sessions/internal/livesession`. Runtime and session
 assembly code may use that constructor after dependencies have been injected,
