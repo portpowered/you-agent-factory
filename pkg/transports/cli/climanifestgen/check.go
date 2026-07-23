@@ -1,6 +1,8 @@
 package climanifestgen
 
-import "github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
+import (
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
+)
 
 // Drift describes byte-level differences between generated artifacts and the
 // current generator output.

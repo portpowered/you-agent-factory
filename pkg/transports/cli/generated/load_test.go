@@ -111,6 +111,27 @@ func TestRepresentativeFamilyManifestMatchesContractedIDs(t *testing.T) {
 	}
 }
 
+func TestRepresentativeFamilyManifestIncludesRootLifecycleAndInputMetadata(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	root, err := manifest.CommandByID("you")
+	if err != nil {
+		t.Fatalf("CommandByID(%q) error = %v", "you", err)
+	}
+	if root.RootLifecycle == nil || root.RootLifecycle.NoArguments != "help" ||
+		root.RootLifecycle.Ownership.Server != "you.flag.server" {
+		t.Fatalf("root lifecycle = %#v, want no-argument help with server ownership", root.RootLifecycle)
+	}
+	server := root.Flags["you.flag.server"]
+	if server.Usage == "" || server.Sensitivity != "public" ||
+		server.DefaultValue == nil || server.DefaultValue.String == nil ||
+		*server.DefaultValue.String != "http://localhost:7437" {
+		t.Fatalf("server input metadata = %#v, want manifest-owned usage, sensitivity, and typed default", server)
+	}
+}
+
 func TestRepresentativeFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 	if len(generated.RepresentativeFamilyCommandIDs) != len(climanifestgen.RepresentativeFamilyCommandIDs) {
 		t.Fatalf("generated id count = %d, want %d", len(generated.RepresentativeFamilyCommandIDs), len(climanifestgen.RepresentativeFamilyCommandIDs))

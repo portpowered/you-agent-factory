@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -935,15 +934,15 @@ func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t 
 	}
 }
 
-func TestRootCommand_NoArgsStartsContinuousRun(t *testing.T) {
+func TestRootCommand_NoArgsPrintsHelpWithoutRun(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
 	}()
 
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
+	runCalls := 0
+	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
+		runCalls++
 		return nil
 	}
 
@@ -956,31 +955,16 @@ func TestRootCommand_NoArgsStartsContinuousRun(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute root no args: %v", err)
 	}
-
-	if !got.Continuously {
-		t.Fatal("expected no-arg invocation to use continuous mode")
+	if runCalls != 0 {
+		t.Fatalf("run calls = %d, want 0", runCalls)
 	}
-	if !got.Bootstrap {
-		t.Fatal("expected no-arg invocation to enable bootstrap mode")
-	}
-	if !got.OpenDashboard {
-		t.Fatal("expected no-arg invocation to enable dashboard auto-open")
-	}
-	if got.Dir != "factory" {
-		t.Errorf("dir = %q, want %q", got.Dir, "factory")
-	}
-	if got.Port != 7437 {
-		t.Errorf("port = %d, want %d", got.Port, 7437)
-	}
-	if !got.AutoPort {
-		t.Fatal("expected no-arg invocation to auto-resolve the dashboard port")
-	}
-	if got.StartupOutput == nil {
-		t.Fatal("expected no-arg invocation to configure startup output")
+	if output := out.String(); !strings.Contains(output, "Available Commands:") ||
+		!strings.Contains(output, "Run and manage CPN-based workflow factories") {
+		t.Fatalf("root no-argument output is not concise discovery help:\n%s", output)
 	}
 }
 
-func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
+func TestRootCommand_NoArgsDoesNotChangeExplicitRun(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -1023,54 +1007,19 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 		t.Fatalf("execute explicit run: %v", err)
 	}
 
-	if len(captured) != 2 {
-		t.Fatalf("captured run configs = %d, want 2", len(captured))
+	if len(captured) != 1 {
+		t.Fatalf("captured run configs = %d, want 1", len(captured))
 	}
 
-	noArgs := captured[0]
-	explicit := captured[1]
-	if !noArgs.Continuously || !noArgs.Bootstrap || !noArgs.OpenDashboard {
-		t.Fatalf("no-args config missing documented OOTB defaults: %#v", noArgs)
-	}
+	explicit := captured[0]
 	if explicit.Continuously || explicit.Bootstrap || explicit.OpenDashboard {
 		t.Fatalf("explicit run should not inherit OOTB-only defaults: %#v", explicit)
 	}
-	if got := rootOut.String(); !strings.Contains(got, "service startup reached: mode=continuous bootstrap=true open-dashboard=true") {
-		t.Fatalf("no-args observable startup output = %q, want OOTB service startup", got)
+	if got := rootOut.String(); !strings.Contains(got, "Available Commands:") {
+		t.Fatalf("no-args observable output = %q, want discovery help", got)
 	}
 	if got := explicitOut.String(); !strings.Contains(got, "service startup reached: mode=batch bootstrap=false open-dashboard=false") {
 		t.Fatalf("explicit run observable startup output = %q, want explicit service startup", got)
-	}
-
-	noArgs.Continuously = false
-	noArgs.Bootstrap = false
-	noArgs.OpenDashboard = false
-	noArgs.Logger = nil
-	noArgs.StartupOutput = nil
-	noArgs.Output = nil
-	noArgs.FactoryScaffoldInitializer = nil
-	noArgs.ResolveCurrentFactoryDir = nil
-	noArgs.ResolveFactoryConfigRoot = nil
-	noArgs.LoadFactoryConfigFile = nil
-	noArgs.WorkRequestFileLoader = nil
-	noArgs.DirectoryCreator = nil
-	noArgs.BrowserOpener = nil
-	noArgs.Stdin = nil
-	noArgs.StdinIsTTY = nil
-	explicit.Logger = nil
-	explicit.StartupOutput = nil
-	explicit.Output = nil
-	explicit.FactoryScaffoldInitializer = nil
-	explicit.ResolveCurrentFactoryDir = nil
-	explicit.ResolveFactoryConfigRoot = nil
-	explicit.LoadFactoryConfigFile = nil
-	explicit.WorkRequestFileLoader = nil
-	explicit.DirectoryCreator = nil
-	explicit.BrowserOpener = nil
-	explicit.Stdin = nil
-	explicit.StdinIsTTY = nil
-	if !reflect.DeepEqual(noArgs, explicit) {
-		t.Fatalf("no-args and explicit run configs diverge outside documented defaults:\nno-args: %#v\nrun:     %#v", noArgs, explicit)
 	}
 }
 
@@ -2024,7 +1973,7 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 	)
 	second.SetOut(io.Discard)
 	second.SetErr(io.Discard)
-	second.SetArgs(nil)
+	second.SetArgs([]string{"run"})
 	if err := second.Execute(); err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
@@ -2037,7 +1986,7 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 	)
 	third.SetOut(io.Discard)
 	third.SetErr(io.Discard)
-	third.SetArgs(nil)
+	third.SetArgs([]string{"run"})
 	if err := third.Execute(); err != nil {
 		t.Fatalf("third Execute() error = %v", err)
 	}
@@ -2096,7 +2045,7 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 	}
 }
 
-func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
+func TestRootCommand_ExplicitRunHonorsDefaultWorkerModelFlags(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
@@ -2126,10 +2075,10 @@ func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
 	))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--default-worker-model-provider", "codex", "--default-worker-model", "gpt-5-codex"})
+	root.SetArgs([]string{"run", "--default-worker-model-provider", "codex", "--default-worker-model", "gpt-5-codex"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute root no args with default model flags: %v", err)
+		t.Fatalf("execute explicit run with default model flags: %v", err)
 	}
 	if got.OperatorDefaults.WorkerModelProvider != "CODEX" {
 		t.Fatalf("provider = %q, want CODEX", got.OperatorDefaults.WorkerModelProvider)

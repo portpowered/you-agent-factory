@@ -53,6 +53,8 @@ type Flag struct {
 	NoOptionValue    *InputValue `json:"noOptionDefaultValue,omitempty"`
 	AcceptedSources  []string    `json:"acceptedSources,omitempty"`
 	HandlerBindingID string      `json:"handlerBindingId,omitempty"`
+	Usage            string      `json:"usage,omitempty"`
+	Sensitivity      string      `json:"sensitivity,omitempty"`
 }
 
 // InputValue is a transport-neutral, explicitly typed scalar or repeated input

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 )
@@ -18,6 +19,9 @@ const (
 	KindStaleMetadata       = "stale-generated-metadata"
 	KindMissingHandler      = "missing-handler"
 	KindAliasAsCanonical    = "compatibility-alias-as-canonical"
+	KindUncontractedGlobal  = "uncontracted-root-global"
+	KindMissingGlobal       = "missing-root-global"
+	KindRootGlobalDrift     = "root-global-metadata-drift"
 )
 
 // CompatibilityRecord identifies one approved compatibility-only CLI path.
@@ -31,6 +35,7 @@ type CompatibilityRecord struct {
 // Input contains immutable snapshots used by the pure validator.
 type Input struct {
 	Production             commandidentity.Inventory
+	ProductionInputs       cliinputs.Inventory
 	Canonical              climanifest.Manifest
 	Compatibility          climanifest.Manifest
 	ApprovedCompatibility  []CompatibilityRecord
@@ -127,8 +132,138 @@ func Validate(input Input) []Finding {
 
 	findings = append(findings, validateGeneratedCanonical(input.Canonical, approved, input.GeneratedCanonical)...)
 	findings = append(findings, validateGeneratedCompatibility(input.Compatibility, approved, input.GeneratedCompatibility)...)
+	findings = append(findings, validateRootGlobals(input.Canonical, input.ProductionInputs)...)
 	sortFindings(findings)
 	return findings
+}
+
+func validateRootGlobals(
+	canonical climanifest.Manifest,
+	production cliinputs.Inventory,
+) []Finding {
+	root, ok := canonical.Commands[canonical.RootPath]
+	if !ok {
+		return []Finding{newFinding(
+			KindMissingGlobal,
+			canonical.RootPath,
+			canonical.RootPath,
+			"root",
+			"canonical root command is missing",
+		)}
+	}
+	expected := make(map[string]climanifest.Flag)
+	for id, flag := range root.Flags {
+		if flag.Scope == "persistent" && flag.Lifecycle.State == "active" {
+			expected[id] = flag
+		}
+	}
+	actual := make(map[string]cliinputs.FlagRecord)
+	findings := make([]Finding, 0)
+	for _, flag := range production.Flags {
+		if flag.CommandPath != root.Path || flag.Scope != "persistent" {
+			continue
+		}
+		if _, exists := actual[flag.IDCandidate]; exists {
+			findings = append(findings, newFinding(
+				KindUncontractedGlobal,
+				flag.IDCandidate,
+				root.Path,
+				"long",
+				"executable root contains duplicate persistent input identity",
+			))
+			continue
+		}
+		actual[flag.IDCandidate] = flag
+	}
+	for id, got := range actual {
+		want, exists := expected[id]
+		if !exists {
+			findings = append(findings, newFinding(
+				KindUncontractedGlobal,
+				id,
+				root.Path,
+				"long",
+				fmt.Sprintf("executable root persistent flag %q is absent from the authored manifest", got.Long),
+			))
+			continue
+		}
+		if field := firstRootGlobalMismatch(want, got); field != "" {
+			findings = append(findings, newFinding(
+				KindRootGlobalDrift,
+				id,
+				root.Path,
+				field,
+				"executable root persistent flag metadata differs from the authored manifest",
+			))
+		}
+	}
+	for id, want := range expected {
+		if _, exists := actual[id]; !exists {
+			findings = append(findings, newFinding(
+				KindMissingGlobal,
+				id,
+				root.Path,
+				"long",
+				fmt.Sprintf("authored root persistent flag %q is absent from the executable root", want.Long),
+			))
+		}
+	}
+	return findings
+}
+
+func firstRootGlobalMismatch(want climanifest.Flag, got cliinputs.FlagRecord) string {
+	aliases := append([]string(nil), want.Aliases...)
+	if aliases == nil {
+		aliases = []string{}
+	}
+	sort.Strings(aliases)
+	fields := []struct {
+		name string
+		want any
+		got  any
+	}{
+		{"long", want.Long, got.Long},
+		{"shorthand", want.Shorthand, got.Shorthand},
+		{"aliases", aliases, got.Aliases},
+		{"scope", want.Scope, got.Scope},
+		{"valueType", want.ValueType, got.ValueType},
+		{"required", want.Required, got.Required},
+		{"default", manifestInputValueString(want.DefaultValue, want.Default), got.Default},
+		{"changedDefault", want.ChangedDefault, got.ChangedDefault},
+		{"noOptionDefault", manifestInputValueString(want.NoOptionValue, want.NoOptionDefault), got.NoOptionDefault},
+		{"repeatable", want.Repeatable, got.Repeatable},
+		{"normalization", want.Normalization, got.Normalization},
+		{"completion", want.Completion, got.CompletionKind},
+		{"visibility", want.Visibility, got.Visibility},
+		{"deprecated", want.Lifecycle.State == "deprecated", got.Deprecated},
+		{"deprecatedMessage", want.Lifecycle.Deprecated, got.DeprecatedMessage},
+	}
+	for _, field := range fields {
+		if !reflect.DeepEqual(field.want, field.got) {
+			return field.name
+		}
+	}
+	return ""
+}
+
+func manifestInputValueString(value *climanifest.InputValue, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	switch {
+	case value.Boolean != nil:
+		return fmt.Sprint(*value.Boolean)
+	case value.String != nil:
+		return *value.String
+	case value.Int != nil:
+		return fmt.Sprint(*value.Int)
+	case value.Int64 != nil:
+		return fmt.Sprint(*value.Int64)
+	case value.StringArray != nil:
+		return fmt.Sprint(*value.StringArray)
+	default:
+		return fallback
+	}
 }
 
 func validateProductionCommand(actual commandidentity.CommandRecord, want expectedCommand) []Finding {

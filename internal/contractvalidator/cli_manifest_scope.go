@@ -110,7 +110,11 @@ func cliComparableInheritedFlag(flag map[string]any) map[string]any {
 	comparable := make(map[string]any, len(flag))
 	for field, value := range flag {
 		switch field {
-		case "id", "scope", "inheritedFromInputId":
+		case "id", "scope", "inheritedFromInputId",
+			"kind", "minCardinality", "maxCardinality", "acceptedSources",
+			"handlerBindingId", "usage", "sensitivity",
+			"default", "changedDefault", "noOptionDefault", "binding",
+			"defaultValue", "noOptionDefaultValue":
 			continue
 		case "lifecycle":
 			lifecycle, _ := value.(map[string]any)
@@ -125,7 +129,18 @@ func cliComparableInheritedFlag(flag map[string]any) map[string]any {
 			comparable[field] = value
 		}
 	}
+	comparable["effectiveDefault"] = cliComparableInputValue(flag, "defaultValue", "default")
+	comparable["effectiveNoOptionDefault"] = cliComparableInputValue(flag, "noOptionDefaultValue", "noOptionDefault")
 	return comparable
+}
+
+func cliComparableInputValue(flag map[string]any, typedField, serializedField string) string {
+	if typed, exists := flag[typedField].(map[string]any); exists {
+		_, value := singleCLIInputValue(typed)
+		return fmt.Sprint(value)
+	}
+	value, _ := flag[serializedField].(string)
+	return value
 }
 
 type cliSpellingOwner struct {

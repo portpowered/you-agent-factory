@@ -71,11 +71,91 @@ func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
 
 func productionParserParityCases() []productionParserParityCase {
 	cases := make([]productionParserParityCase, 0)
+	cases = append(cases, productionParserParityStaticFamilyCases()...)
 	cases = append(cases, productionParserParityRunCases()...)
 	cases = append(cases, productionParserParitySubmitCases()...)
 	cases = append(cases, productionParserParitySessionShowCases()...)
 	cases = append(cases, productionParserParitySessionCreateCases()...)
 	return cases
+}
+
+func productionParserParityStaticFamilyCases() []productionParserParityCase {
+	return []productionParserParityCase{
+		{
+			name:             "docs retains optional topic parsing",
+			commandPath:      "you docs",
+			argv:             []string{"docs", "run"},
+			argumentPosition: 0,
+		},
+		{
+			name:             "models retains required model and local invoke flags",
+			commandPath:      "you models invoke",
+			argv:             []string{"models", "invoke", "voice-model", "--text", "hello"},
+			flagLong:         "text",
+			argumentPosition: 0,
+		},
+		{
+			name:        "mcp retains local runtime parsing",
+			commandPath: "you mcp serve",
+			argv:        []string{"mcp", "serve", "--runtime"},
+			flagLong:    "runtime",
+		},
+		{
+			name:        "factory retains local directory parsing",
+			commandPath: "you factory list",
+			argv:        []string{"factory", "list", "--dir", "factory"},
+			flagLong:    "dir",
+		},
+		{
+			name:             "config retains variadic init parsing",
+			commandPath:      "you config init",
+			argv:             []string{"config", "init", "operator"},
+			argumentPosition: 0,
+		},
+		{
+			name:        "init retains local executor parsing",
+			commandPath: "you init",
+			argv:        []string{"init", "--executor", "codex"},
+			flagLong:    "executor",
+		},
+		{
+			name:        "work retains local state filtering",
+			commandPath: "you work list",
+			argv:        []string{"work", "list", "--state-name", "ready"},
+			flagLong:    "state-name",
+		},
+		{
+			name:        "server global remains parseable after deep descendant",
+			commandPath: "you factory list",
+			argv:        []string{"factory", "list", "--server", "https://factory.example"},
+			flagLong:    "server",
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
+				t.Helper()
+				record := findFlagRecord(t, inv, "you factory list", "server")
+				if record.Scope != "inherited" {
+					t.Fatalf("inventory server scope = %q, want inherited", record.Scope)
+				}
+				flag := parsedFlag(parsed, "server")
+				if flag == nil || !flag.Changed || flag.Value != "https://factory.example" {
+					t.Fatalf("parsed server = changed %v value %q, want explicit URI", flag != nil && flag.Changed, flagValue(flag))
+				}
+			},
+		},
+		{
+			name:         "unknown local input fails before dispatch",
+			commandPath:  "you work list",
+			argv:         []string{"work", "list", "--missing-local"},
+			wantParseErr: true,
+			errContains:  "unknown flag: --missing-local",
+		},
+		{
+			name:         "unknown global input fails before dispatch",
+			commandPath:  "you docs",
+			argv:         []string{"--missing-global", "docs"},
+			wantParseErr: true,
+			errContains:  "unknown flag: --missing-global",
+		},
+	}
 }
 
 func productionParserParityRunCases() []productionParserParityCase {

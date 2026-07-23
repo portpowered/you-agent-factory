@@ -60,10 +60,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v3 := provideCLIRunDefaults(liveRecordingTargetPlanner)
 	batchInputFileSystem := provideBatchInputFileSystem()
 	directoryCreator := provideRunDirectoryCreator()
-	opener := provideBrowserOpener()
+	opener := provideBrowserOpener(edges2)
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
 	configDecoder := provideOperatorConfigDecoder()
 	defaultsResolver := provideOperatorDefaultsResolver(fileSystem, configDecoder)
+	configLoader := provideOperatorConfigLoader(fileSystem, configDecoder)
 	providersessionsService, err := provideProviderSessions(edges2)
 	if err != nil {
 		return nil, err
@@ -99,7 +100,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	loader := provideFactoryDefinitionLoader(v4, v5, v6, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v7, portableBundledFileInspection, v8)
 	validationService := provideFactoryDefinitionValidationService(javaScriptWorkflows, loader)
 	v9 := provideFactoryDefinitionValidator(validationService)
-	configLoader := provideOperatorConfigLoader(fileSystem, configDecoder)
 	v10 := provideDurableExecutionFactory(configLoader)
 	v11 := provideWorkerExecutionFactory()
 	modelsService, err := provideModelsService(edges2)
@@ -447,6 +447,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		RunDirectoryCreator:               directoryCreator,
 		BrowserOpener:                     opener,
 		ResolveOperatorDefaults:           defaultsResolver,
+		LoadOperatorConfig:                configLoader,
 		BuildExecution:                    executionServiceBuilder,
 		ModelsCLI:                         cliService,
 		SubmitWork:                        submitWorkOperation,

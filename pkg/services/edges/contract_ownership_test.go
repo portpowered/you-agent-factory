@@ -212,6 +212,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"RecordingRemovePath":            {typeName: "recordings.RecordingRemovePath", effect: "remove portable recording temporary files"},
 		"RecordingRenamePath":            {typeName: "recordings.RecordingRenamePath", effect: "publish portable recording files atomically"},
 		"APIServerStarter":               {typeName: "platformhttpserver.Starter", effect: "bind and serve the external HTTP listener"},
+		"BrowserOpener":                  {typeName: "platformbrowser.Opener", effect: "open a customer-facing URL in the host browser"},
 		"InvocationMetricsRecorder":      {typeName: "factorysessions.InvocationMetricsRecorder", effect: "publish Factory Session invocation metrics"},
 		"RuntimeHostObserver":            {typeName: "factorysessions.RuntimeHostObserver", effect: "observe Factory Session runtime-host lifecycle"},
 		"ModelPullMetricsRecorder":       {typeName: "models.PullMetricsRecorder", effect: "publish managed-model pull metrics"},

@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -179,4 +180,134 @@ func completeCanonicalCommandContract(command *climanifest.Command) {
 		AcrossTiers:      "replace",
 		MultipleBindings: "reject",
 	}
+}
+
+func TestNewCommandTreeResolvesPersistentInputsForDescendants(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		environment string
+		want        bool
+		source      resolvedinput.Source
+		changed     bool
+	}{
+		{
+			name:   "manifest default at deep descendant",
+			args:   []string{"alpha", "leaf"},
+			source: resolvedinput.SourceManifestDefault,
+		},
+		{
+			name:    "long spelling before descendant",
+			args:    []string{"--activate", "alpha", "leaf"},
+			want:    true,
+			source:  resolvedinput.SourceCLIFlag,
+			changed: true,
+		},
+		{
+			name:    "alias after descendant",
+			args:    []string{"alpha", "leaf", "--enable"},
+			want:    true,
+			source:  resolvedinput.SourceCLIFlag,
+			changed: true,
+		},
+		{
+			name:    "shorthand after parent",
+			args:    []string{"alpha", "-a", "leaf"},
+			want:    true,
+			source:  resolvedinput.SourceCLIFlag,
+			changed: true,
+		},
+		{
+			name:        "CLI precedes configured source",
+			args:        []string{"alpha", "leaf", "--activate=false"},
+			environment: "true",
+			source:      resolvedinput.SourceCLIFlag,
+			changed:     true,
+		},
+		{
+			name:        "configured source precedes default",
+			args:        []string{"alpha", "leaf"},
+			environment: "true",
+			want:        true,
+			source:      resolvedinput.SourceEnvironment,
+			changed:     true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := persistentResolutionManifest()
+			var received resolvedinput.Inputs
+			bindings := genericBindingsForManifest(manifest)
+			bindings.Handlers["stable.leaf.handler"] = func(
+				ctx context.Context,
+				_ map[string]any,
+			) error {
+				var err error
+				received, err = climanifestcobra.ResolvedPersistentInputsFromContext(ctx)
+				return err
+			}
+			bindings.SourceValues = func(
+				_ context.Context,
+				_ climanifest.SourceBinding,
+				_ resolvedinput.ValueKind,
+			) (resolvedinput.Value, bool, error) {
+				if test.environment == "" {
+					return resolvedinput.Value{}, false, nil
+				}
+				return resolvedinput.BoolValue(test.environment == "true"), true, nil
+			}
+			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			if err != nil {
+				t.Fatalf("NewCommandTree() error = %v", err)
+			}
+			root.SetArgs(test.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			value, err := received.Bool("stable.root.flag.activate")
+			if err != nil || value != test.want {
+				t.Fatalf("resolved value = (%t, %v), want %t", value, err, test.want)
+			}
+			state, ok := received.State("stable.root.flag.activate")
+			if !ok || state.Provenance != test.source || state.Changed != test.changed ||
+				state.Default != (test.source == resolvedinput.SourceManifestDefault) {
+				t.Fatalf("resolved state = (%#v, %t), want source=%q changed=%t", state, ok, test.source, test.changed)
+			}
+			observation, ok := received.Observe("stable.root.flag.activate")
+			if !ok || observation.Value != resolvedinput.RedactedValue ||
+				observation.Provenance != test.source || observation.Changed != test.changed {
+				t.Fatalf("redacted observation = (%#v, %t)", observation, ok)
+			}
+		})
+	}
+}
+
+func persistentResolutionManifest() climanifest.Manifest {
+	manifest := syntheticFlagManifest()
+	root := manifest.Commands["stable.root"]
+	flag := root.Flags["stable.root.flag.activate"]
+	flag.AcceptedSources = []string{
+		climanifest.SourceCLI,
+		climanifest.SourceEnvironment,
+		climanifest.SourceManifestDefault,
+	}
+	flag.HandlerBindingID = "stable.root.binding.activate"
+	flag.Sensitivity = "sensitive"
+	root.Flags[flag.ID] = flag
+	root.HandlerBindings = map[string]climanifest.HandlerBinding{
+		flag.HandlerBindingID: {ID: flag.HandlerBindingID, InputID: flag.ID},
+	}
+	root.SourceBindings = map[string]climanifest.SourceBinding{
+		"stable.root.source.activate.environment": {
+			ID:          "stable.root.source.activate.environment",
+			Source:      climanifest.SourceEnvironment,
+			ExternalKey: "FORGE_ACTIVATE",
+			InputID:     flag.ID,
+		},
+	}
+	root.Precedence = climanifest.CanonicalPrecedence()
+	manifest.Commands[root.ID] = root
+	leaf := syntheticCommand("stable.leaf", "leaf", "forge alpha leaf", true)
+	manifest.Commands[leaf.ID] = leaf
+	return manifest
 }

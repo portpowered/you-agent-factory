@@ -73,24 +73,6 @@ func validateGenericHandlers(plan []plannedCommand, bindings GenericBindings) er
 	return nil
 }
 
-func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindings GenericBindings) {
-	if !record.Runnable {
-		return
-	}
-	handler := bindings.Handlers[record.Handler.ID]
-	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
-	cmd.RunE = func(command *cobra.Command, args []string) error {
-		values, err := InputValues(command)
-		if err != nil {
-			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
-		}
-		if cobraHandler != nil {
-			return cobraHandler(command, args, values)
-		}
-		return handler(command.Context(), values)
-	}
-}
-
 func validateGenericPresentation(plan []plannedCommand, bindings GenericBindings) error {
 	if err := validateSiblingCommandIdentities(plan); err != nil {
 		return err
@@ -902,14 +884,19 @@ func argumentUsageToken(argument climanifest.Argument) string {
 }
 
 func projectedFlagUsage(flag climanifest.Flag) string {
+	usage := flag.Usage
 	if len(flag.Aliases) == 0 {
-		return ""
+		return usage
 	}
 	aliases := make([]string, len(flag.Aliases))
 	for index, alias := range flag.Aliases {
 		aliases[index] = "--" + alias
 	}
-	return "aliases: " + strings.Join(aliases, ", ")
+	aliasUsage := "aliases: " + strings.Join(aliases, ", ")
+	if usage == "" {
+		return aliasUsage
+	}
+	return usage + " (" + aliasUsage + ")"
 }
 
 func completionForInput(

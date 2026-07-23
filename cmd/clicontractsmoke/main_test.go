@@ -36,6 +36,7 @@ func TestRunPropagatesDeliberateViolationDiagnostics(t *testing.T) {
 		{clicontract.ViolationUncontractedCommand, `uncontracted-command: stable ID "you.experimental" path "you experimental"`},
 		{clicontract.ViolationStaleMetadata, `stale-generated-metadata: stable ID "you" path "you" field "name"`},
 		{clicontract.ViolationMissingHandler, `missing-handler: stable ID "you.run" path "you run" field "handler"`},
+		{clicontract.ViolationUncontractedGlobal, `uncontracted-root-global: stable ID "you.flag.extra-global" path "you" field "long"`},
 	}
 
 	for _, tc := range tests {

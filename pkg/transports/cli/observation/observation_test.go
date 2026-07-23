@@ -2,9 +2,11 @@ package observation
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +26,10 @@ func TestObservationRoundTripDetachesPrivateCLIRepresentation(t *testing.T) {
 			CommandPath: "you run", Positionals: []string{"hello"},
 			Flags: []platformprocess.CLIParsedFlag{{Name: "verbose", Changed: true, Value: "true"}},
 		},
+		ResolvedInputs: []resolvedinput.Observation{{
+			InputID: "you.flag.verbose", Kind: resolvedinput.ValueKindBool,
+			Provenance: resolvedinput.SourceCLIFlag, Changed: true, Value: true,
+		}},
 	}
 	edge, err := Encode(original)
 	if err != nil {
@@ -55,5 +61,21 @@ func TestCaptureObserverDecodesNeutralEdge(t *testing.T) {
 	}
 	if target.Snapshot.Commands.RootPath != "you" || target.Snapshot.CommandTree != "you\tyou\t\n" {
 		t.Fatalf("captured observation = %#v", target)
+	}
+}
+
+func TestResolvedInputObservationRejectsInvalidEdgeValues(t *testing.T) {
+	_, err := Decode(platformprocess.CLIObservation{
+		CommandIdentityJSON: `{"formatVersion":"cli-command-identity/v1","rootPath":"you","commands":[]}`,
+		CommandInputsJSON:   `{"formatVersion":"cli-command-inputs/v1","arguments":[],"flags":[],"relationships":[]}`,
+		ResolvedInputsJSON:  `{`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "decode resolved CLI inputs observation") {
+		t.Fatalf("Decode() error = %v, want resolved-input diagnostic", err)
+	}
+
+	_, err = Encode(Result{ResolvedInputs: []resolvedinput.Observation{{Value: func() {}}}})
+	if err == nil || !strings.Contains(err.Error(), "encode resolved CLI inputs observation") {
+		t.Fatalf("Encode() error = %v, want resolved-input diagnostic", err)
 	}
 }

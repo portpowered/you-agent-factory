@@ -21,6 +21,21 @@ primary-result behavior.
   manifests are its public input boundary; keep those cases limited to
   observable Cobra construction, parsing, help, completion, and dispatch
   behavior. Do not use source inspection or inventory scans to raise coverage.
+- Manifest-owned root no-argument discovery is projected by the generic Cobra
+  constructor before external persistent-source collection, resolved-input
+  compatibility binding, chained pre-runs, and handler dispatch. It may
+  initialize a manifest-default-only observation snapshot, but it must not read
+  Operator Settings. Prove its inert behavior through `root.BuildProcess` with
+  exact Operator Settings, Factory-loading/materialization, listener,
+  runtime-host, provider, and browser edges, plus a compiled-binary malformed
+  config case; do not substitute source-shape assertions for observable help
+  output and zero effect calls.
+- Root/global CLI inputs have one writable definition path:
+  `contracts/cli/commands.json`. `climanifestcobra` generically projects those
+  records into Cobra and resolved inputs; `make cli-manifest-check` compares
+  the constructed production root/global inventory against those records and
+  rejects extra, missing, or metadata-drifted persistent inputs regardless of
+  registration source shape.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.
@@ -365,6 +380,15 @@ response-stream output.
   an explicit structured invocation request, not as omitted args, so
   all-optional or defaulted signatures stay transport-equivalent with CLI.
 - `pkg/transports/cli/run/` is the `you run --factory` CLI boundary.
+- Root and persistent/global CLI metadata is authored only on the `you` record
+  in `contracts/cli/commands.json`. Root flags use the canonical typed-input
+  shape with stable handler/source bindings plus manifest-owned usage,
+  sensitivity, completion, and lifecycle metadata. `rootLifecycle` declares
+  the no-argument help intent and the stable ownership boundaries for root
+  help, `you init`, `you run`, and the global `--server` input; it does not move
+  executable lifecycle policy out of command handlers or Initializer. Run
+  `make cli-manifest-generate` after changing this contract so generated Cobra
+  metadata stays current.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
@@ -563,6 +587,11 @@ response-stream output.
   sensitivity into the detached snapshot: diagnostic and observation boundaries
   expose provenance and changed/default state while replacing sensitive scalar
   or collection values with `resolvedinput.RedactedValue`.
+  The injected `CLIObserver` edge parses and validates the selected command,
+  runs only the root persistent-input resolution boundary, and serializes the
+  resulting stable-ID observations without dispatching the selected handler.
+  Keep its `ResolvedInputsJSON` projection detached and redaction-safe, and
+  refresh after compatibility parsing for commands that disable Cobra parsing.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
@@ -640,11 +669,18 @@ response-stream output.
   been removed. `WorkFamilyBindings.FlagUsages` supplies local flag help text.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
+  The same behavioral smoke is part of `make cli-manifest-check` and compares
+  the constructed root persistent-flag spelling and metadata set against the
+  authored manifest, so duplicate registration is rejected independently of
+  the Go source shape or helper used to register it.
   Keep deliberate smoke violations snapshot-only: they must use the production
   validator and diagnostics without executing commands, invoking services,
   mutating Cobra state, or requiring network access.
 - Operator default worker model settings resolve at the CLI/process boundary in
-  `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
+  `pkg/transports/cli/root.go`: the injected Operator Settings config loader
+  supplies raw `operator-config` candidates to manifest-owned global input
+  resolution, while `resolveOperatorDefaults` consumes those resolved values
+  for legacy run behavior. The effective defaults flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.

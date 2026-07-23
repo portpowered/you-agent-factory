@@ -34,6 +34,12 @@ func run(store generatedartifacts.SourceStore, repositoryRoot, violation string,
 		fmt.Fprintln(stderr, "[agent-factory:cli-contract-smoke] source store is required")
 		return 1
 	}
+	home, err := os.MkdirTemp("", "you-cli-contract-smoke-")
+	if err != nil {
+		fmt.Fprintf(stderr, "[agent-factory:cli-contract-smoke] create isolated home: %v\n", err)
+		return 1
+	}
+	defer os.RemoveAll(home)
 	var observation cliobservation.Result
 	process, err := rootapp.BuildProcess(context.Background(), serviceedges.Edges{
 		CLIObserver: cliobservation.Capture(&observation),
@@ -43,8 +49,14 @@ func run(store generatedartifacts.SourceStore, repositoryRoot, violation string,
 		return 1
 	}
 	if err := process.Execute(rootapp.Input{
-		Args: []string{"you"}, Env: os.Environ(), WorkingDirectory: repositoryRoot,
-		Stdout: io.Discard, Stderr: io.Discard,
+		Args: []string{"you"},
+		Env: append(
+			os.Environ(),
+			"HOME="+home,
+			"USERPROFILE="+home,
+		),
+		WorkingDirectory: repositoryRoot,
+		Stdout:           io.Discard, Stderr: io.Discard,
 	}); err != nil {
 		fmt.Fprintf(stderr, "[agent-factory:cli-contract-smoke] observe production command: %v\n", err)
 		return 1
@@ -54,9 +66,20 @@ func run(store generatedartifacts.SourceStore, repositoryRoot, violation string,
 		checkErr error
 	)
 	if violation == "" {
-		findings, checkErr = clicontract.CheckProduction(store, observation.Snapshot.Commands, repositoryRoot)
+		findings, checkErr = clicontract.CheckProduction(
+			store,
+			observation.Snapshot.Commands,
+			observation.Snapshot.Inputs,
+			repositoryRoot,
+		)
 	} else {
-		findings, checkErr = clicontract.CheckProductionViolation(store, observation.Snapshot.Commands, repositoryRoot, clicontract.DeliberateViolation(violation))
+		findings, checkErr = clicontract.CheckProductionViolation(
+			store,
+			observation.Snapshot.Commands,
+			observation.Snapshot.Inputs,
+			repositoryRoot,
+			clicontract.DeliberateViolation(violation),
+		)
 	}
 	if checkErr != nil {
 		fmt.Fprintf(stderr, "[agent-factory:cli-contract-smoke] check failed: %v\n", checkErr)

@@ -3,6 +3,7 @@ package climanifestcobra_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
@@ -49,6 +51,72 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	assertProjectedHelpAndLifecycle(t, alpha)
 	assertProjectedFlagCompletion(t, alpha, &dynamicCalls)
 	assertProjectedArgumentCompletion(t, alpha, &dynamicCalls)
+}
+
+func TestNewCommandTreeProjectsRootNoArgumentHelpWithoutDispatch(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	bindings := genericBindingsForManifest(manifest)
+	handlerCalls := 0
+	sourceCalls := 0
+	rootInputCalls := 0
+	bindings.SourceValues = func(
+		context.Context,
+		climanifest.SourceBinding,
+		resolvedinput.ValueKind,
+	) (resolvedinput.Value, bool, error) {
+		sourceCalls++
+		return resolvedinput.Value{}, false, errors.New("root discovery collected an external source")
+	}
+	bindings.RootInputs = func(resolvedinput.Inputs) error {
+		rootInputCalls++
+		return errors.New("root discovery bound resolved inputs")
+	}
+	for handlerID := range bindings.Handlers {
+		bindings.Handlers[handlerID] = func(context.Context, map[string]any) error {
+			handlerCalls++
+			return nil
+		}
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	output := stdout.String()
+	if handlerCalls != 0 {
+		t.Fatalf("root handler calls = %d, want 0", handlerCalls)
+	}
+	if sourceCalls != 0 {
+		t.Fatalf("root external source calls = %d, want 0", sourceCalls)
+	}
+	if rootInputCalls != 0 {
+		t.Fatalf("root resolved-input binding calls = %d, want 0", rootInputCalls)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	for _, expected := range []string{
+		"Run and manage CPN-based workflow factories",
+		"Available Commands:",
+		"session",
+		"--server",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("stdout omitted %q:\n%s", expected, output)
+		}
+	}
+	if strings.Contains(output, "How to use:") {
+		t.Fatalf("stdout included long-form help instead of concise discovery help:\n%s", output)
+	}
 }
 
 func TestNewCommandTreeProjectsMatchingInheritedPresentation(t *testing.T) {

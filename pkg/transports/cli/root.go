@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
@@ -20,6 +21,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -29,6 +31,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
@@ -101,6 +104,7 @@ type CommandOperations struct {
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
+	LoadOperatorConfig                operatorconfig.ConfigLoader
 	BuildExecution                    ExecutionServiceBuilder
 	ModelsCLI                         modelscli.Service
 	SubmitWork                        SubmitWorkOperation
@@ -152,6 +156,7 @@ type CommandFactory struct {
 	runDirectoryCreator               platformfilesystem.DirectoryCreator
 	browserOpener                     platformbrowser.Opener
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
+	loadOperatorConfig                operatorconfig.ConfigLoader
 
 	SubmitWork            func(submitcli.SubmitConfig) error
 	SubmitBatch           func(submitcli.BatchConfig) error
@@ -201,6 +206,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		runDirectoryCreator:               operations.RunDirectoryCreator,
 		browserOpener:                     operations.BrowserOpener,
 		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
+		loadOperatorConfig:                operations.LoadOperatorConfig,
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
 		ListSessions:                      operations.ListSessions,
@@ -268,7 +274,17 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 		return err
 	}
 	command, positionals, parseErr := ParseArgvForCLIInputsInventory(root, input.Arguments)
-	result := cliobservation.Result{Snapshot: snapshot, Parse: cliobservation.CaptureParseResult(command, positionals)}
+	result := cliobservation.Result{
+		Snapshot: snapshot,
+		Parse:    cliobservation.CaptureParseResult(command, positionals),
+	}
+	if parseErr == nil {
+		resolved, resolveErr := climanifestcobra.ResolvePersistentInputsForObservation(command, positionals)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		result.ResolvedInputs = resolved.Observations()
+	}
 	edgeObservation, err := cliobservation.Encode(result)
 	if err != nil {
 		return err
@@ -498,8 +514,18 @@ func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDe
 		return operatorconfig.ResolvedDefaults{}, err
 	}
 	return rootOptions.resolveOperatorDefaults(homeDir, environment, operatorconfig.FlagOverrides{
-		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
-		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
+		WorkerModelProvider: resolvedPersistentStringIfCLI(
+			cmd,
+			"you.flag.default-worker-model-provider",
+			"default-worker-model-provider",
+			operatorDefaults.defaultWorkerModelProvider,
+		),
+		WorkerModel: resolvedPersistentStringIfCLI(
+			cmd,
+			"you.flag.default-worker-model",
+			"default-worker-model",
+			operatorDefaults.defaultWorkerModel,
+		),
 	})
 }
 
@@ -530,6 +556,100 @@ func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string
 		return value
 	}
 	return ""
+}
+
+func resolvedPersistentStringIfCLI(
+	cmd *cobra.Command,
+	inputID string,
+	legacyName string,
+	legacyValue string,
+) string {
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if !found || state.Provenance != resolvedinput.SourceCLIFlag {
+			return ""
+		}
+		value, valueErr := inputs.String(inputID)
+		if valueErr == nil {
+			return value
+		}
+		return ""
+	}
+	return persistentFlagValueIfChanged(cmd, legacyName, legacyValue)
+}
+
+func representativeSourceValues(options CommandFactory) climanifestcobra.SourceCandidateProvider {
+	return func(
+		_ context.Context,
+		binding climanifest.SourceBinding,
+		kind resolvedinput.ValueKind,
+	) (resolvedinput.Value, bool, error) {
+		if kind != resolvedinput.ValueKindString {
+			return resolvedinput.Value{}, false, fmt.Errorf(
+				"source binding %q requires unsupported value kind %q",
+				binding.ID,
+				kind,
+			)
+		}
+		if binding.Source == climanifest.SourceEnvironment {
+			if options.lookupEnv == nil {
+				return resolvedinput.Value{}, false, nil
+			}
+			value, present, err := lookupProcessEnvironment(options, binding.ExternalKey)
+			if err != nil || !present || strings.TrimSpace(value) == "" {
+				return resolvedinput.Value{}, false, err
+			}
+			return resolvedinput.StringValue(strings.TrimSpace(value)), true, nil
+		}
+		if binding.Source != climanifest.SourceOperatorConfig {
+			return resolvedinput.Value{}, false, nil
+		}
+		return operatorConfigSourceValue(options, binding)
+	}
+}
+
+func operatorConfigSourceValue(
+	options CommandFactory,
+	binding climanifest.SourceBinding,
+) (resolvedinput.Value, bool, error) {
+	if options.loadOperatorConfig == nil {
+		return resolvedinput.Value{}, false, nil
+	}
+	homeDir, err := resolveProcessHomeDir(options)
+	if err != nil {
+		return resolvedinput.Value{}, false, err
+	}
+	config, err := options.loadOperatorConfig(
+		operatorconfig.DefaultConfigPath(homeDir),
+	)
+	if err != nil {
+		// A config path below a non-directory ancestor is unavailable in
+		// the same way as a missing optional config. Commands such as
+		// `you config init` still own the later, actionable creation error.
+		if errors.Is(err, syscall.ENOTDIR) {
+			return resolvedinput.Value{}, false, nil
+		}
+		return resolvedinput.Value{}, false, err
+	}
+	value := ""
+	switch binding.ExternalKey {
+	case "defaults.workerModelProvider":
+		value = config.Defaults.WorkerModelProvider
+	case "defaults.workerModel":
+		value = config.Defaults.WorkerModel
+	default:
+		return resolvedinput.Value{}, false, fmt.Errorf(
+			"source binding %q has unsupported operator-config key %q",
+			binding.ID,
+			binding.ExternalKey,
+		)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return resolvedinput.Value{}, false, nil
+	}
+	return resolvedinput.StringValue(value), true, nil
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
