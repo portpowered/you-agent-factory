@@ -11,6 +11,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/artifactprojection"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -127,7 +128,7 @@ func projectedSessionArtifacts(
 		if ctx.JavaScript == nil {
 			return nil
 		}
-		artifactStates := ArtifactStatesFromJavaScriptRuntime(ctx.JavaScriptCheckpoints, ctx.JavaScript.Artifacts)
+		artifactStates := artifactprojection.StatesFromJavaScriptRuntime(ctx.JavaScriptCheckpoints, ctx.JavaScript.Artifacts)
 		return projectedArtifacts(artifactStates)
 	default:
 		return nil
