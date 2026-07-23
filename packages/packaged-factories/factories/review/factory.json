@@ -12,11 +12,11 @@
           {"kind": "STDIN"}
         ]
       }
-    ],
-    "examples": [
-      {"name": "positional-input", "argv": ["Draft the release notes"]}
     ]
   },
+  "examples": [
+    {"name": "positional-input", "description": {"type": "LOCALIZABLE_ASSET", "value": "Review draft release notes."}, "args": {"input": "Draft the release notes"}}
+  ],
   "invocationReturn": {
     "policy": "EXPLICIT",
     "workTypeName": "reviewable-work",

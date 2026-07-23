@@ -62,19 +62,20 @@
           {"kind": "NAMED"}
         ]
       }
-    ],
-    "examples": [
-      {
-        "name": "positional-topic",
-        "argv": ["Compare event sourcing and state machines for workflow orchestration"]
-      },
-      {
-        "name": "stdin-topic",
-        "argv": [],
-        "stdin": "What are the trade-offs of retrieval-augmented generation?"
-      }
     ]
   },
+  "examples": [
+    {
+      "name": "positional-topic",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Compare two workflow architecture approaches."},
+      "args": {"topic": "Compare event sourcing and state machines for workflow orchestration"}
+    },
+    {
+      "name": "stdin-topic",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Research retrieval-augmented generation trade-offs."},
+      "args": {"topic": "What are the trade-offs of retrieval-augmented generation?"}
+    }
+  ],
   "orchestrator": {
     "kind": "JAVASCRIPT",
     "javascript": {

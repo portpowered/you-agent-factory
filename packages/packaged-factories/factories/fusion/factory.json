@@ -87,30 +87,20 @@
       "contentType": "text/markdown",
       "fileExtension": ".md",
       "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content."
-    },
-    "examples": [
-      {
-        "name": "positional-input-with-provider-overrides",
-        "argv": [
-          "Draft a release summary",
-          "--first-provider=CLAUDE",
-          "--second-provider=CODEX",
-          "--output",
-          "fusion-summary.md"
-        ]
-      },
-      {
-        "name": "stdin-input-with-model-overrides",
-        "argv": [
-          "--first-model",
-          "claude-sonnet-4-20250514",
-          "--second-model",
-          "gpt-5"
-        ],
-        "stdin": "Draft a release summary"
-      }
-    ]
+    }
   },
+  "examples": [
+    {
+      "name": "positional-input-with-provider-overrides",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Draft a release summary with provider overrides."},
+      "args": {"input": "Draft a release summary", "firstProvider": "CLAUDE", "secondProvider": "CODEX", "output": "fusion-summary.md"}
+    },
+    {
+      "name": "stdin-input-with-model-overrides",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Draft a release summary with model overrides."},
+      "args": {"input": "Draft a release summary", "firstModel": "claude-sonnet-4-20250514", "secondModel": "gpt-5"}
+    }
+  ],
   "workTypes": [
     {
       "name": "task",

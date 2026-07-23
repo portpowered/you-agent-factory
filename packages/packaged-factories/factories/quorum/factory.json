@@ -9,12 +9,12 @@
       {"name":"branchModel","description":"Model for both independent quorum branch workers. Defaults to gpt-5.","externalName":"branch-model","aliases":["bm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]},
       {"name":"mergeProvider","description":"Provider for the final quorum merge worker. Defaults to CODEX.","externalName":"merge-provider","aliases":["mp"],"choices":["CLAUDE","CODEX"],"defaultValue":"CODEX","bindings":[{"kind":"NAMED"}]},
       {"name":"mergeModel","description":"Model for the final quorum merge worker. Defaults to gpt-5.","externalName":"merge-model","aliases":["mm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]}
-    ],
-    "examples": [
-      {"name":"default-quorum","argv":["Compare the two proposed release plans."]},
-      {"name":"role-specific-models","argv":["Compare the two proposed release plans.","--branch-provider","CODEX","--branch-model","gpt-5","--merge-provider","CLAUDE","--merge-model","claude-sonnet-4-20250514"]}
     ]
   },
+  "examples": [
+    {"name":"default-quorum","description":{"type":"LOCALIZABLE_ASSET","value":"Compare release plans with the default quorum."},"args":{"input":"Compare the two proposed release plans."}},
+    {"name":"role-specific-models","description":{"type":"LOCALIZABLE_ASSET","value":"Compare release plans with role-specific providers and models."},"args":{"input":"Compare the two proposed release plans.","branchProvider":"CODEX","branchModel":"gpt-5","mergeProvider":"CLAUDE","mergeModel":"claude-sonnet-4-20250514"}}
+  ],
   "workTypes": [
     {"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"quorum-context","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},
     {"name":"quorum-branch-a","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},

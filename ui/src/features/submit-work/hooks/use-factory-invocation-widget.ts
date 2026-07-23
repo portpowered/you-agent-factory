@@ -37,7 +37,7 @@ export function useFactoryInvocationWidget(
     (state) => state.incrementRefreshToken,
   );
   const signature = currentFactory.data?.invocationSignature;
-  const projection = projectInvocationForm(signature);
+  const projection = projectInvocationForm(signature, currentFactory.data?.examples);
   const signatureKey = useMemo(
     () => (signature ? JSON.stringify(signature) : null),
     [signature],

@@ -75,6 +75,46 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	assertExpandedConfigRoundTrip(t, expanded, original)
 }
 
+func TestNameValueOpenAPIInternalRoundTripPreservesMetadata(t *testing.T) {
+	locales := []string{"en-US"}
+	localized := map[string]string{"fr-FR": "Description française"}
+	id := "stable-description-id"
+	generated := factoryapi.NameValue{
+		Type:    factoryapi.LOCALIZABLEASSET,
+		Value:   "Base description",
+		Locales: &locales,
+		Values:  &localized,
+		Id:      &id,
+	}
+
+	internal, err := NameValueFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("NameValueFromOpenAPI: %v", err)
+	}
+	roundTrip := NameValueAPIFromInternal(&internal)
+	if !reflect.DeepEqual(roundTrip, &generated) {
+		t.Fatalf("round trip = %#v, want %#v", roundTrip, generated)
+	}
+
+	(*roundTrip.Locales)[0] = "de-DE"
+	(*roundTrip.Values)["fr-FR"] = "changed"
+	if internal.Locales[0] != "en-US" || internal.Values["fr-FR"] != "Description française" {
+		t.Fatal("public mapping shares mutable locale storage with internal contract")
+	}
+}
+
+func TestNameValueFromOpenAPIRejectsInvalidSemanticValues(t *testing.T) {
+	locales := []string{"en-us"}
+	_, err := NameValueFromOpenAPI(factoryapi.NameValue{
+		Type:    factoryapi.LOCALIZABLEASSET,
+		Value:   "Base description",
+		Locales: &locales,
+	})
+	if err == nil || !strings.Contains(err.Error(), "locales[0]") {
+		t.Fatalf("NameValueFromOpenAPI error = %v, want locales[0] diagnostic", err)
+	}
+}
+
 func assertExpandedConfigRoundTrip(t *testing.T, expanded, original *interfaces.FactoryConfig) {
 	t.Helper()
 
@@ -210,7 +250,10 @@ func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	stopWords[0] = "MUTATED"
 	stopWords = append(stopWords, "LATE")
 	env["MODE"] = "mutated"
@@ -342,13 +385,15 @@ func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *
 				FileExtension: ".md",
 				Description:   "Writes markdown to disk",
 			},
-			Examples: []interfaces.InvocationExampleConfig{{
-				Name:        "basic",
-				Description: "Basic invocation",
-				Argv:        []string{"brief.md", "--output=result.md"},
-				Stdin:       "stdin prompt",
-			}},
 		},
+		Examples: []interfaces.InvocationExampleConfig{{
+			Name: "basic",
+			Description: interfaces.NameValueConfig{
+				Type: interfaces.NameValueTypeLocalizableAsset, Value: "Basic invocation",
+				Locales: []string{"en-US"}, Values: map[string]string{"fr-FR": "Invocation de base"}, ID: "example-basic",
+			},
+			Args: map[string]interface{}{"input": "brief.md\nsecond line", "tag": []string{"alpha", "beta"}},
+		}},
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "story",
 			States: []interfaces.StateConfig{
@@ -377,6 +422,9 @@ func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *
 
 	if !reflect.DeepEqual(expanded.InvocationSignature, original.InvocationSignature) {
 		t.Fatalf("expanded invocationSignature = %#v, want %#v", expanded.InvocationSignature, original.InvocationSignature)
+	}
+	if !reflect.DeepEqual(expanded.Examples, original.Examples) {
+		t.Fatalf("expanded examples = %#v, want %#v", expanded.Examples, original.Examples)
 	}
 }
 

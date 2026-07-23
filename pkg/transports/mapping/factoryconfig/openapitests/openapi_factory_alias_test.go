@@ -411,7 +411,10 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	got, err := FactoryConfigFromOpenAPI(generated)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
@@ -493,7 +496,10 @@ func TestFactoryConfigToOpenAPI_PreservesAndDetachesWorkstationEnv(t *testing.T)
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	workstation := requireSingleGeneratedWorkstation(t, generated)
 	if workstation.Env == nil {
 		t.Fatal("expected generated workstation env")
@@ -532,7 +538,10 @@ func TestFactoryConfigToOpenAPI_OmitsEmptyWorkstationEnv(t *testing.T) {
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	workstation := requireSingleGeneratedWorkstation(t, generated)
 	if workstation.Env != nil {
 		t.Fatalf("expected empty workstation env to be omitted from generated boundary, got %#v", workstation.Env)

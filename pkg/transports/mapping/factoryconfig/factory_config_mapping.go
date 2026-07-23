@@ -113,13 +113,26 @@ func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
 	if strings.TrimSpace(string(apiCfg.Name)) == "" {
 		return fmt.Errorf("factory.name is required")
 	}
+	if apiCfg.Examples != nil {
+		for index, example := range *apiCfg.Examples {
+			if strings.TrimSpace(example.Name) == "" {
+				return fmt.Errorf("factory.examples[%d].name must be a non-empty string", index)
+			}
+			if example.Args == nil {
+				return fmt.Errorf("factory.examples[%d].args is required", index)
+			}
+		}
+	}
 	return nil
 }
 
 // Flatten serializes an internal factory configuration into canonical JSON that is
 // stable for persisted output and downstream tooling.
 func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, error) {
-	apiCfg := factoryAPIFromInternalConfig(cfg)
+	apiCfg, err := factoryAPIFromInternalConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	if isDefaultPetriOrchestratorAPI(apiCfg.Orchestrator) {
 		apiCfg.Orchestrator = nil
 	}
@@ -142,19 +155,28 @@ func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, er
 	return encoded, nil
 }
 
-func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {
+func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Factory, error) {
 	if cfg == nil {
-		return factoryapi.Factory{}
+		return factoryapi.Factory{}, nil
+	}
+	if err := validateInternalFactoryMetadata(cfg); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	examples, err := invocationExamplesAPIFromInternal(cfg.Examples)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	return factoryapi.Factory{
 		Name:                factoryReferenceName(cfg),
+		Description:         NameValueAPIFromInternal(cfg.Description),
 		Id:                  stringPtrIfNotEmpty(cfg.Project),
 		Version:             hybridLogicalTimestampPtr(cfg.Version),
 		Guards:              factoryGuardsAPIFromInternal(cfg.Guards),
 		InputTypes:          inputTypesAPIFromInternal(cfg.InputTypes),
 		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
 		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
+		Examples:            examples,
 		Orchestrator:        orchestratorAPIFromInternal(cfg),
 		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
 		Resources:           resourcesAPIFromInternal(cfg.Resources),
@@ -162,7 +184,72 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		Layout:              factoryLayoutAPIFromInternal(cfg.Layout),
 		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
 		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
+	}, nil
+}
+
+func validateInternalFactoryMetadata(cfg *interfaces.FactoryConfig) error {
+	if err := validateInternalNameValue(cfg.Description, "factory.description"); err != nil {
+		return err
 	}
+	for index := range cfg.WorkTypes {
+		if err := validateInternalNameValue(cfg.WorkTypes[index].Description, fmt.Sprintf("factory.workTypes[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Workers {
+		if err := validateInternalNameValue(cfg.Workers[index].Description, fmt.Sprintf("factory.workers[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Workstations {
+		if err := validateInternalNameValue(cfg.Workstations[index].Description, fmt.Sprintf("factory.workstations[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	for index := range cfg.Examples {
+		if strings.TrimSpace(cfg.Examples[index].Name) == "" {
+			return fmt.Errorf("factory.examples[%d].name must be a non-empty string", index)
+		}
+		if err := validateInternalNameValue(&cfg.Examples[index].Description, fmt.Sprintf("factory.examples[%d].description", index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInternalNameValue(value *interfaces.NameValueConfig, path string) error {
+	if value == nil {
+		return nil
+	}
+	if err := value.Validate(); err != nil {
+		return fmt.Errorf("%s.%w", path, err)
+	}
+	return nil
+}
+
+// NameValueAPIFromInternal maps a validated internal localized value into the
+// generated public contract without sharing mutable collection storage.
+func NameValueAPIFromInternal(value *interfaces.NameValueConfig) *factoryapi.NameValue {
+	if value == nil {
+		return nil
+	}
+	result := &factoryapi.NameValue{
+		Type:  factoryapi.NameValueType(value.Type),
+		Value: value.Value,
+		Id:    stringPtrIfNotEmpty(value.ID),
+	}
+	if len(value.Locales) > 0 {
+		locales := append([]string(nil), value.Locales...)
+		result.Locales = &locales
+	}
+	if len(value.Values) > 0 {
+		values := make(map[string]string, len(value.Values))
+		for locale, localized := range value.Values {
+			values[locale] = localized
+		}
+		result.Values = &values
+	}
+	return result
 }
 
 func invocationSignatureAPIFromInternal(value *interfaces.InvocationSignatureConfig) *factoryapi.FactoryInvocationSignature {
@@ -173,7 +260,6 @@ func invocationSignatureAPIFromInternal(value *interfaces.InvocationSignatureCon
 		Parameters:                 invocationParametersAPIFromInternal(value.Parameters),
 		UnknownNamedArgumentPolicy: invocationUnknownNamedArgumentPolicyPtr(value.UnknownNamedArgumentPolicy),
 		OutputContract:             invocationOutputContractAPIFromInternal(value.OutputContract),
-		Examples:                   invocationExamplesAPIFromInternal(value.Examples),
 	}
 }
 
@@ -260,20 +346,44 @@ func invocationOutputContractModePtr(value string) *factoryapi.FactoryInvocation
 	return &mode
 }
 
-func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleConfig) *[]factoryapi.FactoryInvocationExample {
+func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleConfig) (*[]factoryapi.FactoryInvocationExample, error) {
 	if len(examples) == 0 {
-		return nil
+		return nil, nil
 	}
 	values := make([]factoryapi.FactoryInvocationExample, len(examples))
 	for i, example := range examples {
+		args, err := invocationExampleArgsAPIFromInternal(example.Args, fmt.Sprintf("factory.examples[%d].args", i))
+		if err != nil {
+			return nil, err
+		}
 		values[i] = factoryapi.FactoryInvocationExample{
 			Name:        example.Name,
-			Description: stringPtrIfNotEmpty(example.Description),
-			Argv:        stringSlicePtr(example.Argv),
-			Stdin:       stringPtrIfNotEmpty(example.Stdin),
+			Description: *NameValueAPIFromInternal(&example.Description),
+			Args:        args,
 		}
 	}
-	return &values
+	return &values, nil
+}
+
+func invocationExampleArgsAPIFromInternal(args map[string]interface{}, path string) (factoryapi.FactoryInvocationArguments, error) {
+	values := make(factoryapi.FactoryInvocationArguments, len(args))
+	for name, value := range args {
+		var union factoryapi.FactoryInvocationArguments_AdditionalProperties
+		switch typed := value.(type) {
+		case string:
+			if err := union.FromFactoryInvocationArguments0(typed); err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", path, name, err)
+			}
+		case []string:
+			if err := union.FromFactoryInvocationArguments1(append([]string(nil), typed...)); err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", path, name, err)
+			}
+		default:
+			return nil, fmt.Errorf("%s.%s must be a string or array of strings", path, name)
+		}
+		values[name] = union
+	}
+	return values, nil
 }
 
 func validatePortableLayoutBoundaryJSON(data []byte) error {
@@ -782,6 +892,7 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 		result[i] = factoryapi.WorkType{
 			Id:               stringPtrIfNotEmpty(workType.ID),
 			Name:             workType.Name,
+			Description:      NameValueAPIFromInternal(workType.Description),
 			States:           states,
 			HandlingBehavior: workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
 		}
@@ -852,9 +963,10 @@ func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName 
 	return factoryapi.FactoryName("factory")
 }
 
-// FactoryConfigToOpenAPI converts the internal factory config into the generated
-// OpenAPI model without passing through normalized on-disk JSON.
-func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
+// FactoryConfigToOpenAPI converts a valid internal factory config into the
+// generated OpenAPI model without passing through normalized on-disk JSON.
+// It rejects values that cannot be represented by the public contract.
+func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) (factoryapi.Factory, error) {
 	return factoryAPIFromInternalConfig(cfg)
 }
 
@@ -878,6 +990,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 
 	apiWorkstation := factoryapi.Workstation{
 		Name:                  normalized.Name,
+		Description:           NameValueAPIFromInternal(normalized.Description),
 		Worker:                normalized.WorkerTypeName,
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
 		Outputs:               optionalWorkstationIOsAPIFromInternal(normalized.Outputs),
@@ -1044,6 +1157,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.FactoryWorkerConfi
 	}
 	return &factoryapi.Worker{
 		Id:               stringPtrIfNotEmpty(def.ID),
+		Description:      NameValueAPIFromInternal(def.Description),
 		Type:             workerTypePtrForFactoryUsage(def, workstations),
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
