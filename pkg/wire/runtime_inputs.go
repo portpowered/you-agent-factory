@@ -37,7 +37,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
 		observer factorysessions.RuntimeHostObserver,
-	) factorysessions.ApplicationOpeningRequest {
+	) factorysessionwire.ApplicationOpeningRequest {
 		logDirectory := cfg.RuntimeLogDir
 		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
 			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
@@ -97,9 +97,9 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			},
 			OperatorDefaults: cfg.OperatorDefaults,
 		}
-		return factorysessions.ApplicationOpeningRequest{
+		return factorysessionwire.ApplicationOpeningRequest{
 			Runtime: request,
-			Ports: factorysessions.ApplicationOpeningPorts{
+			Ports: factorysessionwire.ApplicationOpeningPorts{
 				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
 				RuntimeHostObserver:       observer,
 			},
@@ -116,7 +116,7 @@ func provideRuntimeInputResolver(
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
-		ports factorysessions.ApplicationOpeningPorts,
+		ports factorysessionwire.ApplicationOpeningPorts,
 		logger *zap.Logger,
 	) (factorysessionwire.ApplicationRuntimeInputs, error) {
 		edges := defaultEdges

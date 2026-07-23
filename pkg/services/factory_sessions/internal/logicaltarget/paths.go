@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
@@ -30,7 +31,7 @@ func AbsolutizeFactoryDirectory(dir string, resolveHome factorysessions.HomeDire
 }
 
 // ResolveSessionFolder validates and resolves a Factory Session folder path.
-func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDirectoryResolver, directories factorysessions.DirectoryInspection) (string, error) {
+func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDirectoryResolver, directories roles.DirectoryInspection) (string, error) {
 	trimmed := strings.TrimSpace(folderPath)
 	if trimmed == "" {
 		return "", sessionvalidation.New(
@@ -131,7 +132,7 @@ func SessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.L
 }
 
 // ValidateInitNewFactoryNestedDir rejects initialization over conflicting content.
-func ValidateInitNewFactoryNestedDir(resolvedFolder string, directories factorysessions.DirectoryInspection) error {
+func ValidateInitNewFactoryNestedDir(resolvedFolder string, directories roles.DirectoryInspection) error {
 	if directories == nil {
 		return newValidationError(
 			factorysessions.ValidationReasonUnreadable,

@@ -12,9 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 
 	"go.uber.org/zap"
 )
@@ -66,7 +67,7 @@ type SessionRuntime struct {
 	editableFactoryValidator     factorysessions.EditableFactoryValidator
 	reconnectCursorValidator     factorysessions.ReconnectCursorValidator
 	worldStateProjector          factory.WorldStateProjector
-	invocationMetricsRecorder    factorysessions.InvocationMetricsRecorder
+	invocationMetricsRecorder    roles.InvocationMetricsRecorder
 	baseLogger                   *zap.Logger
 	logger                       *zap.Logger
 	startTime                    time.Time
@@ -75,7 +76,7 @@ type SessionRuntime struct {
 	durableExecution             factorysessions.ExecutionService
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factory.SessionResultProjectionOperation
-	directoryInspection          factorysessions.DirectoryInspection
+	directoryInspection          roles.DirectoryInspection
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	namedPaths                   interfaces.NamedPathResolver

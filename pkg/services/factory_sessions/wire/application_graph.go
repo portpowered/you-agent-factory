@@ -13,6 +13,7 @@ import (
 	executionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
@@ -27,6 +28,54 @@ import (
 // by the canonical application graph. They keep implementation package names
 // private to Factory Sessions while the root Wire package composes exact roles.
 type (
+	ApplicationRuntime                   = roles.ApplicationRuntime
+	RuntimeAssembly                      = roles.RuntimeAssembly
+	DirectoryInspection                  = roles.DirectoryInspection
+	CursorPersistenceFileSystem          = roles.CursorPersistenceFileSystem
+	CursorPersistenceTemporaryFile       = roles.CursorPersistenceTemporaryFile
+	CursorPersistenceCreateTemporaryFile = roles.CursorPersistenceCreateTemporaryFile
+	CursorStoreFactory                   = roles.CursorStoreFactory
+	ExecutionOpeningFileSystem           = roles.ExecutionOpeningFileSystem
+	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
+	RuntimeResolver                      = roles.RuntimeResolver
+	CurrentRuntimeResolver               = roles.CurrentRuntimeResolver
+	RuntimeReader                        = roles.RuntimeReader
+	OwnedExecutionService                = roles.OwnedExecutionService
+	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
+	StdioApplication                     = roles.StdioApplication
+	FixtureStdioApplicationBuilder       = roles.FixtureStdioApplicationBuilder
+	RuntimeStdioApplicationBuilder       = roles.RuntimeStdioApplicationBuilder
+	StdioExecutionOpening                = roles.StdioExecutionOpening
+	StdioOpeningOperation                = roles.StdioOpeningOperation
+	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
+	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
+	RequestPreparation                   = roles.RequestPreparation
+	Registry                             = roles.Registry
+	RuntimePersistenceStore              = roles.RuntimePersistenceStore
+	RuntimePersistenceFileSystem         = roles.RuntimePersistenceFileSystem
+	RuntimePersistenceStoreFactory       = roles.RuntimePersistenceStoreFactory
+	LifecycleRuntime                     = roles.LifecycleRuntime
+	ProcessRuntime                       = roles.ProcessRuntime
+	ProcessRuntimeFactory                = roles.ProcessRuntimeFactory
+	RuntimeHostOperation                 = roles.RuntimeHostOperation
+	LifecyclePlanRequest                 = roles.LifecyclePlanRequest
+	LifecyclePlanOperation               = roles.LifecyclePlanOperation
+	SessionInvoker                       = roles.SessionInvoker
+	InvocationInputResolver              = roles.InvocationInputResolver
+	ModelInvocationOperation             = roles.ModelInvocationOperation
+	InvocationOperation                  = roles.InvocationOperation
+	InvocationTarget                     = roles.InvocationTarget
+	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
+	ApplicationOpeningPorts              = roles.ApplicationOpeningPorts
+	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
+	RuntimeResources                     = roles.RuntimeResources
+	RuntimeHTTPServices                  = roles.RuntimeHTTPServices
+	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
+	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
+	OpenedProcessApplication             = roles.OpenedProcessApplication
+	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
+	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
+
 	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
 	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
 	RuntimeOpener                   = applicationopening.RuntimeOpener
@@ -68,6 +117,12 @@ type (
 	StdioOpeningService               = executionopening.StdioOpeningService
 )
 
+// RuntimeBinder is the construction-only boundary used by canonical Wire to
+// bind invocation-local runtime values before publishing the root Service.
+type RuntimeBinder interface {
+	ForRuntime(factorysessions.RuntimeBinding) (RuntimeAssembly, error)
+}
+
 var (
 	NewCursorFileStore         = persistence.NewFileStore
 	NewRuntimeProjectStore     = runtimepersist.NewProjectStore
@@ -91,7 +146,7 @@ type RuntimeOpeningDependencies struct {
 	ModelService                    models.Service
 	WorkFactory                     WorkFactory
 	AutomationFactory               AutomationFactory
-	FactorySessionsService          factorysessions.Service
+	FactorySessionsService          RuntimeBinder
 	FactorySessionExecutionFactory  FactorySessionExecutionFactory
 	RecordingsProjectionFactory     RecordingsProjectionFactory
 	RecordingsFactory               RecordingsFactory
@@ -118,7 +173,7 @@ type RuntimeOpeningDependencies struct {
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	AdaptWorkerCommandRunner        WorkerCommandRunnerAdapter
-	ProcessRuntimeFactory           factorysessions.ProcessRuntimeFactory
+	ProcessRuntimeFactory           ProcessRuntimeFactory
 	EnsureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
 	GenerateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                     factorysessions.HomeDirectoryResolver
@@ -145,7 +200,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 	)
 }
 
-func NewLifecyclePlanOperation() factorysessions.LifecyclePlanOperation {
+func NewLifecyclePlanOperation() LifecyclePlanOperation {
 	return processlifecycle.NewLifecyclePlanOperation()
 }
 
@@ -153,7 +208,7 @@ func NewApplicationService(
 	resolveInputs ApplicationRuntimeInputResolver,
 	openRuntime RuntimeOpener,
 	adaptRuntime RuntimeAdapter,
-	planLifecycle factorysessions.LifecyclePlanOperation,
+	planLifecycle LifecyclePlanOperation,
 ) (*ApplicationService, error) {
 	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle)
 }
@@ -167,7 +222,7 @@ func NewInvocationOperation(
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
-) (factorysessions.InvocationOperation, error) {
+) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
 		edges,
@@ -180,22 +235,22 @@ func NewInvocationOperation(
 	)
 }
 
-func NewExecutionServiceBuilder(factory *ExecutionOpeningFactory) factorysessions.ExecutionServiceBuilder {
+func NewExecutionServiceBuilder(factory *ExecutionOpeningFactory) ExecutionServiceBuilder {
 	return executionopening.NewServiceBuilder(factory)
 }
 
 func NewDirectJavaScriptRunOperation(
-	build factorysessions.ExecutionServiceBuilder,
-	runSync factorysessions.DirectJavaScriptSyncRunner,
+	build ExecutionServiceBuilder,
+	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
-) (factorysessions.DirectJavaScriptRunOperation, error) {
+) (DirectJavaScriptRunOperation, error) {
 	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID)
 }
 
 func NewStdioOpeningService(
-	opening factorysessions.StdioExecutionOpening,
-	buildFixture factorysessions.FixtureStdioApplicationBuilder,
-	buildRuntime factorysessions.RuntimeStdioApplicationBuilder,
+	opening StdioExecutionOpening,
+	buildFixture FixtureStdioApplicationBuilder,
+	buildRuntime RuntimeStdioApplicationBuilder,
 ) (*StdioOpeningService, error) {
 	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime)
 }

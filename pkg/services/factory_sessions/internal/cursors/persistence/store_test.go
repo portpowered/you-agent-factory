@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 func TestFileStoreRestartResumesAtNextObservableEvent(t *testing.T) {
@@ -294,7 +294,7 @@ func newTestFileStore(t *testing.T, dir string) *persistence.FileStore {
 	return store
 }
 
-func createTemporaryFile(dir, pattern string) (factorysessions.CursorPersistenceTemporaryFile, error) {
+func createTemporaryFile(dir, pattern string) (roles.CursorPersistenceTemporaryFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
 

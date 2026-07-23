@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 const schemaVersion = "factory-session-reconnect-cursor/v1"
@@ -30,8 +30,8 @@ type persistedCheckpoint struct {
 // directory. It owns no recovery, remapping, or event-delivery policy.
 type FileStore struct {
 	dir                 string
-	files               factorysessions.CursorPersistenceFileSystem
-	createTemporaryFile factorysessions.CursorPersistenceCreateTemporaryFile
+	files               roles.CursorPersistenceFileSystem
+	createTemporaryFile roles.CursorPersistenceCreateTemporaryFile
 
 	mu     sync.RWMutex
 	closed bool
@@ -40,8 +40,8 @@ type FileStore struct {
 // NewFileStore initializes an explicit cursor persistence directory.
 func NewFileStore(
 	dir string,
-	files factorysessions.CursorPersistenceFileSystem,
-	createTemporaryFile factorysessions.CursorPersistenceCreateTemporaryFile,
+	files roles.CursorPersistenceFileSystem,
+	createTemporaryFile roles.CursorPersistenceCreateTemporaryFile,
 ) (*FileStore, error) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {

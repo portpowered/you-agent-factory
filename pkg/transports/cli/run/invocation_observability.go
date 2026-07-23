@@ -16,6 +16,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"go.uber.org/zap"
 )
 
@@ -262,7 +263,7 @@ func recordCLIInvocationFailure(cfg RunConfig, err error) {
 }
 
 func recordInvocationMetric(
-	recorder factorysessions.InvocationMetricsRecorder,
+	recorder runconfig.InvocationMetricsRecorder,
 	metric factorysessions.InvocationMetric,
 ) {
 	if recorder == nil {

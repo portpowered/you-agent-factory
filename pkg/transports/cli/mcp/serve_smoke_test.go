@@ -118,7 +118,7 @@ func executeGeneratedMCPServe(
 	return root.ExecuteContext(ctx)
 }
 
-func installSmokeRequestPreparation() factorysessions.RequestPreparation {
+func installSmokeRequestPreparation() mcpfactorysession.RequestPreparation {
 	return installSmokeRequestPreparationCallbacks{
 		start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
 			return request, nil

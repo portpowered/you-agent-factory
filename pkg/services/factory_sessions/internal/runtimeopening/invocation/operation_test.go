@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -35,7 +36,7 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 		FactoryCfg: cfg,
 		Session:    &factorysessions.LiveSession{SessionState: factorysessions.SessionState{FactoryDir: factoryDir}},
 	}
-	started, err := javaScriptStartRequest(projection, factorysessions.InvocationTarget{
+	started, err := javaScriptStartRequest(projection, roles.InvocationTarget{
 		FactoryDir: factoryDir, MockWorkersConfig: &workers.MockWorkersConfig{},
 	}, factorysessions.InvocationRequest{Args: &args, RequestID: &requestID}, invocationInputResolver{
 		resolved: factorysessions.ResolvedInvocationInput{NormalizedArguments: &work.NormalizedArguments{

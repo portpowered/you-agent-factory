@@ -36,7 +36,7 @@ type programmedFactorySessionEvents struct {
 }
 
 type sseRequestPreparation struct {
-	factorysessions.RequestPreparation
+	factorysessionshttp.RequestPreparation
 }
 
 func (sseRequestPreparation) PrepareEventReconnect(

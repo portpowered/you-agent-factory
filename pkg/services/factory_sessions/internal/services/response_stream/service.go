@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -29,21 +30,7 @@ type SubscriptionRequest struct {
 // Cursor is the bounded response-event read value returned to the outer
 // Factory Sessions service. Its operations keep the private implementation
 // and concrete store subscription out of the outer service.
-type Cursor struct {
-	NextEvents   func(context.Context) ([]responseevents.FactoryResponseEvent, error)
-	DrainEvents  func() ([]responseevents.FactoryResponseEvent, error)
-	DetachCursor func()
-}
-
-func (c *Cursor) Next(ctx context.Context) ([]responseevents.FactoryResponseEvent, error) {
-	return c.NextEvents(ctx)
-}
-
-func (c *Cursor) Drain() ([]responseevents.FactoryResponseEvent, error) {
-	return c.DrainEvents()
-}
-
-func (c *Cursor) Detach() { c.DetachCursor() }
+type Cursor = factorysessions.ResponseEventCursor
 
 // Tracker coordinates one consumer's persisted acknowledged cursor without
 // exposing the concrete tracker implementation.

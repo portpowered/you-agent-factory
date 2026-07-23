@@ -4,3 +4,10 @@ package contracts
 
 // SessionIDGenerator supplies one opaque Factory Session identity.
 type SessionIDGenerator func() string
+
+// InvocationMetric records one emitted runtime counter together with its
+// low-cardinality dimensions.
+type InvocationMetric struct {
+	Name   string
+	Labels map[string]string
+}

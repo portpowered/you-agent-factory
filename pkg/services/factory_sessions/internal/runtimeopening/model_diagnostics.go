@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
@@ -15,7 +16,7 @@ func ModelHostDiagnosticLogger(logger *zap.Logger) models.HostDiagnosticLogger {
 	return zapModelHostLogger{logger: logger.Named("modelhost")}
 }
 
-func ModelHostDiagnosticMetrics(recorder factorysessions.InvocationMetricsRecorder) models.HostMetricsRecorder {
+func ModelHostDiagnosticMetrics(recorder roles.InvocationMetricsRecorder) models.HostMetricsRecorder {
 	if recorder == nil {
 		return nil
 	}
@@ -44,7 +45,7 @@ func modelHostZapFields(fields map[string]string) []zap.Field {
 }
 
 type modelHostMetricsRecorder struct {
-	recorder factorysessions.InvocationMetricsRecorder
+	recorder roles.InvocationMetricsRecorder
 }
 
 func (a modelHostMetricsRecorder) RecordMetric(name string, labels map[string]string) {

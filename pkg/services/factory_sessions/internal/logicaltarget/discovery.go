@@ -10,12 +10,13 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"go.uber.org/zap"
 )
 
 // Discover lists runnable factory targets under folderPath.
-func Discover(folderPath string, probe factorysessions.TargetProbe, directories factorysessions.DirectoryInspection, resolveHome factorysessions.HomeDirectoryResolver) ([]factorysessions.Target, error) {
+func Discover(folderPath string, probe factorysessions.TargetProbe, directories roles.DirectoryInspection, resolveHome factorysessions.HomeDirectoryResolver) ([]factorysessions.Target, error) {
 	resolvedFolder, err := ResolveSessionFolder(folderPath, resolveHome, directories)
 	if err != nil {
 		return nil, err
@@ -46,7 +47,7 @@ func Discover(folderPath string, probe factorysessions.TargetProbe, directories 
 }
 
 // DiscoverConfigured loads runnable Factory targets with canonical diagnostics.
-func DiscoverConfigured(folderPath string, workstationLoader factorydefinitions.WorkstationLoader, loadFactory factorydefinitions.LoadedFactoryLoader, logger *zap.Logger, directories factorysessions.DirectoryInspection, resolveHome factorysessions.HomeDirectoryResolver) ([]factorysessions.Target, error) {
+func DiscoverConfigured(folderPath string, workstationLoader factorydefinitions.WorkstationLoader, loadFactory factorydefinitions.LoadedFactoryLoader, logger *zap.Logger, directories roles.DirectoryInspection, resolveHome factorysessions.HomeDirectoryResolver) ([]factorysessions.Target, error) {
 	return Discover(folderPath, func(folderPath, factoryDir string, ref factorysessions.TargetRef) (factorysessions.Target, bool, *factorysessions.DiscoveryFailure) {
 		return probeConfigured(folderPath, factoryDir, ref, workstationLoader, loadFactory, logger)
 	}, directories, resolveHome)
@@ -90,7 +91,7 @@ func logProbeFailure(logger *zap.Logger, folderPath, factoryDir string, ref fact
 	logger.Error("factory session discovery target runtime config load failed", fields...)
 }
 
-func collect(folderPath string, probe factorysessions.TargetProbe, directories factorysessions.DirectoryInspection) ([]factorysessions.Target, []factorysessions.DiscoveryFailure, error) {
+func collect(folderPath string, probe factorysessions.TargetProbe, directories roles.DirectoryInspection) ([]factorysessions.Target, []factorysessions.DiscoveryFailure, error) {
 	targets := make([]factorysessions.Target, 0, 4)
 	failures := make([]factorysessions.DiscoveryFailure, 0, 2)
 	appendProbed(&targets, &failures, probe, folderPath, folderPath, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})

@@ -37,7 +37,7 @@ type Adapter struct {
 	workerPrompts      workers.PromptTemplates
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
-	sessionRequests    factorysessions.RequestPreparation
+	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
 
@@ -62,7 +62,18 @@ type Dependencies struct {
 	WorkerPrompts      workers.PromptTemplates
 	ContentStaging     work.ContentStagingService
 	RequestPreparation work.RequestPreparationService
-	SessionRequests    factorysessions.RequestPreparation
+	SessionRequests    RequestPreparation
+}
+
+type RequestPreparation interface {
+	PrepareStart(factorysessions.StartRequest) (factorysessions.StartRequest, error)
+	PrepareControl(factorysessions.ControlRequest) (factorysessions.ControlRequest, error)
+	PrepareApprove(factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error)
+	PrepareRetryDispatch(factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error)
+	PrepareInterruptDispatch(factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error)
+	PrepareListSessions(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
+	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
+	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
 }
 
 // NewHandler constructs an inert Factory Sessions HTTP adapter.

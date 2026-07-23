@@ -244,12 +244,12 @@ func waitForPresentationWriteAttempt(t *testing.T, writer *gatedPresentationWrit
 }
 
 type presentationSource struct {
-	cursor factorysessions.ResponseEventCursor
+	cursor ResponseEventCursor
 }
 
 func (s presentationSource) SubscribeSessionResponseEventsFromLatest(
 	string,
-) (factorysessions.ResponseEventCursor, error) {
+) (ResponseEventCursor, error) {
 	return s.cursor, nil
 }
 

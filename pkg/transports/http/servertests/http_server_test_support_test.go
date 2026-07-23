@@ -3,7 +3,6 @@ package apiserver_test
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -35,7 +34,7 @@ func newAPIServerFromRoles(
 	workerPrompts workers.PromptTemplates,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
-	sessionRequests factorysessions.RequestPreparation,
+	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
 ) *api.Server {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{

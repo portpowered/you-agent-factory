@@ -28,7 +28,7 @@ type LiveGateway interface {
 	OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
 	ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
 	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (factorysessions.ResponseEventCursor, error)
+	SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error)
 	GetFactorySessionResult(context.Context, string) (workflowresult.LiveSessionResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (workflowresult.PartialSessionResult, error)

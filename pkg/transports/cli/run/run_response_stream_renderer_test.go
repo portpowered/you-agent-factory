@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -42,7 +43,7 @@ func newRecordingResponseEventAttachable() *recordingResponseEventAttachable {
 
 func (a *recordingResponseEventAttachable) SubscribeSessionResponseEventsFromLatest(
 	string,
-) (factorysessions.ResponseEventCursor, error) {
+) (factoryvisualization.ResponseEventCursor, error) {
 	a.once.Do(func() { close(a.subscribed) })
 	return a.cursor, nil
 }
@@ -59,7 +60,7 @@ type stubResponseEventInvocationService struct {
 
 func (s stubResponseEventInvocationService) SubscribeSessionResponseEventsFromLatest(
 	sessionID string,
-) (factorysessions.ResponseEventCursor, error) {
+) (factoryvisualization.ResponseEventCursor, error) {
 	return s.attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
 }
 

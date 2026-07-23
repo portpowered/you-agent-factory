@@ -198,7 +198,7 @@ func TestCLIResumeSmokeLane_NonResumeLiveSessionCreateShowListRegression(t *test
 	}
 }
 
-func resumeSmokeListPreparation() fse.RequestPreparation {
+func resumeSmokeListPreparation() sessioncli.RequestPreparation {
 	return resumeSmokeRequestPreparationCallbacks{
 		list: func(request fse.ListSessionsRequest) (fse.ListSessionsRequest, error) {
 			return request, nil

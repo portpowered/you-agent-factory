@@ -18,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -33,7 +34,7 @@ type canonicalResponseEventRunStub struct {
 
 func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEventsFromLatest(
 	_ string,
-) (factorysessions.ResponseEventCursor, error) {
+) (factoryvisualization.ResponseEventCursor, error) {
 	s.once.Do(func() { close(s.subscribed) })
 	return s.cursor, nil
 }

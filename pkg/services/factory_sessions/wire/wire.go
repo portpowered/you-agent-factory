@@ -23,7 +23,7 @@ import (
 
 // NewRequestPreparation constructs the private request-normalization
 // implementation for injection into Factory Sessions-owned transports.
-func NewRequestPreparation() factorysessions.RequestPreparation {
+func NewRequestPreparation() RequestPreparation {
 	return requestpreparation.New()
 }
 
@@ -51,12 +51,12 @@ func NewService(
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection factorysessions.DirectoryInspection,
+	directoryInspection DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-) (factorysessions.Service, error) {
+) (RuntimeBinder, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
 	}
@@ -120,7 +120,7 @@ func NewService(
 func NewDurableExecution(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores RuntimePersistenceStoreFactory,
 	executor workers.InvocationExecutor,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
@@ -143,7 +143,7 @@ func NewDurableExecution(
 func NewStandaloneExecution(
 	provider factorysessions.ExecutionProvider,
 	projectRoot string,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
 	executor workers.InvocationExecutor,

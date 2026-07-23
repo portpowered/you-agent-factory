@@ -32,7 +32,7 @@ func (s *session) Run(ctx context.Context) error {
 
 type Opener func(
 	factorysessions.ExecutionService,
-	factorysessions.RequestPreparation,
+	mcpfactorysession.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
 	io.Reader,
 	io.Writer,
@@ -44,7 +44,7 @@ func NewOpener() Opener { return Open }
 // role to an inert MCP protocol server.
 func Open(
 	execution factorysessions.ExecutionService,
-	prepare factorysessions.RequestPreparation,
+	prepare mcpfactorysession.RequestPreparation,
 	workflows factoryruntime.WorkflowPreviewOperation,
 	input io.Reader,
 	output io.Writer,

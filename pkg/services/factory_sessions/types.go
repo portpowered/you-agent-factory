@@ -137,14 +137,22 @@ type SessionResponseEventStore = responseeventstore.SessionResponseEventStore
 // cursor used by application and transport consumers.
 type ResponseEventSubscription = responseeventstore.Subscription
 
-// ResponseEventCursor is the Factory Sessions-owned retained-then-live
-// capability exposed to consumers. Callers depend on this role rather than the
-// concrete session store so tests can script the public event boundary.
-type ResponseEventCursor interface {
-	Next(context.Context) ([]FactoryResponseEvent, error)
-	Drain() ([]FactoryResponseEvent, error)
-	Detach()
+// ResponseEventCursor is the detached retained-then-live response-event value
+// returned by Service. Function fields keep cursor behavior explicit without
+// publishing an additional service-root interface.
+type ResponseEventCursor struct {
+	NextEvents   func(context.Context) ([]FactoryResponseEvent, error)
+	DrainEvents  func() ([]FactoryResponseEvent, error)
+	DetachCursor func()
 }
+
+func (c *ResponseEventCursor) Next(ctx context.Context) ([]FactoryResponseEvent, error) {
+	return c.NextEvents(ctx)
+}
+
+func (c *ResponseEventCursor) Drain() ([]FactoryResponseEvent, error) { return c.DrainEvents() }
+
+func (c *ResponseEventCursor) Detach() { c.DetachCursor() }
 
 var (
 	// ErrResponseEventStoreExpired reports that a completed response-event

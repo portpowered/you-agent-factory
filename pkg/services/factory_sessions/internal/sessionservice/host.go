@@ -9,6 +9,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
@@ -43,7 +44,7 @@ type dependencyHost struct {
 	observeLiveLifecycleControl   func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
 	durableExecution              func() factorysessions.ExecutionService
 	javaScriptCheckpointStore     func(*factorysessions.LiveSession) factory.JavaScriptCheckpointStore
-	directoryInspection           factorysessions.DirectoryInspection
+	directoryInspection           roles.DirectoryInspection
 	resolveSessionFolder          func(string) (string, error)
 	selectTarget                  func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
 }

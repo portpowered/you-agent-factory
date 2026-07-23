@@ -10,7 +10,6 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,7 +25,7 @@ import (
 
 // NewRuntime constructs the public Workers runtime role.
 func NewRuntime(
-	sessions factorysessions.CurrentRuntimeResolver,
+	sessions CurrentRuntimeResolver,
 	modelService models.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
@@ -92,7 +91,7 @@ func NewRuntime(
 // whether command runners came from an external edge or Wire's production
 // adapter selection.
 func NewRuntimeWithSelection(
-	sessions factorysessions.CurrentRuntimeResolver,
+	sessions CurrentRuntimeResolver,
 	modelService models.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,

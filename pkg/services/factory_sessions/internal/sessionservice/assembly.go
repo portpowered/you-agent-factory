@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
@@ -34,7 +35,7 @@ type Assembly struct {
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	directoryInspection          factorysessions.DirectoryInspection
+	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
@@ -58,13 +59,13 @@ func NewAssembly(
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection factorysessions.DirectoryInspection,
+	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
-) factorysessions.RuntimeAssembly {
+) roles.RuntimeAssembly {
 	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil {
 		return nil
 	}
@@ -165,11 +166,11 @@ func (a *Assembly) Complete(
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 	worldStateProjector factoryruntime.WorldStateProjector,
-	invocationMetricsRecorder factorysessions.InvocationMetricsRecorder,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) (
-	factorysessions.ApplicationRuntime,
+	roles.ApplicationRuntime,
 	factorysessions.Service,
-	factorysessions.SessionInvoker,
+	roles.SessionInvoker,
 	factorysessions.DefinitionHost,
 	error,
 ) {

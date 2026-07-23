@@ -31,6 +31,11 @@ runtime-specific values through an owner-defined binding such as `ForRuntime`.
 Do not inject a callback that lets the runtime-opening consumer select or
 construct the concrete service.
 
+Keep the product-facing service root to its canonical `Service` interface plus
+detached value contracts. Construction-only roles belong in the service-local
+`wire` package, implementation collaborators belong under `internal`, and
+cross-service consumers should own the narrow interface they actually call.
+
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout
 normalization and stamps the next durable version afterward. Generated Factory

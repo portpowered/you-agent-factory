@@ -9,21 +9,22 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 type directJavaScriptRunOperation struct {
-	build             factorysessions.ExecutionServiceBuilder
-	runSync           factorysessions.DirectJavaScriptSyncRunner
+	build             roles.ExecutionServiceBuilder
+	runSync           roles.DirectJavaScriptSyncRunner
 	generateSessionID factorysessions.SessionIDGenerator
 }
 
 // NewDirectJavaScriptRunOperation constructs the Factory Sessions-owned raw
 // JavaScript invocation boundary.
 func NewDirectJavaScriptRunOperation(
-	build factorysessions.ExecutionServiceBuilder,
-	runSync factorysessions.DirectJavaScriptSyncRunner,
+	build roles.ExecutionServiceBuilder,
+	runSync roles.DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
-) (factorysessions.DirectJavaScriptRunOperation, error) {
+) (roles.DirectJavaScriptRunOperation, error) {
 	if build == nil {
 		return nil, errors.New("session execution builder is required")
 	}
@@ -89,4 +90,4 @@ func (o *directJavaScriptRunOperation) Run(
 	}, request.JSONOutput, request.Output)
 }
 
-var _ factorysessions.DirectJavaScriptRunOperation = (*directJavaScriptRunOperation)(nil)
+var _ roles.DirectJavaScriptRunOperation = (*directJavaScriptRunOperation)(nil)

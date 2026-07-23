@@ -6,8 +6,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"go.uber.org/zap"
 )
 
@@ -35,13 +36,13 @@ func NewSessionRuntime(
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 	worldStateProjector factory.WorldStateProjector,
-	invocationMetricsRecorder factorysessions.InvocationMetricsRecorder,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factory.SessionResultProjectionOperation,
 	sessionState *sessionruntime.Service,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection factorysessions.DirectoryInspection,
+	directoryInspection roles.DirectoryInspection,
 	namedPaths interfaces.NamedPathResolver,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,

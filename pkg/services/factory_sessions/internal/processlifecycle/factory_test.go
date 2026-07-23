@@ -8,6 +8,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"go.uber.org/zap"
 )
 
@@ -50,7 +51,7 @@ type hostOperation struct {
 func (host *hostOperation) Run(
 	ctx context.Context,
 	_ http.Handler,
-	runtime factorysessions.LifecycleRuntime,
+	runtime roles.LifecycleRuntime,
 	_ *zap.Logger,
 	request factorysessions.RuntimeHostRequest,
 	_ factorysessions.RuntimeHostObserver,

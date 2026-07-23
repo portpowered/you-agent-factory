@@ -17,7 +17,7 @@ const (
 	successSessionID = "dur-sess-petri-success-001"
 )
 
-var canonicalMCPRequestPreparation factorysessions.RequestPreparation = mcpRequestPreparation{
+var canonicalMCPRequestPreparation mcpfactorysession.RequestPreparation = mcpRequestPreparation{
 	start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) { return request, nil },
 	control: func(request factorysessions.ControlRequest) (factorysessions.ControlRequest, error) {
 		return request, nil

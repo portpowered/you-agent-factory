@@ -6,15 +6,19 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	visualizationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 )
 
 type currentRuntimeSource struct {
-	reader factorysessions.RuntimeReader
+	reader RuntimeReader
 }
+
+// RuntimeReader is the exact consumer-owned live-runtime observation role.
+type RuntimeReader = visualizationcontracts.RuntimeReader
 
 // NewCurrentRuntimeSource adapts the currently selected Factory Session to the
 // exact observation capability consumed by Factory Visualization.
-func NewCurrentRuntimeSource(reader factorysessions.RuntimeReader) Source {
+func NewCurrentRuntimeSource(reader RuntimeReader) Source {
 	return &currentRuntimeSource{reader: reader}
 }
 

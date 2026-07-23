@@ -141,7 +141,7 @@ func (s *fakeResponseStream) CloseAndDrain() error {
 type fakeResponseEventAttachment struct {
 	cancel context.CancelFunc
 	done   chan struct{}
-	cursor factorysessions.ResponseEventCursor
+	cursor factoryvisualization.ResponseEventCursor
 	sink   factoryvisualization.ResponseEventSink
 }
 

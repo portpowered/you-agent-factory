@@ -8,16 +8,17 @@ import (
 	"net/http"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"go.uber.org/zap"
 )
 
 // Factory is the process-scoped, inert lifecycle binder constructed by Wire.
 type Factory struct {
-	host factorysessions.RuntimeHostOperation
+	host roles.RuntimeHostOperation
 }
 
 // NewFactory constructs a lifecycle binder from the stable runtime host.
-func NewFactory(host factorysessions.RuntimeHostOperation) (*Factory, error) {
+func NewFactory(host roles.RuntimeHostOperation) (*Factory, error) {
 	if host == nil {
 		return nil, errors.New("construct Factory Session process lifecycle: runtime host is required")
 	}
@@ -26,11 +27,11 @@ func NewFactory(host factorysessions.RuntimeHostOperation) (*Factory, error) {
 
 // Bind retains only the exact opened runtime and invocation-local host values.
 func (factory *Factory) Bind(
-	runtime factorysessions.LifecycleRuntime,
+	runtime roles.LifecycleRuntime,
 	request factorysessions.RuntimeHostRequest,
 	observer factorysessions.RuntimeHostObserver,
 	logger *zap.Logger,
-) (factorysessions.ProcessRuntime, error) {
+) (roles.ProcessRuntime, error) {
 	if factory == nil || factory.host == nil || runtime == nil {
 		return nil, errors.New("bind Factory Session process lifecycle: factory and runtime are required")
 	}
@@ -38,8 +39,8 @@ func (factory *Factory) Bind(
 }
 
 type processRuntime struct {
-	runtime  factorysessions.LifecycleRuntime
-	host     factorysessions.RuntimeHostOperation
+	runtime  roles.LifecycleRuntime
+	host     roles.RuntimeHostOperation
 	request  factorysessions.RuntimeHostRequest
 	observer factorysessions.RuntimeHostObserver
 	logger   *zap.Logger
@@ -61,5 +62,5 @@ func (runtime *processRuntime) Stop(ctx context.Context) error {
 	return runtime.runtime.StopLifecycle(ctx)
 }
 
-var _ factorysessions.ProcessRuntimeFactory = (*Factory)(nil)
-var _ factorysessions.ProcessRuntime = (*processRuntime)(nil)
+var _ roles.ProcessRuntimeFactory = (*Factory)(nil)
+var _ roles.ProcessRuntime = (*processRuntime)(nil)

@@ -26,7 +26,7 @@ func (s *Service) ResolveFactorySession(sessionID string) *factorysessions.LiveS
 func (s *Service) SubscribeFactoryResponseEvents(
 	ctx context.Context,
 	request factorysessions.ResponseEventSubscriptionRequest,
-) (factorysessions.ResponseEventCursor, error) {
+) (*factorysessions.ResponseEventCursor, error) {
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}

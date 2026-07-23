@@ -31,7 +31,11 @@ type InvocationRequest struct {
 
 // InvocationOperation is the already-constructed service operation consumed by
 // the CLI transport.
-type InvocationOperation = factorysessions.ModelInvocationOperation
+type InvocationOperation interface {
+	InvokeModel(context.Context, factorysessions.InvocationTarget, string, modelinference.Request) (modelinference.Result, error)
+	ResolveModelInvocationFactoryDir(string) (string, error)
+	ExportModelInvocationArtifact(string, string) error
+}
 
 func invokeModelThroughBootstrap(
 	cfg invokeOptions,

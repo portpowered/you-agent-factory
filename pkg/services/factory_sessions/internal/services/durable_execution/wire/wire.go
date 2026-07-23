@@ -6,6 +6,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -26,7 +27,7 @@ func NewService(execution factorysessions.ExecutionService) (durableexecution.Se
 func NewDurable(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores roles.RuntimePersistenceStoreFactory,
 	executor workers.InvocationExecutor,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
@@ -48,7 +49,7 @@ func NewDurable(
 func NewStandalone(
 	provider factorysessions.ExecutionProvider,
 	projectRoot string,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores roles.RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
 	executor workers.InvocationExecutor,

@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"go.uber.org/zap"
 )
@@ -18,14 +19,14 @@ type runtimeOpenerFunc func(
 	*factorysessions.RuntimeOpeningRequest,
 	serviceedges.Edges,
 	*zap.Logger,
-) (factorysessions.OpenedApplicationRuntime, error)
+) (roles.OpenedApplicationRuntime, error)
 
 func (open runtimeOpenerFunc) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 	edges serviceedges.Edges,
 	logger *zap.Logger,
-) (factorysessions.OpenedApplicationRuntime, error) {
+) (roles.OpenedApplicationRuntime, error) {
 	return open(ctx, request, edges, logger)
 }
 
@@ -35,7 +36,7 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 	resolve := RuntimeInputResolver(func(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		factorysessions.ApplicationOpeningPorts,
+		roles.ApplicationOpeningPorts,
 		*zap.Logger,
 	) (RuntimeInputs, error) {
 		return RuntimeInputs{}, nil
@@ -45,17 +46,17 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 		*factorysessions.RuntimeOpeningRequest,
 		serviceedges.Edges,
 		*zap.Logger,
-	) (factorysessions.OpenedApplicationRuntime, error) {
-		return factorysessions.OpenedApplicationRuntime{}, nil
+	) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{}, nil
 	})
 	adapt := RuntimeAdapter(func(
-		factorysessions.OpenedApplicationRuntime,
+		roles.OpenedApplicationRuntime,
 		serviceedges.Edges,
 		factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
 		return factorysessions.BoundProcessComponents{}, nil
 	})
-	plan := factorysessions.LifecyclePlanOperation(func(factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) {
+	plan := roles.LifecyclePlanOperation(func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 		return lifecycle.Plan{}, nil
 	})
 
@@ -81,7 +82,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	request := &factorysessions.RuntimeOpeningRequest{}
 	resolvedRequest := &factorysessions.RuntimeOpeningRequest{}
 	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
-	invocationPorts := factorysessions.ApplicationOpeningPorts{RuntimeHostObserver: observer}
+	invocationPorts := roles.ApplicationOpeningPorts{RuntimeHostObserver: observer}
 	resolvedEdges := serviceedges.Edges{}
 	logger := zap.NewNop()
 	var order []string
@@ -89,7 +90,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 		func(
 			ctx context.Context,
 			gotRequest *factorysessions.RuntimeOpeningRequest,
-			gotPorts factorysessions.ApplicationOpeningPorts,
+			gotPorts roles.ApplicationOpeningPorts,
 			gotLogger *zap.Logger,
 		) (RuntimeInputs, error) {
 			order = append(order, "resolve")
@@ -106,22 +107,22 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 			gotRequest *factorysessions.RuntimeOpeningRequest,
 			_ serviceedges.Edges,
 			gotLogger *zap.Logger,
-		) (factorysessions.OpenedApplicationRuntime, error) {
+		) (roles.OpenedApplicationRuntime, error) {
 			order = append(order, "open")
 			if gotRequest != resolvedRequest || gotLogger != logger {
 				t.Fatal("runtime opener did not receive resolved inputs")
 			}
-			return factorysessions.OpenedApplicationRuntime{}, nil
+			return roles.OpenedApplicationRuntime{}, nil
 		}),
 		func(
-			factorysessions.OpenedApplicationRuntime,
+			roles.OpenedApplicationRuntime,
 			serviceedges.Edges,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			order = append(order, "bind")
 			return factorysessions.BoundProcessComponents{}, nil
 		},
-		func(got factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) {
+		func(got roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 			order = append(order, "plan")
 			return lifecycle.Plan{Resources: []lifecycle.NamedResource{{Name: "factory runtime"}}}, nil
 		},
@@ -130,7 +131,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 		t.Fatalf("New(): %v", err)
 	}
 
-	opened, err := service.OpenApplication(context.Background(), factorysessions.ApplicationOpeningRequest{
+	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
 		Runtime: request, Ports: invocationPorts,
 	}, logger, nil)
 	if err != nil {
@@ -154,7 +155,7 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.ApplicationOpeningPorts,
+			roles.ApplicationOpeningPorts,
 			*zap.Logger,
 		) (RuntimeInputs, error) {
 			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
@@ -164,27 +165,27 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 			*factorysessions.RuntimeOpeningRequest,
 			serviceedges.Edges,
 			*zap.Logger,
-		) (factorysessions.OpenedApplicationRuntime, error) {
-			return factorysessions.OpenedApplicationRuntime{Resources: factorysessions.RuntimeResources{Close: func() error {
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
 				closed++
 				return closeErr
 			}}}, nil
 		}),
 		func(
-			factorysessions.OpenedApplicationRuntime,
+			roles.OpenedApplicationRuntime,
 			serviceedges.Edges,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			return factorysessions.BoundProcessComponents{}, bindErr
 		},
-		func(factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
 	)
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), factorysessions.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
 	)
 	if !errors.Is(err, bindErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want binding and cleanup causes", err)
@@ -204,7 +205,7 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.ApplicationOpeningPorts,
+			roles.ApplicationOpeningPorts,
 			*zap.Logger,
 		) (RuntimeInputs, error) {
 			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
@@ -214,20 +215,20 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 			*factorysessions.RuntimeOpeningRequest,
 			serviceedges.Edges,
 			*zap.Logger,
-		) (factorysessions.OpenedApplicationRuntime, error) {
-			return factorysessions.OpenedApplicationRuntime{Resources: factorysessions.RuntimeResources{Close: func() error {
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
 				closed++
 				return closeErr
 			}}}, nil
 		}),
 		func(
-			factorysessions.OpenedApplicationRuntime,
+			roles.OpenedApplicationRuntime,
 			serviceedges.Edges,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			return factorysessions.BoundProcessComponents{}, nil
 		},
-		func(factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) {
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 			return lifecycle.Plan{}, planErr
 		},
 	)
@@ -236,7 +237,7 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), factorysessions.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
 	)
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want planning and cleanup causes", err)
@@ -269,7 +270,7 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 				func(
 					context.Context,
 					*factorysessions.RuntimeOpeningRequest,
-					factorysessions.ApplicationOpeningPorts,
+					roles.ApplicationOpeningPorts,
 					*zap.Logger,
 				) (RuntimeInputs, error) {
 					if test.resolveErr != nil {
@@ -282,26 +283,26 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 					*factorysessions.RuntimeOpeningRequest,
 					serviceedges.Edges,
 					*zap.Logger,
-				) (factorysessions.OpenedApplicationRuntime, error) {
+				) (roles.OpenedApplicationRuntime, error) {
 					opened++
-					return factorysessions.OpenedApplicationRuntime{}, test.openErr
+					return roles.OpenedApplicationRuntime{}, test.openErr
 				}),
 				func(
-					factorysessions.OpenedApplicationRuntime,
+					roles.OpenedApplicationRuntime,
 					serviceedges.Edges,
 					factoryvisualization.Sink,
 				) (factorysessions.BoundProcessComponents, error) {
 					adapted++
 					return factorysessions.BoundProcessComponents{}, nil
 				},
-				func(factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+				func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
 			)
 			if err != nil {
 				t.Fatalf("New(): %v", err)
 			}
 
 			_, err = service.OpenApplication(
-				context.Background(), factorysessions.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+				context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
 			)
 			wantErr := test.resolveErr
 			if wantErr == nil {

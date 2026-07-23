@@ -7,6 +7,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
@@ -14,7 +15,7 @@ import (
 type Service struct {
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks
 	resolveHome     factorysessions.HomeDirectoryResolver
-	directories     factorysessions.DirectoryInspection
+	directories     roles.DirectoryInspection
 }
 
 var _ identity.Service = (*Service)(nil)
@@ -22,7 +23,7 @@ var _ identity.Service = (*Service)(nil)
 func New(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directories factorysessions.DirectoryInspection,
+	directories roles.DirectoryInspection,
 ) *Service {
 	if resolveSymlinks == nil || resolveHome == nil || directories == nil {
 		return nil

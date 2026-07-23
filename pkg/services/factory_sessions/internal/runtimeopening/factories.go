@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -25,7 +26,7 @@ type ExternalEffects struct {
 	Clock                     factoryruntime.Clock
 	ProviderOverride          workerprovider.Provider
 	ModelPullMetricsRecorder  models.PullMetricsRecorder
-	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
+	InvocationMetricsRecorder roles.InvocationMetricsRecorder
 	ProviderCommandRunner     platformprocess.CommandRunner
 	ScriptCommandRunner       platformprocess.CommandRunner
 	SubmissionRecorder        recordings.SubmissionRecorder
@@ -71,7 +72,7 @@ type RuntimeLedgerFactory = func() factoryruntime.RuntimeLedgerFactory
 type ReplayClockFactory = func(*factorydefinitions.ReplayArtifact) recordings.Clock
 
 type WorkersRuntimeFactory = func(
-	factorysessions.CurrentRuntimeResolver,
+	roles.CurrentRuntimeResolver,
 	models.Service,
 	workers.CommandRunner,
 	workers.CommandRunner,
@@ -118,7 +119,7 @@ type WorkerExecutionFactory func(
 	workers.CommandRunner,
 	agypty.PTYAllocator,
 	workerprovider.Provider,
-	factorysessions.CurrentRuntimeResolver,
+	roles.CurrentRuntimeResolver,
 	models.Service,
 	work.ContentMaterializer,
 	WorkersRuntimeFactory,

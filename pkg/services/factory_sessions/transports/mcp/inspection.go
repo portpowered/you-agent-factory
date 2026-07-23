@@ -94,7 +94,7 @@ type ReadEventsResult struct {
 
 // ReadEvents returns ordered Factory Session event facts for reconnect and
 // inspection through the you.factory_session.read_events MCP tool.
-func ReadEvents(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+func ReadEvents(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -152,7 +152,7 @@ type ControlInput struct {
 func Control(
 	ctx context.Context,
 	service factorysessionexecution.ExecutionService,
-	prepare factorysessionexecution.RequestPreparation,
+	prepare RequestPreparation,
 	input ControlInput,
 ) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
 	if ctx == nil {
@@ -184,7 +184,7 @@ func Control(
 func invokeLifecycleControl(
 	ctx context.Context,
 	service factorysessionexecution.ExecutionService,
-	prepare factorysessionexecution.RequestPreparation,
+	prepare RequestPreparation,
 	input ControlInput,
 ) (factorysessionexecution.LifecycleControlResult, error) {
 	sessionID := input.SessionID
@@ -239,7 +239,7 @@ func invokeLifecycleControl(
 	}
 }
 
-func prepareControlInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.ControlRequest, error) {
+func prepareControlInput(prepare RequestPreparation, input ControlInput) (factorysessionexecution.ControlRequest, error) {
 	if prepare == nil {
 		return factorysessionexecution.ControlRequest{}, errors.New("Factory Session request preparation is required")
 	}
@@ -249,7 +249,7 @@ func prepareControlInput(prepare factorysessionexecution.RequestPreparation, inp
 	})
 }
 
-func prepareApproveInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.ApproveRequest, error) {
+func prepareApproveInput(prepare RequestPreparation, input ControlInput) (factorysessionexecution.ApproveRequest, error) {
 	if prepare == nil {
 		return factorysessionexecution.ApproveRequest{}, errors.New("Factory Session request preparation is required")
 	}
@@ -266,7 +266,7 @@ func prepareApproveInput(prepare factorysessionexecution.RequestPreparation, inp
 	return prepare.PrepareApprove(approve)
 }
 
-func prepareRetryDispatchInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.RetryDispatchRequest, error) {
+func prepareRetryDispatchInput(prepare RequestPreparation, input ControlInput) (factorysessionexecution.RetryDispatchRequest, error) {
 	if prepare == nil {
 		return factorysessionexecution.RetryDispatchRequest{}, errors.New("Factory Session request preparation is required")
 	}
@@ -280,7 +280,7 @@ func prepareRetryDispatchInput(prepare factorysessionexecution.RequestPreparatio
 	return prepare.PrepareRetryDispatch(retry)
 }
 
-func prepareInterruptDispatchInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.InterruptDispatchRequest, error) {
+func prepareInterruptDispatchInput(prepare RequestPreparation, input ControlInput) (factorysessionexecution.InterruptDispatchRequest, error) {
 	if prepare == nil {
 		return factorysessionexecution.InterruptDispatchRequest{}, errors.New("Factory Session request preparation is required")
 	}

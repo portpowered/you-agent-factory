@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -32,7 +33,7 @@ type Factory struct {
 	modelService                    models.Service
 	workFactory                     WorkFactory
 	automationFactory               AutomationFactory
-	factorySessionsService          factorysessions.Service
+	factorySessionsService          roles.RuntimeBinder
 	factorySessionExecutionFactory  FactorySessionExecutionFactory
 	recordingsProjectionFactory     RecordingsProjectionFactory
 	recordingsFactory               RecordingsFactory
@@ -64,7 +65,7 @@ type Factory struct {
 	resolveClock                    factoryruntime.ClockResolver
 	newSessionLogger                factoryruntime.SessionLoggerFactory
 	adaptWorkerCommandRunner        WorkerCommandRunnerAdapter
-	processRuntimeFactory           factorysessions.ProcessRuntimeFactory
+	processRuntimeFactory           roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
 	generateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                     factorysessions.HomeDirectoryResolver
@@ -84,7 +85,7 @@ func NewFactory(
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsService factorysessions.Service,
+	factorySessionsService roles.RuntimeBinder,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingsFactory RecordingsFactory,
@@ -111,7 +112,7 @@ func NewFactory(
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 	adaptWorkerCommandRunner WorkerCommandRunnerAdapter,
-	processRuntimeFactory factorysessions.ProcessRuntimeFactory,
+	processRuntimeFactory roles.ProcessRuntimeFactory,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -256,7 +257,7 @@ func (f *Factory) OpenApplicationRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	edges serviceedges.Edges,
 	logger *zap.Logger,
-) (factorysessions.OpenedApplicationRuntime, error) {
+) (roles.OpenedApplicationRuntime, error) {
 	opened, err := f.openRuntime(ctx, request, externalEffectsFromProcessEdges(edges), logger)
 	return opened.application, err
 }
@@ -268,7 +269,7 @@ func (f *Factory) OpenInvocationRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	edges serviceedges.Edges,
 	logger *zap.Logger,
-) (factorysessions.OpenedInvocationRuntime, error) {
+) (roles.OpenedInvocationRuntime, error) {
 	opened, err := f.openRuntime(ctx, request, externalEffectsFromProcessEdges(edges), logger)
 	return opened.invocation, err
 }
@@ -280,7 +281,7 @@ func (f *Factory) OpenExecutionRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	effects ExternalEffects,
 	logger *zap.Logger,
-) (factorysessions.OpenedExecutionRuntime, error) {
+) (roles.OpenedExecutionRuntime, error) {
 	opened, err := f.openRuntime(ctx, request, effects, logger)
 	return opened.execution, err
 }

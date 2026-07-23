@@ -77,7 +77,7 @@ type MockFactory struct {
 	MoveWorkErr                             error
 	AppliedOperatorMoveRequests             map[string]work.OperatorMoveResult
 	DurableExecutionService                 factorysessions.ExecutionService
-	FactorySessionRequestPreparation        factorysessions.RequestPreparation
+	FactorySessionRequestPreparation        FactorySessionRequestPreparation
 	ListDurableFactorySessionDispatchesFunc func(
 		context.Context,
 		string,
@@ -93,6 +93,17 @@ type MockFactory struct {
 		string,
 		factorysessions.ControlRequest,
 	) (factorysessions.LifecycleControlResult, error)
+}
+
+type FactorySessionRequestPreparation interface {
+	PrepareStart(factorysessions.StartRequest) (factorysessions.StartRequest, error)
+	PrepareControl(factorysessions.ControlRequest) (factorysessions.ControlRequest, error)
+	PrepareApprove(factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error)
+	PrepareRetryDispatch(factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error)
+	PrepareInterruptDispatch(factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error)
+	PrepareListSessions(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
+	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
+	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
 }
 
 var _ petri.APIFactory = (*MockFactory)(nil)

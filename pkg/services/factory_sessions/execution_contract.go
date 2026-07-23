@@ -1,17 +1,6 @@
 package factorysessions
 
-import (
-	"io/fs"
-
-	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
-)
-
-// ExecutionOpeningFileSystem is the exact host-filesystem capability used to
-// resolve omitted durable-execution project and fixture-catalog paths.
-type ExecutionOpeningFileSystem interface {
-	Getwd() (string, error)
-	Stat(string) (fs.FileInfo, error)
-}
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 
 // Durable Factory Session execution contracts are exposed from the owning
 // service root. The concrete runtime implementation remains in execution.

@@ -4,6 +4,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -12,15 +13,15 @@ import (
 )
 
 type runtimeProducts struct {
-	application factorysessions.OpenedApplicationRuntime
-	invocation  factorysessions.OpenedInvocationRuntime
-	execution   factorysessions.OpenedExecutionRuntime
+	application roles.OpenedApplicationRuntime
+	invocation  roles.OpenedInvocationRuntime
+	execution   roles.OpenedExecutionRuntime
 }
 
 func assembleRuntimeProducts(
 	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway factorysessions.Service,
-	sessionInvocation factorysessions.SessionInvoker,
+	sessionInvocation roles.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
@@ -29,24 +30,24 @@ func assembleRuntimeProducts(
 	modelService models.Service,
 	providerSessions providersessions.Service,
 	startup factoryruntime.HostedInstance,
-	lifecycle factorysessions.LifecycleRuntime,
-	process factorysessions.ProcessRuntime,
-	reader factorysessions.RuntimeReader,
+	lifecycle roles.LifecycleRuntime,
+	process roles.ProcessRuntime,
+	reader roles.RuntimeReader,
 	projections recordings.ProjectionService,
 	directory string,
 	runtimeInstanceID string,
 	backendScopeID string,
 ) runtimeProducts {
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
-	inputResolver, _ := sessionInvocation.(factorysessions.InvocationInputResolver)
-	resources := factorysessions.RuntimeResources{
+	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
+	resources := roles.RuntimeResources{
 		Logger: startup.RuntimeLogger(), Close: startup.CloseArtifacts,
 		Diagnostics: startup.RuntimeDiagnostics(),
 	}
 	resources.Directory = directory
 	resources.RuntimeInstanceID = runtimeInstanceID
 	resources.BackendScopeID = backendScopeID
-	httpServices := factorysessions.RuntimeHTTPServices{
+	httpServices := roles.RuntimeHTTPServices{
 		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 		WorkflowPreview: workflowPreview,
 		FactorySessions: factorySessionGateway, SessionInvocation: sessionInvocation,
@@ -55,20 +56,20 @@ func assembleRuntimeProducts(
 		WorkerPrompts: workerPrompts, Logger: resources.Logger,
 	}
 	return runtimeProducts{
-		application: factorysessions.OpenedApplicationRuntime{
+		application: roles.OpenedApplicationRuntime{
 			Process: process, HTTP: httpServices,
-			Visualization: factorysessions.RuntimeVisualizationServices{
+			Visualization: roles.RuntimeVisualizationServices{
 				Reader: reader, Projections: projections,
 			},
 			Resources: resources,
 		},
-		invocation: factorysessions.OpenedInvocationRuntime{
+		invocation: roles.OpenedInvocationRuntime{
 			Workers: workerService, Sessions: factorySessionGateway,
 			Invoker: sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
 			CloseArtifacts: startup.CloseArtifacts,
 		},
-		execution: factorysessions.OpenedExecutionRuntime{
+		execution: roles.OpenedExecutionRuntime{
 			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
 			Resources: resources,
 		},

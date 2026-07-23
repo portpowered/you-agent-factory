@@ -11,6 +11,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 func TestDirectJavaScriptRunOperationSupportsCustomerSourceExtensions(t *testing.T) {
@@ -40,7 +41,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			var provider, projectRoot, fixturePath, builderMode string
 			builder := func(
 				_ context.Context, gotProvider, gotRoot, gotFixture, gotMode string,
-			) (factorysessions.OwnedExecutionService, error) {
+			) (roles.OwnedExecutionService, error) {
 				provider, projectRoot, fixturePath, builderMode = gotProvider, gotRoot, gotFixture, gotMode
 				return owned, nil
 			}
@@ -93,7 +94,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 	closeFailure := errors.New("close failed")
 	owned := &ownedExecutionStub{closeErr: closeFailure}
 	operation, err := NewDirectJavaScriptRunOperation(
-		func(context.Context, string, string, string, string) (factorysessions.OwnedExecutionService, error) {
+		func(context.Context, string, string, string, string) (roles.OwnedExecutionService, error) {
 			return owned, nil
 		},
 		func(context.Context, factorysessions.ExecutionService, factorysessions.StartRequest, bool, io.Writer) error {

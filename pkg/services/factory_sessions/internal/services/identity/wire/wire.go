@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identityservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/internal/service"
 )
@@ -13,7 +14,7 @@ import (
 func NewService(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directories factorysessions.DirectoryInspection,
+	directories roles.DirectoryInspection,
 ) (identity.Service, error) {
 	if resolveSymlinks == nil {
 		return nil, fmt.Errorf("construct Factory Session identity: symlink resolver is required")

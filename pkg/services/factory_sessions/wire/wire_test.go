@@ -112,4 +112,4 @@ func (namedPathResolver) ResolveCurrentDir(string) (string, error)          { re
 func (namedPathResolver) ReadCurrentPointer(string) (string, error)         { return "", nil }
 func (namedPathResolver) WriteCurrentPointer(string, string) error          { return nil }
 
-var _ factorysessions.DirectoryInspection = (*recordingDirectoryInspection)(nil)
+var _ DirectoryInspection = (*recordingDirectoryInspection)(nil)

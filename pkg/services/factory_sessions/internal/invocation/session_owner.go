@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 // StructuredArgumentsInputSource identifies invocation input resolved from the
@@ -28,7 +29,7 @@ type InvocationRequest = factorysessions.InvocationRequest
 type FactoryInvocationResult = factorydefinitions.FactoryInvocationResult
 
 // SessionInvoker is the canonical Factory Session invocation boundary.
-type SessionInvoker = factorysessions.SessionInvoker
+type SessionInvoker = roles.SessionInvoker
 
 // SessionInvocationWaitInput carries the submitted invocation identity and
 // policy through canonical event-derived result waiting.

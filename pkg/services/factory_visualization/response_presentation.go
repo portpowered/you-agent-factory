@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	visualizationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 )
 
 const (
@@ -25,8 +26,11 @@ type ResponseEventSink interface {
 // ResponseEventSource is the exact Factory Session observation capability
 // consumed by response presentation.
 type ResponseEventSource interface {
-	SubscribeSessionResponseEventsFromLatest(string) (factorysessions.ResponseEventCursor, error)
+	SubscribeSessionResponseEventsFromLatest(string) (ResponseEventCursor, error)
 }
+
+// ResponseEventCursor is the consumer-owned retained response-event role.
+type ResponseEventCursor = visualizationcontracts.ResponseEventCursor
 
 // ResponseEventAttachment owns one response-event subscription lifecycle.
 type ResponseEventAttachment interface {
@@ -106,7 +110,7 @@ func (responsePresentation) OpenLosslessResponseStream(
 type responseEventAttachment struct {
 	cancel context.CancelFunc
 	done   chan struct{}
-	cursor factorysessions.ResponseEventCursor
+	cursor ResponseEventCursor
 	sink   ResponseEventSink
 }
 

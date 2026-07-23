@@ -36,7 +36,7 @@ func newLiveSessionTestServer(sessions apisurface.LiveSessionAPI) *Server {
 }
 
 type httpRequestPreparationFake struct {
-	factorysessions.RequestPreparation
+	factorysessionshttp.RequestPreparation
 }
 
 func (httpRequestPreparationFake) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {

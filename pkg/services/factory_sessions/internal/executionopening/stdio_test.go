@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
@@ -16,7 +17,7 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 	application := stdioApplicationStub{}
 	operation, err := NewStdioOpeningService(
 		opening,
-		func(_ context.Context, got factorysessions.ExecutionService, _ io.Reader, _ io.Writer) (factorysessions.StdioApplication, error) {
+		func(_ context.Context, got factorysessions.ExecutionService, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
 			if got != owned {
 				t.Fatal("fixture builder did not receive opened execution")
 			}
@@ -41,13 +42,13 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 }
 
 func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
-	opened := factorysessions.OpenedExecutionRuntime{Execution: &ownedExecutionStub{}}
+	opened := roles.OpenedExecutionRuntime{Execution: &ownedExecutionStub{}}
 	opening := &stdioExecutionOpeningStub{resolvedRoot: "resolved", opened: opened}
 	application := stdioApplicationStub{}
 	operation, err := NewStdioOpeningService(
 		opening,
 		fixtureStdioBuilderNotCalled(t),
-		func(_ context.Context, got factorysessions.OpenedExecutionRuntime, _ io.Reader, _ io.Writer) (factorysessions.StdioApplication, error) {
+		func(_ context.Context, got roles.OpenedExecutionRuntime, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
 			if got.Execution != opened.Execution {
 				t.Fatal("runtime builder did not receive opened execution")
 			}
@@ -75,7 +76,7 @@ func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T)
 	owned := &ownedExecutionStub{closeErr: closeErr}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
-		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (factorysessions.StdioApplication, error) {
+		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, buildErr
 		},
 		runtimeStdioBuilderNotCalled(t),
@@ -96,9 +97,9 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 	closeCount := 0
 	opening := &stdioExecutionOpeningStub{
 		resolvedRoot: "resolved",
-		opened: factorysessions.OpenedExecutionRuntime{
+		opened: roles.OpenedExecutionRuntime{
 			Execution: &ownedExecutionStub{},
-			Resources: factorysessions.RuntimeResources{Close: func() error {
+			Resources: roles.RuntimeResources{Close: func() error {
 				closeCount++
 				return nil
 			}},
@@ -107,7 +108,7 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 	operation, err := NewStdioOpeningService(
 		opening,
 		fixtureStdioBuilderNotCalled(t),
-		func(_ context.Context, opened factorysessions.OpenedExecutionRuntime, _ io.Reader, _ io.Writer) (factorysessions.StdioApplication, error) {
+		func(_ context.Context, opened roles.OpenedExecutionRuntime, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
 			if closeErr := opened.Resources.Close(); closeErr != nil {
 				t.Fatalf("close runtime resources: %v", closeErr)
 			}
@@ -130,7 +131,7 @@ func TestStdioOpeningServiceRejectsNilApplications(t *testing.T) {
 	owned := &ownedExecutionStub{}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
-		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (factorysessions.StdioApplication, error) {
+		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, nil
 		},
 		runtimeStdioBuilderNotCalled(t),
@@ -151,8 +152,8 @@ type stdioApplicationStub struct{}
 func (stdioApplicationStub) Run(context.Context) error { return nil }
 
 type stdioExecutionOpeningStub struct {
-	execution      factorysessions.OwnedExecutionService
-	opened         factorysessions.OpenedExecutionRuntime
+	execution      roles.OwnedExecutionService
+	opened         roles.OpenedExecutionRuntime
 	resolvedRoot   string
 	resolvedInput  string
 	fixtureCatalog string
@@ -165,28 +166,28 @@ func (stub *stdioExecutionOpeningStub) ResolveProjectRoot(value string) (string,
 	return stub.resolvedRoot, nil
 }
 
-func (stub *stdioExecutionOpeningStub) OpenExecutionRuntime(_ context.Context, request factorysessions.ExecutionRuntimeOpeningRequest) (factorysessions.OpenedExecutionRuntime, error) {
+func (stub *stdioExecutionOpeningStub) OpenExecutionRuntime(_ context.Context, request factorysessions.ExecutionRuntimeOpeningRequest) (roles.OpenedExecutionRuntime, error) {
 	stub.runtimeOpened = true
 	stub.opening = request
 	return stub.opened, nil
 }
 
-func (stub *stdioExecutionOpeningStub) Build(_ context.Context, _, _, fixtureCatalogPath, _ string) (factorysessions.OwnedExecutionService, error) {
+func (stub *stdioExecutionOpeningStub) Build(_ context.Context, _, _, fixtureCatalogPath, _ string) (roles.OwnedExecutionService, error) {
 	stub.fixtureCatalog = fixtureCatalogPath
 	return stub.execution, nil
 }
 
-func fixtureStdioBuilderNotCalled(t *testing.T) factorysessions.FixtureStdioApplicationBuilder {
+func fixtureStdioBuilderNotCalled(t *testing.T) roles.FixtureStdioApplicationBuilder {
 	t.Helper()
-	return func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (factorysessions.StdioApplication, error) {
+	return func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
 		t.Fatal("fixture builder called")
 		return nil, nil
 	}
 }
 
-func runtimeStdioBuilderNotCalled(t *testing.T) factorysessions.RuntimeStdioApplicationBuilder {
+func runtimeStdioBuilderNotCalled(t *testing.T) roles.RuntimeStdioApplicationBuilder {
 	t.Helper()
-	return func(context.Context, factorysessions.OpenedExecutionRuntime, io.Reader, io.Writer) (factorysessions.StdioApplication, error) {
+	return func(context.Context, roles.OpenedExecutionRuntime, io.Reader, io.Writer) (roles.StdioApplication, error) {
 		t.Fatal("runtime builder called")
 		return nil, nil
 	}

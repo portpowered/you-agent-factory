@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -224,7 +225,7 @@ func NewWorkerExecution(
 	scriptCommandRunner workers.CommandRunner,
 	ptyAllocator agypty.PTYAllocator,
 	providerOverride workerprovider.Provider,
-	state factorysessions.CurrentRuntimeResolver,
+	state roles.CurrentRuntimeResolver,
 	modelService models.Service,
 	contentMaterializer work.ContentMaterializer,
 	factory WorkersRuntimeFactory,

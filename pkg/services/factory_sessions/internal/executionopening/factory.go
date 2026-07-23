@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
@@ -45,11 +46,11 @@ type Factory struct {
 	resolveClock   factory.ClockResolver
 	artifactRoots  factory.RuntimeArtifactRootResolver
 	adaptRunner    runtimeopening.WorkerCommandRunnerAdapter
-	paths          factorysessions.ExecutionOpeningFileSystem
+	paths          roles.ExecutionOpeningFileSystem
 	logger         *zap.Logger
 }
 
-var _ factorysessions.StdioExecutionOpening = (*Factory)(nil)
+var _ roles.StdioExecutionOpening = (*Factory)(nil)
 
 func NewFactory(
 	runtimes *runtimeopening.Factory,
@@ -61,7 +62,7 @@ func NewFactory(
 	resolveClock factory.ClockResolver,
 	artifactRoots factory.RuntimeArtifactRootResolver,
 	adaptRunner runtimeopening.WorkerCommandRunnerAdapter,
-	paths factorysessions.ExecutionOpeningFileSystem,
+	paths roles.ExecutionOpeningFileSystem,
 	logger *zap.Logger,
 ) (*Factory, error) {
 	if runtimes == nil {
@@ -111,7 +112,7 @@ func (f *Factory) Build(
 	projectRoot string,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-) (factorysessions.OwnedExecutionService, error) {
+) (roles.OwnedExecutionService, error) {
 	return f.build(ctx, provider, projectRoot, fixtureCatalogPath)
 }
 
@@ -123,7 +124,7 @@ func (f *Factory) buildWithWorkerEffects(
 	projectRootValue string,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-) (factorysessions.OwnedExecutionService, error) {
+) (roles.OwnedExecutionService, error) {
 	provider, err := normalizeSessionExecutionProvider(providerName)
 	if err != nil {
 		return nil, err
@@ -159,15 +160,15 @@ func (f *Factory) buildWithWorkerEffects(
 
 // SessionExecutionBuilderWithEdges binds process-selected worker edges to the
 // transport-facing durable execution builder.
-func (f *Factory) Builder() factorysessions.ExecutionServiceBuilder {
-	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (factorysessions.OwnedExecutionService, error) {
+func (f *Factory) Builder() roles.ExecutionServiceBuilder {
+	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (roles.OwnedExecutionService, error) {
 		return f.buildWithWorkerEffects(ctx, provider, projectRoot, fixtureCatalogPath, childExecutorMode)
 	}
 }
 
 // NewServiceBuilder exposes the lazy durable-session constructor owned by the
 // session execution initializer.
-func NewServiceBuilder(factory *Factory) factorysessions.ExecutionServiceBuilder {
+func NewServiceBuilder(factory *Factory) roles.ExecutionServiceBuilder {
 	return factory.Builder()
 }
 
@@ -176,7 +177,7 @@ func (f *Factory) build(
 	providerName string,
 	projectRootValue string,
 	fixtureCatalogPath string,
-) (factorysessions.OwnedExecutionService, error) {
+) (roles.OwnedExecutionService, error) {
 	provider, err := normalizeSessionExecutionProvider(providerName)
 	if err != nil {
 		return nil, err
@@ -211,7 +212,7 @@ func (f *Factory) build(
 func (f *Factory) BuildRuntimeBacked(
 	ctx context.Context,
 	projectRoot string,
-) (factorysessions.OwnedExecutionService, error) {
+) (roles.OwnedExecutionService, error) {
 	opened, err := f.OpenExecutionRuntime(ctx, factorysessions.ExecutionRuntimeOpeningRequest{
 		ProjectRoot: projectRoot,
 	})
@@ -230,16 +231,16 @@ func (f *Factory) BuildRuntimeBacked(
 func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	opening factorysessions.ExecutionRuntimeOpeningRequest,
-) (factorysessions.OpenedExecutionRuntime, error) {
+) (roles.OpenedExecutionRuntime, error) {
 	if f == nil || f.runtimes == nil {
-		return factorysessions.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution: runtime opening service is required")
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution: runtime opening service is required")
 	}
 	artifactRoots := f.artifactRoots(opening.SystemConfigHome)
 	if strings.TrimSpace(artifactRoots.Logs) == "" {
-		return factorysessions.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: runtime log root is required")
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: runtime log root is required")
 	}
 	if strings.TrimSpace(artifactRoots.Metrics) == "" {
-		return factorysessions.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: runtime metrics root is required")
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: runtime metrics root is required")
 	}
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
@@ -255,13 +256,13 @@ func (f *Factory) OpenExecutionRuntime(
 	}
 	opened, err := f.runtimes.OpenExecutionRuntime(ctx, request, f.runtimeEffects, f.logger)
 	if err != nil {
-		return factorysessions.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: %w", err)
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: %w", err)
 	}
 	if opened.Execution == nil {
 		if opened.Resources.Close != nil {
 			_ = opened.Resources.Close()
 		}
-		return factorysessions.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: durable execution service is required")
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: durable execution service is required")
 	}
 	return opened, nil
 }

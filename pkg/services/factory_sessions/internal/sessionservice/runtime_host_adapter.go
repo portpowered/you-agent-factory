@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
@@ -28,7 +29,7 @@ func newSessionHost(
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
 	durableExecution func() factorysessions.ExecutionService,
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
-	directoryInspection factorysessions.DirectoryInspection,
+	directoryInspection roles.DirectoryInspection,
 	resolveSessionFolder func(string) (string, error),
 	selectTarget func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error),
 ) Host {

@@ -15,7 +15,11 @@ import (
 // Service coordinates Work operations against the runtime registered for a
 // live Factory Session.
 type Service struct {
-	sessions factorysessions.RuntimeResolver
+	sessions RuntimeResolver
+}
+
+type RuntimeResolver interface {
+	Resolve(string) *factorysessions.LiveSession
 }
 
 type applicationService struct {
@@ -24,7 +28,7 @@ type applicationService struct {
 }
 
 // New constructs the canonical Work application service.
-func New(sessions factorysessions.RuntimeResolver) *Service {
+func New(sessions RuntimeResolver) *Service {
 	return &Service{sessions: sessions}
 }
 

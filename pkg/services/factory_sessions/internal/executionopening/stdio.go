@@ -6,21 +6,22 @@ import (
 	"fmt"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 // StdioOpeningService owns the Factory Session selection and opening policy
 // for one MCP stdio invocation. Its builder ports adapt already-injected
 // transport and lifecycle machinery without exposing those implementations.
 type StdioOpeningService struct {
-	opening      factorysessions.StdioExecutionOpening
-	buildFixture factorysessions.FixtureStdioApplicationBuilder
-	buildRuntime factorysessions.RuntimeStdioApplicationBuilder
+	opening      roles.StdioExecutionOpening
+	buildFixture roles.FixtureStdioApplicationBuilder
+	buildRuntime roles.RuntimeStdioApplicationBuilder
 }
 
 func NewStdioOpeningService(
-	opening factorysessions.StdioExecutionOpening,
-	buildFixture factorysessions.FixtureStdioApplicationBuilder,
-	buildRuntime factorysessions.RuntimeStdioApplicationBuilder,
+	opening roles.StdioExecutionOpening,
+	buildFixture roles.FixtureStdioApplicationBuilder,
+	buildRuntime roles.RuntimeStdioApplicationBuilder,
 ) (*StdioOpeningService, error) {
 	if opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
@@ -37,7 +38,7 @@ func NewStdioOpeningService(
 func (service *StdioOpeningService) OpenStdio(
 	ctx context.Context,
 	request factorysessions.StdioOpeningRequest,
-) (factorysessions.StdioApplication, error) {
+) (roles.StdioApplication, error) {
 	if service == nil || service.opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
 	}

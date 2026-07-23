@@ -6,17 +6,17 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Service owns request preparation, Work submission, result waiting, and
 // invocation telemetry for one bound Factory Sessions runtime.
 type Service interface {
-	factorysessions.SessionInvoker
-	factorysessions.InvocationInputResolver
+	roles.SessionInvoker
+	roles.InvocationInputResolver
 }
 
 // Dependencies are the exact runtime and effect ports needed by invocation.

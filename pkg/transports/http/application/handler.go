@@ -24,7 +24,7 @@ type Handler struct {
 	validation         factorydefinitions.SubmittedDefinitionValidationOperation
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
-	sessionRequests    factorysessions.RequestPreparation
+	sessionRequests    factorysessionshttp.RequestPreparation
 }
 
 func NewHandler(
@@ -33,7 +33,7 @@ func NewHandler(
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
-	sessionRequests factorysessions.RequestPreparation,
+	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
 	if mappings == nil || modelsContent == nil || validation == nil ||
 		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {

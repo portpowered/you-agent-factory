@@ -15,7 +15,7 @@ type ListSessionsInput struct {
 
 // ListSessions returns scoped Factory Session summaries through the
 // you.factory_session.list MCP tool.
-func ListSessions(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
+func ListSessions(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
@@ -83,7 +83,7 @@ type GetResultInput struct {
 
 // GetResult retrieves one durable Factory Session result through the
 // you.factory_session.get_result MCP tool.
-func GetResult(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
+func GetResult(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}

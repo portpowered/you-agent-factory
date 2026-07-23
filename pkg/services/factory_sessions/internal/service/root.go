@@ -7,6 +7,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
@@ -15,7 +16,6 @@ import (
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
 // runtime opening binds a clock selected from the invocation's external edges.
 type Root struct {
-	factorysessions.Service
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
@@ -24,15 +24,13 @@ type Root struct {
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	directoryInspection          factorysessions.DirectoryInspection
+	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
 }
-
-var _ factorysessions.Service = (*Root)(nil)
 
 // NewRoot constructs the process-scoped Factory Sessions service without
 // starting runtimes, listeners, or background work.
@@ -45,7 +43,7 @@ func NewRoot(
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection factorysessions.DirectoryInspection,
+	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
@@ -102,7 +100,7 @@ func NewRoot(
 
 // ForRuntime binds invocation-local runtime data to the already-constructed
 // service and returns an isolated live-session assembly.
-func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessions.RuntimeAssembly, error) {
+func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (roles.RuntimeAssembly, error) {
 	if r == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
 	}

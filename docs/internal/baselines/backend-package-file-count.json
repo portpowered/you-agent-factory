@@ -10,7 +10,7 @@
     { "packagePath": "pkg/services/factory_runtime", "fileCount": 53, "owner": "factory-runtime-maintainers", "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages." },
     { "packagePath": "pkg/services/factory_runtime/runtime", "fileCount": 18, "owner": "factory-runtime-maintainers", "removalReason": "Split runtime coordination from lifecycle and projection behavior." },
     { "packagePath": "pkg/services/factory_runtime/subsystems", "fileCount": 19, "owner": "factory-runtime-maintainers", "removalReason": "Separate subsystem adapters by stable runtime boundary." },
-    { "packagePath": "pkg/services/factory_sessions", "fileCount": 27, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
+    { "packagePath": "pkg/services/factory_sessions", "fileCount": 24, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
     { "packagePath": "pkg/services/factory_sessions/internal/execution", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },
     { "packagePath": "pkg/services/factory_sessions/internal/sessionservice", "fileCount": 28, "owner": "factory-session-maintainers", "removalReason": "Partition session service behavior by lifecycle responsibility." },
     { "packagePath": "pkg/services/factory_sessions/transports/cli/session", "fileCount": 17, "owner": "factory-session-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },

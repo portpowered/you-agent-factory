@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -47,6 +46,7 @@ var apiSet = wire.NewSet(
 
 var servicesSet = wire.NewSet(
 	factorysessionwire.NewRequestPreparation,
+	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
 	provideOperatorSettingsFileSystem,
@@ -295,14 +295,17 @@ var BundleSet = wire.NewSet(
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory,
-	wire.Bind(new(factorysessions.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
+	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
 	factorysessionwire.NewStdioOpeningService,
-	wire.Bind(new(factorysessions.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
+	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
 	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
 	factorysessionwire.NewExecutionServiceBuilder,
+	provideCLIExecutionServiceBuilder,
+	provideRunInvocationOperation,
+	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
 	initializerapplication.NewProcess,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),

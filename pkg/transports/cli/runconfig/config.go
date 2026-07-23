@@ -83,8 +83,13 @@ type Config struct {
 	OutputIsTTY                   bool
 	JSONOutput                    bool
 	InvocationOutputMode          string
-	InvocationMetricsRecorder     factorysessions.InvocationMetricsRecorder
+	InvocationMetricsRecorder     InvocationMetricsRecorder
 
 	InvocationSkipPermissionsOverride *bool
 	Logger                            *zap.Logger
+}
+
+// InvocationMetricsRecorder is the observability role consumed by run config.
+type InvocationMetricsRecorder interface {
+	RecordInvocationMetric(factorysessions.InvocationMetric)
 }

@@ -240,7 +240,7 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (f testRunnerOpeners) Invocation() factorysessions.InvocationOperation {
+func (f testRunnerOpeners) Invocation() InvocationOperation {
 	return testInvocationOperation{open: f.invocation}
 }
 
@@ -286,7 +286,7 @@ func (o testInvocationOperation) InvokeFactory(
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
 	outcome := factorysessions.FactoryInvocationOutcome{}
-	var subscription factorysessions.ResponseEventCursor
+	var subscription factoryvisualization.ResponseEventCursor
 	if attachable, ok := runner.(factoryvisualization.ResponseEventSource); ok {
 		subscription, _ = attachable.SubscribeSessionResponseEventsFromLatest(factorysessions.DefaultSessionID)
 	}

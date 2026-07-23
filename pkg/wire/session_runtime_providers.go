@@ -381,12 +381,12 @@ func provideFactorySessionsService(
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directories factorysessions.DirectoryInspection,
+	directories factorysessionwire.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-) (factorysessions.Service, error) {
+) (factorysessionwire.RuntimeBinder, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factorycheckpointstore.New()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
@@ -395,7 +395,7 @@ func provideFactorySessionsService(
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	recordingWriter recordingartifacts.Writer,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 ) factorysessionwire.FactorySessionExecutionFactory {
@@ -427,7 +427,7 @@ func provideFactorySessionExecutionFactory(
 func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	recordingWriter recordingartifacts.Writer,
-	stores factorysessions.RuntimePersistenceStoreFactory,
+	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	fixtureFiles factorysessionwire.ContractFixtureReader,
@@ -612,7 +612,7 @@ func provideWorkersRuntimeFactory(
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges)
 	agentRunHarness := workeragentrun.NewLibraryHarnessAdapter(agentToolFileSystem)
 	return func(
-		sessions factorysessions.CurrentRuntimeResolver,
+		sessions factorysessionwire.CurrentRuntimeResolver,
 		modelService models.Service,
 		providerCommandRunner workers.CommandRunner,
 		scriptCommandRunner workers.CommandRunner,
@@ -801,7 +801,7 @@ func provideSessionExecutionOpeningFactory(
 	resolveClock factoryruntime.ClockResolver,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	paths factorysessions.ExecutionOpeningFileSystem,
+	paths factorysessionwire.ExecutionOpeningFileSystem,
 	allocator agypty.PTYAllocator,
 	logger *zap.Logger,
 ) (*factorysessionwire.ExecutionOpeningFactory, error) {

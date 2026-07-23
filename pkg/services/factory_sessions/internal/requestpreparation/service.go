@@ -5,12 +5,13 @@ package requestpreparation
 import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 type service struct{}
 
 // New constructs the canonical Factory Sessions request-preparation role.
-func New() factorysessions.RequestPreparation { return service{} }
+func New() roles.RequestPreparation { return service{} }
 
 func (service) PrepareStart(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
 	return execution.NormalizeStartRequest(request)

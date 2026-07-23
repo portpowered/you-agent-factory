@@ -32,10 +32,14 @@ type ListConfig struct {
 	DurableLister durableSessionLister
 	DurableCloser io.Closer
 	HTTP          clihttp.Protocol
-	Preparation   fse.RequestPreparation
+	Preparation   RequestPreparation
 }
 
-func NewList(transport clihttp.Protocol, prepare fse.RequestPreparation) func(ListConfig) error {
+type RequestPreparation interface {
+	PrepareListSessions(fse.ListSessionsRequest) (fse.ListSessionsRequest, error)
+}
+
+func NewList(transport clihttp.Protocol, prepare RequestPreparation) func(ListConfig) error {
 	return func(cfg ListConfig) error {
 		cfg.HTTP = transport
 		cfg.Preparation = prepare

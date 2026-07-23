@@ -9,6 +9,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"go.uber.org/zap"
 )
@@ -24,7 +25,7 @@ type RuntimeInputs struct {
 type RuntimeInputResolver func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	factorysessions.ApplicationOpeningPorts,
+	roles.ApplicationOpeningPorts,
 	*zap.Logger,
 ) (RuntimeInputs, error)
 
@@ -34,14 +35,14 @@ type RuntimeOpener interface {
 		*factorysessions.RuntimeOpeningRequest,
 		serviceedges.Edges,
 		*zap.Logger,
-	) (factorysessions.OpenedApplicationRuntime, error)
+	) (roles.OpenedApplicationRuntime, error)
 }
 
 // RuntimeAdapter binds the exact HTTP and optional visualization components
 // selected by Wire to one opened Factory Session. It contains no product
 // lifecycle selection or ordering policy.
 type RuntimeAdapter func(
-	factorysessions.OpenedApplicationRuntime,
+	roles.OpenedApplicationRuntime,
 	serviceedges.Edges,
 	factoryvisualization.Sink,
 ) (factorysessions.BoundProcessComponents, error)
@@ -53,14 +54,14 @@ type Service struct {
 	resolveInputs RuntimeInputResolver
 	openRuntime   RuntimeOpener
 	adaptRuntime  RuntimeAdapter
-	planLifecycle factorysessions.LifecyclePlanOperation
+	planLifecycle roles.LifecyclePlanOperation
 }
 
 func New(
 	resolveInputs RuntimeInputResolver,
 	openRuntime RuntimeOpener,
 	adaptRuntime RuntimeAdapter,
-	planLifecycle factorysessions.LifecyclePlanOperation,
+	planLifecycle roles.LifecyclePlanOperation,
 ) (*Service, error) {
 	switch {
 	case resolveInputs == nil:
@@ -83,44 +84,44 @@ func New(
 
 func (service *Service) OpenApplication(
 	ctx context.Context,
-	request factorysessions.ApplicationOpeningRequest,
+	request roles.ApplicationOpeningRequest,
 	logger *zap.Logger,
 	visualizationSink factoryvisualization.Sink,
-) (factorysessions.OpenedProcessApplication, error) {
+) (roles.OpenedProcessApplication, error) {
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
-		return factorysessions.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
+		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
 	inputs, err := service.resolveInputs(ctx, request.Runtime, request.Ports, logger)
 	if err != nil {
-		return factorysessions.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
+		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(
 		ctx, inputs.Request, inputs.Edges, inputs.Logger,
 	)
 	if err != nil {
-		return factorysessions.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
+		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
 	components, err := service.adaptRuntime(opened, inputs.Edges, visualizationSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
-		return factorysessions.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
+		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
 	}
-	plan, err := service.planLifecycle(factorysessions.LifecyclePlanRequest{
+	plan, err := service.planLifecycle(roles.LifecyclePlanRequest{
 		Runtime:    opened.Process,
 		Components: components,
 		Close:      opened.Resources.Close,
 	})
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
-		return factorysessions.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
+		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
 	}
-	return factorysessions.OpenedProcessApplication{
+	return roles.OpenedProcessApplication{
 		Plan:        plan,
 		Diagnostics: opened.Resources.Diagnostics,
 	}, nil
 }
 
-func closeOpenedRuntime(opened factorysessions.OpenedApplicationRuntime, cause error) error {
+func closeOpenedRuntime(opened roles.OpenedApplicationRuntime, cause error) error {
 	if opened.Resources.Close == nil {
 		return cause
 	}

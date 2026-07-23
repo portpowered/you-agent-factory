@@ -26,7 +26,7 @@ func newTestClientWithWorkflows(workflows factoryruntime.WorkflowPreviewOperatio
 
 func newTestClientWithService(
 	service factorysessions.ExecutionService,
-	prepare factorysessions.RequestPreparation,
+	prepare mcpfactorysession.RequestPreparation,
 	workflows ...factoryruntime.WorkflowPreviewOperation,
 ) *testClient {
 	var workflow factoryruntime.WorkflowPreviewOperation

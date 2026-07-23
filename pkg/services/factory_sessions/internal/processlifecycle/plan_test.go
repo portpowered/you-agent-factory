@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 type planRuntime struct {
@@ -67,7 +68,7 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	runtime := &planRuntime{}
 	visualization := &planComponent{name: "visualization", events: &runtime.events}
 	transport := &planComponent{name: "transport", events: &runtime.events}
-	plan, err := BuildLifecyclePlan(factorysessions.LifecyclePlanRequest{
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
 		Runtime: runtime,
 		Components: factorysessions.BoundProcessComponents{
 			Visualization: visualization,
@@ -162,7 +163,7 @@ func TestRuntimeLifecycleFailsClosedWhenWorkersReturnNoStopOperation(t *testing.
 func TestBuildLifecyclePlanFailsClosedWithoutRuntimeOrTransport(t *testing.T) {
 	transport := &planComponent{}
 	var typedNilRuntime *planRuntime
-	for name, request := range map[string]factorysessions.LifecyclePlanRequest{
+	for name, request := range map[string]roles.LifecyclePlanRequest{
 		"runtime":           {Components: factorysessions.BoundProcessComponents{Transport: transport}},
 		"typed nil runtime": {Runtime: typedNilRuntime, Components: factorysessions.BoundProcessComponents{Transport: transport}},
 		"transport":         {Runtime: &planRuntime{}},
@@ -177,7 +178,7 @@ func TestBuildLifecyclePlanFailsClosedWithoutRuntimeOrTransport(t *testing.T) {
 
 func requiredPlan(t *testing.T, runtime *planRuntime) lifecycle.Plan {
 	t.Helper()
-	plan, err := BuildLifecyclePlan(factorysessions.LifecyclePlanRequest{
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
 		Runtime: runtime,
 		Components: factorysessions.BoundProcessComponents{
 			Transport: &planComponent{name: "transport", events: &runtime.events},
@@ -208,7 +209,7 @@ func requiredPlanWithWorkerResult(
 ) lifecycle.Plan {
 	t.Helper()
 	wrapped := &workerResultRuntime{planRuntime: runtime, stop: stop, err: err}
-	plan, planErr := BuildLifecyclePlan(factorysessions.LifecyclePlanRequest{
+	plan, planErr := BuildLifecyclePlan(roles.LifecyclePlanRequest{
 		Runtime: wrapped,
 		Components: factorysessions.BoundProcessComponents{
 			Transport: &planComponent{name: "transport", events: &runtime.events},

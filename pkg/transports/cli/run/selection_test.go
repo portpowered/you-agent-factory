@@ -16,7 +16,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	output := &bytes.Buffer{}
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, factorysessions.InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
+		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},

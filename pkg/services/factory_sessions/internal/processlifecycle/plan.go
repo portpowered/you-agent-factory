@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 const (
@@ -20,14 +21,14 @@ const (
 
 // NewLifecyclePlanOperation returns the Factory Sessions-owned application
 // lifecycle planner selected once by the canonical injector.
-func NewLifecyclePlanOperation() factorysessions.LifecyclePlanOperation {
+func NewLifecyclePlanOperation() roles.LifecyclePlanOperation {
 	return BuildLifecyclePlan
 }
 
 // BuildLifecyclePlan declares the complete product activation transaction.
 // Initializer consumes the result without knowing which product components it
 // contains or why they are ordered this way.
-func BuildLifecyclePlan(request factorysessions.LifecyclePlanRequest) (lifecycle.Plan, error) {
+func BuildLifecyclePlan(request roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 	if isNil(request.Runtime) {
 		return lifecycle.Plan{}, errors.New("plan Factory Session lifecycle: runtime is required")
 	}
@@ -76,7 +77,7 @@ func BuildLifecyclePlan(request factorysessions.LifecyclePlanRequest) (lifecycle
 // applicationRuntimeLifecycle owns the state needed to pair process runtime
 // and worker-sidecar acquisition with exactly one cleanup operation.
 type applicationRuntimeLifecycle struct {
-	runtime factorysessions.ProcessRuntime
+	runtime roles.ProcessRuntime
 
 	mu            sync.Mutex
 	runtimeCancel context.CancelFunc

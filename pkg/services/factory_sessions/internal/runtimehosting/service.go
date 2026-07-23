@@ -15,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +37,7 @@ func New(start platformhttpserver.Starter) *Service {
 func (service *Service) Run(
 	ctx context.Context,
 	handler http.Handler,
-	runtime factorysessions.LifecycleRuntime,
+	runtime roles.LifecycleRuntime,
 	logger *zap.Logger,
 	request factorysessions.RuntimeHostRequest,
 	observer factorysessions.RuntimeHostObserver,
@@ -182,4 +183,4 @@ func logStartup(
 	)
 }
 
-var _ factorysessions.RuntimeHostOperation = (*Service)(nil)
+var _ roles.RuntimeHostOperation = (*Service)(nil)

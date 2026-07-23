@@ -29,12 +29,6 @@ type Service struct {
 	durable        durableexecution.Service
 }
 
-// ForRuntime rejects rebinding an already-bound application gateway. Runtime
-// binding is owned by the injected process-scoped root.
-func (s *Service) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.RuntimeAssembly, error) {
-	return nil, fmt.Errorf("Factory Sessions service is already bound to a runtime")
-}
-
 // New constructs a session gateway with explicit host and dataplane dependencies.
 func New(host LegacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithResponseStreams(host, responseStreams)

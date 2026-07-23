@@ -14,7 +14,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -61,6 +61,11 @@ type ResumeSessionOperation func(sessioncli.LifecycleControlConfig) error
 type ListSessionDispatchesOperation func(sessioncli.DispatchesConfig) error
 type CreateSessionOperation func(sessioncli.CreateConfig) error
 type DeleteSessionOperation func(sessioncli.DeleteConfig) error
+type OwnedExecutionService interface {
+	factorysessions.ExecutionService
+	Close() error
+}
+type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
 type InitSystemConfigOperation func(configinitcmd.InitConfig) error
@@ -95,7 +100,7 @@ type CommandOperations struct {
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
-	BuildExecution                    fse.ExecutionServiceBuilder
+	BuildExecution                    ExecutionServiceBuilder
 	ModelsCLI                         modelscli.Service
 	SubmitWork                        SubmitWorkOperation
 	SubmitBatch                       SubmitBatchOperation
@@ -156,7 +161,7 @@ type CommandFactory struct {
 	ListSessionDispatches func(sessioncli.DispatchesConfig) error
 	CreateSession         func(sessioncli.CreateConfig) error
 	DeleteSession         func(sessioncli.DeleteConfig) error
-	BuildExecution        fse.ExecutionServiceBuilder
+	BuildExecution        ExecutionServiceBuilder
 	ModelsCLI             modelscli.Service
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
@@ -284,7 +289,7 @@ func buildWorkflowExecutionService(
 	projectRoot string,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-) (fse.OwnedExecutionService, error) {
+) (OwnedExecutionService, error) {
 	if options.BuildExecution == nil {
 		return nil, fmt.Errorf("construct workflow execution: durable execution builder is required")
 	}

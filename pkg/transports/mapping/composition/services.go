@@ -74,7 +74,7 @@ func NewFactoryDefinitionAPI(service factorydefinitions.Service) apisurface.Fact
 	return factorydefinitionmapping.NewAPI(definitions, definitions)
 }
 
-func NewInvocationAPI(invocations factorysessions.SessionInvoker) apisurface.InvocationAPI {
+func NewInvocationAPI(invocations factorysessionmapping.SessionInvoker) apisurface.InvocationAPI {
 	return factorysessionmapping.NewInvocationAPI(invocations)
 }
 

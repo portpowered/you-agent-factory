@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-var canonicalListRequestPreparation fse.RequestPreparation = listRequestPreparation{}
+var canonicalListRequestPreparation RequestPreparation = listRequestPreparation{}
 
 type listRequestPreparation struct{}
 

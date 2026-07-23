@@ -175,6 +175,5 @@ func (r *RecordingInvocationMetrics) Contains(name string, labels map[string]str
 }
 
 var (
-	_ factoryruntime.MetricsEmitter             = (*RecordingMetricsEmitter)(nil)
-	_ factorysessions.InvocationMetricsRecorder = (*RecordingInvocationMetrics)(nil)
+	_ factoryruntime.MetricsEmitter = (*RecordingMetricsEmitter)(nil)
 )
