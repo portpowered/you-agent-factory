@@ -9,7 +9,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -28,6 +28,47 @@ const executeFile = promisify(execFile);
 async function git(repositoryRoot, ...args) {
 	const { stdout } = await executeFile("git", ["-C", repositoryRoot, ...args]);
 	return stdout;
+}
+
+async function assertSourceRevisionAdvances(sourcePath) {
+	const repositoryRoot = await mkdtemp(
+		join(tmpdir(), "you-model-provider-source-git-"),
+	);
+	try {
+		await mkdir(
+			join(repositoryRoot, "packages/model-providers/providers/agy"),
+			{ recursive: true },
+		);
+		const changedPath = join(repositoryRoot, sourcePath);
+		await mkdir(dirname(changedPath), { recursive: true });
+		await writeFile(
+			join(
+				repositoryRoot,
+				"packages/model-providers/providers/agy/provider.yaml",
+			),
+			"id: agy\n",
+		);
+		await writeFile(changedPath, "// initial source\n");
+		await git(repositoryRoot, "init");
+		await git(repositoryRoot, "config", "user.name", "Provider Catalog Test");
+		await git(
+			repositoryRoot,
+			"config",
+			"user.email",
+			"provider-catalog@example.com",
+		);
+		await git(repositoryRoot, "add", "-A");
+		await git(repositoryRoot, "commit", "-m", "initial package source");
+
+		await writeFile(changedPath, "// revised source\n");
+		await git(repositoryRoot, "add", "-A");
+		await git(repositoryRoot, "commit", "-m", "revise package source");
+
+		const head = (await git(repositoryRoot, "rev-parse", "HEAD")).trim();
+		assert.equal(await resolveSourceCommit(repositoryRoot), head);
+	} finally {
+		await rm(repositoryRoot, { recursive: true, force: true });
+	}
 }
 
 test("generated declarations come from the explicit Provider Catalog schema", async () => {
@@ -109,47 +150,13 @@ test("source revision rejects an unrelated shallow-clone head", async () => {
 });
 
 test("source revision advances when the package generator changes", async () => {
-	const repositoryRoot = await mkdtemp(
-		join(tmpdir(), "you-model-provider-generator-git-"),
+	await assertSourceRevisionAdvances("scripts/model-provider-package.mjs");
+});
+
+test("source revision advances when the schema converter changes", async () => {
+	await assertSourceRevisionAdvances(
+		"internal/contractopenapiconverter/convert.go",
 	);
-	try {
-		await mkdir(
-			join(repositoryRoot, "packages/model-providers/providers/agy"),
-			{ recursive: true },
-		);
-		await mkdir(join(repositoryRoot, "scripts"), { recursive: true });
-		await writeFile(
-			join(
-				repositoryRoot,
-				"packages/model-providers/providers/agy/provider.yaml",
-			),
-			"id: agy\n",
-		);
-		const generatorPath = join(
-			repositoryRoot,
-			"scripts/model-provider-package.mjs",
-		);
-		await writeFile(generatorPath, "// initial generator\n");
-		await git(repositoryRoot, "init");
-		await git(repositoryRoot, "config", "user.name", "Provider Catalog Test");
-		await git(
-			repositoryRoot,
-			"config",
-			"user.email",
-			"provider-catalog@example.com",
-		);
-		await git(repositoryRoot, "add", "-A");
-		await git(repositoryRoot, "commit", "-m", "initial package source");
-
-		await writeFile(generatorPath, "// revised generator\n");
-		await git(repositoryRoot, "add", "-A");
-		await git(repositoryRoot, "commit", "-m", "revise package generator");
-
-		const head = (await git(repositoryRoot, "rev-parse", "HEAD")).trim();
-		assert.equal(await resolveSourceCommit(repositoryRoot), head);
-	} finally {
-		await rm(repositoryRoot, { recursive: true, force: true });
-	}
 });
 
 test("reviewed tarball inventory rejects provider sources and runtime code", () => {

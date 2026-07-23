@@ -18,6 +18,7 @@ const typeOutput = `${packageDirectory}/types/index.d.ts`;
 const manifestOutput = `${packageDirectory}/metadata/manifest.json`;
 const sourceIdentityPaths = Object.freeze([
 	"api/openapi.yaml",
+	"internal/contractopenapiconverter",
 	"internal/providercatalog",
 	`${packageDirectory}/providers`,
 	"scripts/model-provider-package.mjs",
