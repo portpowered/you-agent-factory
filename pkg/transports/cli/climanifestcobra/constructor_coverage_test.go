@@ -189,6 +189,94 @@ func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T
 	}
 }
 
+func TestNewCommandTreeDispatchesEveryVariadicArgumentValueType(t *testing.T) {
+	tests := []struct {
+		name      string
+		valueType string
+		args      []string
+		want      any
+	}{
+		{name: "booleans", valueType: "bool", args: []string{"true", "false"}, want: []bool{true, false}},
+		{name: "strings", valueType: "string", args: []string{"first", "second"}, want: []string{"first", "second"}},
+		{name: "integers", valueType: "int", args: []string{"7", "9"}, want: []int{7, 9}},
+		{name: "empty strings", valueType: "string", want: []string(nil)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticArgumentManifest()
+			command := manifest.Commands["stable.shape"]
+			command.Arguments = map[string]climanifest.Argument{
+				"stable.shape.arg.values": {
+					ID: "stable.shape.arg.values", Name: "values", Position: 0, Kind: "positional",
+					ValueType: test.valueType, Variadic: true, MinCardinality: 0, MaxCardinality: -1,
+					Completion: "none",
+				},
+			}
+			manifest.Commands[command.ID] = command
+			var received map[string]any
+			bindings := genericBindingsForManifest(manifest)
+			bindings.Handlers[command.Handler.ID] = func(_ context.Context, values map[string]any) error {
+				received = values
+				return nil
+			}
+			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			if err != nil {
+				t.Fatalf("NewCommandTree() error = %v", err)
+			}
+			root.SetArgs(append([]string{"shape"}, test.args...))
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if !reflect.DeepEqual(received["stable.shape.arg.values"], test.want) {
+				t.Fatalf("handler values = %#v, want %#v", received, test.want)
+			}
+		})
+	}
+}
+
+func TestNewCommandTreeDispatchesScalarBooleanAndInt64Arguments(t *testing.T) {
+	tests := []struct {
+		name      string
+		valueType string
+		arg       string
+		want      any
+	}{
+		{name: "boolean", valueType: "bool", arg: "true", want: true},
+		{name: "64-bit integer", valueType: "int64", arg: "9223372036854775000", want: int64(9223372036854775000)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticArgumentManifest()
+			command := manifest.Commands["stable.shape"]
+			command.Arguments = map[string]climanifest.Argument{
+				"stable.shape.arg.value": {
+					ID: "stable.shape.arg.value", Name: "value", Position: 0, Kind: "positional",
+					ValueType: test.valueType, Required: true, MinCardinality: 1, MaxCardinality: 1,
+					Completion: "none",
+				},
+			}
+			manifest.Commands[command.ID] = command
+			var received map[string]any
+			bindings := genericBindingsForManifest(manifest)
+			bindings.Handlers[command.Handler.ID] = func(_ context.Context, values map[string]any) error {
+				received = values
+				return nil
+			}
+			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			if err != nil {
+				t.Fatalf("NewCommandTree() error = %v", err)
+			}
+			root.SetArgs([]string{"shape", test.arg})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if !reflect.DeepEqual(received["stable.shape.arg.value"], test.want) {
+				t.Fatalf("handler values = %#v, want %#v", received, test.want)
+			}
+		})
+	}
+}
+
 func assertProjectedHelpAndLifecycle(t *testing.T, alpha *cobra.Command) {
 	t.Helper()
 	var output bytes.Buffer

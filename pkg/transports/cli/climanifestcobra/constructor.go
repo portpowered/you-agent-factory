@@ -448,10 +448,19 @@ type plannedFlag struct {
 	canonicalID string
 }
 
+// GenericConstructor is the stateless transport role that projects a resolved
+// manifest snapshot into a detached Cobra command tree.
+type GenericConstructor struct{}
+
 // NewCommandTree constructs a detached Cobra tree from one resolved CLI
 // manifest snapshot. It validates the complete command topology before
 // allocating any Cobra commands, so callers never receive a partial tree.
 func NewCommandTree(manifest climanifest.Manifest, bindingSets ...GenericBindings) (*cobra.Command, error) {
+	return (GenericConstructor{}).Construct(manifest, bindingSets...)
+}
+
+// Construct validates and projects one resolved manifest snapshot.
+func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets ...GenericBindings) (*cobra.Command, error) {
 	bindings, err := resolveGenericBindings(bindingSets)
 	if err != nil {
 		return nil, fmt.Errorf("build generic command tree: %w", err)

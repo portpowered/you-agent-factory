@@ -401,6 +401,11 @@ response-stream output.
   projection, reject duplicate handler ownership, and invoke the selected
   stable-ID handler with a detached normalized `InputValues` snapshot. Public
   command paths and aliases must not participate in executable lookup.
+  `GenericConstructor.Construct` is the strict stateless transport role for
+  functional projection evidence; keep `NewCommandTree` as the convenience
+  constructor while later family migrations remain outside this foundation
+  work. Functional tests may call the role, but must not assemble customer
+  behavior through transport constructors in place of `root.BuildProcess`.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
