@@ -9,6 +9,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 )
 
@@ -62,7 +63,7 @@ func (s *service) Get(ctx context.Context, sessionID string) (factorysessions.Se
 	return controlplane.GetLiveFactorySession(ctx, liveReadHost{s.dependencies}, sessionID)
 }
 
-func (s *service) Resolve(sessionID string) *factorysessions.LiveSession {
+func (s *service) Resolve(sessionID string) *livesession.LiveSession {
 	if s == nil {
 		return nil
 	}
@@ -155,12 +156,12 @@ func (s *service) Close(ctx context.Context, sessionID string) error {
 type liveReadHost struct{ dependencies liveruntime.Dependencies }
 
 func (h liveReadHost) ListLiveSessionIDs() []string { return h.dependencies.ListSessionIDs() }
-func (h liveReadHost) GetLiveSession(id string) *factorysessions.LiveSession {
+func (h liveReadHost) GetLiveSession(id string) *livesession.LiveSession {
 	return h.dependencies.GetSession(id)
 }
-func (h liveReadHost) RequireSession(id string) (*factorysessions.LiveSession, error) {
+func (h liveReadHost) RequireSession(id string) (*livesession.LiveSession, error) {
 	return h.dependencies.RequireSession(id)
 }
-func (h liveReadHost) BuildSessionProjectionContext(ctx context.Context, session *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
+func (h liveReadHost) BuildSessionProjectionContext(ctx context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
 	return h.dependencies.BuildProjectionContext(ctx, session)
 }

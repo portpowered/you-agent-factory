@@ -14,7 +14,7 @@ import (
 
 // SyncPreflightTarget resolves one live session for sync-preflight reads.
 type SyncPreflightTarget struct {
-	Session    *factorysessions.LiveSession
+	Session    *livesession.LiveSession
 	Remapped   bool
 	Unresolved bool
 }
@@ -26,9 +26,9 @@ type SyncPreflightHost interface {
 		logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 	) (SyncPreflightTarget, error)
 	BackendScopeID() string
-	LogicalSessionKeyID(session *factorysessions.LiveSession) string
-	StreamGenerationID(session *factorysessions.LiveSession) string
-	LiveSessionEvents(session *factorysessions.LiveSession) []interfaces.FactoryEvent
+	LogicalSessionKeyID(session *livesession.LiveSession) string
+	StreamGenerationID(session *livesession.LiveSession) string
+	LiveSessionEvents(session *livesession.LiveSession) []interfaces.FactoryEvent
 }
 
 // GetLiveFactorySessionSyncPreflight validates reconnect cursors and session identity
@@ -131,11 +131,11 @@ func newSyncPreflightResponse(
 }
 
 // LogicalSessionKeyID derives the stable logical session key for sync preflight reads.
-func LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func LogicalSessionKeyID(session *livesession.LiveSession) string {
 	return logicalSessionKeyID(session)
 }
 
-func logicalSessionKeyID(session *factorysessions.LiveSession) string {
+func logicalSessionKeyID(session *livesession.LiveSession) string {
 	if session == nil {
 		return ""
 	}

@@ -71,13 +71,13 @@ func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
 }
 
 func TestBuildProjectionContextRequiresExplicitProjectionTime(t *testing.T) {
-	if _, err := sessionprojection.BuildProjectionContext(ProjectionBuildInput{}); err == nil ||
+	if _, err := sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{}); err == nil ||
 		!strings.Contains(err.Error(), "projection time is required") {
 		t.Fatalf("sessionprojection.BuildProjectionContext() error = %v, want required projection time", err)
 	}
 
 	now := time.Date(2026, 7, 20, 16, 45, 0, 0, time.UTC)
-	ctx, err := sessionprojection.BuildProjectionContext(ProjectionBuildInput{Now: now})
+	ctx, err := sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{Now: now})
 	if err != nil {
 		t.Fatalf("sessionprojection.BuildProjectionContext() error = %v", err)
 	}

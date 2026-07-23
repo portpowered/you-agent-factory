@@ -3,7 +3,7 @@ package service_test
 import (
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
@@ -25,8 +25,8 @@ func TestService_StreamMethods_RequireGateway(t *testing.T) {
 		t.Fatal("DispatchCompletionObserverFactory = non-nil, want nil without gateway")
 	}
 
-	gateway.CloseSessionResponseStreams(&factorysessions.LiveSession{ID: "sess"})
-	if gateway.JavaScriptCheckpointStore(&factorysessions.LiveSession{ID: "sess"}) != nil {
+	gateway.CloseSessionResponseStreams(&livesession.LiveSession{ID: "sess"})
+	if gateway.JavaScriptCheckpointStore(&livesession.LiveSession{ID: "sess"}) != nil {
 		t.Fatal("JavaScriptCheckpointStore = non-nil, want nil without gateway")
 	}
 }

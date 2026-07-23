@@ -38,8 +38,8 @@ func newTestManager(host stream.Host) *stream.Manager {
 }
 
 type streamTestHost struct {
-	session     *factorysessions.LiveSession
-	streams     *factorysessions.SessionResponseStreamSet
+	session     *livesession.LiveSession
+	streams     *responsestream.StreamSet
 	published   int
 	compactions int
 	degraded    int
@@ -79,18 +79,18 @@ func canonicalDraftFragment(dispatchID string, draft any) workers.ProgressFragme
 	return workers.ProgressFragment{DispatchID: dispatchID, CanonicalDraft: draft}
 }
 
-func (h *streamTestHost) RequireSession(_ string) (*factorysessions.LiveSession, error) {
+func (h *streamTestHost) RequireSession(_ string) (*livesession.LiveSession, error) {
 	if h.session == nil {
 		return nil, errMissingSession
 	}
 	return h.session, nil
 }
 
-func (h *streamTestHost) GetLiveSession(_ string) *factorysessions.LiveSession {
+func (h *streamTestHost) GetLiveSession(_ string) *livesession.LiveSession {
 	return h.session
 }
 
-func (h *streamTestHost) ResponseStreams(_ *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (h *streamTestHost) ResponseStreams(_ *livesession.LiveSession) *responsestream.StreamSet {
 	if h.streams == nil {
 		h.streams = responsestream.NewStreamSetWithFactory(newTestResponseStream, streamTestClock)
 	}
@@ -101,25 +101,25 @@ func (h *streamTestHost) NewResponseStream() *responsestream.SessionResponseStre
 	return newTestResponseStream()
 }
 
-func (h *streamTestHost) CloseResponseStreams(_ *factorysessions.LiveSession) {
+func (h *streamTestHost) CloseResponseStreams(_ *livesession.LiveSession) {
 	if h.streams != nil {
 		h.streams.Close()
 	}
 }
 
-func (h *streamTestHost) CloseResponseStreamDispatch(_ *factorysessions.LiveSession, dispatchID string) bool {
+func (h *streamTestHost) CloseResponseStreamDispatch(_ *livesession.LiveSession, dispatchID string) bool {
 	if h.streams == nil {
 		return false
 	}
 	return h.streams.CloseDispatch(dispatchID)
 }
 
-func (h *streamTestHost) ObserveResponseStreamPublished(_ *factorysessions.LiveSession, _ string, _ responsestream.Event) {
+func (h *streamTestHost) ObserveResponseStreamPublished(_ *livesession.LiveSession, _ string, _ responsestream.Event) {
 	h.published++
 }
 
 func (h *streamTestHost) ObserveResponseStreamCompaction(
-	_ *factorysessions.LiveSession,
+	_ *livesession.LiveSession,
 	_ string,
 	_ string,
 	_ responsestream.CompactionSummary,
@@ -128,7 +128,7 @@ func (h *streamTestHost) ObserveResponseStreamCompaction(
 }
 
 func (h *streamTestHost) ObserveResponseStreamDegraded(
-	_ *factorysessions.LiveSession,
+	_ *livesession.LiveSession,
 	_ string,
 	_ string,
 	_ string,
@@ -144,7 +144,7 @@ func TestManager_SubscribeAndPublishInferenceProgress(t *testing.T) {
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-stream"},
+		session: &livesession.LiveSession{ID: "sess-stream"},
 	}
 	manager := newTestManager(host)
 	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-stream")
@@ -462,7 +462,7 @@ func TestManager_CloseAllPreventsSubscription(t *testing.T) {
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-close-all"},
+		session: &livesession.LiveSession{ID: "sess-close-all"},
 	}
 	manager := newTestManager(host)
 	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-close-all")
@@ -479,7 +479,7 @@ func TestManager_CloseDispatch_ReleasesOneDispatchStream(t *testing.T) {
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-close-dispatch"},
+		session: &livesession.LiveSession{ID: "sess-close-dispatch"},
 	}
 	manager := newTestManager(host)
 	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-close-dispatch")
@@ -494,7 +494,7 @@ func TestManager_DispatchCompletionObserverFactory_ClosesDispatchOnCompletion(t 
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-observer"},
+		session: &livesession.LiveSession{ID: "sess-observer"},
 	}
 	manager := newTestManager(host)
 	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-observer")
@@ -522,7 +522,7 @@ func TestManager_InferenceProgressPublisher_NormalizesFragmentKinds(t *testing.T
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-fragments"},
+		session: &livesession.LiveSession{ID: "sess-fragments"},
 	}
 	manager := newTestManager(host)
 	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-fragments")

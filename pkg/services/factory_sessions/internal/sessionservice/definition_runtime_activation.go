@@ -7,14 +7,14 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 // NamedFactoryActivationPaths resolves persistence and runtime roots for one
 // named-definition activation.
-func NamedFactoryActivationPaths(factoryRoot, configuredRoot string, session *factorysessions.LiveSession) (persistRoot, folderPath string) {
+func NamedFactoryActivationPaths(factoryRoot, configuredRoot string, session *livesession.LiveSession) (persistRoot, folderPath string) {
 	persistRoot = strings.TrimSpace(factoryRoot)
 	if persistRoot == "" {
 		persistRoot = strings.TrimSpace(configuredRoot)
@@ -37,7 +37,7 @@ func NamedFactoryActivationPaths(factoryRoot, configuredRoot string, session *fa
 func RequireIdleBeforeNamedActivation(
 	ctx context.Context,
 	sessionID string,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 	liveRuntime bool,
 	requireSessionIdle func(context.Context, string) error,
 	requireRuntimeIdle func(context.Context) error,
@@ -58,7 +58,7 @@ func RequireIdleBeforeNamedActivation(
 // definition replacement using the canonical ordering and error policy.
 func ActivateSessionRuntime(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
@@ -66,7 +66,7 @@ func ActivateSessionRuntime(
 	runtimeName string,
 	build func(context.Context, string, string, string) (factory.HostedInstance, error),
 	requireIdle func(context.Context, string) error,
-	replace func(context.Context, *factorysessions.LiveSession, string, factory.HostedInstance) error,
+	replace func(context.Context, *livesession.LiveSession, string, factory.HostedInstance) error,
 ) error {
 	if build == nil || requireIdle == nil || replace == nil {
 		return fmt.Errorf("factory runtime activation dependencies are required")
@@ -86,14 +86,14 @@ func ActivateSessionRuntime(
 func ApplyNamedReplacement(
 	ctx context.Context,
 	sessionID string,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 	liveRuntime bool,
 	persistRoot string,
 	name string,
 	replacement factory.HostedInstance,
 	requireSessionIdle func(context.Context, string) error,
 	requireRuntimeIdle func(context.Context) error,
-	replaceSession func(context.Context, *factorysessions.LiveSession, string, factory.HostedInstance) error,
+	replaceSession func(context.Context, *livesession.LiveSession, string, factory.HostedInstance) error,
 	activateWithoutLiveRuntime func(string, string, factory.HostedInstance) error,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
 ) error {

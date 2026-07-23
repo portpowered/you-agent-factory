@@ -74,7 +74,7 @@ func (s *Service) Select(targets []factorysessions.Target, ref *factorysessions.
 	return logicaltarget.Select(targets, ref)
 }
 
-func (s *Service) Resolve(registry sessionregistry.Service, selector string) *factorysessions.LiveSession {
+func (s *Service) Resolve(registry sessionregistry.Service, selector string) *livesession.LiveSession {
 	if registry == nil {
 		return nil
 	}
@@ -91,7 +91,7 @@ func (s *Service) Resolve(registry sessionregistry.Service, selector string) *fa
 	return nil
 }
 
-func (s *Service) ResolveLogical(registry sessionregistry.Service, backendScopeID, logicalSessionKeyID string) *factorysessions.LiveSession {
+func (s *Service) ResolveLogical(registry sessionregistry.Service, backendScopeID, logicalSessionKeyID string) *livesession.LiveSession {
 	if registry == nil || strings.TrimSpace(logicalSessionKeyID) == "" {
 		return nil
 	}

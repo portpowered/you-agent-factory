@@ -11,13 +11,14 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 type sessionSyncPreflightTarget struct {
-	session    *factorysessions.LiveSession
+	session    *livesession.LiveSession
 	remapped   bool
 	unresolved bool
 }
@@ -71,7 +72,7 @@ func (fs *SessionRuntime) resolveSessionSyncPreflightByLogicalKey(
 
 func (fs *SessionRuntime) buildSessionProjectionContext(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
 	if session == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("%w", factorysessions.ErrSessionNotFound)
@@ -101,7 +102,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	return sessionprojection.BuildProjectionContext(factorysessions.ProjectionBuildInput{
+	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg, Snapshot: snapshot,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
@@ -112,7 +113,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 
 func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) (factorysessioncursors.IdentityScope, error) {
 	if fs == nil || session == nil {
 		return factorysessioncursors.IdentityScope{}, fmt.Errorf("factory service is required")

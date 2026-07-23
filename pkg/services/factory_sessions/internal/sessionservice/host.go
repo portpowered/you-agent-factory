@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
@@ -30,20 +31,20 @@ type dependencyHost struct {
 	discoverTargets               func(string) ([]factorysessions.Target, error)
 	initializeFactoryScaffold     func(string) error
 	openLiveSessionForTarget      func(context.Context, factorysessions.Target) (string, error)
-	requireSession                func(string) (*factorysessions.LiveSession, error)
+	requireSession                func(string) (*livesession.LiveSession, error)
 	listLiveSessionIDs            func() []string
-	getLiveSession                func(string) *factorysessions.LiveSession
-	buildSessionProjectionContext func(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error)
+	getLiveSession                func(string) *livesession.LiveSession
+	buildSessionProjectionContext func(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error)
 	resolveSyncPreflightTarget    func(string, *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error)
 	backendScopeID                func() string
-	logicalSessionKeyID           func(*factorysessions.LiveSession) string
-	streamGenerationID            func(*factorysessions.LiveSession) string
-	liveSessionEvents             func(*factorysessions.LiveSession) []interfaces.FactoryEvent
+	logicalSessionKeyID           func(*livesession.LiveSession) string
+	streamGenerationID            func(*livesession.LiveSession) string
+	liveSessionEvents             func(*livesession.LiveSession) []interfaces.FactoryEvent
 	sessionFactory                func(string) (factory.Service, error)
 	stopLiveSession               func(string) error
 	observeLiveLifecycleControl   func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
 	durableExecution              func() factorysessions.ExecutionService
-	javaScriptCheckpointStore     func(*factorysessions.LiveSession) factory.JavaScriptCheckpointStore
+	javaScriptCheckpointStore     func(*livesession.LiveSession) factory.JavaScriptCheckpointStore
 	directoryInspection           roles.DirectoryInspection
 	resolveSessionFolder          func(string) (string, error)
 	selectTarget                  func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
@@ -88,7 +89,7 @@ func (h dependencyHost) OpenLiveSessionForTarget(ctx context.Context, target fac
 	return h.openLiveSessionForTarget(ctx, target)
 }
 
-func (h dependencyHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
+func (h dependencyHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
 	if h.requireSession == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
@@ -102,14 +103,14 @@ func (h dependencyHost) ListLiveSessionIDs() []string {
 	return h.listLiveSessionIDs()
 }
 
-func (h dependencyHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+func (h dependencyHost) GetLiveSession(sessionID string) *livesession.LiveSession {
 	if h.getLiveSession == nil {
 		return nil
 	}
 	return h.getLiveSession(sessionID)
 }
 
-func (h dependencyHost) BuildSessionProjectionContext(ctx context.Context, session *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
+func (h dependencyHost) BuildSessionProjectionContext(ctx context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
 	if h.buildSessionProjectionContext == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("factory service is required")
 	}
@@ -133,21 +134,21 @@ func (h dependencyHost) BackendScopeID() string {
 	return h.backendScopeID()
 }
 
-func (h dependencyHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func (h dependencyHost) LogicalSessionKeyID(session *livesession.LiveSession) string {
 	if h.logicalSessionKeyID == nil {
 		return ""
 	}
 	return h.logicalSessionKeyID(session)
 }
 
-func (h dependencyHost) StreamGenerationID(session *factorysessions.LiveSession) string {
+func (h dependencyHost) StreamGenerationID(session *livesession.LiveSession) string {
 	if h.streamGenerationID == nil {
 		return ""
 	}
 	return h.streamGenerationID(session)
 }
 
-func (h dependencyHost) LiveSessionEvents(session *factorysessions.LiveSession) []interfaces.FactoryEvent {
+func (h dependencyHost) LiveSessionEvents(session *livesession.LiveSession) []interfaces.FactoryEvent {
 	if h.liveSessionEvents == nil {
 		return nil
 	}
@@ -188,7 +189,7 @@ func (h dependencyHost) DurableExecution() factorysessions.ExecutionService {
 	return h.durableExecution()
 }
 
-func (h dependencyHost) JavaScriptCheckpointStore(session *factorysessions.LiveSession) factory.JavaScriptCheckpointStore {
+func (h dependencyHost) JavaScriptCheckpointStore(session *livesession.LiveSession) factory.JavaScriptCheckpointStore {
 	if h.javaScriptCheckpointStore == nil {
 		return nil
 	}

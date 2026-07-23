@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
 type resultReadTestHost struct {
@@ -27,7 +28,7 @@ func (resultProjectionRole) ProjectSessionResults(
 	}}
 }
 
-func (h *resultReadTestHost) JavaScriptCheckpointStore(_ *factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore {
+func (h *resultReadTestHost) JavaScriptCheckpointStore(_ *livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore {
 	if h.checkpoint == nil {
 		h.checkpoint = resultReadCheckpointStore{}
 	}
@@ -48,7 +49,7 @@ var _ factoryruntime.JavaScriptCheckpointStore = resultReadCheckpointStore{}
 
 func (h *resultReadTestHost) BuildSessionProjectionContext(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
@@ -62,10 +63,10 @@ func (h *resultReadTestHost) BuildSessionProjectionContext(
 func TestGetLiveFactorySessionResult_ReturnsJavaScriptProjection(t *testing.T) {
 	t.Parallel()
 
-	session := &factorysessions.LiveSession{ID: "sess-js"}
+	session := &livesession.LiveSession{ID: "sess-js"}
 	host := &resultReadTestHost{
 		readTestHost: readTestHost{
-			sessions: map[string]*factorysessions.LiveSession{"sess-js": session},
+			sessions: map[string]*livesession.LiveSession{"sess-js": session},
 		},
 		factoryCfg: &interfaces.FactoryConfig{
 			Name: "workflow",
@@ -90,7 +91,7 @@ func TestGetLiveFactorySessionResult_RequiresInjectedProjection(t *testing.T) {
 	t.Parallel()
 
 	host := &resultReadTestHost{
-		readTestHost: readTestHost{sessions: map[string]*factorysessions.LiveSession{
+		readTestHost: readTestHost{sessions: map[string]*livesession.LiveSession{
 			"sess-js": {ID: "sess-js"},
 		}},
 		factoryCfg: &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -107,10 +108,10 @@ func TestGetLiveFactorySessionResult_RequiresInjectedProjection(t *testing.T) {
 func TestGetLiveFactorySessionPartialResult_ReturnsJavaScriptProjection(t *testing.T) {
 	t.Parallel()
 
-	session := &factorysessions.LiveSession{ID: "sess-js-partial"}
+	session := &livesession.LiveSession{ID: "sess-js-partial"}
 	host := &resultReadTestHost{
 		readTestHost: readTestHost{
-			sessions: map[string]*factorysessions.LiveSession{"sess-js-partial": session},
+			sessions: map[string]*livesession.LiveSession{"sess-js-partial": session},
 		},
 		factoryCfg: &interfaces.FactoryConfig{
 			Name: "workflow",

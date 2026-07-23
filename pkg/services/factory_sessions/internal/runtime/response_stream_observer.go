@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	metrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"go.uber.org/zap"
 )
@@ -27,11 +27,11 @@ func NewResponseStreamObserver(resolve ResponseStreamRuntimeResolver) ResponseSt
 	return ResponseStreamObserver{resolve: resolve}
 }
 
-func (o ResponseStreamObserver) ObserveResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
+func (o ResponseStreamObserver) ObserveResponseStreamPublished(session *livesession.LiveSession, sessionID string, event responsestream.Event) {
 	o.emitResponseStreamMetric(session, sessionID, metricResponseStreamPublished, metrics.Fields{DispatchID: strings.TrimSpace(event.DispatchID), Reason: string(event.Kind)})
 }
 
-func (o ResponseStreamObserver) ObserveResponseStreamCompaction(session *factorysessions.LiveSession, sessionID, dispatchID string, summary responsestream.CompactionSummary) {
+func (o ResponseStreamObserver) ObserveResponseStreamCompaction(session *livesession.LiveSession, sessionID, dispatchID string, summary responsestream.CompactionSummary) {
 	o.emitResponseStreamMetric(session, sessionID, metricResponseStreamCompacted, metrics.Fields{DispatchID: strings.TrimSpace(dispatchID), Reason: string(summary.Reason)})
 	if _, logger := o.responseStreamTelemetry(session); logger != nil {
 		logger.Warn("session response stream compacted internal provider progress",
@@ -41,7 +41,7 @@ func (o ResponseStreamObserver) ObserveResponseStreamCompaction(session *factory
 	}
 }
 
-func (o ResponseStreamObserver) ObserveResponseStreamDegraded(session *factorysessions.LiveSession, sessionID, dispatchID, reason string, fallback *zap.Logger, err error) {
+func (o ResponseStreamObserver) ObserveResponseStreamDegraded(session *livesession.LiveSession, sessionID, dispatchID, reason string, fallback *zap.Logger, err error) {
 	o.emitResponseStreamMetric(session, sessionID, metricResponseStreamDegraded, metrics.Fields{DispatchID: strings.TrimSpace(dispatchID), Reason: strings.TrimSpace(reason)})
 	logger := fallback
 	if _, runtimeLogger := o.responseStreamTelemetry(session); runtimeLogger != nil {
@@ -57,14 +57,14 @@ func (o ResponseStreamObserver) ObserveResponseStreamDegraded(session *factoryse
 	logger.Warn("internal provider progress publication degraded", fields...)
 }
 
-func (o ResponseStreamObserver) responseStreamTelemetry(session *factorysessions.LiveSession) (metrics.MetricsEmitter, *zap.Logger) {
+func (o ResponseStreamObserver) responseStreamTelemetry(session *livesession.LiveSession) (metrics.MetricsEmitter, *zap.Logger) {
 	if session == nil || o.resolve == nil {
 		return nil, nil
 	}
 	return o.resolve(session.Handle)
 }
 
-func (o ResponseStreamObserver) emitResponseStreamMetric(session *factorysessions.LiveSession, sessionID, name string, fields metrics.Fields) {
+func (o ResponseStreamObserver) emitResponseStreamMetric(session *livesession.LiveSession, sessionID, name string, fields metrics.Fields) {
 	emitter, logger := o.responseStreamTelemetry(session)
 	if emitter == nil {
 		return

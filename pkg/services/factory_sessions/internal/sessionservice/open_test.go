@@ -36,10 +36,10 @@ type openTestHost struct {
 	scaffoldErr     error
 	openSessionID   string
 	openErr         error
-	requireSession  *factorysessions.LiveSession
+	requireSession  *livesession.LiveSession
 	requireSessionE error
 	sessionIDs      []string
-	sessions        map[string]*factorysessions.LiveSession
+	sessions        map[string]*livesession.LiveSession
 	projectionErr   error
 	selectCalls     int
 }
@@ -71,7 +71,7 @@ func (h *openTestHost) OpenLiveSessionForTarget(_ context.Context, _ factorysess
 	return h.openSessionID, nil
 }
 
-func (h *openTestHost) RequireSession(_ string) (*factorysessions.LiveSession, error) {
+func (h *openTestHost) RequireSession(_ string) (*livesession.LiveSession, error) {
 	if h.requireSessionE != nil {
 		return nil, h.requireSessionE
 	}
@@ -82,7 +82,7 @@ func (h *openTestHost) ListLiveSessionIDs() []string {
 	return h.sessionIDs
 }
 
-func (h *openTestHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+func (h *openTestHost) GetLiveSession(sessionID string) *livesession.LiveSession {
 	if h.sessions == nil {
 		return h.requireSession
 	}
@@ -91,7 +91,7 @@ func (h *openTestHost) GetLiveSession(sessionID string) *factorysessions.LiveSes
 
 func (h *openTestHost) BuildSessionProjectionContext(
 	_ context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
@@ -114,15 +114,15 @@ func (h *openTestHost) BackendScopeID() string {
 	return "runtime-test"
 }
 
-func (h *openTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func (h *openTestHost) LogicalSessionKeyID(session *livesession.LiveSession) string {
 	return controlplane.LogicalSessionKeyID(session)
 }
 
-func (h *openTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string {
+func (h *openTestHost) StreamGenerationID(_ *livesession.LiveSession) string {
 	return "runtime-test::sess-1"
 }
 
-func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []interfaces.FactoryEvent {
+func (h *openTestHost) LiveSessionEvents(_ *livesession.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
@@ -148,7 +148,7 @@ func (h *openTestHost) DurableExecution() factorysessionexecution.Service {
 	return nil
 }
 
-func (h *openTestHost) ResponseStreams(*factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (h *openTestHost) ResponseStreams(*livesession.LiveSession) *responsestream.StreamSet {
 	return nil
 }
 
@@ -156,21 +156,21 @@ func (h *openTestHost) NewResponseStream() *responsestream.SessionResponseStream
 	return newServiceTestResponseStream()
 }
 
-func (h *openTestHost) CloseResponseStreams(*factorysessions.LiveSession) {}
+func (h *openTestHost) CloseResponseStreams(*livesession.LiveSession) {}
 
-func (h *openTestHost) CloseResponseStreamDispatch(*factorysessions.LiveSession, string) bool {
+func (h *openTestHost) CloseResponseStreamDispatch(*livesession.LiveSession, string) bool {
 	return false
 }
 
-func (h *openTestHost) JavaScriptCheckpointStore(*factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore {
+func (h *openTestHost) JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore {
 	return nil
 }
 
-func (h *openTestHost) ObserveResponseStreamPublished(*factorysessions.LiveSession, string, responsestream.Event) {
+func (h *openTestHost) ObserveResponseStreamPublished(*livesession.LiveSession, string, responsestream.Event) {
 }
 
 func (h *openTestHost) ObserveResponseStreamCompaction(
-	*factorysessions.LiveSession,
+	*livesession.LiveSession,
 	string,
 	string,
 	responsestream.CompactionSummary,
@@ -178,7 +178,7 @@ func (h *openTestHost) ObserveResponseStreamCompaction(
 }
 
 func (h *openTestHost) ObserveResponseStreamDegraded(
-	*factorysessions.LiveSession,
+	*livesession.LiveSession,
 	string,
 	string,
 	string,
@@ -197,9 +197,9 @@ func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T
 			FolderPath: "/tmp",
 		}},
 		openSessionID: "sess-1",
-		requireSession: &factorysessions.LiveSession{
+		requireSession: &livesession.LiveSession{
 			ID: "sess-1",
-			SessionState: factorysessions.SessionState{
+			SessionState: livesession.SessionState{
 				FactoryDir: "/tmp/factory",
 				FolderPath: "/tmp",
 			},
@@ -291,9 +291,9 @@ func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 			Project:    "demo",
 		}},
 		openSessionID: "sess-1",
-		requireSession: &factorysessions.LiveSession{
+		requireSession: &livesession.LiveSession{
 			ID: "sess-1",
-			SessionState: factorysessions.SessionState{
+			SessionState: livesession.SessionState{
 				FactoryDir: "/tmp/factory",
 				FolderPath: "/tmp",
 			},

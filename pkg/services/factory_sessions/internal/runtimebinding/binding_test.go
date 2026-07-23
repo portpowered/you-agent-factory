@@ -9,8 +9,9 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -367,7 +368,7 @@ func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
 	}
 }
 
-func registerTestSession(state *sessionruntime.Service, sessionID string) *factorysessions.LiveSession {
+func registerTestSession(state *sessionruntime.Service, sessionID string) *livesession.LiveSession {
 	instance := &hostedInstanceFake{}
 	handle := newHostedHandleFake(instance)
 	state.Register(sessionruntime.Registration{

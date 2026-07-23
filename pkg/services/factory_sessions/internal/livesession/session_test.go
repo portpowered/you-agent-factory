@@ -58,7 +58,7 @@ func TestNewUUIDKeepsRegistryIdentity(t *testing.T) {
 
 func TestCanonicalIDPrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
 	t.Parallel()
-	session := &factorysessions.LiveSession{
+	session := &livesession.LiveSession{
 		ID: factorysessions.DefaultSessionID, IsDefault: true,
 		RuntimeFactorySessionID: "550e8400-e29b-41d4-a716-446655440000",
 	}
@@ -69,7 +69,7 @@ func TestCanonicalIDPrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
 
 func TestEnsureRuntimeIDAssignsUUIDAndIsIdempotent(t *testing.T) {
 	t.Parallel()
-	session := &factorysessions.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true}
+	session := &livesession.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true}
 	if err := livesession.EnsureRuntimeID(session, sessionID); err != nil {
 		t.Fatalf("EnsureRuntimeID: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestEnsureRuntimeIDAssignsUUIDAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func newSession(t *testing.T, id string, clock factoryruntime.Clock) *factorysessions.LiveSession {
+func newSession(t *testing.T, id string, clock factoryruntime.Clock) *livesession.LiveSession {
 	t.Helper()
 	session := livesession.New(
 		id, "/factories/default", "/workspace", "/workspace",

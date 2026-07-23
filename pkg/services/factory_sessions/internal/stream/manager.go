@@ -52,7 +52,7 @@ func (m *Manager) Subscribe(
 	sessionID string,
 	dispatchID string,
 	afterSequence int64,
-) (*factorysessions.SessionResponseStreamSubscription, error) {
+) (*responsestream.Subscription, error) {
 	if m == nil || m.sessions == nil {
 		return nil, fmt.Errorf("session stream manager is required")
 	}
@@ -86,7 +86,7 @@ func (m *Manager) DispatchIDs(sessionID string) ([]string, error) {
 // ResponseStreams returns the canonical registry-owned stream set for a live
 // session. Compatibility shells use this while their direct stream helpers are
 // retired.
-func (m *Manager) ResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (m *Manager) ResponseStreams(session *livesession.LiveSession) *responsestream.StreamSet {
 	if m == nil || m.registry == nil || session == nil {
 		return nil
 	}
@@ -94,7 +94,7 @@ func (m *Manager) ResponseStreams(session *factorysessions.LiveSession) *factory
 }
 
 // CloseAll releases all response streams owned by one live session.
-func (m *Manager) CloseAll(session *factorysessions.LiveSession) {
+func (m *Manager) CloseAll(session *livesession.LiveSession) {
 	if m == nil || session == nil {
 		return
 	}
@@ -107,7 +107,7 @@ func (m *Manager) CloseAll(session *factorysessions.LiveSession) {
 }
 
 // CloseDispatch releases one dispatch-scoped response stream.
-func (m *Manager) CloseDispatch(session *factorysessions.LiveSession, dispatchID string) bool {
+func (m *Manager) CloseDispatch(session *livesession.LiveSession, dispatchID string) bool {
 	if m == nil || session == nil {
 		return false
 	}
@@ -153,7 +153,7 @@ func (m *Manager) inferenceProgressPublisher(
 	normalizedSessionID := normalizeSessionID(sessionID)
 	return func(fragment factorysessions.ProgressFragment) {
 		dispatchID := strings.TrimSpace(fragment.DispatchID)
-		var session *factorysessions.LiveSession
+		var session *livesession.LiveSession
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				m.observeDegraded(
@@ -214,13 +214,13 @@ func (m *Manager) inferenceProgressPublisher(
 	}
 }
 
-func (m *Manager) observeDegraded(session *factorysessions.LiveSession, sessionID, dispatchID, reason string, logger *zap.Logger, err error) {
+func (m *Manager) observeDegraded(session *livesession.LiveSession, sessionID, dispatchID, reason string, logger *zap.Logger, err error) {
 	if m != nil && m.observer != nil {
 		m.observer.ObserveResponseStreamDegraded(session, sessionID, dispatchID, reason, logger, err)
 	}
 }
 
-func (m *Manager) publishCanonicalDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
+func (m *Manager) publishCanonicalDraft(session *livesession.LiveSession, draft responseevents.Draft) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
@@ -238,7 +238,7 @@ func (m *Manager) publishCanonicalDraft(session *factorysessions.LiveSession, dr
 	return nil
 }
 
-func (m *Manager) publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, skipCanonical bool) error {
+func (m *Manager) publishCanonicalResponseEvents(session *livesession.LiveSession, fragment responsestream.Event, skipCanonical bool) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
@@ -283,7 +283,7 @@ func normalizeSessionID(sessionID string) string {
 	return normalized
 }
 
-func responseStreamSessionKey(session *factorysessions.LiveSession) string {
+func responseStreamSessionKey(session *livesession.LiveSession) string {
 	if session == nil {
 		return ""
 	}

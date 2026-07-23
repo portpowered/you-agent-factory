@@ -15,7 +15,7 @@ import (
 
 type readTestHost struct {
 	sessionIDs      []string
-	sessions        map[string]*factorysessions.LiveSession
+	sessions        map[string]*livesession.LiveSession
 	projectionErr   error
 	requireSessionE error
 	snapshot        *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]
@@ -23,7 +23,7 @@ type readTestHost struct {
 
 type defaultIdentityTestHost struct {
 	*readTestHost
-	session *factorysessions.LiveSession
+	session *livesession.LiveSession
 }
 
 func (h *defaultIdentityTestHost) ResolveSyncPreflightTarget(
@@ -37,15 +37,15 @@ func (h *defaultIdentityTestHost) BackendScopeID() string {
 	return "backend-default-identity-test"
 }
 
-func (h *defaultIdentityTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func (h *defaultIdentityTestHost) LogicalSessionKeyID(session *livesession.LiveSession) string {
 	return controlplane.LogicalSessionKeyID(session)
 }
 
-func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSession) string {
+func (h *defaultIdentityTestHost) StreamGenerationID(*livesession.LiveSession) string {
 	return "stream-default-identity-test"
 }
 
-func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []interfaces.FactoryEvent {
+func (h *defaultIdentityTestHost) LiveSessionEvents(*livesession.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
@@ -65,14 +65,14 @@ func (h *readTestHost) ListLiveSessionIDs() []string {
 	return h.sessionIDs
 }
 
-func (h *readTestHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+func (h *readTestHost) GetLiveSession(sessionID string) *livesession.LiveSession {
 	if h.sessions == nil {
 		return nil
 	}
 	return h.sessions[sessionID]
 }
 
-func (h *readTestHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
+func (h *readTestHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
 	if h.requireSessionE != nil {
 		return nil, h.requireSessionE
 	}
@@ -85,7 +85,7 @@ func (h *readTestHost) RequireSession(sessionID string) (*factorysessions.LiveSe
 
 func (h *readTestHost) BuildSessionProjectionContext(
 	_ context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
@@ -116,17 +116,17 @@ func TestListLiveFactorySessions_OrdersDefaultFirst(t *testing.T) {
 
 	host := &readTestHost{
 		sessionIDs: []string{"beta", "~default"},
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			"beta": {
 				ID: "beta",
-				SessionState: factorysessions.SessionState{
+				SessionState: livesession.SessionState{
 					FactoryDir: "/tmp/beta",
 				},
 			},
 			"~default": {
 				ID:        "~default",
 				IsDefault: true,
-				SessionState: factorysessions.SessionState{
+				SessionState: livesession.SessionState{
 					FactoryDir: "/tmp/default",
 				},
 			},
@@ -152,11 +152,11 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 		t.Fatalf("allocated session id %q must be a UUID distinct from the default selector", allocatedSessionID)
 	}
 
-	defaultSession := &factorysessions.LiveSession{
+	defaultSession := &livesession.LiveSession{
 		ID:                      factorysessions.DefaultSessionID,
 		IsDefault:               true,
 		RuntimeFactorySessionID: allocatedSessionID,
-		SessionState: factorysessions.SessionState{
+		SessionState: livesession.SessionState{
 			FactoryDir: "/tmp/default/factory",
 			FolderPath: "/tmp/default",
 		},
@@ -165,7 +165,7 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 	host := &defaultIdentityTestHost{
 		readTestHost: &readTestHost{
 			sessionIDs: []string{factorysessions.DefaultSessionID},
-			sessions: map[string]*factorysessions.LiveSession{
+			sessions: map[string]*livesession.LiveSession{
 				factorysessions.DefaultSessionID: defaultSession,
 			},
 			snapshot: &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
@@ -272,7 +272,7 @@ func TestListLiveFactorySessions_FallsBackWhenProjectionFails(t *testing.T) {
 
 	host := &readTestHost{
 		sessionIDs: []string{"sess-1"},
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			"sess-1": {ID: "sess-1"},
 		},
 		projectionErr: errors.New("projection unavailable"),
@@ -302,10 +302,10 @@ func TestGetLiveFactorySession_ReturnsProjectedSession(t *testing.T) {
 	t.Parallel()
 
 	host := &readTestHost{
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			"sess-1": {
 				ID: "sess-1",
-				SessionState: factorysessions.SessionState{
+				SessionState: livesession.SessionState{
 					FactoryDir: "/tmp/factory",
 				},
 			},

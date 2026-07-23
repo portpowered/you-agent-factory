@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -40,9 +41,9 @@ func TestNewServiceRequiresEveryRuntimeEffectAndStaysInert(t *testing.T) {
 func TestServiceOwnsOpenReadAndStop(t *testing.T) {
 	t.Parallel()
 
-	defaultSession := &factorysessions.LiveSession{ID: "default", IsDefault: true}
-	namedSession := &factorysessions.LiveSession{ID: "named"}
-	sessions := map[string]*factorysessions.LiveSession{"default": defaultSession, "named": namedSession}
+	defaultSession := &livesession.LiveSession{ID: "default", IsDefault: true}
+	namedSession := &livesession.LiveSession{ID: "named"}
+	sessions := map[string]*livesession.LiveSession{"default": defaultSession, "named": namedSession}
 	stopped := ""
 	dependencies := testDependencies()
 	dependencies.OpenForTarget = func(_ context.Context, target factorysessions.Target) (string, error) {
@@ -52,14 +53,14 @@ func TestServiceOwnsOpenReadAndStop(t *testing.T) {
 		return "named", nil
 	}
 	dependencies.ListSessionIDs = func() []string { return []string{"named", "default"} }
-	dependencies.GetSession = func(id string) *factorysessions.LiveSession { return sessions[id] }
-	dependencies.RequireSession = func(id string) (*factorysessions.LiveSession, error) {
+	dependencies.GetSession = func(id string) *livesession.LiveSession { return sessions[id] }
+	dependencies.RequireSession = func(id string) (*livesession.LiveSession, error) {
 		if session := sessions[id]; session != nil {
 			return session, nil
 		}
 		return nil, factorysessions.ErrSessionNotFound
 	}
-	dependencies.BuildProjectionContext = func(_ context.Context, session *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
+	dependencies.BuildProjectionContext = func(_ context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
 		return factorysessions.ProjectionContext{
 			Session:          &factorysessions.ScopedLiveSessionSummary{ID: session.ID},
 			FactorySessionID: session.ID,
@@ -122,9 +123,9 @@ func testDependencies() liveruntime.Dependencies {
 	return liveruntime.Dependencies{
 		OpenForTarget:  func(context.Context, factorysessions.Target) (string, error) { return "session", nil },
 		ListSessionIDs: func() []string { return nil },
-		GetSession:     func(string) *factorysessions.LiveSession { return nil },
-		RequireSession: func(string) (*factorysessions.LiveSession, error) { return nil, factorysessions.ErrSessionNotFound },
-		BuildProjectionContext: func(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
+		GetSession:     func(string) *livesession.LiveSession { return nil },
+		RequireSession: func(string) (*livesession.LiveSession, error) { return nil, factorysessions.ErrSessionNotFound },
+		BuildProjectionContext: func(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
 			return factorysessions.ProjectionContext{}, nil
 		},
 		SessionFactory: func(string) (factoryruntime.Service, error) { return &testFactoryRuntime{}, nil },

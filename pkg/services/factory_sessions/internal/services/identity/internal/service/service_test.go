@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -108,8 +109,8 @@ func TestServiceResolvesRestartedSessionByLogicalIdentity(t *testing.T) {
 	canonicalFolder := filepath.Clean(t.TempDir())
 	svc := newTestService(canonicalFolder)
 	registry := sessionregistry.New()
-	restarted := &factorysessions.LiveSession{
-		ID: "new-runtime-id", SessionState: factorysessions.SessionState{FolderPath: "submitted-folder"},
+	restarted := &livesession.LiveSession{
+		ID: "new-runtime-id", SessionState: livesession.SessionState{FolderPath: "submitted-folder"},
 		Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 	}
 	registry.Upsert(restarted, true)

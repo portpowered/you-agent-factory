@@ -150,8 +150,8 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 }
 
 func TestLogicalSessionKeyID_DefaultTargetUsesStableKey(t *testing.T) {
-	session := &LiveSession{
-		SessionState: SessionState{
+	session := &livesession.LiveSession{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{
@@ -164,8 +164,8 @@ func TestLogicalSessionKeyID_DefaultTargetUsesStableKey(t *testing.T) {
 }
 
 func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
-	session := &LiveSession{
-		SessionState: SessionState{
+	session := &livesession.LiveSession{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{
@@ -180,16 +180,16 @@ func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
 
 func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T) {
 	registry := sessionregistry.New()
-	defaultSession := &LiveSession{
+	defaultSession := &livesession.LiveSession{
 		ID: "session-default",
-		SessionState: SessionState{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{Kind: TargetKindDefault},
 	}
-	namedSession := &LiveSession{
+	namedSession := &livesession.LiveSession{
 		ID: "session-beta",
-		SessionState: SessionState{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{Kind: TargetKindNamed, Name: "beta"},

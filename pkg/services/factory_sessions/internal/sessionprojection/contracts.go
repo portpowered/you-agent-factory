@@ -1,11 +1,32 @@
 package sessionprojection
 
-import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-import "strings"
+import (
+	"strings"
+	"time"
 
-type ProjectionBuildInput = factorysessions.ProjectionBuildInput
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+)
+
+// ProjectionBuildInput contains the owner-private mutable runtime facts needed
+// to build one detached Factory Session projection context.
+type ProjectionBuildInput struct {
+	Session             *livesession.LiveSession
+	RuntimeConfig       interfaces.RuntimeConfigLookup
+	Snapshot            *factoryruntime.StateSnapshot
+	BackendScopeID      string
+	LogicalSessionKey   string
+	NormalizedTarget    *factorysessions.RuntimeLogicalTarget
+	RuntimeStartedAt    time.Time
+	CheckpointStore     factoryruntime.JavaScriptCheckpointStore
+	Events              []interfaces.FactoryEvent
+	WorldStateProjector factoryruntime.WorldStateProjector
+	Now                 time.Time
+}
+
 type ProjectionContext = factorysessions.ProjectionContext
-type LiveSession = factorysessions.LiveSession
 type RuntimeLogicalTarget = factorysessions.RuntimeLogicalTarget
 type RuntimeProjection = factorysessions.RuntimeProjection
 type RuntimeBudgets = factorysessions.RuntimeBudgets

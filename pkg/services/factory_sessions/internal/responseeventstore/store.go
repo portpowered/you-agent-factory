@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
@@ -34,7 +35,7 @@ type SessionResponseEventStore struct {
 
 // ResponseEventIDGenerator supplies opaque identities for canonical Factory
 // Session response events.
-type ResponseEventIDGenerator func() string
+type ResponseEventIDGenerator = factorysessions.ResponseEventIDGenerator
 
 // NewSessionResponseEventStore allocates an empty store for one session runtime
 // using the explicitly supplied process clock.

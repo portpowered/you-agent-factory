@@ -115,7 +115,7 @@ func DefaultTarget(bundleDir, bundleFolder, factoryRootDir string) factorysessio
 type Service struct {
 	registry       sessionregistry.Service
 	responses      *responsestream.Registry
-	close          func(*factorysessions.LiveSession)
+	close          func(*livesession.LiveSession)
 	clock          factoryruntime.Clock
 	eventIDs       factorysessions.ResponseEventIDGenerator
 	sessionIDs     factorysessions.SessionIDGenerator
@@ -164,7 +164,7 @@ func (s *Service) WithActivationLock(fn func() error) error {
 func New(
 	registry sessionregistry.Service,
 	responses *responsestream.Registry,
-	closeSession func(*factorysessions.LiveSession),
+	closeSession func(*livesession.LiveSession),
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -177,7 +177,7 @@ func New(
 func NewWithResponseStreams(
 	registry sessionregistry.Service,
 	responses *responsestream.Registry,
-	closeSession func(*factorysessions.LiveSession),
+	closeSession func(*livesession.LiveSession),
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -190,7 +190,7 @@ func NewWithResponseStreams(
 func NewWithResponseService(
 	registry sessionregistry.Service,
 	responses *responsestream.Registry,
-	closeSession func(*factorysessions.LiveSession),
+	closeSession func(*livesession.LiveSession),
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -222,7 +222,7 @@ func (s *Service) ResponseEventService() responsestreamservice.Service {
 
 // ResponseStreamsForSession returns the canonical registry-owned stream set
 // for one live session.
-func (s *Service) ResponseStreamsForSession(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (s *Service) ResponseStreamsForSession(session *livesession.LiveSession) *responsestream.StreamSet {
 	if s == nil || s.responses == nil || session == nil {
 		return nil
 	}
@@ -231,7 +231,7 @@ func (s *Service) ResponseStreamsForSession(session *factorysessions.LiveSession
 
 // CloseResponseStreams closes response events and every dispatch stream owned
 // by one live session.
-func (s *Service) CloseResponseStreams(session *factorysessions.LiveSession) {
+func (s *Service) CloseResponseStreams(session *livesession.LiveSession) {
 	if s == nil || s.responses == nil || session == nil {
 		return
 	}
@@ -281,7 +281,7 @@ func (s *Service) Register(registration Registration) string {
 	return sessionID
 }
 
-func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *factorysessions.LiveSession {
+func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *livesession.LiveSession {
 	session := livesession.New(
 		sessionID,
 		strings.TrimSpace(registration.FactoryDir),
@@ -308,7 +308,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	return session
 }
 
-func (s *Service) bindResponseEventCompletion(session *factorysessions.LiveSession, addRecorder func(func(interfaces.FactoryEventType))) {
+func (s *Service) bindResponseEventCompletion(session *livesession.LiveSession, addRecorder func(func(interfaces.FactoryEventType))) {
 	if session == nil || addRecorder == nil {
 		return
 	}
@@ -344,7 +344,7 @@ func (s *Service) Unregister(sessionID string) {
 }
 
 // Current returns the selected live session.
-func (s *Service) Current() *factorysessions.LiveSession {
+func (s *Service) Current() *livesession.LiveSession {
 	if s == nil || s.registry == nil {
 		return nil
 	}
@@ -352,7 +352,7 @@ func (s *Service) Current() *factorysessions.LiveSession {
 }
 
 // Default returns the compatibility default live session.
-func (s *Service) Default() *factorysessions.LiveSession {
+func (s *Service) Default() *livesession.LiveSession {
 	if s == nil || s.registry == nil {
 		return nil
 	}
@@ -360,7 +360,7 @@ func (s *Service) Default() *factorysessions.LiveSession {
 }
 
 // Resolve accepts registry IDs, the default selector, and canonical runtime IDs.
-func (s *Service) Resolve(sessionID string) *factorysessions.LiveSession {
+func (s *Service) Resolve(sessionID string) *livesession.LiveSession {
 	if s == nil || s.registry == nil {
 		return nil
 	}
@@ -381,7 +381,7 @@ func (s *Service) Resolve(sessionID string) *factorysessions.LiveSession {
 }
 
 // Require resolves a live session and verifies its opaque runtime handle.
-func (s *Service) Require(sessionID string, validHandle func(any) bool) (*factorysessions.LiveSession, error) {
+func (s *Service) Require(sessionID string, validHandle func(any) bool) (*livesession.LiveSession, error) {
 	session := s.Resolve(sessionID)
 	if session == nil || (validHandle != nil && !validHandle(session.Handle)) {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
@@ -391,11 +391,11 @@ func (s *Service) Require(sessionID string, validHandle func(any) bool) (*factor
 
 // RequireSession resolves a session for domain services that do not interpret
 // the runtime-owned opaque handle.
-func (s *Service) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
+func (s *Service) RequireSession(sessionID string) (*livesession.LiveSession, error) {
 	return s.Require(sessionID, nil)
 }
 
 // GetLiveSession resolves registry aliases and canonical runtime IDs.
-func (s *Service) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+func (s *Service) GetLiveSession(sessionID string) *livesession.LiveSession {
 	return s.Resolve(sessionID)
 }

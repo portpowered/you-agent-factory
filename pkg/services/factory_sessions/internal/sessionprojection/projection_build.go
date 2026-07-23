@@ -49,7 +49,7 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 	return result, nil
 }
 
-func projectLiveSession(session *factorysessions.LiveSession) *factorysessions.ScopedLiveSessionSummary {
+func projectLiveSession(session *livesession.LiveSession) *factorysessions.ScopedLiveSessionSummary {
 	if session == nil {
 		return nil
 	}

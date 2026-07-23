@@ -12,6 +12,47 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
 
+// SessionState tracks session-owned runtime metadata that stays attached to a
+// private live-session record rather than mutable service-global configuration.
+type SessionState struct {
+	FactoryDir       string
+	FolderPath       string
+	ExecutionBaseDir string
+}
+
+// LiveSession is the owner-private mutable record for one hosted Factory
+// Session. Public operations project it into detached root contract values.
+type LiveSession struct {
+	ID string
+	SessionState
+	Handle                  any
+	Runtime                 *factorysessions.LiveRuntime
+	IsDefault               bool
+	Project                 string
+	Target                  factorysessions.TargetRef
+	RuntimeFactorySessionID string
+	ResponseEvents          *responseeventstore.SessionResponseEventStore
+	JavaScriptCheckpoints   factoryruntime.JavaScriptCheckpointStore
+}
+
+// CompleteResponseEvents marks the session-owned response-event publication
+// scope complete while retaining its immutable events for catch-up readers.
+func (s *LiveSession) CompleteResponseEvents() {
+	if s == nil || s.ResponseEvents == nil {
+		return
+	}
+	s.ResponseEvents.Complete()
+}
+
+// CloseResponseEvents closes the response-event store owned by this live
+// session and detaches its active subscribers.
+func (s *LiveSession) CloseResponseEvents() {
+	if s == nil || s.ResponseEvents == nil {
+		return
+	}
+	s.ResponseEvents.Close()
+}
+
 // New constructs a registry entry for a started session.
 func New(
 	sessionID string,
@@ -25,13 +66,13 @@ func New(
 	clock factoryruntime.Clock,
 	generateSessionID factorysessions.SessionIDGenerator,
 	eventIDs factorysessions.ResponseEventIDGenerator,
-) *factorysessions.LiveSession {
+) *LiveSession {
 	if clock == nil || generateSessionID == nil || eventIDs == nil {
 		return nil
 	}
-	session := &factorysessions.LiveSession{
+	session := &LiveSession{
 		ID: sessionID,
-		SessionState: factorysessions.SessionState{
+		SessionState: SessionState{
 			FactoryDir:       factoryDir,
 			FolderPath:       folderPath,
 			ExecutionBaseDir: executionBaseDir,
@@ -53,7 +94,7 @@ func New(
 // CanonicalID returns the durable runtime identity for one live session.
 // Default-route sessions keep the ~default registry alias but expose a UUID
 // runtime identity to clients.
-func CanonicalID(session *factorysessions.LiveSession) string {
+func CanonicalID(session *LiveSession) string {
 	if session == nil {
 		return ""
 	}
@@ -71,7 +112,7 @@ func IsUUIDID(sessionID string) bool {
 
 // EnsureRuntimeID assigns a UUID runtime identity to default sessions that
 // still use the ~default registry alias.
-func EnsureRuntimeID(session *factorysessions.LiveSession, generateID factorysessions.SessionIDGenerator) error {
+func EnsureRuntimeID(session *LiveSession, generateID factorysessions.SessionIDGenerator) error {
 	if session == nil {
 		return nil
 	}

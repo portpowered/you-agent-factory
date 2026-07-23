@@ -9,12 +9,13 @@ import (
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 )
 
 // ResolveFactorySession returns the canonical live session entity for
 // boundary adapters that need transient response-event or summary state.
-func (s *Service) ResolveFactorySession(sessionID string) *factorysessions.LiveSession {
+func (s *Service) ResolveFactorySession(sessionID string) *livesession.LiveSession {
 	if s == nil || s.host == nil {
 		return nil
 	}

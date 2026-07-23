@@ -6,22 +6,22 @@ import (
 	"strings"
 	"sync"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 )
 
 // Service is the private live Factory Session directory contract shared by
 // owner-local runtime and identity capabilities.
 type Service interface {
-	Upsert(*factorysessions.LiveSession, bool)
+	Upsert(*livesession.LiveSession, bool)
 	Select(string) bool
-	Current() *factorysessions.LiveSession
-	Get(string) *factorysessions.LiveSession
+	Current() *livesession.LiveSession
+	Get(string) *livesession.LiveSession
 	Remove(string)
 	Count() int
 	IDs() []string
-	DefaultSession() *factorysessions.LiveSession
-	FindByLogicalSessionKeyID(string) *factorysessions.LiveSession
+	DefaultSession() *livesession.LiveSession
+	FindByLogicalSessionKeyID(string) *livesession.LiveSession
 }
 
 // Registry is the synchronized in-memory implementation of the Factory
@@ -29,17 +29,17 @@ type Service interface {
 type Registry struct {
 	mu         sync.RWMutex
 	selectedID string
-	sessions   map[string]*factorysessions.LiveSession
+	sessions   map[string]*livesession.LiveSession
 }
 
 var _ Service = (*Registry)(nil)
 
 // New constructs an empty live session registry.
 func New() *Registry {
-	return &Registry{sessions: make(map[string]*factorysessions.LiveSession)}
+	return &Registry{sessions: make(map[string]*livesession.LiveSession)}
 }
 
-func (r *Registry) Upsert(session *factorysessions.LiveSession, selectSession bool) {
+func (r *Registry) Upsert(session *livesession.LiveSession, selectSession bool) {
 	if r == nil || session == nil || session.ID == "" {
 		return
 	}
@@ -64,7 +64,7 @@ func (r *Registry) Select(id string) bool {
 	return true
 }
 
-func (r *Registry) Current() *factorysessions.LiveSession {
+func (r *Registry) Current() *livesession.LiveSession {
 	if r == nil {
 		return nil
 	}
@@ -73,7 +73,7 @@ func (r *Registry) Current() *factorysessions.LiveSession {
 	return r.sessions[r.selectedID]
 }
 
-func (r *Registry) Get(id string) *factorysessions.LiveSession {
+func (r *Registry) Get(id string) *livesession.LiveSession {
 	if r == nil {
 		return nil
 	}
@@ -141,7 +141,7 @@ func (r *Registry) IDs() []string {
 	return ids
 }
 
-func (r *Registry) DefaultSession() *factorysessions.LiveSession {
+func (r *Registry) DefaultSession() *livesession.LiveSession {
 	if r == nil {
 		return nil
 	}
@@ -160,7 +160,7 @@ func (r *Registry) DefaultSession() *factorysessions.LiveSession {
 	return nil
 }
 
-func (r *Registry) FindByLogicalSessionKeyID(logicalSessionKeyID string) *factorysessions.LiveSession {
+func (r *Registry) FindByLogicalSessionKeyID(logicalSessionKeyID string) *livesession.LiveSession {
 	if r == nil {
 		return nil
 	}

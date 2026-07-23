@@ -14,9 +14,9 @@ import (
 // LiveReadHost exposes live session registry and projection seams owned by the composition root.
 type LiveReadHost interface {
 	ListLiveSessionIDs() []string
-	GetLiveSession(sessionID string) *factorysessions.LiveSession
-	RequireSession(sessionID string) (*factorysessions.LiveSession, error)
-	BuildSessionProjectionContext(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error)
+	GetLiveSession(sessionID string) *livesession.LiveSession
+	RequireSession(sessionID string) (*livesession.LiveSession, error)
+	BuildSessionProjectionContext(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error)
 }
 
 // IsDurableExecutionSessionID reports whether session reads route to durable execution.

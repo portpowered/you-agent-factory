@@ -3,16 +3,18 @@ package service
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identityservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
-	"path/filepath"
-	"strings"
 )
 
 const (
@@ -26,7 +28,7 @@ type (
 	FactorySessionTargetRef  = factorysessions.TargetRef
 	FactorySessionTarget     = factorysessions.Target
 	FactorySessionOpenResult = factorysessions.OpenResult
-	liveFactorySession       = factorysessions.LiveSession
+	liveFactorySession       = livesession.LiveSession
 )
 
 func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
@@ -228,7 +230,7 @@ func (fs *SessionRuntime) requireIdleRuntimeForSession(
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
 func (fs *SessionRuntime) ReplaceSessionRuntime(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 	name string,
 	replacement factoryRuntimeBundle,
 ) error {

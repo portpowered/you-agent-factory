@@ -76,6 +76,4 @@ type Service interface {
 	ApproveDurableFactorySession(context.Context, string, ApproveRequest) (LifecycleControlResult, error)
 	RetryDurableFactorySessionDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
 	InterruptDurableFactorySessionDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
-	SubscribeSessionResponseStream(string, string, int64) (*SessionResponseStreamSubscription, error)
-	SessionResponseStreamDispatchIDs(string) ([]string, error)
 }

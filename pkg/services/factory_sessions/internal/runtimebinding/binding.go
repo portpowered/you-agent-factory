@@ -12,9 +12,9 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	runtimemetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
@@ -22,7 +22,7 @@ import (
 )
 
 type LiveSessionResolver interface {
-	Resolve(string) *factorysessions.LiveSession
+	Resolve(string) *livesession.LiveSession
 }
 
 type Registration struct {
@@ -124,14 +124,14 @@ func Replace(
 	readinessContext context.Context,
 	state *sessionruntime.Service,
 	runtimeState *State,
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 	replacement factory.HostedInstance,
 	serviceMode bool,
 	lifecycle factory.Lifecycle,
 	startSidecars func(context.Context, factory.HostedHandle) error,
 	stop func(factory.HostedHandle) error,
 	report func(error),
-) (*factorysessions.LiveSession, error) {
+) (*livesession.LiveSession, error) {
 	if session == nil {
 		return nil, fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
@@ -300,7 +300,7 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	})
 }
 
-func SessionStateFrom(session *factorysessions.LiveSession) *SessionState {
+func SessionStateFrom(session *livesession.LiveSession) *SessionState {
 	if session == nil {
 		return nil
 	}
@@ -308,7 +308,7 @@ func SessionStateFrom(session *factorysessions.LiveSession) *SessionState {
 	return state
 }
 
-func HandleFromSession(session *factorysessions.LiveSession) factory.HostedHandle {
+func HandleFromSession(session *livesession.LiveSession) factory.HostedHandle {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -316,7 +316,7 @@ func HandleFromSession(session *factorysessions.LiveSession) factory.HostedHandl
 	return state.Handle
 }
 
-func BundleFromSession(session *factorysessions.LiveSession) factory.HostedInstance {
+func BundleFromSession(session *livesession.LiveSession) factory.HostedInstance {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -350,7 +350,7 @@ func CurrentBundle(
 
 // CanonicalEventsFromSession returns the event ledger for a live runtime
 // without exposing its opaque handle representation to Session consumers.
-func CanonicalEventsFromSession(session *factorysessions.LiveSession) []interfaces.FactoryEvent {
+func CanonicalEventsFromSession(session *livesession.LiveSession) []interfaces.FactoryEvent {
 	instance := BundleFromSession(session)
 	if instance == nil {
 		return nil
@@ -360,7 +360,7 @@ func CanonicalEventsFromSession(session *factorysessions.LiveSession) []interfac
 
 // BackendScopeID resolves the process-configured scope before the session
 // runtime bundle fallback.
-func BackendScopeID(configured string, session *factorysessions.LiveSession) string {
+func BackendScopeID(configured string, session *livesession.LiveSession) string {
 	if configured = strings.TrimSpace(configured); configured != "" {
 		return configured
 	}
@@ -372,7 +372,7 @@ func BackendScopeID(configured string, session *factorysessions.LiveSession) str
 
 // StreamGenerationID resolves the canonical ledger generation, runtime
 // snapshot generation, then runtime start timestamp.
-func StreamGenerationID(session *factorysessions.LiveSession) string {
+func StreamGenerationID(session *livesession.LiveSession) string {
 	instance := BundleFromSession(session)
 	if instance != nil {
 		if generation := strings.TrimSpace(instance.StreamGeneration()); generation != "" {
@@ -406,7 +406,7 @@ func NewStreamManager(state *sessionruntime.Service) *sessionstream.Manager {
 	)
 }
 
-func ResponseStreamRuntimeFromSessionHandle(handle any) (runtimemetrics.MetricsEmitter, *zap.Logger) {
+func ResponseStreamRuntimeFromSessionHandle(handle any) (factory.MetricsEmitter, *zap.Logger) {
 	state, _ := handle.(*SessionState)
 	if state == nil {
 		return nil, nil
@@ -421,7 +421,7 @@ func ResponseStreamRuntimeFromSessionHandle(handle any) (runtimemetrics.MetricsE
 	return instance.RuntimeMetrics(), instance.RuntimeLogger()
 }
 
-func PreparedSpecFromSession(session *factorysessions.LiveSession) any {
+func PreparedSpecFromSession(session *livesession.LiveSession) any {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -429,7 +429,7 @@ func PreparedSpecFromSession(session *factorysessions.LiveSession) any {
 	return state.Spec
 }
 
-func RequireLiveSession(resolver LiveSessionResolver, sessionID string) (*factorysessions.LiveSession, error) {
+func RequireLiveSession(resolver LiveSessionResolver, sessionID string) (*livesession.LiveSession, error) {
 	if resolver == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
@@ -444,7 +444,7 @@ func RequireLiveSession(resolver LiveSessionResolver, sessionID string) (*factor
 // NextLiveSession returns another registered session backed by a live Factory
 // Runtime. Selection policy belongs here so process hosts do not each maintain
 // their own registry traversal.
-func NextLiveSession(state *sessionruntime.Service, exceptSessionID string) *factorysessions.LiveSession {
+func NextLiveSession(state *sessionruntime.Service, exceptSessionID string) *livesession.LiveSession {
 	if state == nil || state.Registry() == nil {
 		return nil
 	}
@@ -462,7 +462,7 @@ func NextLiveSession(state *sessionruntime.Service, exceptSessionID string) *fac
 
 // DefaultSessionSuccessor resolves the selected non-default session used when
 // a client reconnects through the compatibility default-session selector.
-func DefaultSessionSuccessor(state *sessionruntime.Service, runtimeState *State) *factorysessions.LiveSession {
+func DefaultSessionSuccessor(state *sessionruntime.Service, runtimeState *State) *livesession.LiveSession {
 	if state == nil {
 		return nil
 	}

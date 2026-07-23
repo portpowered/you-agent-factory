@@ -10,6 +10,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
 type directoryInspectionStub struct {
@@ -95,11 +96,11 @@ func assertPathValidation(t *testing.T, err error, wantReason string) {
 
 func TestSessionFactoryRoots(t *testing.T) {
 	serviceRoot := filepath.Join("workspace", factorydefinitions.FactoryDir)
-	defaultSession := &factorysessions.LiveSession{IsDefault: true, SessionState: factorysessions.SessionState{FolderPath: "workspace", FactoryDir: serviceRoot}}
+	defaultSession := &livesession.LiveSession{IsDefault: true, SessionState: livesession.SessionState{FolderPath: "workspace", FactoryDir: serviceRoot}}
 	if got := SessionFactoryRootDir(serviceRoot, defaultSession); got != "workspace" {
 		t.Fatalf("SessionFactoryRootDir(default) = %q, want workspace", got)
 	}
-	named := &factorysessions.LiveSession{SessionState: factorysessions.SessionState{FolderPath: "named", FactoryDir: filepath.Join("named", factorydefinitions.FactoryDir)}}
+	named := &livesession.LiveSession{SessionState: livesession.SessionState{FolderPath: "named", FactoryDir: filepath.Join("named", factorydefinitions.FactoryDir)}}
 	if got := SessionFactoryPersistRoot(serviceRoot, named); got != "named" {
 		t.Fatalf("SessionFactoryPersistRoot(named) = %q, want named", got)
 	}

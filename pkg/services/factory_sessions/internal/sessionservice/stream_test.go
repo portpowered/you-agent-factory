@@ -6,14 +6,14 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type streamGatewayHost struct {
 	openTestHost
-	streams    *factorysessions.SessionResponseStreamSet
+	streams    *responsestream.StreamSet
 	checkpoint factoryruntime.JavaScriptCheckpointStore
 }
 
@@ -26,27 +26,27 @@ func responseFragment(dispatchID, payload string) workers.ProgressFragment {
 	}
 }
 
-func (h *streamGatewayHost) ResponseStreams(_ *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (h *streamGatewayHost) ResponseStreams(_ *livesession.LiveSession) *responsestream.StreamSet {
 	if h.streams == nil {
 		h.streams = responsestream.NewStreamSetWithFactory(newServiceTestResponseStream, serviceTestClock)
 	}
 	return h.streams
 }
 
-func (h *streamGatewayHost) CloseResponseStreams(_ *factorysessions.LiveSession) {
+func (h *streamGatewayHost) CloseResponseStreams(_ *livesession.LiveSession) {
 	if h.streams != nil {
 		h.streams.Close()
 	}
 }
 
-func (h *streamGatewayHost) CloseResponseStreamDispatch(_ *factorysessions.LiveSession, dispatchID string) bool {
+func (h *streamGatewayHost) CloseResponseStreamDispatch(_ *livesession.LiveSession, dispatchID string) bool {
 	if h.streams == nil {
 		return false
 	}
 	return h.streams.CloseDispatch(dispatchID)
 }
 
-func (h *streamGatewayHost) JavaScriptCheckpointStore(_ *factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore {
+func (h *streamGatewayHost) JavaScriptCheckpointStore(_ *livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore {
 	if h.checkpoint == nil {
 		h.checkpoint = streamCheckpointStore{}
 	}
@@ -70,7 +70,7 @@ func TestService_SubscribeSessionResponseStream_DelegatesThroughStreamManager(t 
 
 	host := &streamGatewayHost{
 		openTestHost: openTestHost{
-			requireSession: &factorysessions.LiveSession{ID: "sess-stream"},
+			requireSession: &livesession.LiveSession{ID: "sess-stream"},
 		},
 	}
 	gateway := newServiceTestGateway(host)
@@ -97,7 +97,7 @@ func TestService_CloseSessionResponseStreams_ReleasesDispatchStreams(t *testing.
 
 	host := &streamGatewayHost{
 		openTestHost: openTestHost{
-			requireSession: &factorysessions.LiveSession{ID: "sess-close"},
+			requireSession: &livesession.LiveSession{ID: "sess-close"},
 		},
 	}
 	gateway := newServiceTestGateway(host)
@@ -117,7 +117,7 @@ func TestService_SessionResponseStreamDispatchIDs_ReturnsActiveDispatches(t *tes
 
 	host := &streamGatewayHost{
 		openTestHost: openTestHost{
-			requireSession: &factorysessions.LiveSession{ID: "sess-dispatch-ids"},
+			requireSession: &livesession.LiveSession{ID: "sess-dispatch-ids"},
 		},
 	}
 	gateway := newServiceTestGateway(host)
@@ -138,7 +138,7 @@ func TestService_JavaScriptCheckpointStore_ReturnsSessionOwnedStore(t *testing.T
 
 	host := &streamGatewayHost{
 		openTestHost: openTestHost{
-			requireSession: &factorysessions.LiveSession{ID: "sess-checkpoint"},
+			requireSession: &livesession.LiveSession{ID: "sess-checkpoint"},
 		},
 	}
 	gateway := newServiceTestGateway(host)
@@ -154,8 +154,8 @@ func TestService_DispatchCompletionObserverFactory_ClosesDispatchStream(t *testi
 
 	host := &streamGatewayHost{
 		openTestHost: openTestHost{
-			requireSession: &factorysessions.LiveSession{ID: "sess-dispatch-close"},
-			sessions: map[string]*factorysessions.LiveSession{
+			requireSession: &livesession.LiveSession{ID: "sess-dispatch-close"},
+			sessions: map[string]*livesession.LiveSession{
 				"sess-dispatch-close": {ID: "sess-dispatch-close"},
 			},
 		},

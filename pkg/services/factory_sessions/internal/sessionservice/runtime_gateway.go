@@ -9,6 +9,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
@@ -18,7 +19,7 @@ import (
 
 type sessionGateway interface {
 	factorysessions.Service
-	JavaScriptCheckpointStore(*factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore
+	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 }
 
@@ -101,18 +102,6 @@ func (s *Service) GetEngineStateSnapshotForSession(
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
 	return s.liveRuntime.Snapshot(ctx, sessionID)
-}
-
-func (fs *SessionRuntime) SubscribeSessionResponseStream(
-	sessionID string,
-	dispatchID string,
-	afterSequence int64,
-) (*factorysessions.SessionResponseStreamSubscription, error) {
-	return fs.requireSessionGateway().SubscribeSessionResponseStream(sessionID, dispatchID, afterSequence)
-}
-
-func (fs *SessionRuntime) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
-	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
 }
 
 func (fs *SessionRuntime) inferenceProgressPublisher(
@@ -247,7 +236,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	backendScopeID := func() string {
 		return runtimebinding.BackendScopeID(runtime.backendScopeID, nil)
 	}
-	logicalSessionKeyID := func(session *factorysessions.LiveSession) string {
+	logicalSessionKeyID := func(session *livesession.LiveSession) string {
 		if session == nil {
 			return ""
 		}
@@ -259,7 +248,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		}
 		return resolved.LogicalSessionKeyID
 	}
-	streamGenerationID := func(session *factorysessions.LiveSession) string {
+	streamGenerationID := func(session *livesession.LiveSession) string {
 		return runtimebinding.StreamGenerationID(session)
 	}
 	return newSessionHost(

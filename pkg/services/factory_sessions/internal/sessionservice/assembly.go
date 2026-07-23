@@ -114,7 +114,7 @@ func (a *Assembly) CurrentRuntime() *factorysessions.LiveRuntime {
 	return a.state.CurrentRuntime()
 }
 
-func (a *Assembly) Resolve(sessionID string) *factorysessions.LiveSession {
+func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 	if a == nil || a.state == nil {
 		return nil
 	}
@@ -372,7 +372,7 @@ func (h definitionHost) AttachFactoryDefinitions(definitions factorydefinitions.
 }
 
 func projectDefinitionSession(
-	session *factorysessions.LiveSession,
+	session *livesession.LiveSession,
 ) *factorydefinitions.DefinitionSession {
 	if session == nil {
 		return nil
@@ -387,16 +387,16 @@ func projectDefinitionSession(
 
 func (h definitionHost) liveSession(
 	session *factorydefinitions.DefinitionSession,
-) *factorysessions.LiveSession {
+) *livesession.LiveSession {
 	if session == nil {
 		return nil
 	}
 	if live, err := h.callbacks().RequireSession(session.ID); err == nil && live != nil {
 		return live
 	}
-	return &factorysessions.LiveSession{
+	return &livesession.LiveSession{
 		ID: session.ID,
-		SessionState: factorysessions.SessionState{
+		SessionState: livesession.SessionState{
 			FolderPath: session.FolderPath,
 			FactoryDir: session.FactoryDir,
 		},

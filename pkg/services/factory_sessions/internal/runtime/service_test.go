@@ -56,7 +56,7 @@ func TestServiceRegisterResolveAndUnregister(t *testing.T) {
 	closed := ""
 	clock := platformclock.Real{}
 	responses := responsestream.NewRegistry(newRuntimeTestResponseStream, clock)
-	service := sessionruntime.New(registry, responses, func(session *factorysessions.LiveSession) { closed = session.ID }, clock, func() string { return "response-event-test-id" }, func() string { return "session-test-id" })
+	service := sessionruntime.New(registry, responses, func(session *livesession.LiveSession) { closed = session.ID }, clock, func() string { return "response-event-test-id" }, func() string { return "session-test-id" })
 
 	id := service.Register(sessionruntime.Registration{
 		SessionID: factorysessions.DefaultSessionID, Handle: struct{}{}, Default: true,

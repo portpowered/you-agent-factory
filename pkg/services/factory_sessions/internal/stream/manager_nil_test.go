@@ -3,7 +3,7 @@ package stream_test
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
@@ -11,7 +11,7 @@ func TestManager_NilReceiverMethodsAreSafe(t *testing.T) {
 	t.Parallel()
 
 	var manager *stream.Manager
-	session := &factorysessions.LiveSession{ID: "sess-nil"}
+	session := &livesession.LiveSession{ID: "sess-nil"}
 
 	if _, err := manager.Subscribe("sess-nil", "dispatch-1", 0); err == nil {
 		t.Fatal("Subscribe = nil, want manager required")
@@ -47,7 +47,7 @@ func TestManager_DispatchIDs_ReturnsNilForMissingStreams(t *testing.T) {
 	t.Parallel()
 
 	host := &streamTestHost{
-		session: &factorysessions.LiveSession{ID: "sess-no-streams"},
+		session: &livesession.LiveSession{ID: "sess-no-streams"},
 	}
 	host.streams = nil
 	manager := newTestManager(host)

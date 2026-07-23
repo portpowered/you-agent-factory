@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
@@ -207,7 +208,7 @@ func TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens(t *testing.T) {
 func TestGetLiveFactorySession_ReturnsNotFoundForMissingSession(t *testing.T) {
 	t.Parallel()
 
-	host := &readTestHost{sessions: map[string]*factorysessions.LiveSession{}}
+	host := &readTestHost{sessions: map[string]*livesession.LiveSession{}}
 
 	_, err := controlplane.GetLiveFactorySession(context.Background(), host, "missing")
 	if err == nil {

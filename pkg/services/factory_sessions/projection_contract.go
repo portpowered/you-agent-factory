@@ -26,22 +26,6 @@ type ProjectionContext struct {
 	Now                    time.Time
 }
 
-// ProjectionBuildInput contains the canonical runtime facts needed to build
-// one live Factory Session projection context.
-type ProjectionBuildInput struct {
-	Session             *LiveSession
-	RuntimeConfig       interfaces.RuntimeConfigLookup
-	Snapshot            *factory.StateSnapshot
-	BackendScopeID      string
-	LogicalSessionKey   string
-	NormalizedTarget    *RuntimeLogicalTarget
-	RuntimeStartedAt    time.Time
-	CheckpointStore     factory.JavaScriptCheckpointStore
-	Events              []interfaces.FactoryEvent
-	WorldStateProjector factory.WorldStateProjector
-	Now                 time.Time
-}
-
 // ReadProjection carries one live Factory Session read and records whether its
 // runtime projection was available.
 type ReadProjection struct {

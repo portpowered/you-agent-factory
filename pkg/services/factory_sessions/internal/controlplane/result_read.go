@@ -7,13 +7,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 // ResultReadHost exposes live session projection and checkpoint seams for result reads.
 type ResultReadHost interface {
 	LiveReadHost
-	JavaScriptCheckpointStore(session *factorysessions.LiveSession) workflowresult.JavaScriptCheckpointStore
+	JavaScriptCheckpointStore(session *livesession.LiveSession) workflowresult.JavaScriptCheckpointStore
 }
 
 // GetLiveFactorySessionResult returns the terminal JavaScript session result read shape.

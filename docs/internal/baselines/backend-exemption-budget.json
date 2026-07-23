@@ -735,12 +735,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/transports/cli/sessionexecution/retired_surface_test.go#TestRetiredSessionExecutionSurfaceCannotReturn",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/transports/mcp/execution_test.go#TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."

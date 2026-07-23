@@ -505,7 +505,7 @@ func LogicalTargetToAPI(ref factorysessions.CanonicalLogicalTargetReference) fac
 func LogicalTargetFromSession(
 	normalize factorysessions.LogicalTargetReferenceNormalizer,
 	backendScopeID string,
-	session *factorysessions.LiveSession,
+	session *factorysessions.ScopedLiveSessionSummary,
 ) (*factoryapi.FactorySessionLogicalTarget, error) {
 	if session == nil {
 		return nil, nil

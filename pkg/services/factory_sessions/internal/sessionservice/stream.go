@@ -5,6 +5,8 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"go.uber.org/zap"
 )
 
@@ -13,7 +15,7 @@ func (s *Service) SubscribeSessionResponseStream(
 	sessionID string,
 	dispatchID string,
 	afterSequence int64,
-) (*factorysessions.SessionResponseStreamSubscription, error) {
+) (*responsestream.Subscription, error) {
 	if s == nil || s.streams == nil {
 		return nil, errSessionGatewayRequired()
 	}
@@ -29,7 +31,7 @@ func (s *Service) SessionResponseStreamDispatchIDs(sessionID string) ([]string, 
 }
 
 // ResponseStreams returns the registry-owned stream set for one live session.
-func (s *Service) ResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (s *Service) ResponseStreams(session *livesession.LiveSession) *responsestream.StreamSet {
 	if s == nil || s.streams == nil {
 		return nil
 	}
@@ -37,7 +39,7 @@ func (s *Service) ResponseStreams(session *factorysessions.LiveSession) *factory
 }
 
 // CloseSessionResponseStreams releases all response streams for one live session.
-func (s *Service) CloseSessionResponseStreams(session *factorysessions.LiveSession) {
+func (s *Service) CloseSessionResponseStreams(session *livesession.LiveSession) {
 	if s == nil || s.streams == nil {
 		return
 	}
@@ -45,7 +47,7 @@ func (s *Service) CloseSessionResponseStreams(session *factorysessions.LiveSessi
 }
 
 // JavaScriptCheckpointStore returns the session-owned JavaScript checkpoint store.
-func (s *Service) JavaScriptCheckpointStore(session *factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore {
+func (s *Service) JavaScriptCheckpointStore(session *livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore {
 	if s == nil || s.host == nil {
 		return nil
 	}

@@ -5,9 +5,10 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -20,11 +21,11 @@ func newSessionHost(
 	discoverTargets func(string) ([]factorysessions.Target, error),
 	initializeFactoryScaffold func(string) error,
 	openLiveSessionForTarget func(context.Context, factorysessions.Target) (string, error),
-	buildSessionProjectionContext func(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error),
+	buildSessionProjectionContext func(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error),
 	resolveSyncPreflightTarget func(string, *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error),
 	backendScopeID func() string,
-	logicalSessionKeyID func(*factorysessions.LiveSession) string,
-	streamGenerationID func(*factorysessions.LiveSession) string,
+	logicalSessionKeyID func(*livesession.LiveSession) string,
+	streamGenerationID func(*livesession.LiveSession) string,
 	stopLiveSession func(string) error,
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
 	durableExecution func() factorysessions.ExecutionService,
@@ -46,7 +47,7 @@ func newSessionHost(
 		selectTarget:         selectTarget,
 	}
 	if state != nil {
-		host.requireSession = func(sessionID string) (*factorysessions.LiveSession, error) {
+		host.requireSession = func(sessionID string) (*livesession.LiveSession, error) {
 			return runtimebinding.RequireLiveSession(state, sessionID)
 		}
 		host.listLiveSessionIDs = func() []string {
@@ -60,7 +61,7 @@ func newSessionHost(
 		host.sessionFactory = func(sessionID string) (factory.Service, error) {
 			return runtimebinding.FactoryForSession(state, sessionID)
 		}
-		host.javaScriptCheckpointStore = func(session *factorysessions.LiveSession) factory.JavaScriptCheckpointStore {
+		host.javaScriptCheckpointStore = func(session *livesession.LiveSession) factory.JavaScriptCheckpointStore {
 			if session == nil {
 				return nil
 			}

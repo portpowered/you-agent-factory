@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -268,9 +268,9 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		t.Fatalf("LogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
 	}
 
-	session := &factorysessions.LiveSession{
-		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
-		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
+	session := &factorysessions.ScopedLiveSessionSummary{
+		FolderPath: t.TempDir(),
+		Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
 	}
 	target, err = factorysession.LogicalTargetFromSession(normalize, "scope-1", session)
 	if err != nil {
@@ -280,9 +280,9 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		t.Fatalf("target = %#v", target)
 	}
 
-	invalidSession := &factorysessions.LiveSession{
-		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
-		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
+	invalidSession := &factorysessions.ScopedLiveSessionSummary{
+		FolderPath: t.TempDir(),
+		Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
 	}
 	if _, err := factorysession.LogicalTargetFromSession(normalize, "scope-1", invalidSession); err == nil {
 		t.Fatal("LogicalTargetFromSession(invalid named target) = nil, want validation error")

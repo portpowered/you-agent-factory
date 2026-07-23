@@ -8,6 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"go.uber.org/zap"
 )
@@ -20,8 +21,8 @@ type Service interface {
 	Discover(context.Context, DiscoverRequest) ([]factorysessions.Target, error)
 	ResolveFolder(string) (string, error)
 	Select([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
-	Resolve(sessionregistry.Service, string) *factorysessions.LiveSession
-	ResolveLogical(sessionregistry.Service, string, string) *factorysessions.LiveSession
+	Resolve(sessionregistry.Service, string) *livesession.LiveSession
+	ResolveLogical(sessionregistry.Service, string, string) *livesession.LiveSession
 }
 
 type NormalizeRequest struct {

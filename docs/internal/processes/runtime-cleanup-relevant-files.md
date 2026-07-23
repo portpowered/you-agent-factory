@@ -553,9 +553,10 @@ Editable Factory-definition reads and writes use `FactorySnapshot`,
 assembles generated read/save responses; composition injects that adapter
 instead of making `pkg/factory/definition` import transport contracts.
 
-Live Factory Session summaries and discovered targets retain `LiveSession`,
-`Target`, and `TargetRef` as their owner-defined values. Convert those values,
-including canonical runtime session identity and optional target names, through
+Live Factory Session summaries and discovered targets retain
+`ScopedLiveSessionSummary`, `Target`, and `TargetRef` as their owner-defined
+detached values. Convert those values, including canonical runtime session
+identity and optional target names, through
 `pkg/transports/mapping/factorysession` when assembling open or list responses;
 do not export generated summary or target constructors from the session owner.
 Injected home resolution, absolute-path cleanup, folder inspection, and path
@@ -671,10 +672,13 @@ projection package or reimplement its policy.
 
 Live Factory Session record construction is owner-private under
 `pkg/services/factory_sessions/internal/livesession`. Runtime and session
-assembly code may use that constructor after dependencies have been injected,
-while the service root exposes only the detached `LiveSession` value contract.
-Keep the package-boundary synthetic denial for the retired root constructor so
-external consumers cannot reintroduce a parallel construction path.
+assembly code may use that constructor and mutable `LiveSession`/`SessionState`
+records after dependencies have been injected. Keep runtime handles,
+response-event stores, response streams, checkpoints, and registry mutation
+below the owner-private boundary; the service root exposes detached summaries,
+projection values, cursors, and narrow operations only. Keep the
+package-boundary synthetic denial for the retired root constructor so external
+consumers cannot reintroduce a parallel construction path.
 
 Canonical live Factory Session ID selection, default-alias UUID allocation,
 and UUID validation are owned by the same private `internal/livesession`

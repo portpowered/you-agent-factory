@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
 // DeriveLogicalSessionKeyID returns a stable opaque identifier derived from
@@ -35,7 +36,7 @@ func IsLogicalSessionKeyID(value string) bool {
 
 // LegacyLiveSessionKeyID preserves the pre-canonical logical key used by the
 // in-memory live-session registry during compatibility lookup.
-func LegacyLiveSessionKeyID(session *factorysessions.LiveSession) string {
+func LegacyLiveSessionKeyID(session *livesession.LiveSession) string {
 	if session == nil {
 		return ""
 	}

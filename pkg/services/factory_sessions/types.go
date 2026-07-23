@@ -8,8 +8,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
@@ -30,7 +28,8 @@ type RuntimeInstanceIDGenerator func() string
 // implementation and tests replace it only at the external edge.
 type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
-type ResponseEventIDGenerator = responseeventstore.ResponseEventIDGenerator
+// ResponseEventIDGenerator supplies opaque identities for response events.
+type ResponseEventIDGenerator func() string
 
 // LiveRuntime is the host-independent runtime capability attached to a live
 // Factory Session. Process hosts retain their private lifecycle handles, while
@@ -87,51 +86,6 @@ type OpenResult struct {
 	FolderPath      string
 }
 
-// SessionState tracks session-owned runtime metadata that should stay attached
-// to the live session rather than mutable service-global configuration.
-type SessionState struct {
-	FactoryDir       string
-	FolderPath       string
-	ExecutionBaseDir string
-}
-
-// LiveSession tracks one live factory session and its runtime handle.
-// Handle is typed by the composition root (for example *service.liveRuntimeHandle).
-type LiveSession struct {
-	ID string
-	SessionState
-	Handle                  any
-	Runtime                 *LiveRuntime
-	IsDefault               bool
-	Project                 string
-	Target                  TargetRef
-	RuntimeFactorySessionID string
-	ResponseEvents          *responseeventstore.SessionResponseEventStore
-	JavaScriptCheckpoints   factory.JavaScriptCheckpointStore
-}
-
-// CompleteResponseEvents marks the session-owned response-event publication
-// scope complete while retaining its immutable events for catch-up readers.
-func (s *LiveSession) CompleteResponseEvents() {
-	if s == nil || s.ResponseEvents == nil {
-		return
-	}
-	s.ResponseEvents.Complete()
-}
-
-// CloseResponseEvents closes the response-event store owned by this live
-// session and detaches its active subscribers.
-func (s *LiveSession) CloseResponseEvents() {
-	if s == nil || s.ResponseEvents == nil {
-		return
-	}
-	s.ResponseEvents.Close()
-}
-
-// ResponseEventSubscription is the Factory Sessions-owned retained-then-live
-// cursor used by application and transport consumers.
-type ResponseEventSubscription = responseeventstore.Subscription
-
 // ResponseEventCursor is the detached retained-then-live response-event value
 // returned by Service. Function fields keep cursor behavior explicit without
 // publishing an additional service-root interface.
@@ -152,46 +106,11 @@ func (c *ResponseEventCursor) Detach() { c.DetachCursor() }
 var (
 	// ErrResponseEventStoreExpired reports that a completed response-event
 	// stream is outside its late-subscription retention window.
-	ErrResponseEventStoreExpired = responseeventstore.ErrStoreExpired
+	ErrResponseEventStoreExpired = errors.New("session response event store retention window has expired")
 	// ErrResponseEventSubscriptionClosed reports that a response-event cursor
 	// was detached or its owning store was closed.
-	ErrResponseEventSubscriptionClosed = responseeventstore.ErrSubscriptionClosed
+	ErrResponseEventSubscriptionClosed = errors.New("session response event store subscription is closed")
 )
-
-// SessionResponseStreamSet keeps the dispatch-keyed response streams owned by
-// one live Factory Session runtime.
-type SessionResponseStreamSet = responsestream.StreamSet
-
-// SessionResponseStreamEvent is the internal envelope for provider progress and
-// response fragments within one Factory Session runtime.
-type SessionResponseStreamEvent = responsestream.Event
-
-// SessionResponseStreamEventKind identifies internal response-stream semantics.
-type SessionResponseStreamEventKind = responsestream.EventKind
-
-// SessionResponseStreamReadResult is the internal bounded catch-up view for
-// one response-stream subscriber resume point.
-type SessionResponseStreamReadResult = responsestream.ReadResult
-
-// SessionResponseStreamCompactionSummary records bounded fidelity loss for
-// stream subscribers that resume after truncation or coalescing.
-type SessionResponseStreamCompactionSummary = responsestream.CompactionSummary
-
-// SessionResponseStreamEventType identifies provider-neutral internal response
-// stream event semantics.
-type SessionResponseStreamEventType = responsestream.EventType
-
-// SessionResponseStreamRetentionLimits documents bounded-retention controls for
-// one internal session response stream.
-type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
-
-// SessionResponseStreamRetentionAccounting summarizes retained stream bytes,
-// event count, and oldest event timestamp for retention decisions.
-type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounting
-
-// SessionResponseStreamSubscription is an internal live-session response-stream
-// cursor that can read retained and live dispatch progress.
-type SessionResponseStreamSubscription = responsestream.Subscription
 
 // RuntimeProjection is the Factory Session-owned live runtime read model.
 // Transport packages map this detached value to their public contract.

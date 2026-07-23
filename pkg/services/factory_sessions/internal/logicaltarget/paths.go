@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
@@ -108,7 +109,7 @@ func SameFactoryDir(left, right string) bool {
 }
 
 // SessionFactoryRootDir resolves the editable-definition root for a live session.
-func SessionFactoryRootDir(serviceRootDir string, session *factorysessions.LiveSession) string {
+func SessionFactoryRootDir(serviceRootDir string, session *livesession.LiveSession) string {
 	if session == nil {
 		return ""
 	}
@@ -124,7 +125,7 @@ func SessionFactoryRootDir(serviceRootDir string, session *factorysessions.LiveS
 }
 
 // SessionFactoryPersistRoot resolves the on-disk definition persistence root.
-func SessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
+func SessionFactoryPersistRoot(serviceRootDir string, session *livesession.LiveSession) string {
 	if session != nil && !session.IsDefault && strings.TrimSpace(session.FolderPath) != "" {
 		return session.FolderPath
 	}

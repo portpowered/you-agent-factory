@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
@@ -30,7 +31,7 @@ func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factoryses
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {
 	t.Parallel()
 
-	session := &factorysessions.LiveSession{ID: "sess-preflight"}
+	session := &livesession.LiveSession{ID: "sess-preflight"}
 	host := &openTestHost{requireSession: session}
 	gateway := newServiceTestGateway(host)
 
@@ -50,7 +51,7 @@ func TestService_SubscribeFactoryResponseEvents_UsesExactSessionWithoutDefaultFa
 	t.Parallel()
 
 	gateway := newServiceTestGateway(&openTestHost{
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			factorysessions.DefaultSessionID: {
 				ID:             factorysessions.DefaultSessionID,
 				ResponseEvents: responseeventstore.NewSessionResponseEventStore(factorysessions.DefaultSessionID, serviceTestClock, func() string { return "response-event-test-id" }),
@@ -72,7 +73,7 @@ func TestService_SubscribeFactoryResponseEvents_RequiresInjectedResponseOwner(t 
 
 	sessionID := "session-without-response-owner"
 	gateway := newServiceTestGateway(&openTestHost{
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			sessionID: {
 				ID: sessionID,
 				ResponseEvents: responseeventstore.NewSessionResponseEventStore(
@@ -120,7 +121,7 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}
-	host := &openTestHost{sessions: map[string]*factorysessions.LiveSession{
+	host := &openTestHost{sessions: map[string]*livesession.LiveSession{
 		"session-1": {ID: "session-1", ResponseEvents: store},
 	}}
 	gateway := newResponseServiceTestGateway(t, host)
@@ -164,7 +165,7 @@ func TestService_GetFactorySessionResult_RejectsNonJavaScriptFactory(t *testing.
 	t.Parallel()
 
 	host := &openTestHost{
-		requireSession: &factorysessions.LiveSession{ID: "sess-petri"},
+		requireSession: &livesession.LiveSession{ID: "sess-petri"},
 	}
 	gateway := newServiceTestGateway(host)
 
@@ -178,7 +179,7 @@ func TestService_GetFactorySessionPartialResult_RejectsNonJavaScriptFactory(t *t
 	t.Parallel()
 
 	host := &openTestHost{
-		requireSession: &factorysessions.LiveSession{ID: "sess-petri"},
+		requireSession: &livesession.LiveSession{ID: "sess-petri"},
 	}
 	gateway := newServiceTestGateway(host)
 
@@ -193,7 +194,7 @@ func TestService_ListFactorySessions_DelegatesToControlPlane(t *testing.T) {
 
 	host := &openTestHost{
 		sessionIDs: []string{"~default"},
-		sessions: map[string]*factorysessions.LiveSession{
+		sessions: map[string]*livesession.LiveSession{
 			"~default": {ID: "~default", IsDefault: true},
 		},
 	}
@@ -212,7 +213,7 @@ func TestService_GetFactorySession_DelegatesToControlPlane(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
-		requireSession: &factorysessions.LiveSession{ID: "sess-get"},
+		requireSession: &livesession.LiveSession{ID: "sess-get"},
 	}
 	gateway := newServiceTestGateway(host)
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -19,7 +19,7 @@ type Service struct {
 }
 
 type RuntimeResolver interface {
-	Resolve(string) *factorysessions.LiveSession
+	Resolve(string) *factorysessions.LiveRuntime
 }
 
 type applicationService struct {
@@ -136,11 +136,11 @@ func (s *Service) runtime(sessionID string) (*factorysessions.LiveRuntime, error
 	if s == nil || s.sessions == nil {
 		return nil, fmt.Errorf("Factory Session runtime service is required")
 	}
-	session := s.sessions.Resolve(sessionID)
-	if session == nil || session.Runtime == nil || session.Runtime.Factory == nil {
+	runtime := s.sessions.Resolve(sessionID)
+	if runtime == nil || runtime.Factory == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	return session.Runtime, nil
+	return runtime, nil
 }
 
 // SubmitWorkRequestForSession admits a canonical Work Request to one live session.

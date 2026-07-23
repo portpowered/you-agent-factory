@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -70,7 +71,7 @@ type OpenedExecutionRuntime struct {
 }
 
 type RuntimeResolver interface {
-	Resolve(sessionID string) *factorysessions.LiveSession
+	Resolve(sessionID string) *livesession.LiveSession
 }
 
 type CurrentRuntimeResolver interface {
@@ -159,15 +160,15 @@ type RequestPreparation interface {
 }
 
 type Registry interface {
-	Upsert(*factorysessions.LiveSession, bool)
+	Upsert(*livesession.LiveSession, bool)
 	Select(string) bool
-	Current() *factorysessions.LiveSession
-	Get(string) *factorysessions.LiveSession
+	Current() *livesession.LiveSession
+	Get(string) *livesession.LiveSession
 	Remove(string)
 	Count() int
 	IDs() []string
-	DefaultSession() *factorysessions.LiveSession
-	FindByLogicalSessionKeyID(string) *factorysessions.LiveSession
+	DefaultSession() *livesession.LiveSession
+	FindByLogicalSessionKeyID(string) *livesession.LiveSession
 }
 
 type RuntimePersistenceStore interface {

@@ -41,15 +41,15 @@ func (h *syncPreflightTestHost) BackendScopeID() string {
 	return h.backendID
 }
 
-func (h *syncPreflightTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func (h *syncPreflightTestHost) LogicalSessionKeyID(session *livesession.LiveSession) string {
 	return controlplane.LogicalSessionKeyID(session)
 }
 
-func (h *syncPreflightTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string {
+func (h *syncPreflightTestHost) StreamGenerationID(_ *livesession.LiveSession) string {
 	return h.streamGenID
 }
 
-func (h *syncPreflightTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []interfaces.FactoryEvent {
+func (h *syncPreflightTestHost) LiveSessionEvents(_ *livesession.LiveSession) []interfaces.FactoryEvent {
 	return h.events
 }
 
@@ -131,8 +131,8 @@ func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *tes
 func TestLogicalSessionKeyID_UsesFolderAndTargetIdentity(t *testing.T) {
 	t.Parallel()
 
-	key := controlplane.LogicalSessionKeyID(&factorysessions.LiveSession{
-		SessionState: factorysessions.SessionState{
+	key := controlplane.LogicalSessionKeyID(&livesession.LiveSession{
+		SessionState: livesession.SessionState{
 			FolderPath: "/tmp/demo",
 		},
 		Target: factorysessions.TargetRef{
