@@ -4393,6 +4393,143 @@ export interface components {
      * @enum {string}
      */
     WorkerModelProvider: WorkerModelProvider;
+    /** @description Versioned public collection of provider manifests. */
+    ProviderCatalog: {
+      /**
+       * @description Provider Catalog document format version.
+       * @enum {string}
+       */
+      formatVersion: ProviderCatalogFormatVersion;
+      /**
+       * Format: uri
+       * @description Immutable JSON Schema identifier used to validate every provider entry.
+       * @enum {string}
+       */
+      providerSchema: ProviderCatalogProviderSchema;
+      /** @description Optional source-revision provenance supplied by a publication staging process. */
+      publicationProvenance?: {
+        /**
+         * Format: uri
+         * @description Public source repository from which the catalog was published.
+         */
+        sourceRepository: string;
+        /** @description Full immutable Git commit identifying the published source tree. */
+        sourceCommit: string;
+      };
+      /** @description Provider manifests in canonical provider-ID order. */
+      providers: components["schemas"]["ProviderManifest"][];
+    };
+    /** @description Public, data-only metadata for one model-provider integration. A manifest describes evidenced maximum behavior and publication posture; it never reports current-machine installation, authentication, readiness, pricing, or runtime registration. */
+    ProviderManifest: {
+      /** @description Stable canonical lowercase provider identifier. */
+      id: string;
+      /** @description Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias. */
+      aliases: string[];
+      /** @description Localizable customer-facing provider name. */
+      displayName: components["schemas"]["NameValue"];
+      /** @description Localizable customer-facing provider summary. */
+      description: components["schemas"]["NameValue"];
+      /** @description Stable public documentation links for this provider. */
+      documentation: components["schemas"]["ProviderDocumentationLink"][];
+      technicalSupportLevel: components["schemas"]["ProviderTechnicalSupportLevel"];
+      implementationAvailability: components["schemas"]["ProviderImplementationAvailability"];
+      maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
+      maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
+      discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      deprecation?: components["schemas"]["ProviderDeprecation"];
+    };
+    /**
+     * @description Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
+     * @enum {string}
+     */
+    ProviderTechnicalSupportLevel: ProviderTechnicalSupportLevel;
+    /**
+     * @description How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
+     * @enum {string}
+     */
+    ProviderImplementationAvailability: ProviderImplementationAvailability;
+    /** @description One stable public documentation resource for a provider. */
+    ProviderDocumentationLink: {
+      kind: components["schemas"]["ProviderDocumentationLinkKind"];
+      /**
+       * Format: uri
+       * @description Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.
+       */
+      url: string;
+    };
+    /**
+     * @description Purpose of one stable public provider documentation link.
+     * @enum {string}
+     */
+    ProviderDocumentationLinkKind: ProviderDocumentationLinkKind;
+    /** @description Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness. */
+    ProviderExecutionCapabilities: {
+      /** @description Accepts authored prompt input for execution. */
+      promptSubmission: boolean;
+      /** @description Accepts image content as invocation input. */
+      imageInput: boolean;
+      /** @description Can continue an identified provider session. */
+      sessionResume: boolean;
+      /** @description Can constrain authoritative output using a structured schema. */
+      structuredOutput: boolean;
+      /** @description Can execute provider-managed tools during an invocation. */
+      toolExecution: boolean;
+      /** @description Can execute with an explicit working directory. */
+      workingDirectory: boolean;
+      /** @description Can execute against an isolated source-control worktree. */
+      worktree: boolean;
+    };
+    /** @description Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture. */
+    ProviderResponseFidelityCapabilities: {
+      /** @description Exposes native streaming observations. */
+      nativeStreaming: boolean;
+      /** @description Emits incremental assistant-message deltas. */
+      messageDeltas: boolean;
+      /** @description Emits assistant-message snapshots. */
+      messageSnapshots: boolean;
+      /** @description Emits reasoning summaries or reasoning deltas. */
+      reasoningSummaries: boolean;
+      /** @description Emits correlated tool lifecycle metadata. */
+      toolLifecycle: boolean;
+      /** @description Emits incremental tool-output deltas. */
+      toolOutputDeltas: boolean;
+      /** @description Emits observed file changes. */
+      fileChanges: boolean;
+      /** @description Emits plan updates. */
+      plans: boolean;
+      /** @description Emits usage accounting. */
+      usage: boolean;
+      /** @description Assigns stable item identifiers across response events. */
+      stableItemIds: boolean;
+      /** @description Supports reconnecting an interrupted provider response stream. */
+      providerReconnect: boolean;
+    };
+    /** @description Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract. */
+    ProviderDiscoveryPrerequisites: {
+      /** @description Executable basenames that may supply the provider integration. */
+      executableNames: string[];
+      /** @description Credential-free endpoint transport kinds; addresses and live status are not published. */
+      endpointKinds: components["schemas"]["ProviderDiscoveryEndpointKind"][];
+      /** @description Required configuration-key names only; configuration and environment values are forbidden. */
+      configurationKeys: string[];
+    };
+    /**
+     * @description Static endpoint transport kind that may be checked without credentials.
+     * @enum {string}
+     */
+    ProviderDiscoveryEndpointKind: ProviderDiscoveryEndpointKind;
+    /** @description Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself. */
+    ProviderDeprecation: {
+      /**
+       * Format: date
+       * @description UTC calendar date on which the catalog began marking the provider deprecated.
+       */
+      deprecatedSince: string;
+      /** @description Localizable explanation of why the provider is deprecated. */
+      reason: components["schemas"]["NameValue"];
+      /** @description Canonical ID of a different, non-deprecated replacement provider in this catalog. */
+      replacementProviderId?: string;
+    };
     /**
      * @description Provider locality for a model worker capability declaration.
      * @enum {string}
@@ -7823,6 +7960,47 @@ export const WorkerModelProvider = {
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
+export const ProviderCatalogFormatVersion = {
+  Value1_0_0: "1.0.0",
+} as const;
+export type ProviderCatalogFormatVersion =
+  (typeof ProviderCatalogFormatVersion)[keyof typeof ProviderCatalogFormatVersion];
+export const ProviderCatalogProviderSchema = {
+  https_schemas_you_dev_model_providers_provider_manifest_1_0_0_schema_json:
+    "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+} as const;
+export type ProviderCatalogProviderSchema =
+  (typeof ProviderCatalogProviderSchema)[keyof typeof ProviderCatalogProviderSchema];
+export const ProviderTechnicalSupportLevel = {
+  production: "production",
+  experimental: "experimental",
+  not_supported: "not-supported",
+} as const;
+export type ProviderTechnicalSupportLevel =
+  (typeof ProviderTechnicalSupportLevel)[keyof typeof ProviderTechnicalSupportLevel];
+export const ProviderImplementationAvailability = {
+  bundled: "bundled",
+  externally_supplied: "externally-supplied",
+  catalog_only: "catalog-only",
+} as const;
+export type ProviderImplementationAvailability =
+  (typeof ProviderImplementationAvailability)[keyof typeof ProviderImplementationAvailability];
+export const ProviderDocumentationLinkKind = {
+  homepage: "homepage",
+  setup: "setup",
+  reference: "reference",
+  support: "support",
+} as const;
+export type ProviderDocumentationLinkKind =
+  (typeof ProviderDocumentationLinkKind)[keyof typeof ProviderDocumentationLinkKind];
+export const ProviderDiscoveryEndpointKind = {
+  local_http: "local-http",
+  remote_http: "remote-http",
+  stdio: "stdio",
+  unix_socket: "unix-socket",
+} as const;
+export type ProviderDiscoveryEndpointKind =
+  (typeof ProviderDiscoveryEndpointKind)[keyof typeof ProviderDiscoveryEndpointKind];
 export const WorkerModelLocality = {
   LOCAL: "LOCAL",
   CLOUD: "CLOUD",
