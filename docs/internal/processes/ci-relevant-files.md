@@ -117,6 +117,12 @@
   without writing, reports sorted package-relative stale, missing, and
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
+  Packaged Factory npm candidates use the shared release identity and staging
+  core in `scripts/package-release-candidate.mjs` through
+  `scripts/packaged-factories-package-candidate.mjs`; keep its run ID, full
+  source commit, candidate-version policy, staged manifest provenance, and
+  evidence shape aligned with `scripts/api-package-candidate.mjs`. The focused
+  behavioral coverage runs in `make packaged-factory-package-smoke`.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do

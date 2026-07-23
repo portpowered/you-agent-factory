@@ -2,20 +2,17 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { packAndVerify } from "./api-package-pack.mjs";
+import { packPackage } from "./api-package-pack.mjs";
 import {
 	DEVELOPMENT_DIST_TAG,
-	SHORT_SHA_LENGTH,
 	deriveCandidateVersion,
 	prepareReleaseCandidate,
 } from "./package-release-candidate.mjs";
 
-export const API_PACKAGE_NAME = "@you-agent-factory/api";
-export {
-	DEVELOPMENT_DIST_TAG,
-	SHORT_SHA_LENGTH,
-	deriveCandidateVersion,
-};
+export const PACKAGED_FACTORIES_PACKAGE_NAME =
+	"@you-agent-factory/packaged-factories";
+
+export { DEVELOPMENT_DIST_TAG, deriveCandidateVersion };
 
 export async function prepareCandidate({
 	packageDirectory,
@@ -28,8 +25,8 @@ export async function prepareCandidate({
 		outputDirectory,
 		runId,
 		sourceCommit,
-		packageName: API_PACKAGE_NAME,
-		pack: packAndVerify,
+		packageName: PACKAGED_FACTORIES_PACKAGE_NAME,
+		pack: packPackage,
 	});
 }
 

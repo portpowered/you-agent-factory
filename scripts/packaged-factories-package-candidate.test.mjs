@@ -6,15 +6,16 @@ import { basename, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { prepareCandidate as prepareApiCandidate } from "./api-package-candidate.mjs";
 import {
 	DEVELOPMENT_DIST_TAG,
-	SHORT_SHA_LENGTH,
-	deriveCandidateVersion,
 	prepareCandidate,
-} from "./api-package-candidate.mjs";
-import { REVIEWED_PACK_FILES } from "./api-package-pack.mjs";
+} from "./packaged-factories-package-candidate.mjs";
 
 const packageDirectory = fileURLToPath(
+	new URL("../packages/packaged-factories", import.meta.url),
+);
+const apiPackageDirectory = fileURLToPath(
 	new URL("../packages/api", import.meta.url),
 );
 const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -37,37 +38,28 @@ function stagedContractManifest(contents) {
 	)}\n`;
 }
 
-test("candidate version uses the immutable run ID and fixed commit prefix", () => {
-	assert.equal(SHORT_SHA_LENGTH, 12);
-	assert.equal(
-		deriveCandidateVersion({
-			baseVersion: "1.2.3",
-			runId: "9876543210",
-			sourceCommit,
-		}),
-		"1.2.3-dev.9876543210.0123456789ab",
+function expectedInventory(contractManifest) {
+	const artifactFiles = contractManifest.factories.flatMap((factory) => [
+		factory.json.locator,
+		factory.yaml.locator,
+	]);
+	return [
+		"LICENSE.md",
+		"README.md",
+		"generated/README.md",
+		"generated/manifest.json",
+		"package.json",
+		"schemas/factory.schema.json",
+		"schemas/factory.schema.yaml",
+		...artifactFiles,
+	].sort((left, right) => left.localeCompare(right));
+}
+
+test("Packaged Factories candidate is attributable and leaves package sources unchanged", async (t) => {
+	const outputDirectory = await temporaryDirectory(
+		t,
+		"you-packaged-factories-candidate-",
 	);
-});
-
-test("candidate identity rejects incomplete or non-canonical inputs", () => {
-	const valid = { baseVersion: "1.2.3", runId: "42", sourceCommit };
-	for (const replacement of [
-		{ baseVersion: undefined },
-		{ baseVersion: "1.2.3-beta.1" },
-		{ baseVersion: "01.2.3" },
-		{ runId: undefined },
-		{ runId: "0" },
-		{ runId: "042" },
-		{ sourceCommit: undefined },
-		{ sourceCommit: sourceCommit.slice(0, -1) },
-		{ sourceCommit: sourceCommit.toUpperCase() },
-	]) {
-		assert.throws(() => deriveCandidateVersion({ ...valid, ...replacement }));
-	}
-});
-
-test("preparation packs one attributable candidate without mutating package sources", async (t) => {
-	const outputDirectory = await temporaryDirectory(t, "you-api-candidate-output-");
 	const packageManifestPath = join(packageDirectory, "package.json");
 	const contractManifestPath = join(
 		packageDirectory,
@@ -76,6 +68,7 @@ test("preparation packs one attributable candidate without mutating package sour
 	);
 	const packageManifestBefore = await readFile(packageManifestPath);
 	const contractManifestBefore = await readFile(contractManifestPath);
+	const contractManifest = JSON.parse(contractManifestBefore);
 
 	const result = await prepareCandidate({
 		packageDirectory,
@@ -87,14 +80,12 @@ test("preparation packs one attributable candidate without mutating package sour
 	assert.deepEqual(await readFile(packageManifestPath), packageManifestBefore);
 	assert.deepEqual(await readFile(contractManifestPath), contractManifestBefore);
 	assert.deepEqual(result.evidence, {
-		packageName: "@you-agent-factory/api",
+		packageName: "@you-agent-factory/packaged-factories",
 		candidateVersion: "0.0.0-dev.9876543210.0123456789ab",
 		sourceCommit,
 		contractDigest: digest(stagedContractManifest(contractManifestBefore)),
 		artifactDigest: digest(await readFile(result.tarballPath)),
-		inventory: [...REVIEWED_PACK_FILES].sort((left, right) =>
-			left.localeCompare(right),
-		),
+		inventory: expectedInventory(contractManifest),
 		distTag: DEVELOPMENT_DIST_TAG,
 	});
 	assert.equal(
@@ -107,9 +98,33 @@ test("preparation packs one attributable candidate without mutating package sour
 	);
 });
 
-test("repeated preparation preserves identity, inventory, and artifact digest", async (t) => {
-	const firstOutput = await temporaryDirectory(t, "you-api-candidate-first-");
-	const secondOutput = await temporaryDirectory(t, "you-api-candidate-second-");
+test("API and Packaged Factories candidates share release identity and provenance", async (t) => {
+	const apiOutput = await temporaryDirectory(t, "you-shared-api-candidate-");
+	const factoriesOutput = await temporaryDirectory(
+		t,
+		"you-shared-factories-candidate-",
+	);
+	const input = { runId: "42", sourceCommit };
+
+	const api = await prepareApiCandidate({
+		...input,
+		packageDirectory: apiPackageDirectory,
+		outputDirectory: apiOutput,
+	});
+	const factories = await prepareCandidate({
+		...input,
+		packageDirectory,
+		outputDirectory: factoriesOutput,
+	});
+
+	assert.equal(factories.evidence.candidateVersion, api.evidence.candidateVersion);
+	assert.equal(factories.evidence.sourceCommit, api.evidence.sourceCommit);
+	assert.equal(factories.evidence.distTag, api.evidence.distTag);
+});
+
+test("repeated preparation preserves Packaged Factories candidate evidence", async (t) => {
+	const firstOutput = await temporaryDirectory(t, "you-factories-first-");
+	const secondOutput = await temporaryDirectory(t, "you-factories-second-");
 	const input = {
 		packageDirectory,
 		runId: "123456789",
@@ -129,52 +144,18 @@ test("repeated preparation preserves identity, inventory, and artifact digest", 
 	assert.notEqual(second.tarballPath, first.tarballPath);
 });
 
-test("invalid identity fails before creating candidate output", async (t) => {
-	const parent = await temporaryDirectory(t, "you-api-candidate-invalid-");
+test("invalid shared identity fails before creating candidate output", async (t) => {
+	const parent = await temporaryDirectory(t, "you-factories-invalid-");
 	const outputDirectory = join(parent, "candidate");
 
 	await assert.rejects(
 		prepareCandidate({
 			packageDirectory,
 			outputDirectory,
-			runId: "not-a-run-id",
+			runId: "042",
 			sourceCommit,
 		}),
 		/run ID must be a canonical positive integer/,
 	);
 	await assert.rejects(readdir(outputDirectory), { code: "ENOENT" });
-});
-
-test("candidate evidence contains only the approved non-sensitive fields", async (t) => {
-	const outputDirectory = await temporaryDirectory(t, "you-api-candidate-safe-");
-	const secret = "never-include-this-npm-token";
-	const previousNpmToken = process.env.NPM_TOKEN;
-	process.env.NPM_TOKEN = secret;
-	t.after(() => {
-		if (previousNpmToken === undefined) {
-			delete process.env.NPM_TOKEN;
-			return;
-		}
-		process.env.NPM_TOKEN = previousNpmToken;
-	});
-
-	const result = await prepareCandidate({
-		packageDirectory,
-		outputDirectory,
-		runId: "7",
-		sourceCommit,
-	});
-	const serialized = JSON.stringify(result.evidence);
-
-	assert.deepEqual(Object.keys(result.evidence), [
-		"packageName",
-		"candidateVersion",
-		"sourceCommit",
-		"contractDigest",
-		"artifactDigest",
-		"inventory",
-		"distTag",
-	]);
-	assert.equal(serialized.includes(secret), false);
-	assert.equal(serialized.includes("authorization"), false);
 });
