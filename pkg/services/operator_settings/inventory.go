@@ -13,9 +13,9 @@ const (
 	outcomeAccept = "accept"
 	outcomeReject = "reject"
 
-	entrypointParseFileConfig = "DecodeGlobalConfig"
-	entrypointLoadFileConfig  = "LoadFileConfig"
-	entrypointResolve         = "Resolve"
+	entrypointDecodeGlobalConfig = "DecodeGlobalConfig"
+	entrypointLoadFileConfig     = "LoadFileConfig"
+	entrypointResolve            = "Resolve"
 
 	categoryParseDefaults     = "parse-defaults"
 	categoryParseWorkerPreset = "parse-worker-presets"
@@ -42,17 +42,18 @@ type InputCase struct {
 	Fixture     string `json:"fixture,omitempty"`
 	Description string `json:"description"`
 
-	ExpectedFileConfig *FileConfigExpectation `json:"expectedFileConfig,omitempty"`
-	ResolveLayers      *ResolveLayers         `json:"resolveLayers,omitempty"`
-	PrecedenceWinners  *PrecedenceWinners     `json:"precedenceWinners,omitempty"`
-	ExpectedResolved   *ResolvedExpectation   `json:"expectedResolved,omitempty"`
-	ErrorFragments     []string               `json:"errorFragments,omitempty"`
+	ExpectedConfig    *ConfigExpectation   `json:"expectedConfig,omitempty"`
+	ResolveLayers     *ResolveLayers       `json:"resolveLayers,omitempty"`
+	PrecedenceWinners *PrecedenceWinners   `json:"precedenceWinners,omitempty"`
+	ExpectedResolved  *ResolvedExpectation `json:"expectedResolved,omitempty"`
+	ErrorFragments    []string             `json:"errorFragments,omitempty"`
 }
 
-// FileConfigExpectation records expected parse/load outputs for accepted file inputs.
-type FileConfigExpectation struct {
-	Defaults      DefaultsSnapshot `json:"defaults"`
-	WorkerPresets []WorkerPreset   `json:"workerPresets,omitempty"`
+// ConfigExpectation records expected generated-document decode/load outputs.
+type ConfigExpectation struct {
+	BackendScopeID string           `json:"backendScopeID,omitempty"`
+	Defaults       DefaultsSnapshot `json:"defaults"`
+	WorkerPresets  []WorkerPreset   `json:"workerPresets,omitempty"`
 }
 
 // DefaultsSnapshot is the trimmed defaults shape asserted by inventory table tests.

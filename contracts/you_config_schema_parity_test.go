@@ -164,27 +164,6 @@ func TestYouConfigSchemaLoaderParityMatrix(t *testing.T) {
 	})
 }
 
-func TestYouConfigSchemaTopologyMatchesInventoryWithoutUnsupportedFields(t *testing.T) {
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	root := document.(map[string]any)
-	contract := root["contract"].(map[string]any)
-	fields := contract["fields"].(map[string]any)
-
-	inventory := committedGlobalConfigInventory(t)
-	inventoryIDs := make(map[string]struct{}, len(inventory.Fields))
-	for _, record := range inventory.Fields {
-		inventoryIDs[record.ID] = struct{}{}
-		if _, ok := fields[record.ID]; !ok {
-			t.Fatalf("schema contract missing inventoried field %q", record.ID)
-		}
-	}
-	for id := range fields {
-		if _, ok := inventoryIDs[id]; !ok {
-			t.Fatalf("schema contract advertises unsupported field %q", id)
-		}
-	}
-}
-
 func runOperatorConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, inputCase operator_settings.InputCase) {
 	t.Helper()
 
@@ -192,7 +171,7 @@ func runOperatorConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, 
 
 	switch inputCase.Entrypoint {
 	case "DecodeGlobalConfig":
-		runOperatorParseSchemaParityCase(t, schema, inputCase, rule)
+		runOperatorDecodeSchemaParityCase(t, schema, inputCase, rule)
 	case "LoadFileConfig":
 		runOperatorLoadSchemaParityCase(t, schema, inputCase, rule)
 	case "Resolve":
@@ -218,7 +197,7 @@ func runSystemConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, in
 	}
 }
 
-func runOperatorParseSchemaParityCase(
+func runOperatorDecodeSchemaParityCase(
 	t *testing.T,
 	schema *jsonschema.Schema,
 	inputCase operator_settings.InputCase,
@@ -232,13 +211,13 @@ func runOperatorParseSchemaParityCase(
 	cfg, err := globalconfigmapping.Decode(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
-			t.Fatalf("ParseFileConfig() error = %v, want accept", err)
+			t.Fatalf("DecodeGlobalConfig() error = %v, want accept", err)
 		}
-		assertOperatorFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertOperatorConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
-		t.Fatal("ParseFileConfig() error = nil, want reject")
+		t.Fatal("DecodeGlobalConfig() error = nil, want reject")
 	}
 	assertErrorFragments(t, err, inputCase.ErrorFragments)
 }
@@ -270,7 +249,7 @@ func runOperatorLoadSchemaParityCase(
 		if err != nil {
 			t.Fatalf("LoadFileConfig() error = %v, want accept", err)
 		}
-		assertOperatorFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertOperatorConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
@@ -534,7 +513,7 @@ func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveL
 	if layers.FileFixture != "" {
 		cfg, err := globalconfigmapping.Decode(readOperatorFixture(t, layers.FileFixture))
 		if err != nil {
-			t.Fatalf("ParseFileConfig(file fixture) error = %v", err)
+			t.Fatalf("DecodeGlobalConfig(file fixture) error = %v", err)
 		}
 		return cfg.Defaults
 	}
@@ -544,10 +523,13 @@ func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveL
 	}
 }
 
-func assertOperatorFileConfigExpectation(t *testing.T, cfg operator_settings.Config, want *operator_settings.FileConfigExpectation) {
+func assertOperatorConfigExpectation(t *testing.T, cfg operator_settings.Config, want *operator_settings.ConfigExpectation) {
 	t.Helper()
 	if want == nil {
-		t.Fatal("accept case missing expectedFileConfig")
+		t.Fatal("accept case missing expectedConfig")
+	}
+	if cfg.BackendScopeID != want.BackendScopeID {
+		t.Fatalf("backendScopeID = %q, want %q", cfg.BackendScopeID, want.BackendScopeID)
 	}
 	gotDefaults := operator_settings.DefaultsSnapshot{
 		WorkerModelProvider: cfg.Defaults.WorkerModelProvider,

@@ -1,9 +1,7 @@
 package operatorsettings
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,19 +42,6 @@ type ConfigDocumentService struct {
 // cancels or interrupts provider/model input. Prompt EOF is mapped to this
 // outcome as well.
 var ErrProviderModelInputCanceled = errors.New("provider/model input canceled")
-
-// MarshalInputInventoryJSON renders the operator config input inventory as stable JSON.
-func MarshalInputInventoryJSON(inventory InputInventory) ([]byte, error) {
-	payload, err := json.MarshalIndent(inventory, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal operator config input inventory: %w", err)
-	}
-
-	var buffer bytes.Buffer
-	buffer.Write(payload)
-	buffer.WriteByte('\n')
-	return buffer.Bytes(), nil
-}
 
 // Load reads and validates a complete operator configuration. A
 // missing destination is represented by an empty, valid document.

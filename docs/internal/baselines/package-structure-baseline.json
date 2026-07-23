@@ -2064,11 +2064,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/encode.go",
-      "target": "MarshalInputInventoryJSON"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/environment_resolution.go",
       "target": "ResolveFromHomeWithEnvironment"
     },
@@ -3216,11 +3211,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/stream",
       "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/globalconfiginventory",
-      "target": "pkg/services/operator_settings"
     },
     {
       "rule": "service-root-unexpected-directory",

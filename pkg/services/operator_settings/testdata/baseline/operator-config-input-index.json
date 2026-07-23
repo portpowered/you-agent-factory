@@ -10,7 +10,7 @@
       "outcome": "accept",
       "fixture": "valid/defaults-only.json",
       "description": "defaults.workerModelProvider and defaults.workerModel parse from file",
-      "expectedFileConfig": {
+      "expectedConfig": {
         "defaults": {
           "workerModelProvider": "codex",
           "workerModel": "gpt-5-codex"
@@ -23,8 +23,9 @@
       "entrypoint": "DecodeGlobalConfig",
       "outcome": "accept",
       "fixture": "valid/backend-scope-sibling.json",
-      "description": "operatorconfig tolerates sibling backendScopeID without returning it on FileConfig",
-      "expectedFileConfig": {
+      "description": "generated global config decode returns backendScopeID with normalized defaults",
+      "expectedConfig": {
+        "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
         "defaults": {
           "workerModelProvider": "claude",
           "workerModel": "claude-sonnet"
@@ -38,7 +39,7 @@
       "outcome": "accept",
       "fixture": "valid/worker-presets-canonicalized.json",
       "description": "workerPresets ids, providers, models, and reasoningEffort are trimmed and canonicalized",
-      "expectedFileConfig": {
+      "expectedConfig": {
         "defaults": {},
         "workerPresets": [
           {
@@ -57,7 +58,7 @@
       "outcome": "accept",
       "fixture": "valid/worker-presets-missing.json",
       "description": "missing workerPresets array is backward compatible",
-      "expectedFileConfig": {
+      "expectedConfig": {
         "defaults": {
           "workerModel": "existing-model"
         }
@@ -187,8 +188,8 @@
       "category": "load-file",
       "entrypoint": "LoadFileConfig",
       "outcome": "accept",
-      "description": "missing config file returns empty FileConfig without error",
-      "expectedFileConfig": {
+      "description": "missing config file returns empty Config without error",
+      "expectedConfig": {
         "defaults": {}
       }
     },
@@ -199,7 +200,7 @@
       "outcome": "accept",
       "fixture": "valid/load-defaults.json",
       "description": "LoadFileConfig reads and validates defaults from disk",
-      "expectedFileConfig": {
+      "expectedConfig": {
         "defaults": {
           "workerModelProvider": "claude",
           "workerModel": "claude-sonnet"

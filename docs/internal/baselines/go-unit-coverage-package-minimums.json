@@ -713,10 +713,6 @@
       "minimum": 89.09
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/globalconfiginventory",
-      "minimum": 95.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
       "minimum": 95.65
     },
