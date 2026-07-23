@@ -56,6 +56,18 @@ func TestNamedFactoryPersistenceJSONAndYAMLParity(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(factoryDir, "factory.yaml")); !os.IsNotExist(err) {
 			t.Fatalf("unexpected YAML persistence model in %s: %v", factoryDir, err)
 		}
+		for relativePath, want := range map[string]string{
+			"scripts/helper.sh":                "echo portable\n",
+			"inputs/task/request/payload.json": `{"title":"starter"}`,
+		} {
+			data, err := os.ReadFile(filepath.Join(factoryDir, filepath.FromSlash(relativePath)))
+			if err != nil {
+				t.Fatalf("read materialized %s: %v", relativePath, err)
+			}
+			if string(data) != want {
+				t.Fatalf("%s = %q, want %q", relativePath, data, want)
+			}
+		}
 		loaded, err := factorydefinitioncomposition.LoadedFactoryLoader(factoryDir, nil)
 		if err != nil {
 			t.Fatalf("load persisted factory %s: %v", factoryDir, err)
@@ -210,6 +222,20 @@ func persistenceParityJSON(project string) string {
     "description": {"type": "LOCALIZABLE_ASSET", "value": "Example"},
     "args": {"prompt": "first line\nsecond line\n"}
   }],
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "type": "SCRIPT",
+        "targetPath": "factory/scripts/helper.sh",
+        "content": {"encoding": "utf-8", "inline": "echo portable\n"}
+      },
+      {
+        "type": "INPUT",
+        "targetPath": "factory/inputs/task/request/payload.json",
+        "content": {"encoding": "utf-8", "inline": "{\"title\":\"starter\"}"}
+      }
+    ]
+  },
   "workTypes": [{
     "name": "task",
     "states": [
@@ -254,6 +280,19 @@ examples:
       prompt: |
         first line
         second line
+supportingFiles:
+  bundledFiles:
+    - type: SCRIPT
+      targetPath: factory/scripts/helper.sh
+      content:
+        encoding: utf-8
+        inline: |
+          echo portable
+    - type: INPUT
+      targetPath: factory/inputs/task/request/payload.json
+      content:
+        encoding: utf-8
+        inline: '{"title":"starter"}'
 workTypes:
   - name: task
     states:
