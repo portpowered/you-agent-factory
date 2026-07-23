@@ -350,6 +350,26 @@ describe("CLI manifest adapter", () => {
 });
 
 describe("CLI manifest adapter rich inputs", () => {
+  it("localizes invalid non-final variadic argument diagnostics", () => {
+    const manifest = validManifest();
+    const argumentsById = manifest.commands["you.run"].arguments;
+    const prompt = argumentsById["you.run.arg.prompt"];
+    prompt.variadic = true;
+    prompt.maxCardinality = -1;
+    argumentsById["you.run.arg.output"] = {
+      ...prompt,
+      id: "you.run.arg.output",
+      name: "output",
+      position: 1,
+      variadic: false,
+      maxCardinality: 1,
+    };
+
+    expect(diagnosticMessages(manifest, "zh-CN")).toContain(
+      "只有最后一个位置参数可以是可变参数。",
+    );
+  });
+
   it("validates rich flag cardinality and typed defaults", () => {
     const cardinality = validManifest();
     const flags = cardinality.commands["you.run"].flags as Record<
@@ -388,6 +408,9 @@ describe("CLI manifest adapter rich inputs", () => {
     ] as Record<string, unknown>;
     argument.defaultValue = { int: 7 };
     expect(diagnosticCodes(typedDefault)).toContain("invalid_value");
+    expect(diagnosticMessages(typedDefault, "zh-CN")).toContain(
+      "输入 you.run.arg.prompt 的类型化默认值与值类型 string 不匹配。",
+    );
   });
 });
 
