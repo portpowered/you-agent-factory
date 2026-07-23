@@ -961,9 +961,5 @@ func newProductionModelsCommand(
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
 	)
-	registry, err := commandregistry.NewModelsRegistry(handler)
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewModelsCommand(registry)
+	return climanifestcobra.NewModelsCommand(handler)
 }

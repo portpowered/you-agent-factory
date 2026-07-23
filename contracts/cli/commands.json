@@ -9461,6 +9461,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": true,
           "minCardinality": 1,
           "maxCardinality": 1,
@@ -9468,9 +9469,17 @@
           "enum": [],
           "pattern": "",
           "completion": "none",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.models.inspect.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -9670,6 +9679,12 @@
           "stdout",
           "stderr"
         ]
+      },
+      "handlerBindings": {
+        "you.models.inspect.binding.model-name": {
+          "id": "you.models.inspect.binding.model-name",
+          "inputId": "you.models.inspect.arg.0"
+        }
       },
       "outputs": {
         "you.models.inspect.output.human": {

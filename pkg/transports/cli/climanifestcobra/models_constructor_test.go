@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -15,23 +14,23 @@ import (
 
 type modelsHandlerStub struct{}
 
-func (modelsHandlerStub) List(*cobra.Command, []string) error    { return nil }
-func (modelsHandlerStub) Inspect(*cobra.Command, []string) error { return nil }
-func (modelsHandlerStub) Invoke(*cobra.Command, []string) error  { return nil }
-func (modelsHandlerStub) Pull(*cobra.Command, []string) error    { return nil }
+func (modelsHandlerStub) List(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
+func (modelsHandlerStub) Inspect(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
+func (modelsHandlerStub) Invoke(*cobra.Command, []string) error { return nil }
+func (modelsHandlerStub) Pull(*cobra.Command, []string) error   { return nil }
 
 func TestDocsAndModelsCommandsAreConstructedIndependently(t *testing.T) {
-	modelsRegistry, err := commandregistry.NewModelsRegistry(modelsHandlerStub{})
-	if err != nil {
-		t.Fatal(err)
-	}
 	docs, err := climanifestcobra.NewDocsCommand(
 		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	models, err := climanifestcobra.NewModelsCommand(modelsRegistry)
+	models, err := climanifestcobra.NewModelsCommand(modelsHandlerStub{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,12 +101,93 @@ func TestGenericDocsDispatchResolvesTopicByStableManifestID(t *testing.T) {
 	}
 }
 
-func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
-	registry, err := commandregistry.NewModelsRegistry(modelsHandlerStub{})
+func TestGenericModelsInspectDispatchResolvesLocalAndInheritedInputs(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	models, err := climanifestcobra.NewModelsCommand(registry)
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelsRecord, err := manifest.CommandByID("you.models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspectRecord, err := manifest.CommandByID("you.models.inspect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Commands = map[string]climanifest.Command{
+		rootRecord.ID:    rootRecord,
+		modelsRecord.ID:  modelsRecord,
+		inspectRecord.ID: inspectRecord,
+	}
+
+	var local, inherited resolvedinput.Inputs
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			inspectRecord.Handler.ID: func(
+				_ *cobra.Command,
+				gotLocal resolvedinput.Inputs,
+				gotInherited resolvedinput.Inputs,
+			) error {
+				local, inherited = gotLocal, gotInherited
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{
+		"--server", "http://127.0.0.1:9090",
+		"models", "inspect", "OMNIVOICE_Q4_K_M",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(models inspect) error = %v", err)
+	}
+	modelName, err := local.String("you.models.inspect.arg.0")
+	if err != nil || modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("resolved model name = %q, %v", modelName, err)
+	}
+	assertResolvedState(t, local, "you.models.inspect.arg.0", resolvedinput.State{
+		Provenance: resolvedinput.SourcePositionalArgument, Changed: true,
+	})
+	server, err := inherited.String("you.flag.server")
+	if err != nil || server != "http://127.0.0.1:9090" {
+		t.Fatalf("resolved server = %q, %v", server, err)
+	}
+	assertResolvedState(t, inherited, "you.flag.server", resolvedinput.State{
+		Provenance: resolvedinput.SourceCLIFlag, Changed: true,
+	})
+	assertResolvedState(t, inherited, "you.flag.json", resolvedinput.State{
+		Provenance: resolvedinput.SourceManifestDefault, Default: true,
+	})
+}
+
+func assertResolvedState(
+	t *testing.T,
+	inputs resolvedinput.Inputs,
+	inputID string,
+	want resolvedinput.State,
+) {
+	t.Helper()
+	got, found := inputs.State(inputID)
+	if !found || !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolved %s state = %#v, %t; want %#v", inputID, got, found, want)
+	}
+}
+
+func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
+	models, err := climanifestcobra.NewModelsCommand(modelsHandlerStub{})
 	if err != nil {
 		t.Fatal(err)
 	}

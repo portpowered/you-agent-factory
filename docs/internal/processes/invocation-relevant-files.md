@@ -509,6 +509,12 @@ response-stream output.
   `pkg/transports/cli/climanifestcobra/bindings.go`, and inherited root inputs
   arrive as a separate resolved snapshot. Keep raw argument slices and public
   spellings out of these adapters.
+  For an incremental family migration, project the canonical root, family
+  parent, and completed leaves as one temporary generic tree, detach the family
+  parent, and attach only still-unmigrated leaves through their narrow legacy
+  registry. This preserves inherited root resolution after production root
+  composition without forcing later behavioral slices into the current change;
+  remove each legacy entry as its leaf gains a resolved handler.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.

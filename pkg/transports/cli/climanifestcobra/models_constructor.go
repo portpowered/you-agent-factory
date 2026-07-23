@@ -73,19 +73,36 @@ func NewDocsCommandFromManifest(
 }
 
 // NewModelsCommand builds the independently injected `you models` family.
-func NewModelsCommand(registry *commandregistry.Registry) (*cobra.Command, error) {
+func NewModelsCommand(handler commandregistry.ModelsHandler) (*cobra.Command, error) {
 	manifest, err := generated.ModelsDocsFamilyManifest()
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
 	}
-	return NewModelsCommandFromManifest(manifest, registry)
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	return NewModelsCommandFromManifest(manifest, handler)
 }
 
-// NewModelsCommandFromManifest builds `you models` entirely from manifest
-// arguments and flags, attaching only the injected command handlers.
-func NewModelsCommandFromManifest(manifest climanifest.Manifest, registry *commandregistry.Registry) (*cobra.Command, error) {
-	if registry == nil {
-		return nil, fmt.Errorf("build models command: registry is required")
+// NewModelsCommandFromManifest projects list and inspect through the generic
+// constructor while retaining narrow legacy dispatch only for the later
+// invoke and pull migration slices.
+func NewModelsCommandFromManifest(
+	manifest climanifest.Manifest,
+	handler commandregistry.ModelsHandler,
+) (*cobra.Command, error) {
+	if handler == nil {
+		return nil, fmt.Errorf("build models command: handler is required")
+	}
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
 	}
 	parentRecord, err := manifest.CommandByID("you.models")
 	if err != nil {
@@ -94,19 +111,118 @@ func NewModelsCommandFromManifest(manifest climanifest.Manifest, registry *comma
 	if parentRecord.Runnable {
 		return nil, fmt.Errorf("build models command: %q must remain non-runnable", parentRecord.ID)
 	}
-	parent := commandFromManifest(parentRecord, true)
-	for _, id := range []string{"you.models.list", "you.models.inspect", "you.models.invoke", "you.models.pull"} {
-		record, recordErr := manifest.CommandByID(id)
-		if recordErr != nil {
-			return nil, fmt.Errorf("build models command: %w", recordErr)
+	familyManifest := manifest
+	listRecord, err := manifest.CommandByID("you.models.list")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
+	inspectRecord, err := manifest.CommandByID("you.models.inspect")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
+	parent, err := buildResolvedModelsParent(
+		manifest,
+		rootRecord,
+		parentRecord,
+		listRecord,
+		inspectRecord,
+		handler,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := attachLegacyModelsLeaves(parent, familyManifest, handler); err != nil {
+		return nil, err
+	}
+	return parent, nil
+}
+
+func buildResolvedModelsParent(
+	manifest climanifest.Manifest,
+	rootRecord climanifest.Command,
+	parentRecord climanifest.Command,
+	listRecord climanifest.Command,
+	inspectRecord climanifest.Command,
+	handler commandregistry.ModelsHandler,
+) (*cobra.Command, error) {
+	manifest.Commands = map[string]climanifest.Command{
+		rootRecord.ID:    rootRecord,
+		parentRecord.ID:  parentRecord,
+		listRecord.ID:    listRecord,
+		inspectRecord.ID: inspectRecord,
+	}
+	root, err := NewCommandTree(manifest, GenericBindings{
+		Handlers: HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: ResolvedCobraHandlerRegistry{
+			listRecord.Handler.ID:    handler.List,
+			inspectRecord.Handler.ID: handler.Inspect,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
+	parent, _, err := root.Find([]string{parentRecord.Name})
+	if err != nil {
+		return nil, fmt.Errorf("build models command: find projected command: %w", err)
+	}
+	root.RemoveCommand(parent)
+	for _, id := range []string{listRecord.ID, inspectRecord.ID} {
+		command, _, findErr := parent.Find([]string{strings.TrimPrefix(id, parentRecord.ID+".")})
+		if findErr != nil {
+			return nil, fmt.Errorf("build models command: find %q: %w", id, findErr)
 		}
-		leaf, leafErr := buildRunnableModelsLeaf(record, registry)
+		command.PreRunE = rejectDeprecatedPortFlag
+		if id == inspectRecord.ID {
+			preserveModelsExactArgumentDiagnostic(command, inspectRecord)
+		}
+	}
+	return parent, nil
+}
+
+func preserveModelsExactArgumentDiagnostic(
+	command *cobra.Command,
+	record climanifest.Command,
+) {
+	arguments := make([]climanifest.Argument, 0, len(record.Arguments))
+	for _, argument := range record.Arguments {
+		arguments = append(arguments, argument)
+	}
+	minimum, maximum := argumentCardinality(arguments)
+	if minimum != maximum {
+		return
+	}
+	validate := command.Args
+	command.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) != minimum {
+			return cobra.ExactArgs(minimum)(cmd, args)
+		}
+		return validate(cmd, args)
+	}
+}
+
+func attachLegacyModelsLeaves(
+	parent *cobra.Command,
+	manifest climanifest.Manifest,
+	handler commandregistry.ModelsHandler,
+) error {
+	registry, err := commandregistry.NewModelsRegistry(handler)
+	if err != nil {
+		return err
+	}
+	for _, id := range []string{"you.models.invoke", "you.models.pull"} {
+		commandRecord, commandErr := manifest.CommandByID(id)
+		if commandErr != nil {
+			return fmt.Errorf("build models command: %w", commandErr)
+		}
+		leaf, leafErr := buildRunnableModelsLeaf(commandRecord, registry)
 		if leafErr != nil {
-			return nil, leafErr
+			return leafErr
 		}
 		parent.AddCommand(leaf)
 	}
-	return parent, nil
+	return nil
 }
 
 func buildRunnableModelsLeaf(record climanifest.Command, registry *commandregistry.Registry) (*cobra.Command, error) {

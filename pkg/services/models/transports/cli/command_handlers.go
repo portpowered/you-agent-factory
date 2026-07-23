@@ -6,6 +6,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -43,25 +44,74 @@ func NewCommandHandler(
 	}
 }
 
-func (h *CommandHandler) List(cmd *cobra.Command, _ []string) error {
+const (
+	modelsInspectNameInputID = "you.models.inspect.arg.0"
+	serverInputID            = "you.flag.server"
+	jsonInputID              = "you.flag.json"
+	verboseInputID           = "you.flag.verbose"
+	debugInputID             = "you.flag.debug"
+)
+
+func (h *CommandHandler) List(
+	cmd *cobra.Command,
+	_ resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
 	if h == nil || h.models == nil {
 		return fmt.Errorf("models list service is required")
 	}
 	cfg := ListConfig{Context: cmd.Context(), Output: cmd.OutOrStdout()}
-	h.applyCommon(cmd, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models list inputs: %w", err)
+	}
 	return h.models.List(cfg)
 }
 
-func (h *CommandHandler) Inspect(cmd *cobra.Command, args []string) error {
+func (h *CommandHandler) Inspect(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
 	if h == nil || h.models == nil {
 		return fmt.Errorf("models inspect service is required")
 	}
-	cfg := InspectConfig{Context: cmd.Context(), Output: cmd.OutOrStdout()}
-	if len(args) == 1 {
-		cfg.ModelName = args[0]
+	modelName, err := inputs.String(modelsInspectNameInputID)
+	if err != nil {
+		return fmt.Errorf("read models inspect model name: %w", err)
 	}
-	h.applyCommon(cmd, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
+	cfg := InspectConfig{
+		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+	}
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models inspect inputs: %w", err)
+	}
 	return h.models.Inspect(cfg)
+}
+
+func (h *CommandHandler) applyResolvedCommon(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	server *string,
+	json, verbose, debug *bool,
+	diagnostics *io.Writer,
+) error {
+	var err error
+	if *server, err = inputs.String(serverInputID); err != nil {
+		return err
+	}
+	if *json, err = inputs.Bool(jsonInputID); err != nil {
+		return err
+	}
+	if *verbose, err = inputs.Bool(verboseInputID); err != nil {
+		return err
+	}
+	if *debug, err = inputs.Bool(debugInputID); err != nil {
+		return err
+	}
+	if h.diagnosticsWriter != nil {
+		*diagnostics = h.diagnosticsWriter(cmd)
+	}
+	return nil
 }
 
 func (h *CommandHandler) Invoke(cmd *cobra.Command, args []string) error {
