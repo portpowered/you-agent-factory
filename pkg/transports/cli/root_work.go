@@ -13,6 +13,7 @@ import (
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -38,6 +39,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 		sessionRegistry,
 		representativePersistentFlagBindings(globals, diagnostics, operatorDefaults),
 		sessionBindings,
+		representativeSourceValues(options),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
@@ -64,6 +66,7 @@ func newGenericRepresentativeFamily(
 	sessionRegistry *commandregistry.Registry,
 	flagBindings climanifestcobra.PersistentFlagBindings,
 	sessionBindings climanifestcobra.SessionFamilyBindings,
+	sourceValues climanifestcobra.SourceCandidateProvider,
 ) (*cobra.Command, error) {
 	manifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
@@ -95,13 +98,17 @@ func newGenericRepresentativeFamily(
 			flagBindings,
 		)
 	}
-	inputs := representativeInputBindings(flagBindings)
+	inputs := make(climanifestcobra.InputBindingRegistry)
 	for inputID, binding := range sessionInputBindings(sessionBindings) {
 		inputs[inputID] = binding
 	}
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
 		CobraHandlers: handlers,
 		Inputs:        inputs,
+		SourceValues:  sourceValues,
+		RootInputs: func(inputs resolvedinput.Inputs) error {
+			return applyRepresentativeResolvedInputs(inputs, flagBindings)
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -109,31 +116,6 @@ func newGenericRepresentativeFamily(
 	root.SilenceUsage = true
 	applySessionGenericFlagUsages(root, manifest, sessionBindings.FlagUsages)
 	return root, nil
-}
-
-func representativeInputBindings(
-	bindings climanifestcobra.PersistentFlagBindings,
-) climanifestcobra.InputBindingRegistry {
-	targets := map[string]any{
-		"you.flag.debug":                         bindings.Debug,
-		"you.flag.default-worker-model":          bindings.DefaultWorkerModel,
-		"you.flag.default-worker-model-provider": bindings.DefaultWorkerModelProvider,
-		"you.flag.json":                          bindings.JSON,
-		"you.flag.server":                        bindings.Server,
-		"you.flag.verbose":                       bindings.Verbose,
-	}
-	result := make(climanifestcobra.InputBindingRegistry, len(targets))
-	for inputID, target := range targets {
-		stableID, bindingTarget := inputID, target
-		result[stableID] = func(value any) error {
-			return assignRepresentativeGenericValue(
-				map[string]any{stableID: value},
-				stableID,
-				bindingTarget,
-			)
-		}
-	}
-	return result
 }
 
 func sessionInputBindings(
@@ -199,10 +181,12 @@ func productionGenericCobraHandler(
 	handlers commandregistry.CommandHandlers,
 	bindings climanifestcobra.PersistentFlagBindings,
 ) climanifestcobra.CobraHandler {
-	return func(cmd *cobra.Command, args []string, values map[string]any) error {
-		if err := applyRepresentativeGenericValues(values, bindings); err != nil {
-			return fmt.Errorf("bind %s generic inputs: %w", commandID, err)
-		}
+	return func(
+		cmd *cobra.Command,
+		args []string,
+		values map[string]any,
+		_ resolvedinput.Inputs,
+	) error {
 		if genericSessionUsesDeprecatedPort(commandID) {
 			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
 				return err
@@ -226,23 +210,61 @@ func genericSessionUsesDeprecatedPort(commandID string) bool {
 	}
 }
 
-func applyRepresentativeGenericValues(
-	values map[string]any,
+func applyRepresentativeResolvedInputs(
+	inputs resolvedinput.Inputs,
 	bindings climanifestcobra.PersistentFlagBindings,
 ) error {
-	targets := map[string]any{
-		"debug":                         bindings.Debug,
-		"default-worker-model":          bindings.DefaultWorkerModel,
-		"default-worker-model-provider": bindings.DefaultWorkerModelProvider,
-		"json":                          bindings.JSON,
-		"server":                        bindings.Server,
-		"verbose":                       bindings.Verbose,
+	targets := map[string]struct {
+		value any
+		read  func(resolvedinput.Inputs, string) (any, error)
+	}{
+		"you.flag.debug": {
+			value: bindings.Debug,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.Bool(id)
+			},
+		},
+		"you.flag.default-worker-model": {
+			value: bindings.DefaultWorkerModel,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.String(id)
+			},
+		},
+		"you.flag.default-worker-model-provider": {
+			value: bindings.DefaultWorkerModelProvider,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.String(id)
+			},
+		},
+		"you.flag.json": {
+			value: bindings.JSON,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.Bool(id)
+			},
+		},
+		"you.flag.server": {
+			value: bindings.Server,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.String(id)
+			},
+		},
+		"you.flag.verbose": {
+			value: bindings.Verbose,
+			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
+				return inputs.Bool(id)
+			},
+		},
 	}
-	for name, target := range targets {
-		if err := assignRepresentativeGenericValue(values, "you.flag."+name, target); err != nil {
+	for inputID, target := range targets {
+		value, err := target.read(inputs, inputID)
+		if err != nil {
 			return err
 		}
-		if err := assignRepresentativeGenericValue(values, "you.session.show.flag."+name, target); err != nil {
+		if err := assignRepresentativeGenericValue(
+			map[string]any{inputID: value},
+			inputID,
+			target.value,
+		); err != nil {
 			return err
 		}
 	}
@@ -473,6 +495,9 @@ func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConf
 func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *runcli.RunConfig) ([]string, runcli.RunConfig, error) {
 	args, err := parseRunCommandArgs(cmd, args)
 	if err != nil {
+		return nil, *cfg, err
+	}
+	if err := climanifestcobra.RefreshResolvedPersistentInputs(cmd); err != nil {
 		return nil, *cfg, err
 	}
 	if err := rejectDeprecatedPortFlag(cmd, nil); err != nil {

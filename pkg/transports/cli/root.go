@@ -20,6 +20,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -29,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
@@ -498,8 +500,18 @@ func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDe
 		return operatorconfig.ResolvedDefaults{}, err
 	}
 	return rootOptions.resolveOperatorDefaults(homeDir, environment, operatorconfig.FlagOverrides{
-		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
-		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
+		WorkerModelProvider: resolvedPersistentStringIfCLI(
+			cmd,
+			"you.flag.default-worker-model-provider",
+			"default-worker-model-provider",
+			operatorDefaults.defaultWorkerModelProvider,
+		),
+		WorkerModel: resolvedPersistentStringIfCLI(
+			cmd,
+			"you.flag.default-worker-model",
+			"default-worker-model",
+			operatorDefaults.defaultWorkerModel,
+		),
 	})
 }
 
@@ -530,6 +542,59 @@ func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string
 		return value
 	}
 	return ""
+}
+
+func resolvedPersistentStringIfCLI(
+	cmd *cobra.Command,
+	inputID string,
+	legacyName string,
+	legacyValue string,
+) string {
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if !found || state.Provenance != resolvedinput.SourceCLIFlag {
+			return ""
+		}
+		value, valueErr := inputs.String(inputID)
+		if valueErr == nil {
+			return value
+		}
+		return ""
+	}
+	return persistentFlagValueIfChanged(cmd, legacyName, legacyValue)
+}
+
+func representativeSourceValues(options CommandFactory) climanifestcobra.SourceCandidateProvider {
+	return func(
+		_ context.Context,
+		binding climanifest.SourceBinding,
+		kind resolvedinput.ValueKind,
+	) (resolvedinput.Value, bool, error) {
+		if kind != resolvedinput.ValueKindString {
+			return resolvedinput.Value{}, false, fmt.Errorf(
+				"source binding %q requires unsupported value kind %q",
+				binding.ID,
+				kind,
+			)
+		}
+		if binding.Source == climanifest.SourceEnvironment {
+			if options.lookupEnv == nil {
+				return resolvedinput.Value{}, false, nil
+			}
+			value, present, err := lookupProcessEnvironment(options, binding.ExternalKey)
+			if err != nil || !present || strings.TrimSpace(value) == "" {
+				return resolvedinput.Value{}, false, err
+			}
+			return resolvedinput.StringValue(strings.TrimSpace(value)), true, nil
+		}
+		if binding.Source != climanifest.SourceOperatorConfig {
+			return resolvedinput.Value{}, false, nil
+		}
+		// Operator Settings currently exposes a final CLI-inclusive resolver,
+		// not the raw lower-priority candidate required by this boundary.
+		return resolvedinput.Value{}, false, nil
+	}
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {

@@ -205,6 +205,18 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		if err := projectGenericPresentation(built[item.record.Path], item, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
+	}
+	persistentInputs, err := newPersistentInputResolver(
+		plan,
+		targets,
+		bindings.SourceValues,
+		bindings.RootInputs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build generic command tree: %w", err)
+	}
+	installPersistentInputResolution(built[manifest.RootPath], persistentInputs)
+	for _, item := range plan {
 		projectGenericHandler(built[item.record.Path], item.record, bindings)
 	}
 	for _, item := range plan {

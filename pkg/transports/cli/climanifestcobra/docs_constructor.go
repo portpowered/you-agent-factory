@@ -85,7 +85,11 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 		}
 		if cobraHandler != nil {
-			return cobraHandler(command, args, values)
+			persistentInputs, err := ResolvedPersistentInputs(command)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			return cobraHandler(command, args, values, persistentInputs)
 		}
 		return handler(command.Context(), values)
 	}

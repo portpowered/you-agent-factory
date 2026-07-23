@@ -137,7 +137,7 @@ type genericFlagValue struct {
 	normalization string
 	enum          map[string]struct{}
 	value         any
-	arrayChanged  bool
+	changed       bool
 	binding       InputBinding
 }
 
@@ -170,15 +170,17 @@ func (v *genericFlagValue) Set(raw string) error {
 	}
 	if v.valueType != "stringArray" {
 		v.value = value
+		v.changed = true
 		return v.bind()
 	}
 	item := value.([]string)[0]
-	if !v.arrayChanged {
+	if !v.changed {
 		v.value = []string{item}
-		v.arrayChanged = true
+		v.changed = true
 		return v.bind()
 	}
 	v.value = append(v.value.([]string), item)
+	v.changed = true
 	return v.bind()
 }
 
@@ -207,6 +209,7 @@ func (v *genericFlagValue) Append(raw string) error {
 		return err
 	}
 	v.value = append(v.value.([]string), item)
+	v.changed = true
 	return v.bind()
 }
 
@@ -220,7 +223,7 @@ func (v *genericFlagValue) Replace(values []string) error {
 		replacement = append(replacement, value)
 	}
 	v.value = replacement
-	v.arrayChanged = true
+	v.changed = true
 	return v.bind()
 }
 
