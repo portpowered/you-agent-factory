@@ -23,6 +23,13 @@ primary-result behavior.
   its referenced artifacts through that filesystem instead of embedding or
   reconstructing publication bytes elsewhere; `Source()` remains the authored
   source compatibility boundary.
+- `internal/packagedfactorycatalog.LoadPublishedDefinitionCatalog()` is the
+  fail-closed backend projection of that publication. It validates the manifest,
+  schema identity, locators, hashes, unique identities, both generated formats,
+  canonical Factory mapping, and Factory Definitions validation before exposing
+  detached exact JSON definitions. Use `LoadDefinitionCatalog(fs.FS)` only for
+  inert fixture injection and consumer tests; lifecycle and installation effects
+  remain outside the catalog.
 - The customer-implementable provider inference contract lives in
   `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
