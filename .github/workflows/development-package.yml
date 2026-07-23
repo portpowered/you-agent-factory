@@ -69,6 +69,9 @@ jobs:
       - name: Validate package allowlist, packing, and isolated consumption
         run: make api-package-pack-smoke
 
+      - name: Validate Packaged Factories generation, packing, and isolated consumption
+        run: make packaged-factory-package-smoke
+
       - name: Install Playwright browser for frontend package verification
         run: make ui-install-playwright
 
@@ -127,6 +130,32 @@ jobs:
         with:
           name: api-development-candidate-${{ github.run_id }}
           path: .artifacts/api-development-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Authorize, prepare, and smoke the exact Packaged Factories candidate without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/packaged-factories-development-candidate/package
+          node scripts/packaged-factories-package-pr-dry-run.mjs \
+            --event-name "${{ github.event_name }}" \
+            --output-directory .artifacts/packaged-factories-development-candidate/package \
+            --package-directory packages/packaged-factories \
+            --prerequisite-result "${{ needs.validate.result }}" \
+            --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
+            --ref "${{ github.ref }}" \
+            --repository "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --source-commit "${{ github.event.pull_request.head.sha }}" \
+            --workspace-directory "${{ github.workspace }}" \
+            | tee .artifacts/packaged-factories-development-candidate/dry-run-outcome.json
+
+      - name: Upload the preserved Packaged Factories candidate and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-factories-development-candidate-${{ github.run_id }}
+          path: .artifacts/packaged-factories-development-candidate/
           if-no-files-found: error
           retention-days: 7
 

@@ -132,6 +132,14 @@
   scripts, lockfiles, workspaces, and links, resolve artifacts only through
   public package specifiers, and validate both generated representations
   against the installed schema before removing the consumer.
+  Pull-request authorization is shared through
+  `scripts/package-development-policy.mjs`; keep the API compatibility re-export
+  and require every candidate to match the reviewed full head SHA after
+  prerequisites succeed. The Development Package pull-request job runs
+  `scripts/packaged-factories-package-pr-dry-run.mjs` without registry access
+  and preserves the exact tarball, candidate evidence, consumer evidence, and
+  no-publish outcome for review. Keep generation, identity, inventory, pack,
+  and installed-consumer failures stage-specific.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
