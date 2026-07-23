@@ -65,9 +65,63 @@ jobs:
           release_version="${release_tag#v}"
           printf 'release_version=%s\n' "$release_version" >> "$GITHUB_OUTPUT"
 
+  prepare-data-package-candidates:
+    name: Prepare Data Package Candidates
+    needs: resolve-release-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Prepare the API candidate from the release commit
+        run: >-
+          node scripts/api-package-candidate.mjs
+          --output-directory .artifacts/api-release-candidate
+          --package-directory packages/api
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Prepare the Packaged Factories candidate from the release commit
+        run: >-
+          node scripts/packaged-factories-package-candidate.mjs
+          --output-directory .artifacts/packaged-factories-release-candidate
+          --package-directory packages/packaged-factories
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Upload the API candidate and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-release-candidate-${{ github.run_id }}
+          path: .artifacts/api-release-candidate/
+          if-no-files-found: error
+
+      - name: Upload the Packaged Factories candidate and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-factories-release-candidate-${{ github.run_id }}
+          path: .artifacts/packaged-factories-release-candidate/
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
-    needs: resolve-release-tag
+    needs:
+      - resolve-release-tag
+      - prepare-data-package-candidates
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -108,6 +162,32 @@ jobs:
       - name: Install dashboard dependencies
         working-directory: ui
         run: bun install --frozen-lockfile
+
+      - name: Download the preserved API candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: api-release-candidate-${{ github.run_id }}
+          path: .artifacts/api-release-candidate
+
+      - name: Download the preserved Packaged Factories candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: packaged-factories-release-candidate-${{ github.run_id }}
+          path: .artifacts/packaged-factories-release-candidate
+
+      - name: Reconcile, publish, and verify the exact API candidate
+        run: >-
+          node scripts/api-package-publish.mjs
+          --candidate-directory .artifacts/api-release-candidate
+          --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
+          --workspace-directory .
+
+      - name: Reconcile, publish, and verify the exact Packaged Factories candidate
+        run: >-
+          node scripts/packaged-factories-package-publish.mjs
+          --candidate-directory .artifacts/packaged-factories-release-candidate
+          --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
+          --workspace-directory .
 
       - name: Prepare the canonical frontend package release candidates
         run: >-

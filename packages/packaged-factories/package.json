@@ -1,16 +1,28 @@
 {
   "name": "@you-agent-factory/packaged-factories",
   "version": "0.0.0",
-  "private": true,
-  "description": "Human-readable sources, portable catalog artifacts, and validation schemas for the first-party Factories shipped with You Agent Factory.",
+  "description": "Data-only Factory catalog artifacts and schemas for You Agent Factory consumers.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/portpowered/infinite-you.git"
+    "url": "git+https://github.com/portpowered/you-agent-factory.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
-    "factories",
-    "generated",
-    "schemas"
-  ]
+    "README.md",
+    "LICENSE.md",
+    "generated/manifest.json",
+    "generated/factories",
+    "schemas/factory.schema.json",
+    "schemas/factory.schema.yaml"
+  ],
+  "exports": {
+    "./manifest": "./generated/manifest.json",
+    "./schemas/factory.json": "./schemas/factory.schema.json",
+    "./schemas/factory.yaml": "./schemas/factory.schema.yaml",
+    "./factories/*.json": "./generated/factories/*/factory.json",
+    "./factories/*.yaml": "./generated/factories/*/factory.yaml"
+  }
 }
