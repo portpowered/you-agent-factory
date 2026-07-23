@@ -195,7 +195,7 @@ func applyOperatorDefaults(
 	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorDefaults); err != nil {
 		return fmt.Errorf("apply operator defaults: %w", err)
 	}
-	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
+	return nil
 }
 
 func warnReplayMetadataMismatches(

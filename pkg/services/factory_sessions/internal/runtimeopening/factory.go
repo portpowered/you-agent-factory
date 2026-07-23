@@ -70,6 +70,7 @@ type Factory struct {
 	generateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                     factorysessions.HomeDirectoryResolver
 	replayFiles                     fileeffects.ReplayRecordingReader
+	providerIdentities              factorysessions.ProviderIdentityResolver
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -117,6 +118,7 @@ func NewFactory(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	replayFiles fileeffects.ReplayRecordingReader,
+	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (*Factory, error) {
 	if workflowPreview == nil {
 		return nil, fmt.Errorf("Factory Runtime workflow preview operation is required")
@@ -150,6 +152,9 @@ func NewFactory(
 	}
 	if factorySessionsService == nil {
 		return nil, fmt.Errorf("Factory Sessions service is required")
+	}
+	if providerIdentities == nil {
+		return nil, fmt.Errorf("provider identity resolver is required")
 	}
 	return &Factory{
 		durableExecutionFactory:         durableExecutionFactory,
@@ -194,6 +199,7 @@ func NewFactory(
 		generateRuntimeInstanceID:       generateRuntimeInstanceID,
 		resolveHome:                     resolveHome,
 		replayFiles:                     replayFiles,
+		providerIdentities:              providerIdentities,
 	}, nil
 }
 
@@ -247,6 +253,7 @@ func (f *Factory) openRuntime(
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
 		f.replayFiles,
+		f.providerIdentities,
 	)
 }
 

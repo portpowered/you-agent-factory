@@ -149,7 +149,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	}
 }
 
-func TestResolveRunnerSelectionRejectsExternalIntegrationOnNativeRunnerPath(t *testing.T) {
+func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 	registrations, err := BuiltInRegistrations()
 	if err != nil {
@@ -162,12 +162,23 @@ func TestResolveRunnerSelectionRejectsExternalIntegrationOnNativeRunnerPath(t *t
 		t.Fatalf("New() error = %v", err)
 	}
 
-	_, err = providers.ResolveRunnerSelection("customer", "", "")
-	if err == nil || !strings.Contains(err.Error(), "not available through the provider-native runner path") {
+	selection, err := providers.ResolveRunnerSelection("customer", "", "")
+	if err != nil {
 		t.Fatalf("ResolveRunnerSelection(external) error = %v", err)
+	}
+	if selection.RunnerID != "customer.provider" ||
+		selection.Source != workers.RunnerSelectionSourceWorkstation {
+		t.Fatalf(
+			"ResolveRunnerSelection(external) = %#v, want canonical registered integration",
+			selection,
+		)
 	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)
+	}
+	if _, err := providers.RunnerID("customer"); err == nil ||
+		!strings.Contains(err.Error(), "not available through the provider-native runner path") {
+		t.Fatalf("RunnerID(external) error = %v, want native-path rejection", err)
 	}
 }
 

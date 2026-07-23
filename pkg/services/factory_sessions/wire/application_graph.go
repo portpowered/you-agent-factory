@@ -171,6 +171,7 @@ type RuntimeOpeningDependencies struct {
 	GenerateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                     factorysessions.HomeDirectoryResolver
 	ReplayFiles                     ReplayRecordingReader
+	ProviderIdentities              factorysessions.ProviderIdentityResolver
 }
 
 func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningFactory, error) {
@@ -190,6 +191,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
 		deps.AdaptWorkerCommandRunner, deps.ProcessRuntimeFactory, deps.EnsureOperatorBackendScope,
 		deps.GenerateRuntimeInstanceID, deps.ResolveHome, deps.ReplayFiles,
+		deps.ProviderIdentities,
 	)
 }
 

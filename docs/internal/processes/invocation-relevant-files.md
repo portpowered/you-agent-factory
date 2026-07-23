@@ -121,10 +121,20 @@ primary-result behavior.
   path until provider-native execution migrates to the neutral conductor.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, manifest-maximum capability checks, and executable-prerequisite
-  preflight. Preserve the existing selection precedence and native runner IDs;
+  preflight, and to Factory Sessions through the narrow
+  `ProviderIdentityResolver` opening contract. After operator defaults are
+  applied, Factory opening resolves concrete worker and guard selections to
+  canonical registry identities; operator-file defaults and JavaScript worker
+  presets use the same authority. Leave declared invocation interpolation
+  expressions unresolved at this stage. Do not restore built-in membership or
+  alias lists in Factory Runtime or operator-default helpers.
+  Preserve the existing selection precedence and native runner IDs;
   the registry resolves canonical IDs and published aliases first, with the
   legacy `cursor-cli` runner ID mapped only at the native-execution
-  compatibility boundary. Preserve accepted public model-provider aliases
+  compatibility boundary. Externally supplied integrations retain their
+  canonical provider identity during runner selection so opening can validate
+  and carry them without pretending they are a bundled native runner.
+  Preserve accepted public model-provider aliases
   (`openai` and `anthropic`) as collision-validated registry identity claims so
   static lookup and routed selection cannot disagree. Carry the registry's
   canonical legacy-provider selection through the workstation boundary into

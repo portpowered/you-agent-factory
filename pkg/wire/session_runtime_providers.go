@@ -74,6 +74,12 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 	return providerregistry.New(registrations...)
 }
 
+func provideFactorySessionProviderIdentityResolver(
+	providers *providerregistry.Registry,
+) factorysessions.ProviderIdentityResolver {
+	return providers.CanonicalIdentity
+}
+
 func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service, error) {
 	files := edges.ProviderSessionFileSystem
 	if files == nil {
