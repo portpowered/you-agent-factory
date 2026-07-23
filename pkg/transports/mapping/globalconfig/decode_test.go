@@ -75,6 +75,36 @@ func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
 	}
 }
 
+func TestDecode_EmptyObjectReturnsEmptyConfig(t *testing.T) {
+	config, err := globalconfig.Decode([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if config.BackendScopeID != "" || config.Defaults != (operatorsettings.Defaults{}) || len(config.WorkerPresets) != 0 {
+		t.Fatalf("config = %#v, want empty", config)
+	}
+}
+
+func TestEncode_OmitsAbsentOptionalValues(t *testing.T) {
+	payload, err := globalconfig.Encode(operatorsettings.Config{
+		Defaults: operatorsettings.Defaults{WorkerModelProvider: "CODEX"},
+		WorkerPresets: []operatorsettings.WorkerPreset{{
+			ID: "build", ModelProvider: "CODEX",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	for _, absent := range []string{`"backendScopeID"`, `"workerModel"`, `"model"`, `"reasoningEffort"`} {
+		if strings.Contains(string(payload), absent) {
+			t.Fatalf("Encode() payload = %s, want %s omitted", payload, absent)
+		}
+	}
+	if _, err := globalconfig.Decode(payload); err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+}
+
 func TestLoadFileConfig_MissingFileReturnsEmptyConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.json")
 	config, err := operatorsettings.LoadFileConfig(platformfilesystem.Local{}, globalconfig.Decode, path)
@@ -93,9 +123,11 @@ func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
 		want string
 	}{
 		{name: "malformed", json: `{"defaults":`, want: "decode generated global config"},
+		{name: "null root", json: `null`, want: "expected a JSON object"},
 		{name: "unknown top-level", json: `{"unsupported":true}`, want: `unknown field "unsupported"`},
 		{name: "unknown defaults field", json: `{"defaults":{"unsupported":true}}`, want: `unknown field "unsupported"`},
 		{name: "trailing JSON", json: `{}` + "\n{}", want: "unexpected trailing JSON"},
+		{name: "invalid trailing token", json: `{}` + "\nx", want: "invalid character"},
 		{name: "missing preset provider", json: `{"workerPresets":[{"id":"build"}]}`, want: "modelProvider"},
 		{name: "duplicate preset", json: `{"workerPresets":[{"id":"build","modelProvider":"codex"},{"id":" build ","modelProvider":"claude"}]}`, want: "duplicated"},
 		{name: "symbolic preset provider", json: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`, want: `unsupported modelProvider "DEFAULT"`},
