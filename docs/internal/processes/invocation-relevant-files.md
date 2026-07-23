@@ -30,6 +30,12 @@ primary-result behavior.
   detached exact JSON definitions. Use `LoadDefinitionCatalog(fs.FS)` only for
   inert fixture injection and consumer tests; lifecycle and installation effects
   remain outside the catalog.
+- `pkg/wire.providePackagedFactoryDefinitions()` loads that validated catalog
+  while constructing the inert process graph and supplies detached definitions
+  to the existing System Initialization service. Keep packaged installation and
+  non-overwrite policy in Factory Definitions and lifecycle activation in
+  Initializer; the embedded publication package and catalog must not acquire
+  either responsibility.
 - The customer-implementable provider inference contract lives in
   `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
