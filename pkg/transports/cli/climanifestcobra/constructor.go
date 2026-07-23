@@ -229,6 +229,9 @@ func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([
 	if err := validateManifestHeader(manifest); err != nil {
 		return nil, err
 	}
+	if err := climanifest.ValidateRootContract(manifest); err != nil {
+		return nil, err
+	}
 	byPath, err := indexCommandRecords(manifest.Commands)
 	if err != nil {
 		return nil, err
@@ -635,15 +638,54 @@ func validateGenericFlagDefaultValue(commandID string, flag climanifest.Flag, va
 }
 
 func validateInheritedFlag(inherited, declared climanifest.Flag) error {
-	comparable := inherited
-	comparable.ID = declared.ID
-	comparable.Scope = declared.Scope
-	comparable.InheritedFromID = declared.InheritedFromID
-	comparable.Lifecycle.ItemID = declared.Lifecycle.ItemID
-	if !reflect.DeepEqual(comparable, declared) {
+	inheritedDefault, inheritedDefaultErr := genericFlagDefault(inherited)
+	declaredDefault, declaredDefaultErr := genericFlagDefault(declared)
+	inheritedNoOption, inheritedNoOptionErr := inheritedEffectiveNoOption(inherited)
+	declaredNoOption, declaredNoOptionErr := inheritedEffectiveNoOption(declared)
+	if inheritedDefaultErr != nil || declaredDefaultErr != nil ||
+		inheritedNoOptionErr != nil || declaredNoOptionErr != nil ||
+		!reflect.DeepEqual(inheritedDefault, declaredDefault) ||
+		!reflect.DeepEqual(inheritedNoOption, declaredNoOption) ||
+		!reflect.DeepEqual(inheritedPresentation(inherited), inheritedPresentation(declared)) {
 		return fmt.Errorf("inheritance target %q has incompatible flag metadata", declared.ID)
 	}
 	return nil
+}
+
+func inheritedEffectiveNoOption(flag climanifest.Flag) (any, error) {
+	if flag.NoOptionValue == nil && flag.NoOptionDefault == "" {
+		return nil, nil
+	}
+	return genericNoOptionValue(flag)
+}
+
+func inheritedPresentation(flag climanifest.Flag) any {
+	return struct {
+		Long          string
+		Shorthand     string
+		Aliases       []string
+		ValueType     string
+		Enum          []string
+		Required      bool
+		Repeatable    bool
+		Normalization string
+		Completion    string
+		Visibility    string
+		Lifecycle     climanifest.Lifecycle
+	}{
+		Long: flag.Long, Shorthand: flag.Shorthand, Aliases: flag.Aliases,
+		ValueType: flag.ValueType, Enum: flag.Enum, Required: flag.Required,
+		Repeatable: flag.Repeatable, Normalization: flag.Normalization,
+		Completion: flag.Completion, Visibility: flag.Visibility,
+		Lifecycle: climanifest.Lifecycle{
+			FormatVersion: flag.Lifecycle.FormatVersion,
+			State:         flag.Lifecycle.State,
+			Since:         flag.Lifecycle.Since,
+			Deprecated:    flag.Lifecycle.Deprecated,
+			Removed:       flag.Lifecycle.Removed,
+			Successor:     flag.Lifecycle.Successor,
+		},
+	}
 }
 
 func genericFlagError(commandID, inputID, format string, args ...any) error {

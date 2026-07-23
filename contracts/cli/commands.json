@@ -2,6 +2,7 @@
   "commands": {
     "you": {
       "aliases": [],
+      "completeness": "authoritative",
       "channels": {
         "input": [
           "cli",
@@ -63,12 +64,18 @@
       },
       "flags": {
         "you.flag.debug": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "false",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.binding.debug",
           "id": "you.flag.debug",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.debug",
@@ -76,22 +83,36 @@
             "state": "active"
           },
           "long": "debug",
-          "noOptionDefault": "true",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "d",
+          "usage": "emit lower-level command diagnostics where supported (implies --verbose)",
           "valueType": "bool",
           "visibility": "visible"
         },
         "you.flag.default-worker-model": {
+          "acceptedSources": [
+            "cli",
+            "environment",
+            "operator-config",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.binding.default-worker-model",
           "id": "you.flag.default-worker-model",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.default-worker-model",
@@ -99,22 +120,33 @@
             "state": "active"
           },
           "long": "default-worker-model",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "",
+          "usage": "default worker model for model workers with omitted model",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.flag.default-worker-model-provider": {
+          "acceptedSources": [
+            "cli",
+            "environment",
+            "operator-config",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.binding.default-worker-model-provider",
           "id": "you.flag.default-worker-model-provider",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.default-worker-model-provider",
@@ -122,22 +154,31 @@
             "state": "active"
           },
           "long": "default-worker-model-provider",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "",
+          "usage": "default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.flag.json": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "false",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.binding.json",
           "id": "you.flag.json",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.json",
@@ -145,22 +186,34 @@
             "state": "active"
           },
           "long": "json",
-          "noOptionDefault": "true",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "",
+          "usage": "emit structured JSON on stdout for supported commands; diagnostics remain on stderr",
           "valueType": "bool",
           "visibility": "visible"
         },
         "you.flag.server": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "http://localhost:7437",
+          "defaultValue": {
+            "string": "http://localhost:7437"
+          },
+          "handlerBindingId": "you.binding.server",
           "id": "you.flag.server",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.server",
@@ -168,22 +221,31 @@
             "state": "active"
           },
           "long": "server",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "",
+          "usage": "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.flag.verbose": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "false",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.binding.verbose",
           "id": "you.flag.verbose",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.flag.verbose",
@@ -191,14 +253,46 @@
             "state": "active"
           },
           "long": "verbose",
-          "noOptionDefault": "true",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "persistent",
           "shorthand": "v",
+          "usage": "emit concise command diagnostics to stderr",
           "valueType": "bool",
           "visibility": "visible"
+        }
+      },
+      "handlerBindings": {
+        "you.binding.debug": {
+          "id": "you.binding.debug",
+          "inputId": "you.flag.debug"
+        },
+        "you.binding.default-worker-model": {
+          "id": "you.binding.default-worker-model",
+          "inputId": "you.flag.default-worker-model"
+        },
+        "you.binding.default-worker-model-provider": {
+          "id": "you.binding.default-worker-model-provider",
+          "inputId": "you.flag.default-worker-model-provider"
+        },
+        "you.binding.json": {
+          "id": "you.binding.json",
+          "inputId": "you.flag.json"
+        },
+        "you.binding.server": {
+          "id": "you.binding.server",
+          "inputId": "you.flag.server"
+        },
+        "you.binding.verbose": {
+          "id": "you.binding.verbose",
+          "inputId": "you.flag.verbose"
         }
       },
       "handler": {
@@ -242,6 +336,18 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "rootLifecycle": {
+        "exitCode": 0,
+        "helpOutput": "stdout",
+        "noArguments": "help",
+        "ownership": {
+          "help": "you",
+          "init": "you.init",
+          "run": "you.run",
+          "server": "you.flag.server"
+        },
+        "sideEffects": "none"
+      },
       "sideEffects": {
         "you.side-effect.filesystem": {
           "id": "you.side-effect.filesystem",
@@ -254,6 +360,32 @@
         "you.side-effect.process": {
           "id": "you.side-effect.process",
           "kind": "process"
+        }
+      },
+      "sourceBindings": {
+        "you.source.default-worker-model.environment": {
+          "externalKey": "YOU_DEFAULT_WORKER_MODEL",
+          "id": "you.source.default-worker-model.environment",
+          "inputId": "you.flag.default-worker-model",
+          "source": "environment"
+        },
+        "you.source.default-worker-model.operator-config": {
+          "externalKey": "defaults.workerModel",
+          "id": "you.source.default-worker-model.operator-config",
+          "inputId": "you.flag.default-worker-model",
+          "source": "operator-config"
+        },
+        "you.source.default-worker-model-provider.environment": {
+          "externalKey": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
+          "id": "you.source.default-worker-model-provider.environment",
+          "inputId": "you.flag.default-worker-model-provider",
+          "source": "environment"
+        },
+        "you.source.default-worker-model-provider.operator-config": {
+          "externalKey": "defaults.workerModelProvider",
+          "id": "you.source.default-worker-model-provider.operator-config",
+          "inputId": "you.flag.default-worker-model-provider",
+          "source": "operator-config"
         }
       },
       "usage": {

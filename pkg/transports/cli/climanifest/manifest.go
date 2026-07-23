@@ -32,6 +32,26 @@ type Command struct {
 	SideEffects     map[string]SideEffect     `json:"sideEffects,omitempty"`
 	Constraints     Constraints               `json:"constraints,omitempty"`
 	Handler         *Handler                  `json:"handler,omitempty"`
+	RootLifecycle   *RootLifecycle            `json:"rootLifecycle,omitempty"`
+}
+
+// RootLifecycle declares discovery behavior and lifecycle ownership without
+// embedding executable policy in the transport contract.
+type RootLifecycle struct {
+	NoArguments string        `json:"noArguments"`
+	HelpOutput  string        `json:"helpOutput"`
+	ExitCode    int           `json:"exitCode"`
+	SideEffects string        `json:"sideEffects"`
+	Ownership   RootOwnership `json:"ownership"`
+}
+
+// RootOwnership records the stable manifest items that own the root discovery
+// surface and the adjacent init, run, and server lifecycles.
+type RootOwnership struct {
+	Help   string `json:"help"`
+	Init   string `json:"init"`
+	Run    string `json:"run"`
+	Server string `json:"server"`
 }
 
 // SourceBinding routes one non-CLI source into a stable input identity.

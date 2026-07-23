@@ -321,6 +321,15 @@ response-stream output.
   an explicit structured invocation request, not as omitted args, so
   all-optional or defaulted signatures stay transport-equivalent with CLI.
 - `pkg/transports/cli/run/` is the `you run --factory` CLI boundary.
+- Root and persistent/global CLI metadata is authored only on the `you` record
+  in `contracts/cli/commands.json`. Root flags use the canonical typed-input
+  shape with stable handler/source bindings plus manifest-owned usage,
+  sensitivity, completion, and lifecycle metadata. `rootLifecycle` declares
+  the no-argument help intent and the stable ownership boundaries for root
+  help, `you init`, `you run`, and the global `--server` input; it does not move
+  executable lifecycle policy out of command handlers or Initializer. Run
+  `make cli-manifest-generate` after changing this contract so generated Cobra
+  metadata stays current.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;

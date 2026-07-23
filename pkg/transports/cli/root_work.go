@@ -107,11 +107,6 @@ func newGenericRepresentativeFamily(
 		return nil, err
 	}
 	root.SilenceUsage = true
-	for name, usage := range flagBindings.FlagUsages {
-		if flag := root.PersistentFlags().Lookup(name); flag != nil {
-			flag.Usage = usage
-		}
-	}
 	applySessionGenericFlagUsages(root, manifest, sessionBindings.FlagUsages)
 	return root, nil
 }

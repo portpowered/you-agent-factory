@@ -21,6 +21,9 @@ func LoadProduction(store generatedartifacts.SourceStore, path string) (Manifest
 	if err := ValidateRunSubmitFamily(manifest); err != nil {
 		return Manifest{}, fmt.Errorf("validate run/submit family: %w", err)
 	}
+	if err := ValidateRootContract(manifest); err != nil {
+		return Manifest{}, fmt.Errorf("validate root contract: %w", err)
+	}
 	return manifest, nil
 }
 

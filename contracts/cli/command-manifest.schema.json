@@ -193,6 +193,9 @@
         },
         "handler": {
           "$ref": "#/$defs/handler"
+        },
+        "rootLifecycle": {
+          "$ref": "#/$defs/rootLifecycle"
         }
       },
       "allOf": [
@@ -490,6 +493,56 @@
         }
       ]
     },
+    "rootLifecycle": {
+      "description": "Root discovery behavior and stable ownership boundaries. This is declarative metadata; command handlers and Initializer retain executable lifecycle policy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noArguments",
+        "helpOutput",
+        "exitCode",
+        "sideEffects",
+        "ownership"
+      ],
+      "properties": {
+        "noArguments": {
+          "const": "help"
+        },
+        "helpOutput": {
+          "const": "stdout"
+        },
+        "exitCode": {
+          "const": 0
+        },
+        "sideEffects": {
+          "const": "none"
+        },
+        "ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "help",
+            "init",
+            "run",
+            "server"
+          ],
+          "properties": {
+            "help": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "init": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "run": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "server": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            }
+          }
+        }
+      }
+    },
     "flag": {
       "type": "object",
       "additionalProperties": false,
@@ -645,6 +698,18 @@
         "handlerBindingId": {
           "description": "Stable handler binding that receives the resolved input value.",
           "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "usage": {
+          "description": "Canonical help text for the flag.",
+          "type": "string",
+          "minLength": 1
+        },
+        "sensitivity": {
+          "description": "Whether observations may expose the resolved value.",
+          "enum": [
+            "public",
+            "sensitive"
+          ]
         },
         "visibility": {
           "description": "Whether the flag is shown in default help output.",

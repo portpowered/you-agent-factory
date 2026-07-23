@@ -241,7 +241,9 @@ func renderManifestGoValue(value reflect.Value) string {
 		if value.IsNil() {
 			return "nil"
 		}
-		return "&" + renderManifestGoValue(value.Elem())
+		elementType := renderManifestGoType(value.Type().Elem())
+		return "func(value " + elementType + ") *" + elementType +
+			" { return &value }(" + renderManifestGoValue(value.Elem()) + ")"
 	}
 	switch value.Kind() {
 	case reflect.Struct:

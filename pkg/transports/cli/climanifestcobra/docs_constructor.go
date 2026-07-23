@@ -902,14 +902,19 @@ func argumentUsageToken(argument climanifest.Argument) string {
 }
 
 func projectedFlagUsage(flag climanifest.Flag) string {
+	usage := flag.Usage
 	if len(flag.Aliases) == 0 {
-		return ""
+		return usage
 	}
 	aliases := make([]string, len(flag.Aliases))
 	for index, alias := range flag.Aliases {
 		aliases[index] = "--" + alias
 	}
-	return "aliases: " + strings.Join(aliases, ", ")
+	aliasUsage := "aliases: " + strings.Join(aliases, ", ")
+	if usage == "" {
+		return aliasUsage
+	}
+	return usage + " (" + aliasUsage + ")"
 }
 
 func completionForInput(
