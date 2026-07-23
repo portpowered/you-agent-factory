@@ -17,6 +17,12 @@ primary-result behavior.
   package's observed numeric floor and the wrapper package's documented
   measurement exception when it has no executable statements. Verify both with
   `make test-unit-coverage` and `make test-functional-coverage`.
+- `packages/packaged-factories.Published()` is the inert, read-only Go boundary
+  for the exact `factories/`, `generated/`, and `schemas/` trees included in the
+  npm package. Backend catalog consumers should read the generated manifest and
+  its referenced artifacts through that filesystem instead of embedding or
+  reconstructing publication bytes elsewhere; `Source()` remains the authored
+  source compatibility boundary.
 - The customer-implementable provider inference contract lives in
   `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
