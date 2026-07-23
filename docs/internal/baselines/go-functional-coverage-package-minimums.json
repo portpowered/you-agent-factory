@@ -665,6 +665,18 @@
       "minimum": 53.65
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
+      "minimum": 25.15
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
+      "minimum": 14.54
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
       "minimum": 0.32
     },
@@ -1127,10 +1139,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
-      "minimum": 25.15
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath",
       "minimum": 37.50
     },
@@ -1283,14 +1291,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
-      "minimum": 14.54
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",
