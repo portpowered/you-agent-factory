@@ -1,0 +1,39 @@
+id: opencode
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: OpenCode
+description:
+  type: LOCALIZABLE_ASSET
+  value: OpenCode CLI integration with negotiated response fidelity.
+documentation:
+  - kind: reference
+    url: https://opencode.ai/docs/cli/
+technicalSupportLevel: experimental
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: true
+  structuredOutput: false
+  toolExecution: true
+  workingDirectory: true
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: true
+  messageDeltas: false
+  messageSnapshots: true
+  reasoningSummaries: false
+  toolLifecycle: false
+  toolOutputDeltas: false
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: true
+  providerReconnect: false
+discovery:
+  executableNames:
+    - opencode
+  endpointKinds:
+    - stdio
+  configurationKeys: []

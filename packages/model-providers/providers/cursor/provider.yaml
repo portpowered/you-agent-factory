@@ -1,0 +1,40 @@
+id: cursor
+aliases:
+  - agent
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Cursor CLI
+description:
+  type: LOCALIZABLE_ASSET
+  value: Cursor Agent CLI integration.
+documentation:
+  - kind: reference
+    url: https://docs.cursor.com/en/cli/overview
+technicalSupportLevel: experimental
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: true
+  structuredOutput: false
+  toolExecution: true
+  workingDirectory: true
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: true
+  messageDeltas: false
+  messageSnapshots: true
+  reasoningSummaries: false
+  toolLifecycle: true
+  toolOutputDeltas: true
+  fileChanges: false
+  plans: false
+  usage: true
+  stableItemIds: true
+  providerReconnect: false
+discovery:
+  executableNames:
+    - agent
+  endpointKinds:
+    - stdio
+  configurationKeys: []
