@@ -87,7 +87,13 @@ primary-result behavior.
   Construction must aggregate and sort normalized identity, collision,
   implementation-coverage, support-posture, and maximum-capability violations
   without calling provider discovery, request-sensitive capabilities, or
-  invocation.
+  invocation. Registry query projections must clone and canonically order
+  manifest-backed collections; normalized canonical IDs and aliases share one
+  fail-closed resolver. Static entry, diagnostic, and maximum-capability reads
+  remain inert. Only explicit request-sensitive capability and discovery
+  methods delegate to an Integration, validate the returned provider-neutral
+  contract, and return canonical detached values; invocation access resolves
+  the bound Integration without invoking it.
 
 ## CLI run and submit command contracts
 

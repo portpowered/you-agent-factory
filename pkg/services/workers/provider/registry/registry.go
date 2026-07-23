@@ -54,6 +54,7 @@ func ExternalRegistration(manifest Manifest, integration inference.Integration) 
 type Registry struct {
 	manifests    map[string]Manifest
 	integrations map[string]inference.Integration
+	aliases      map[string]string
 }
 
 // New parses and validates the embedded catalog, then joins all registrations.
@@ -185,9 +186,14 @@ func assembleRegistry(byID map[string][]manifestCandidate, integrations map[stri
 	registry := &Registry{
 		manifests:    make(map[string]Manifest, len(byID)),
 		integrations: make(map[string]inference.Integration, len(integrations)),
+		aliases:      make(map[string]string),
 	}
 	for identity, candidates := range byID {
-		registry.manifests[identity] = cloneManifest(candidates[0].manifest)
+		manifest := cloneManifest(candidates[0].manifest)
+		registry.manifests[identity] = manifest
+		for _, alias := range manifest.Aliases {
+			registry.aliases[normalize(alias)] = identity
+		}
 		if registered := integrations[identity]; len(registered) == 1 {
 			registry.integrations[identity] = registered[0]
 		}
