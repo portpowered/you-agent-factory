@@ -773,6 +773,11 @@ const (
 	ProviderCatalogFormatVersionV1 ProviderCatalogFormatVersion = "1.0.0"
 )
 
+// Defines values for ProviderCatalogProviderSchema.
+const (
+	HttpsschemasYouDevmodelProvidersproviderManifest100SchemaJson ProviderCatalogProviderSchema = "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json"
+)
+
 // Defines values for ProviderDiscoveryEndpointKind.
 const (
 	ProviderDiscoveryEndpointKindLocalHTTP  ProviderDiscoveryEndpointKind = "local-http"
@@ -5057,12 +5062,27 @@ type ProviderCatalog struct {
 	// FormatVersion Provider Catalog document format version.
 	FormatVersion ProviderCatalogFormatVersion `json:"formatVersion"`
 
+	// ProviderSchema Immutable JSON Schema identifier used to validate every provider entry.
+	ProviderSchema ProviderCatalogProviderSchema `json:"providerSchema"`
+
 	// Providers Provider manifests in canonical provider-ID order.
 	Providers []ProviderManifest `json:"providers"`
+
+	// PublicationProvenance Optional source-revision provenance supplied by a publication staging process.
+	PublicationProvenance *struct {
+		// SourceCommit Full immutable Git commit identifying the published source tree.
+		SourceCommit string `json:"sourceCommit"`
+
+		// SourceRepository Public source repository from which the catalog was published.
+		SourceRepository string `json:"sourceRepository"`
+	} `json:"publicationProvenance,omitempty"`
 }
 
 // ProviderCatalogFormatVersion Provider Catalog document format version.
 type ProviderCatalogFormatVersion string
+
+// ProviderCatalogProviderSchema Immutable JSON Schema identifier used to validate every provider entry.
+type ProviderCatalogProviderSchema string
 
 // ProviderDeprecation Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.
 type ProviderDeprecation struct {

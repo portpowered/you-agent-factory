@@ -10,6 +10,12 @@ describe("generated session factory OpenAPI types", () => {
   it("round-trips the typed provider catalog contract without changing meaning", () => {
     const catalog: ProviderCatalog = {
       formatVersion: "1.0.0",
+      providerSchema:
+        "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+      publicationProvenance: {
+        sourceRepository: "https://github.com/portpowered/infinite-you",
+        sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+      },
       providers: [
         {
           id: "example-alpha",
@@ -70,6 +76,9 @@ describe("generated session factory OpenAPI types", () => {
     };
 
     const roundTrip: ProviderCatalog = JSON.parse(JSON.stringify(catalog));
+    expect(roundTrip.providerSchema).toBe(
+      "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+    );
     expect(roundTrip.providers[0]).toMatchObject({
       id: "example-alpha",
       technicalSupportLevel: "experimental",

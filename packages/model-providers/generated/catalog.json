@@ -1,0 +1,418 @@
+{
+  "formatVersion": "1.0.0",
+  "providerSchema": "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+  "providers": [
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Antigravity terminal-agent integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "agy"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Agy"
+      },
+      "documentation": [
+        {
+          "kind": "homepage",
+          "url": "https://agylabs.github.io/agy-demos/"
+        }
+      ],
+      "id": "agy",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "technicalSupportLevel": "not-supported"
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Anthropic Claude Code CLI integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "claude"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Claude Code"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://docs.anthropic.com/en/docs/claude-code/cli-usage"
+        }
+      ],
+      "id": "claude",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": true
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": true,
+        "messageSnapshots": true,
+        "nativeStreaming": true,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": true,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "usage": false
+      },
+      "technicalSupportLevel": "experimental"
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenAI Codex CLI integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "codex"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Codex"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://developers.openai.com/codex/cli/reference/"
+        }
+      ],
+      "id": "codex",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": true,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": true,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": true
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": true,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": true,
+        "stableItemIds": true,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "usage": false
+      },
+      "technicalSupportLevel": "production"
+    },
+    {
+      "aliases": [
+        "agent"
+      ],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Cursor Agent CLI integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "agent"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Cursor CLI"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://docs.cursor.com/en/cli/overview"
+        }
+      ],
+      "id": "cursor",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": true,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": true,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "usage": true
+      },
+      "technicalSupportLevel": "experimental"
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Google Gemini CLI integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "gemini"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Gemini CLI"
+      },
+      "documentation": [
+        {
+          "kind": "setup",
+          "url": "https://geminicli.com/docs/get-started/installation/"
+        }
+      ],
+      "id": "gemini",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "technicalSupportLevel": "experimental"
+    },
+    {
+      "aliases": [
+        "kiro-cli"
+      ],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kiro terminal-agent integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "kiro-cli"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kiro CLI"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://kiro.dev/docs/cli/chat/"
+        }
+      ],
+      "id": "kiro",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "technicalSupportLevel": "experimental"
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenCode CLI integration with negotiated response fidelity."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "opencode"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenCode"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://opencode.ai/docs/cli/"
+        }
+      ],
+      "id": "opencode",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": false,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": true,
+        "nativeStreaming": true,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": true,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "technicalSupportLevel": "experimental"
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pi terminal coding-agent integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "pi"
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pi"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://pi.dev/docs/latest"
+        }
+      ],
+      "id": "pi",
+      "implementationAvailability": "bundled",
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "promptSubmission": true,
+        "sessionResume": true,
+        "structuredOutput": true,
+        "toolExecution": true,
+        "workingDirectory": true,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": true,
+        "messageSnapshots": true,
+        "nativeStreaming": true,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": true,
+        "stableItemIds": true,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "usage": false
+      },
+      "technicalSupportLevel": "experimental"
+    }
+  ]
+}

@@ -4394,6 +4394,22 @@ export interface components {
        * @enum {string}
        */
       formatVersion: ProviderCatalogFormatVersion;
+      /**
+       * Format: uri
+       * @description Immutable JSON Schema identifier used to validate every provider entry.
+       * @enum {string}
+       */
+      providerSchema: ProviderCatalogProviderSchema;
+      /** @description Optional source-revision provenance supplied by a publication staging process. */
+      publicationProvenance?: {
+        /**
+         * Format: uri
+         * @description Public source repository from which the catalog was published.
+         */
+        sourceRepository: string;
+        /** @description Full immutable Git commit identifying the published source tree. */
+        sourceCommit: string;
+      };
       /** @description Provider manifests in canonical provider-ID order. */
       providers: components["schemas"]["ProviderManifest"][];
     };
@@ -7943,6 +7959,12 @@ export const ProviderCatalogFormatVersion = {
 } as const;
 export type ProviderCatalogFormatVersion =
   (typeof ProviderCatalogFormatVersion)[keyof typeof ProviderCatalogFormatVersion];
+export const ProviderCatalogProviderSchema = {
+  https_schemas_you_dev_model_providers_provider_manifest_1_0_0_schema_json:
+    "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
+} as const;
+export type ProviderCatalogProviderSchema =
+  (typeof ProviderCatalogProviderSchema)[keyof typeof ProviderCatalogProviderSchema];
 export const ProviderTechnicalSupportLevel = {
   production: "production",
   experimental: "experimental",
