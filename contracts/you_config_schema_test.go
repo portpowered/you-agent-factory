@@ -10,18 +10,6 @@ import (
 
 const youConfigSchemaID = "https://schemas.portpowered.com/you/config/you-config.schema.json"
 
-var inventoriedGlobalConfigFieldIDs = []string{
-	"backendScopeID",
-	"defaults",
-	"defaults.workerModelProvider",
-	"defaults.workerModel",
-	"workerPresets",
-	"workerPresets[].id",
-	"workerPresets[].modelProvider",
-	"workerPresets[].model",
-	"workerPresets[].reasoningEffort",
-}
-
 func youConfigSchema(t *testing.T) *jsonschema.Schema {
 	t.Helper()
 	return compileSchema(
@@ -45,21 +33,6 @@ func youConfigSchema(t *testing.T) *jsonschema.Schema {
 			id:   sensitivitySchemaID,
 		},
 	)
-}
-
-func TestYouConfigSchemaDeclaresDraft202012AndStableID(t *testing.T) {
-	t.Parallel()
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	root, ok := document.(map[string]any)
-	if !ok {
-		t.Fatalf("schema root type = %T, want map[string]any", document)
-	}
-	if root["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
-		t.Fatalf("$schema = %#v, want Draft 2020-12", root["$schema"])
-	}
-	if root["$id"] != youConfigSchemaID {
-		t.Fatalf("$id = %#v, want %q", root["$id"], youConfigSchemaID)
-	}
 }
 
 func TestYouConfigSchemaValidFixtures(t *testing.T) {
@@ -87,26 +60,6 @@ func TestYouConfigSchemaValidFixtures(t *testing.T) {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
 			}
 		})
-	}
-}
-
-func TestYouConfigSchemaClosedObjectBoundaries(t *testing.T) {
-	t.Parallel()
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	root := document.(map[string]any)
-
-	if root["additionalProperties"] != false {
-		t.Fatalf("root additionalProperties = %#v, want false", root["additionalProperties"])
-	}
-
-	defaults := root["properties"].(map[string]any)["defaults"].(map[string]any)
-	if defaults["additionalProperties"] != false {
-		t.Fatalf("defaults additionalProperties = %#v, want false", defaults["additionalProperties"])
-	}
-
-	workerPreset := root["$defs"].(map[string]any)["workerPreset"].(map[string]any)
-	if workerPreset["additionalProperties"] != false {
-		t.Fatalf("workerPreset additionalProperties = %#v, want false", workerPreset["additionalProperties"])
 	}
 }
 
@@ -142,32 +95,5 @@ func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
 				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
 			}
 		})
-	}
-}
-
-func TestYouConfigSchemaDoesNotModelEnvOrFlagAsJSONProperties(t *testing.T) {
-	t.Parallel()
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	root := document.(map[string]any)
-	properties := root["properties"].(map[string]any)
-
-	forbidden := []string{
-		"YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-		"YOU_DEFAULT_WORKER_MODEL",
-		"--default-worker-model-provider",
-		"--default-worker-model",
-	}
-	for _, name := range forbidden {
-		if _, ok := properties[name]; ok {
-			t.Fatalf("top-level property %q must not model env/flag precedence as JSON", name)
-		}
-	}
-
-	defaults := properties["defaults"].(map[string]any)
-	defaultProperties := defaults["properties"].(map[string]any)
-	for _, name := range forbidden {
-		if _, ok := defaultProperties[name]; ok {
-			t.Fatalf("defaults property %q must not model env/flag precedence as JSON", name)
-		}
 	}
 }

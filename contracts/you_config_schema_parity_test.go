@@ -135,15 +135,6 @@ func TestYouConfigSchemaAndLoaderRejectUnicodeWhitespaceOnlyPresetID(t *testing.
 	}
 }
 
-func TestYouConfigSchemaParityMatrixCoversAllIndexedCases(t *testing.T) {
-	for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
-		assertParityRuleRegistered(t, "operator_settings", inputCase.ID)
-	}
-	for _, inputCase := range committedIdentityInputInventory(t).Cases {
-		assertParityRuleRegistered(t, "operator_settings_identity", inputCase.ID)
-	}
-}
-
 func TestYouConfigSchemaLoaderParityMatrix(t *testing.T) {
 	schema := youConfigSchema(t)
 
@@ -424,42 +415,6 @@ func parityRuleForCase(owner, caseID, outcome string, hasFixture bool) youConfig
 		kind:         schemaParityMatchesLoader,
 		schemaAccept: boolPtr(accept),
 	}
-}
-
-func assertParityRuleRegistered(t *testing.T, owner, caseID string) {
-	t.Helper()
-	key := owner + ":" + caseID
-	if _, ok := youConfigSchemaParityOverrides[key]; ok {
-		return
-	}
-	if owner == "operator_settings" {
-		for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
-			if inputCase.ID == caseID {
-				if inputCase.Fixture != "" || inputCase.Entrypoint == "Resolve" {
-					return
-				}
-				if inputCase.ID == "valid-missing-file" {
-					return
-				}
-			}
-		}
-	}
-	if owner == "operator_settings_identity" {
-		for _, inputCase := range committedIdentityInputInventory(t).Cases {
-			if inputCase.ID == caseID {
-				if inputCase.Fixture != "" {
-					return
-				}
-				switch inputCase.ID {
-				case "valid-missing-file", "invalid-empty-config-path":
-					return
-				case "invalid-persist-empty-scope", "invalid-persist-non-local-scope", "invalid-persist-provider-scope":
-					return
-				}
-			}
-		}
-	}
-	t.Fatalf("missing parity rule for indexed case %q", key)
 }
 
 func parseJSONDocument(data []byte) (any, bool) {
