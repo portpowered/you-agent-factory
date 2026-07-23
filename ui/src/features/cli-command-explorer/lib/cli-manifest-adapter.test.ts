@@ -135,6 +135,109 @@ function diagnosticCodes(input: unknown) {
     : [];
 }
 
+function diagnosticMessages(input: unknown, locale: string) {
+  const result = loadCliManifest(input, locale);
+  expect(result.status).toBe("invalid-contract");
+  return result.status === "invalid-contract"
+    ? result.diagnostics.map((diagnostic) => diagnostic.message)
+    : [];
+}
+
+function expectLocalizedIdentityAndHierarchyDiagnostics() {
+  const identity = validManifest();
+  identity.commands["you.run"].id = "you";
+  identity.commands["you.run"].flags["you.run.flag.work"].id =
+    "you.flag.verbose";
+  expect(diagnosticMessages(identity, "zh-CN")).toEqual(
+    expect.arrayContaining([
+      "稳定标识 you 与 commands.you.id 重复。",
+      "命令键 you.run 必须与稳定标识 you 一致。",
+      "输入键 you.run.flag.work 必须与稳定标识 you.flag.verbose 一致。",
+    ]),
+  );
+
+  const hierarchy = validManifest();
+  hierarchy.rootPath = "other";
+  hierarchy.commands["you.run"].path = "elsewhere wrong";
+  expect(diagnosticMessages(hierarchy, "zh-CN")).toEqual(
+    expect.arrayContaining([
+      "根路径 other 无法解析为命令。",
+      "命令路径 elsewhere wrong 必须由非空段组成，并以命令名 run 结尾。",
+      "父命令路径 elsewhere 无法解析。",
+      "命令路径 elsewhere wrong 不在根路径 other 下。",
+    ]),
+  );
+
+  const duplicatePath = validManifest();
+  duplicatePath.commands["you.run"].path = "you";
+  expect(diagnosticMessages(duplicatePath, "zh-CN")).toContain(
+    "命令路径 you 重复。",
+  );
+}
+
+function expectLocalizedCardinalityAndRelationshipDiagnostics() {
+  const cardinality = validManifest();
+  cardinality.commands["you.run"].arguments["you.run.arg.prompt"].variadic =
+    true;
+  cardinality.commands["you.run"].arguments[
+    "you.run.arg.prompt"
+  ].maxCardinality = -1;
+  cardinality.commands["you.run"].arguments["you.run.arg.prompt"].position = 1;
+  cardinality.commands["you.run"].arguments["you.run.arg.extra"] = {
+    ...cardinality.commands["you.run"].arguments["you.run.arg.prompt"],
+    id: "you.run.arg.extra",
+    name: "extra",
+    position: 2,
+    variadic: false,
+    maxCardinality: 1,
+  };
+  expect(diagnosticMessages(cardinality, "zh-CN")).toEqual(
+    expect.arrayContaining([
+      "参数位置必须从零开始连续且不重复；此处应为 0。",
+      "只有最后一个位置参数可以是可变参数。",
+    ]),
+  );
+
+  const relationship = validManifest();
+  relationship.commands["you.run"].relationships[
+    "you.run.rel.choice"
+  ].participants[0] = {
+    type: "flag",
+    id: "you.run.flag.missing",
+  };
+  expect(diagnosticMessages(relationship, "zh-CN")).toContain(
+    "关系参与者 you.run.flag.missing 无法解析为此命令的 flag 输入。",
+  );
+}
+
+function expectLocalizedInheritanceAndSchemaDiagnostics() {
+  const contradictoryInheritance = validManifest();
+  contradictoryInheritance.commands.you.flags["you.flag.verbose"].default =
+    "true";
+  expect(diagnosticMessages(contradictoryInheritance, "zh-CN")).toContain(
+    "继承标志 --verbose 与其持久祖先定义相矛盾。",
+  );
+
+  const missingInheritance = validManifest();
+  missingInheritance.commands.you.flags = {};
+  expect(diagnosticMessages(missingInheritance, "zh-CN")).toContain(
+    "继承标志 --verbose 没有对应的持久祖先定义。",
+  );
+
+  const schemaConstraint = validManifest();
+  schemaConstraint.commands["you.run"].id = "invalid id";
+  expect(diagnosticMessages(schemaConstraint, "zh-CN")).toContain(
+    "commands.you.run.id 应符合 CLI 清单契约：必须满足 pattern 约束。",
+  );
+
+  expect(
+    diagnosticMessages(
+      { formatVersion: "1.0.0", rootPath: 4, commands: {} },
+      "zh-CN",
+    ),
+  ).toContain("rootPath 应符合 CLI 清单契约：必须是字符串。");
+}
+
 describe("CLI manifest adapter", () => {
   it("exposes an explicit loading state", () => {
     expect(loadingCliManifest()).toEqual({ status: "loading" });
@@ -258,5 +361,11 @@ describe("CLI manifest adapter", () => {
     expect(codes.filter((code) => code === "invalid_reference")).toHaveLength(
       1,
     );
+  });
+
+  it("localizes every semantic diagnostic family deterministically", () => {
+    expectLocalizedIdentityAndHierarchyDiagnostics();
+    expectLocalizedCardinalityAndRelationshipDiagnostics();
+    expectLocalizedInheritanceAndSchemaDiagnostics();
   });
 });
