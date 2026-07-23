@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
@@ -604,38 +605,51 @@ func representativeSourceValues(options CommandFactory) climanifestcobra.SourceC
 		if binding.Source != climanifest.SourceOperatorConfig {
 			return resolvedinput.Value{}, false, nil
 		}
-		if options.loadOperatorConfig == nil {
-			return resolvedinput.Value{}, false, nil
-		}
-		homeDir, err := resolveProcessHomeDir(options)
-		if err != nil {
-			return resolvedinput.Value{}, false, err
-		}
-		config, err := options.loadOperatorConfig(
-			operatorconfig.DefaultConfigPath(homeDir),
-		)
-		if err != nil {
-			return resolvedinput.Value{}, false, err
-		}
-		value := ""
-		switch binding.ExternalKey {
-		case "defaults.workerModelProvider":
-			value = config.Defaults.WorkerModelProvider
-		case "defaults.workerModel":
-			value = config.Defaults.WorkerModel
-		default:
-			return resolvedinput.Value{}, false, fmt.Errorf(
-				"source binding %q has unsupported operator-config key %q",
-				binding.ID,
-				binding.ExternalKey,
-			)
-		}
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return resolvedinput.Value{}, false, nil
-		}
-		return resolvedinput.StringValue(value), true, nil
+		return operatorConfigSourceValue(options, binding)
 	}
+}
+
+func operatorConfigSourceValue(
+	options CommandFactory,
+	binding climanifest.SourceBinding,
+) (resolvedinput.Value, bool, error) {
+	if options.loadOperatorConfig == nil {
+		return resolvedinput.Value{}, false, nil
+	}
+	homeDir, err := resolveProcessHomeDir(options)
+	if err != nil {
+		return resolvedinput.Value{}, false, err
+	}
+	config, err := options.loadOperatorConfig(
+		operatorconfig.DefaultConfigPath(homeDir),
+	)
+	if err != nil {
+		// A config path below a non-directory ancestor is unavailable in
+		// the same way as a missing optional config. Commands such as
+		// `you config init` still own the later, actionable creation error.
+		if errors.Is(err, syscall.ENOTDIR) {
+			return resolvedinput.Value{}, false, nil
+		}
+		return resolvedinput.Value{}, false, err
+	}
+	value := ""
+	switch binding.ExternalKey {
+	case "defaults.workerModelProvider":
+		value = config.Defaults.WorkerModelProvider
+	case "defaults.workerModel":
+		value = config.Defaults.WorkerModel
+	default:
+		return resolvedinput.Value{}, false, fmt.Errorf(
+			"source binding %q has unsupported operator-config key %q",
+			binding.ID,
+			binding.ExternalKey,
+		)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return resolvedinput.Value{}, false, nil
+	}
+	return resolvedinput.StringValue(value), true, nil
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
