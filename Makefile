@@ -115,7 +115,7 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke model-provider-package-smoke model-provider-reference-input-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke model-provider-package-smoke model-provider-reference-input-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
@@ -185,6 +185,9 @@ api-smoke:
 
 api-package-pack-smoke:
 	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+
+packaged-factory-package-smoke:
+	node --test scripts/packaged-factories-package-contract.test.mjs
 
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs

@@ -110,9 +110,10 @@
   `cmd/packagedfactorycataloggenerate`; its repository surface is
   `make packaged-factory-catalog-generate`. It computes and validates the whole
   output set before atomically replacing
-  `packages/packaged-factories/generated`, and the npm package allowlist must
-  continue to publish that generated directory alongside authored sources and
-  schemas. `cmd/packagedfactorycatalogcheck` recomputes that same complete plan
+  `packages/packaged-factories/generated`. The npm data-only package allowlist
+  publishes its manifest, flattened generated Factory pairs, schemas, and
+  package documentation while excluding authored Factory sources, prompts, and
+  scripts. `cmd/packagedfactorycatalogcheck` recomputes that same complete plan
   without writing, reports sorted package-relative stale, missing, and
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
