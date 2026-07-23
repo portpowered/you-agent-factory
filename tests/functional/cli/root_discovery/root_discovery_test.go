@@ -30,6 +30,7 @@ func TestBareRootPrintsConciseHelpWithoutProductEffects(t *testing.T) {
 			effects.Add(1)
 			return nil
 		},
+		OperatorSettingsFileSystem: failingOperatorSettingsFileSystem{calls: &effects},
 		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
 			effects.Add(1)
 		},
@@ -123,4 +124,33 @@ var _ providercontract.Provider = countingProvider{}
 func (provider countingProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	provider.calls.Add(1)
 	return workers.InferenceResponse{}, nil
+}
+
+type failingOperatorSettingsFileSystem struct {
+	calls *atomic.Int32
+}
+
+func (fileSystem failingOperatorSettingsFileSystem) ReadFile(string) ([]byte, error) {
+	fileSystem.calls.Add(1)
+	return nil, fs.ErrPermission
+}
+
+func (fileSystem failingOperatorSettingsFileSystem) MkdirAll(string, fs.FileMode) error {
+	fileSystem.calls.Add(1)
+	return fs.ErrPermission
+}
+
+func (fileSystem failingOperatorSettingsFileSystem) Remove(string) error {
+	fileSystem.calls.Add(1)
+	return fs.ErrPermission
+}
+
+func (fileSystem failingOperatorSettingsFileSystem) Chmod(string, fs.FileMode) error {
+	fileSystem.calls.Add(1)
+	return fs.ErrPermission
+}
+
+func (fileSystem failingOperatorSettingsFileSystem) Rename(string, string) error {
+	fileSystem.calls.Add(1)
+	return fs.ErrPermission
 }

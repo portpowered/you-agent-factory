@@ -3,6 +3,7 @@ package climanifestcobra_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
@@ -58,6 +60,20 @@ func TestNewCommandTreeProjectsRootNoArgumentHelpWithoutDispatch(t *testing.T) {
 	}
 	bindings := genericBindingsForManifest(manifest)
 	handlerCalls := 0
+	sourceCalls := 0
+	rootInputCalls := 0
+	bindings.SourceValues = func(
+		context.Context,
+		climanifest.SourceBinding,
+		resolvedinput.ValueKind,
+	) (resolvedinput.Value, bool, error) {
+		sourceCalls++
+		return resolvedinput.Value{}, false, errors.New("root discovery collected an external source")
+	}
+	bindings.RootInputs = func(resolvedinput.Inputs) error {
+		rootInputCalls++
+		return errors.New("root discovery bound resolved inputs")
+	}
 	for handlerID := range bindings.Handlers {
 		bindings.Handlers[handlerID] = func(context.Context, map[string]any) error {
 			handlerCalls++
@@ -78,6 +94,12 @@ func TestNewCommandTreeProjectsRootNoArgumentHelpWithoutDispatch(t *testing.T) {
 	output := stdout.String()
 	if handlerCalls != 0 {
 		t.Fatalf("root handler calls = %d, want 0", handlerCalls)
+	}
+	if sourceCalls != 0 {
+		t.Fatalf("root external source calls = %d, want 0", sourceCalls)
+	}
+	if rootInputCalls != 0 {
+		t.Fatalf("root resolved-input binding calls = %d, want 0", rootInputCalls)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())

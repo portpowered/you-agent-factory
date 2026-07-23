@@ -215,7 +215,12 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 	if err != nil {
 		return nil, fmt.Errorf("build generic command tree: %w", err)
 	}
-	installPersistentInputResolution(built[manifest.RootPath], persistentInputs)
+	rootRecord := rootCommandRecord(plan)
+	installPersistentInputResolution(
+		built[manifest.RootPath],
+		persistentInputs,
+		rootRecord.RootLifecycle != nil,
+	)
 	for _, item := range plan {
 		projectGenericHandler(built[item.record.Path], item.record, bindings)
 	}
@@ -235,6 +240,15 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		}
 	}
 	return built[manifest.RootPath], nil
+}
+
+func rootCommandRecord(plan []plannedCommand) climanifest.Command {
+	for _, item := range plan {
+		if item.parentPath == "" {
+			return item.record
+		}
+	}
+	return climanifest.Command{}
 }
 
 func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([]plannedCommand, error) {

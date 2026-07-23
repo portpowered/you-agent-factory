@@ -183,12 +183,24 @@ func persistentInputContract(
 	}, nil
 }
 
-func installPersistentInputResolution(root *cobra.Command, resolver persistentInputResolver) {
+func installPersistentInputResolution(
+	root *cobra.Command,
+	resolver persistentInputResolver,
+	rootNoArgumentDiscovery bool,
+) {
 	if len(resolver.definitions) == 0 {
 		return
 	}
 	previous := root.PersistentPreRunE
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if rootNoArgumentDiscovery && cmd == root && len(args) == 0 {
+			inputs, err := resolver.resolve(cmd.Context(), false)
+			if err != nil {
+				return err
+			}
+			attachPersistentInputInvocation(cmd, resolver, inputs)
+			return nil
+		}
 		inputs, err := resolver.resolve(cmd.Context(), !cmd.DisableFlagParsing)
 		if err != nil {
 			return err
@@ -198,16 +210,24 @@ func installPersistentInputResolution(root *cobra.Command, resolver persistentIn
 				return fmt.Errorf("bind resolved persistent inputs: %w", err)
 			}
 		}
-		cmd.SetContext(context.WithValue(
-			cmd.Context(),
-			resolvedPersistentInputsContextKey{},
-			persistentInputInvocation{resolver: resolver, inputs: inputs},
-		))
+		attachPersistentInputInvocation(cmd, resolver, inputs)
 		if previous != nil {
 			return previous(cmd, args)
 		}
 		return nil
 	}
+}
+
+func attachPersistentInputInvocation(
+	cmd *cobra.Command,
+	resolver persistentInputResolver,
+	inputs resolvedinput.Inputs,
+) {
+	cmd.SetContext(context.WithValue(
+		cmd.Context(),
+		resolvedPersistentInputsContextKey{},
+		persistentInputInvocation{resolver: resolver, inputs: inputs},
+	))
 }
 
 func (r persistentInputResolver) resolve(

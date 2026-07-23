@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ import (
 func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 	binaryPath := buildReleaseSmokeBinary(t)
 	home := t.TempDir()
-	environment := append(os.Environ(), "HOME="+home)
+	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
 	t.Run("help succeeds", func(t *testing.T) {
 		output, err := runBoundedBinary(t, binaryPath, environment, "--help")
@@ -59,6 +60,26 @@ func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 		output, err := runBoundedBinary(t, binaryPath, environment)
 		if err != nil || !strings.Contains(output, "Usage:") {
 			t.Fatalf("bare you = (%v, %q), want successful usage output", err, output)
+		}
+	})
+
+	t.Run("bare invocation ignores malformed operator config", func(t *testing.T) {
+		malformedHome := t.TempDir()
+		configDirectory := filepath.Join(malformedHome, ".you-agent-factory")
+		if err := os.MkdirAll(configDirectory, 0o700); err != nil {
+			t.Fatalf("create malformed operator config directory: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(configDirectory, "config.json"), []byte("{not-json"), 0o600); err != nil {
+			t.Fatalf("write malformed operator config: %v", err)
+		}
+		malformedEnvironment := append(
+			os.Environ(),
+			"HOME="+malformedHome,
+			"USERPROFILE="+malformedHome,
+		)
+		output, err := runBoundedBinary(t, binaryPath, malformedEnvironment)
+		if err != nil || !strings.Contains(output, "Usage:") {
+			t.Fatalf("bare you with malformed operator config = (%v, %q), want successful usage output", err, output)
 		}
 	})
 

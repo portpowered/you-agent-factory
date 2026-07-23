@@ -22,10 +22,14 @@ primary-result behavior.
   observable Cobra construction, parsing, help, completion, and dispatch
   behavior. Do not use source inspection or inventory scans to raise coverage.
 - Manifest-owned root no-argument discovery is projected by the generic Cobra
-  constructor before handler dispatch. Prove its inert behavior through
-  `root.BuildProcess` with exact Factory-loading/materialization, listener,
-  runtime-host, provider, and browser edges; do not substitute source-shape
-  assertions for observable help output and zero effect calls.
+  constructor before external persistent-source collection, resolved-input
+  compatibility binding, chained pre-runs, and handler dispatch. It may
+  initialize a manifest-default-only observation snapshot, but it must not read
+  Operator Settings. Prove its inert behavior through `root.BuildProcess` with
+  exact Operator Settings, Factory-loading/materialization, listener,
+  runtime-host, provider, and browser edges, plus a compiled-binary malformed
+  config case; do not substitute source-shape assertions for observable help
+  output and zero effect calls.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
   records into Cobra and resolved inputs; `make cli-manifest-check` compares
