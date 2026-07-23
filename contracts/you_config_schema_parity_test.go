@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operator_settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -29,11 +30,6 @@ type youConfigSchemaParityRule struct {
 }
 
 var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
-	"operator_settings:valid-worker-presets-canonicalized": {
-		kind:         schemaParityDiverges,
-		schemaAccept: boolPtr(false),
-		reason:       "operator_settings trims and canonicalizes preset values that Draft 2020-12 cannot express",
-	},
 	"operator_settings:invalid-preset-duplicate-id": {
 		kind:         schemaParityDiverges,
 		schemaAccept: boolPtr(true),
@@ -51,16 +47,11 @@ var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
 		kind:   schemaParityNotApplicable,
 		reason: "malformed on-disk JSON is rejected before schema instance validation",
 	},
-	"operator_settings_identity:valid-tolerates-unknown-sibling": {
-		kind:         schemaParityDiverges,
-		schemaAccept: boolPtr(false),
-		reason:       "the operator_settings identity loader tolerates unknown top-level siblings while the schema enforces a closed root object",
-	},
 	"operator_settings_identity:valid-missing-file": {
 		kind:   schemaParityNotApplicable,
 		reason: "missing config file has no JSON document for schema validation",
 	},
-	"operator_settings_identity:valid-whitespace-config": {
+	"operator_settings_identity:invalid-whitespace-config": {
 		kind:   schemaParityNotApplicable,
 		reason: "whitespace-only config file content is not a JSON document for schema validation",
 	},
@@ -86,12 +77,61 @@ var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
 	},
 }
 
-func TestYouConfigSchemaParityMatrixCoversAllIndexedCases(t *testing.T) {
-	for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
-		assertParityRuleRegistered(t, "operator_settings", inputCase.ID)
+func TestYouConfigSchemaAndLoaderAcceptCanonicalizedPresetFields(t *testing.T) {
+	t.Parallel()
+
+	data := readOperatorFixture(t, "valid/worker-presets-canonicalized.json")
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("canonicalized worker preset fixture must be valid JSON")
 	}
-	for _, inputCase := range committedIdentityInputInventory(t).Cases {
-		assertParityRuleRegistered(t, "operator_settings_identity", inputCase.ID)
+	if err := youConfigSchema(t).Validate(instance); err != nil {
+		t.Fatalf("schema rejected normalized preset input: %v", err)
+	}
+
+	config, err := globalconfigmapping.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode() rejected normalized preset input: %v", err)
+	}
+	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ModelProvider != "CODEX" || config.WorkerPresets[0].ReasoningEffort != "high" {
+		t.Fatalf("worker presets = %#v, want provider CODEX and reasoning effort high", config.WorkerPresets)
+	}
+}
+
+func TestYouConfigSchemaAndLoaderAcceptUnicodePaddedPresetFields(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"workerPresets":[{"id":"research","modelProvider":"\u00a0openai\u00a0","reasoningEffort":"\u00a0HIGH\u00a0"}]}`)
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("Unicode-padded worker preset must be valid JSON")
+	}
+	if err := youConfigSchema(t).Validate(instance); err != nil {
+		t.Fatalf("schema rejected Unicode-padded preset input: %v", err)
+	}
+
+	config, err := globalconfigmapping.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode() rejected Unicode-padded preset input: %v", err)
+	}
+	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ModelProvider != "CODEX" || config.WorkerPresets[0].ReasoningEffort != "high" {
+		t.Fatalf("worker presets = %#v, want provider CODEX and reasoning effort high", config.WorkerPresets)
+	}
+}
+
+func TestYouConfigSchemaAndLoaderRejectUnicodeWhitespaceOnlyPresetID(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"workerPresets":[{"id":"\u00a0","modelProvider":"openai"}]}`)
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("Unicode-whitespace worker preset must be valid JSON")
+	}
+	if err := youConfigSchema(t).Validate(instance); err == nil {
+		t.Fatal("schema accepted Unicode-whitespace-only preset id")
+	}
+	if _, err := globalconfigmapping.Decode(data); err == nil {
+		t.Fatal("Decode() accepted Unicode-whitespace-only preset id")
 	}
 }
 
@@ -115,35 +155,14 @@ func TestYouConfigSchemaLoaderParityMatrix(t *testing.T) {
 	})
 }
 
-func TestYouConfigSchemaTopologyMatchesInventoryWithoutUnsupportedFields(t *testing.T) {
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	root := document.(map[string]any)
-	contract := root["contract"].(map[string]any)
-	fields := contract["fields"].(map[string]any)
-
-	inventory := committedGlobalConfigInventory(t)
-	inventoryIDs := make(map[string]struct{}, len(inventory.Fields))
-	for _, record := range inventory.Fields {
-		inventoryIDs[record.ID] = struct{}{}
-		if _, ok := fields[record.ID]; !ok {
-			t.Fatalf("schema contract missing inventoried field %q", record.ID)
-		}
-	}
-	for id := range fields {
-		if _, ok := inventoryIDs[id]; !ok {
-			t.Fatalf("schema contract advertises unsupported field %q", id)
-		}
-	}
-}
-
 func runOperatorConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, inputCase operator_settings.InputCase) {
 	t.Helper()
 
 	rule := parityRuleForCase("operator_settings", inputCase.ID, inputCase.Outcome, inputCase.Fixture != "")
 
 	switch inputCase.Entrypoint {
-	case "ParseFileConfig":
-		runOperatorParseSchemaParityCase(t, schema, inputCase, rule)
+	case "DecodeGlobalConfig":
+		runOperatorDecodeSchemaParityCase(t, schema, inputCase, rule)
 	case "LoadFileConfig":
 		runOperatorLoadSchemaParityCase(t, schema, inputCase, rule)
 	case "Resolve":
@@ -169,7 +188,7 @@ func runSystemConfigSchemaParityCase(t *testing.T, schema *jsonschema.Schema, in
 	}
 }
 
-func runOperatorParseSchemaParityCase(
+func runOperatorDecodeSchemaParityCase(
 	t *testing.T,
 	schema *jsonschema.Schema,
 	inputCase operator_settings.InputCase,
@@ -180,16 +199,16 @@ func runOperatorParseSchemaParityCase(
 	data := readOperatorFixture(t, inputCase.Fixture)
 	assertSchemaParityForFixture(t, schema, rule, data)
 
-	cfg, err := operator_settings.ParseFileConfig(data)
+	cfg, err := globalconfigmapping.Decode(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
-			t.Fatalf("ParseFileConfig() error = %v, want accept", err)
+			t.Fatalf("DecodeGlobalConfig() error = %v, want accept", err)
 		}
-		assertOperatorFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertOperatorConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
-		t.Fatal("ParseFileConfig() error = nil, want reject")
+		t.Fatal("DecodeGlobalConfig() error = nil, want reject")
 	}
 	assertErrorFragments(t, err, inputCase.ErrorFragments)
 }
@@ -216,12 +235,12 @@ func runOperatorLoadSchemaParityCase(
 		path = writeOperatorFixtureToTemp(t, inputCase.Fixture)
 	}
 
-	cfg, err := operator_settings.LoadFileConfig(platformfilesystem.Local{}, path)
+	cfg, err := operator_settings.LoadFileConfig(platformfilesystem.Local{}, globalconfigmapping.Decode, path)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("LoadFileConfig() error = %v, want accept", err)
 		}
-		assertOperatorFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertOperatorConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
@@ -315,6 +334,8 @@ func runSystemEnsureScopeSchemaParityCase(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operator_settings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
 		uuid.NewString,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
 		configPath,
 	)
 	if inputCase.Outcome == "accept" {
@@ -396,42 +417,6 @@ func parityRuleForCase(owner, caseID, outcome string, hasFixture bool) youConfig
 	}
 }
 
-func assertParityRuleRegistered(t *testing.T, owner, caseID string) {
-	t.Helper()
-	key := owner + ":" + caseID
-	if _, ok := youConfigSchemaParityOverrides[key]; ok {
-		return
-	}
-	if owner == "operator_settings" {
-		for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
-			if inputCase.ID == caseID {
-				if inputCase.Fixture != "" || inputCase.Entrypoint == "Resolve" {
-					return
-				}
-				if inputCase.ID == "valid-missing-file" {
-					return
-				}
-			}
-		}
-	}
-	if owner == "operator_settings_identity" {
-		for _, inputCase := range committedIdentityInputInventory(t).Cases {
-			if inputCase.ID == caseID {
-				if inputCase.Fixture != "" {
-					return
-				}
-				switch inputCase.ID {
-				case "valid-missing-file", "invalid-empty-config-path":
-					return
-				case "invalid-persist-empty-scope", "invalid-persist-non-local-scope", "invalid-persist-provider-scope":
-					return
-				}
-			}
-		}
-	}
-	t.Fatalf("missing parity rule for indexed case %q", key)
-}
-
 func parseJSONDocument(data []byte) (any, bool) {
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
@@ -481,9 +466,9 @@ func writeSystemFixtureToTemp(t *testing.T, rel string) string {
 func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveLayers) operator_settings.Defaults {
 	t.Helper()
 	if layers.FileFixture != "" {
-		cfg, err := operator_settings.ParseFileConfig(readOperatorFixture(t, layers.FileFixture))
+		cfg, err := globalconfigmapping.Decode(readOperatorFixture(t, layers.FileFixture))
 		if err != nil {
-			t.Fatalf("ParseFileConfig(file fixture) error = %v", err)
+			t.Fatalf("DecodeGlobalConfig(file fixture) error = %v", err)
 		}
 		return cfg.Defaults
 	}
@@ -493,10 +478,13 @@ func operatorDefaultsFromLayers(t *testing.T, layers *operator_settings.ResolveL
 	}
 }
 
-func assertOperatorFileConfigExpectation(t *testing.T, cfg operator_settings.FileConfig, want *operator_settings.FileConfigExpectation) {
+func assertOperatorConfigExpectation(t *testing.T, cfg operator_settings.Config, want *operator_settings.ConfigExpectation) {
 	t.Helper()
 	if want == nil {
-		t.Fatal("accept case missing expectedFileConfig")
+		t.Fatal("accept case missing expectedConfig")
+	}
+	if cfg.BackendScopeID != want.BackendScopeID {
+		t.Fatalf("backendScopeID = %q, want %q", cfg.BackendScopeID, want.BackendScopeID)
 	}
 	gotDefaults := operator_settings.DefaultsSnapshot{
 		WorkerModelProvider: cfg.Defaults.WorkerModelProvider,

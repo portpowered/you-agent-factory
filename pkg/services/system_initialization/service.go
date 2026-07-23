@@ -68,16 +68,16 @@ type LegacyFactoryMigrationFileSystem interface {
 }
 
 type OperatorSettings interface {
-	LoadFileConfig(string) (operatorconfig.FileConfig, error)
+	LoadFileConfig(string) (operatorconfig.Config, error)
 	EnsureLocalBackendScope(string) (operatorconfig.ResolvedBackendScope, error)
 }
 
 type OperatorSettingsFunctions struct {
-	Load   func(string) (operatorconfig.FileConfig, error)
+	Load   func(string) (operatorconfig.Config, error)
 	Ensure func(string) (operatorconfig.ResolvedBackendScope, error)
 }
 
-func (functions OperatorSettingsFunctions) LoadFileConfig(path string) (operatorconfig.FileConfig, error) {
+func (functions OperatorSettingsFunctions) LoadFileConfig(path string) (operatorconfig.Config, error) {
 	return functions.Load(path)
 }
 

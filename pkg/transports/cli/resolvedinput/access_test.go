@@ -1,0 +1,148 @@
+package resolvedinput_test
+
+import (
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+)
+
+func TestTypedAccessorsClassifyMissingInputs(t *testing.T) {
+	inputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{definition("input.unresolved", resolvedinput.ValueKindString)},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		inputID  string
+		expected resolvedinput.ValueKind
+		access   func() error
+	}{
+		{name: "bool", inputID: "input.unknown", expected: resolvedinput.ValueKindBool, access: func() error { _, err := inputs.Bool("input.unknown"); return err }},
+		{name: "string", inputID: "input.unresolved", expected: resolvedinput.ValueKindString, access: func() error { _, err := inputs.String("input.unresolved"); return err }},
+		{name: "int", inputID: "input.unknown", expected: resolvedinput.ValueKindInt, access: func() error { _, err := inputs.Int("input.unknown"); return err }},
+		{name: "int64", inputID: "input.unknown", expected: resolvedinput.ValueKindInt64, access: func() error { _, err := inputs.Int64("input.unknown"); return err }},
+		{name: "string array", inputID: "input.unknown", expected: resolvedinput.ValueKindStringArray, access: func() error { _, err := inputs.StringArray("input.unknown"); return err }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.access()
+			assertAccessError(t, err, resolvedinput.AccessError{
+				Failure:      resolvedinput.AccessFailureMissingInput,
+				InputID:      test.inputID,
+				ExpectedKind: test.expected,
+			})
+		})
+	}
+}
+
+func TestSensitiveMismatchDiagnosticsRedactScalarAndCollectionValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		kind   resolvedinput.ValueKind
+		value  resolvedinput.Value
+		secret []string
+	}{
+		{name: "scalar", kind: resolvedinput.ValueKindString, value: resolvedinput.StringValue("scalar-secret"), secret: []string{"scalar-secret"}},
+		{name: "collection", kind: resolvedinput.ValueKindStringArray, value: resolvedinput.StringArrayValue([]string{"first-secret", "second-secret"}), secret: []string{"first-secret", "second-secret"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inputs, err := resolvedinput.Resolve(
+				[]resolvedinput.Definition{{
+					ID: "input.secret", Kind: test.kind, Sensitive: true,
+					Precedence: []resolvedinput.Source{resolvedinput.SourceEnvironment},
+				}},
+				[]resolvedinput.Candidate{{
+					InputID: "input.secret", Source: resolvedinput.SourceEnvironment, Value: test.value,
+				}},
+			)
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+
+			_, err = inputs.Bool("input.secret")
+			var diagnostic *resolvedinput.AccessError
+			if !errors.As(err, &diagnostic) {
+				t.Fatalf("Bool() error = %v; want *AccessError", err)
+			}
+			if diagnostic.Value != resolvedinput.RedactedValue {
+				t.Fatalf("diagnostic value = %#v; want %q", diagnostic.Value, resolvedinput.RedactedValue)
+			}
+			formatted := diagnostic.Error()
+			if !strings.Contains(formatted, resolvedinput.RedactedValue) {
+				t.Fatalf("Error() = %q; want redaction marker", formatted)
+			}
+			for _, secret := range test.secret {
+				if strings.Contains(formatted, secret) {
+					t.Fatalf("Error() = %q; contains sensitive value %q", formatted, secret)
+				}
+			}
+			if diagnostic.Provenance != resolvedinput.SourceEnvironment || !diagnostic.Changed || diagnostic.Default {
+				t.Fatalf("diagnostic state = %#v; want environment changed non-default", diagnostic)
+			}
+		})
+	}
+}
+
+func TestTypedAccessorsClassifyScalarAndCollectionKindMismatches(t *testing.T) {
+	inputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			definition("input.scalar", resolvedinput.ValueKindBool),
+			definition("input.collection", resolvedinput.ValueKindStringArray),
+		},
+		[]resolvedinput.Candidate{
+			candidate("input.scalar", resolvedinput.BoolValue(true)),
+			candidate("input.collection", resolvedinput.StringArrayValue([]string{"value"})),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	_, scalarErr := inputs.String("input.scalar")
+	assertAccessError(t, scalarErr, resolvedinput.AccessError{
+		Failure:      resolvedinput.AccessFailureKindMismatch,
+		InputID:      "input.scalar",
+		ExpectedKind: resolvedinput.ValueKindString,
+		ActualKind:   resolvedinput.ValueKindBool,
+		Provenance:   resolvedinput.SourceCLIFlag,
+		Changed:      true,
+		Value:        true,
+	})
+
+	_, collectionErr := inputs.Int64("input.collection")
+	assertAccessError(t, collectionErr, resolvedinput.AccessError{
+		Failure:      resolvedinput.AccessFailureKindMismatch,
+		InputID:      "input.collection",
+		ExpectedKind: resolvedinput.ValueKindInt64,
+		ActualKind:   resolvedinput.ValueKindStringArray,
+		Provenance:   resolvedinput.SourceCLIFlag,
+		Changed:      true,
+		Value:        []string{"value"},
+	})
+}
+
+func assertAccessError(t *testing.T, err error, want resolvedinput.AccessError) {
+	t.Helper()
+	wrapped := fmt.Errorf("translate resolved input: %w", err)
+	var diagnostic *resolvedinput.AccessError
+	if !errors.As(wrapped, &diagnostic) {
+		t.Fatalf("wrapped error = %v; want *AccessError", wrapped)
+	}
+	if !reflect.DeepEqual(*diagnostic, want) {
+		t.Fatalf("diagnostic = %#v; want %#v", diagnostic, want)
+	}
+	if !strings.Contains(diagnostic.Error(), want.InputID) {
+		t.Fatalf("Error() = %q; want stable input ID %q", diagnostic.Error(), want.InputID)
+	}
+}

@@ -1,7 +1,6 @@
 package operatorsettings_test
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,41 +10,10 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/globalconfiginventory"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
-
-func TestProjectInputInventory_RecordsUnknownFieldPolicyAndPrecedence(t *testing.T) {
-	t.Parallel()
-
-	inventory := operatorconfig.ProjectInputInventory()
-	if inventory.FormatVersion != operatorconfig.InputInventoryFormatVersion {
-		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, operatorconfig.InputInventoryFormatVersion)
-	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "DisallowUnknownFields") {
-		t.Fatalf("unknown field policy = %q, want DisallowUnknownFields reference", inventory.UnknownFieldPolicy)
-	}
-	if inventory.PrecedenceChain != operatorconfig.PrecedenceChain {
-		t.Fatalf("PrecedenceChain = %q, want %q", inventory.PrecedenceChain, operatorconfig.PrecedenceChain)
-	}
-}
-
-func TestProjectInputInventory_HasUnknownFieldRejectCase(t *testing.T) {
-	t.Parallel()
-
-	inventory := operatorconfig.ProjectInputInventory()
-	for _, inputCase := range inventory.Cases {
-		if inputCase.Category != "parse-unknown-field" || inputCase.Outcome != "reject" {
-			continue
-		}
-		if inputCase.Fixture == "" {
-			t.Fatalf("unknown-field case %q missing fixture", inputCase.ID)
-		}
-		return
-	}
-	t.Fatal("missing unknown-field reject case in input inventory")
-}
 
 func TestIndexedInputCases_MatchProductionLoaders(t *testing.T) {
 	inventory := operatorconfig.ProjectInputInventory()
@@ -69,8 +37,8 @@ func runIndexedInputCase(t *testing.T, inputCase operatorconfig.InputCase) {
 	t.Helper()
 
 	switch inputCase.Entrypoint {
-	case "ParseFileConfig":
-		runParseFileConfigCase(t, inputCase)
+	case "DecodeGlobalConfig":
+		runDecodeGlobalConfigCase(t, inputCase)
 	case "LoadFileConfig":
 		runLoadFileConfigCase(t, inputCase)
 	case "Resolve":
@@ -80,20 +48,20 @@ func runIndexedInputCase(t *testing.T, inputCase operatorconfig.InputCase) {
 	}
 }
 
-func runParseFileConfigCase(t *testing.T, inputCase operatorconfig.InputCase) {
+func runDecodeGlobalConfigCase(t *testing.T, inputCase operatorconfig.InputCase) {
 	t.Helper()
 
 	data := readFixture(t, inputCase.Fixture)
-	cfg, err := operatorconfig.ParseFileConfig(data)
+	cfg, err := globalconfigmapping.Decode(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
-			t.Fatalf("ParseFileConfig() error = %v, want accept", err)
+			t.Fatalf("DecodeGlobalConfig() error = %v, want accept", err)
 		}
-		assertFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
-		t.Fatal("ParseFileConfig() error = nil, want reject")
+		t.Fatal("DecodeGlobalConfig() error = nil, want reject")
 	}
 	assertErrorFragments(t, err, inputCase.ErrorFragments)
 }
@@ -108,12 +76,12 @@ func runLoadFileConfigCase(t *testing.T, inputCase operatorconfig.InputCase) {
 		path = writeFixtureToTemp(t, inputCase.Fixture)
 	}
 
-	cfg, err := operatorconfig.LoadFileConfig(platformfilesystem.Local{}, path)
+	cfg, err := operatorconfig.LoadFileConfig(platformfilesystem.Local{}, globalconfigmapping.Decode, path)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("LoadFileConfig() error = %v, want accept", err)
 		}
-		assertFileConfigExpectation(t, cfg, inputCase.ExpectedFileConfig)
+		assertConfigExpectation(t, cfg, inputCase.ExpectedConfig)
 		return
 	}
 	if err == nil {
@@ -183,9 +151,9 @@ func defaultsFromLayers(t *testing.T, layers *operatorconfig.ResolveLayers) oper
 	t.Helper()
 
 	if layers.FileFixture != "" {
-		cfg, err := operatorconfig.ParseFileConfig(readFixture(t, layers.FileFixture))
+		cfg, err := globalconfigmapping.Decode(readFixture(t, layers.FileFixture))
 		if err != nil {
-			t.Fatalf("ParseFileConfig(file fixture) error = %v", err)
+			t.Fatalf("DecodeGlobalConfig(file fixture) error = %v", err)
 		}
 		return cfg.Defaults
 	}
@@ -195,11 +163,14 @@ func defaultsFromLayers(t *testing.T, layers *operatorconfig.ResolveLayers) oper
 	}
 }
 
-func assertFileConfigExpectation(t *testing.T, cfg operatorconfig.FileConfig, want *operatorconfig.FileConfigExpectation) {
+func assertConfigExpectation(t *testing.T, cfg operatorconfig.Config, want *operatorconfig.ConfigExpectation) {
 	t.Helper()
 
 	if want == nil {
-		t.Fatal("accept case missing expectedFileConfig")
+		t.Fatal("accept case missing expectedConfig")
+	}
+	if cfg.BackendScopeID != want.BackendScopeID {
+		t.Fatalf("backendScopeID = %q, want %q", cfg.BackendScopeID, want.BackendScopeID)
 	}
 	gotDefaults := operatorconfig.DefaultsSnapshot{
 		WorkerModelProvider: cfg.Defaults.WorkerModelProvider,
@@ -247,71 +218,4 @@ func writeFixtureToTemp(t *testing.T, rel string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
-}
-
-func TestMarshalInputInventoryJSON_IsByteIdenticalAcrossRepeatedProjections(t *testing.T) {
-	t.Parallel()
-
-	first := operatorconfig.ProjectInputInventory()
-	second := operatorconfig.ProjectInputInventory()
-
-	firstJSON, err := operatorconfig.MarshalInputInventoryJSON(first)
-	if err != nil {
-		t.Fatalf("first MarshalInputInventoryJSON() error = %v", err)
-	}
-	secondJSON, err := operatorconfig.MarshalInputInventoryJSON(second)
-	if err != nil {
-		t.Fatalf("second MarshalInputInventoryJSON() error = %v", err)
-	}
-	if !bytes.Equal(firstJSON, secondJSON) {
-		t.Fatalf("repeated operator config input inventory json differs")
-	}
-	if firstJSON[len(firstJSON)-1] != '\n' {
-		t.Fatalf("operator config input inventory json missing trailing newline")
-	}
-}
-
-func TestProjectInputInventory_MatchesCommittedBaseline(t *testing.T) {
-	inventory := operatorconfig.ProjectInputInventory()
-	got, err := operatorconfig.MarshalInputInventoryJSON(inventory)
-	if err != nil {
-		t.Fatalf("MarshalInputInventoryJSON() error = %v", err)
-	}
-
-	fixturePath := testutil.MustRepoPath(t, operatorconfig.InputIndexBaselineRelativePath)
-	want, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read baseline fixture %s: %v", fixturePath, err)
-	}
-	want = globalconfiginventory.NormalizeFixtureBytes(want)
-	if bytes.Equal(got, want) {
-		return
-	}
-
-	t.Fatalf(
-		"operator config input index baseline drift detected; update %s when intentional\nwant %d bytes, got %d bytes",
-		operatorconfig.InputIndexBaselineRelativePath,
-		len(want),
-		len(got),
-	)
-}
-
-func TestWriteOperatorConfigInputIndexBaseline(t *testing.T) {
-	if os.Getenv("UPDATE_OPERATOR_CONFIG_BASELINES") != "1" {
-		t.Skip("set UPDATE_OPERATOR_CONFIG_BASELINES=1 to rewrite fixtures")
-	}
-
-	inventory := operatorconfig.ProjectInputInventory()
-	got, err := operatorconfig.MarshalInputInventoryJSON(inventory)
-	if err != nil {
-		t.Fatalf("MarshalInputInventoryJSON() error = %v", err)
-	}
-
-	fixturePath := testutil.MustRepoPath(t, operatorconfig.InputIndexBaselineRelativePath)
-	if err := os.MkdirAll(filepath.Dir(fixturePath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(fixturePath, got, 0o644); err != nil {
-		t.Fatalf("write baseline fixture %s: %v", fixturePath, err)
-	}
 }

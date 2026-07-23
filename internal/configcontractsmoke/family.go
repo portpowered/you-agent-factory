@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"sort"
 
-	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 // FamilyID is the stable identifier for one separately loadable configuration root.
@@ -50,7 +50,7 @@ func (d Diagnostic) Error() string {
 var expectedFamilies = []Family{
 	{
 		ID:                   FamilyGlobal,
-		ParserID:             "pkg/services/operator_settings.ParseFileConfig",
+		ParserID:             "pkg/transports/mapping/globalconfig.Decode",
 		parser:               parseGlobal,
 		CanonicalOwnerPath:   "contracts/config/you-config.schema.json",
 		SchemaProjectionPath: "contracts/config/you-config.schema.json",
@@ -173,7 +173,7 @@ func isExpectedFamily(id FamilyID) bool {
 }
 
 func parseGlobal(payload []byte) error {
-	_, err := operatorconfig.ParseFileConfig(payload)
+	_, err := globalconfigmapping.Decode(payload)
 	return err
 }
 

@@ -9,50 +9,9 @@ import (
 )
 
 const (
-	globalConfigTopologyBaselinePath = "pkg/services/operator_settings/globalconfiginventory/testdata/baseline/global-config-topology.json"
-	identityInputBaselinePath        = "pkg/services/operator_settings/identityinventory/testdata/baseline/system-config-input-index.json"
-	identityFixtureDirectory         = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
+	identityInputBaselinePath = "pkg/services/operator_settings/identityinventory/testdata/baseline/system-config-input-index.json"
+	identityFixtureDirectory  = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
 )
-
-// These representation-only structures deliberately belong to the schema
-// contract tests. Operator Settings owns projection and canonical encoding;
-// contracts consume only the committed JSON artifact that owner tests guard.
-type committedGlobalConfigInventoryDocument struct {
-	PrecedenceChain    string                               `json:"precedenceChain"`
-	SharedFileSplit    committedGlobalConfigSharedFileSplit `json:"sharedFileSplit"`
-	UnknownFieldPolicy []committedGlobalConfigUnknownPolicy `json:"unknownFieldPolicy"`
-	Fields             []committedGlobalConfigField         `json:"fields"`
-}
-
-type committedGlobalConfigSharedFileSplit struct {
-	Summary string                           `json:"summary"`
-	Owners  []committedGlobalConfigFileOwner `json:"owners"`
-}
-
-type committedGlobalConfigFileOwner struct {
-	Package    string   `json:"package"`
-	Owns       []string `json:"owns"`
-	Tolerates  []string `json:"tolerates,omitempty"`
-	DoesNotOwn []string `json:"doesNotOwn,omitempty"`
-}
-
-type committedGlobalConfigUnknownPolicy struct {
-	Package string `json:"package"`
-	Policy  string `json:"policy"`
-}
-
-type committedGlobalConfigField struct {
-	ID                   string   `json:"id"`
-	JSONPath             string   `json:"jsonPath"`
-	DefaultEmptyBehavior string   `json:"defaultEmptyBehavior"`
-	Strictness           string   `json:"strictness"`
-	PersistenceOwner     string   `json:"persistenceOwner"`
-	ParseOwner           string   `json:"parseOwner"`
-	PrecedenceLayers     []string `json:"precedenceLayers,omitempty"`
-	EnvironmentVariable  string   `json:"environmentVariable,omitempty"`
-	FlagName             string   `json:"flagName,omitempty"`
-	Notes                string   `json:"notes,omitempty"`
-}
 
 type committedIdentityInputInventoryDocument struct {
 	SiblingPreservation string                       `json:"siblingPreservation"`
@@ -78,14 +37,6 @@ type committedIdentityScopeExpectation struct {
 type committedIdentityPersistedFileExpectation struct {
 	PreservesDefaults    bool     `json:"preservesDefaults,omitempty"`
 	PreservesSiblingKeys []string `json:"preservesSiblingKeys,omitempty"`
-}
-
-func committedGlobalConfigInventory(t *testing.T) committedGlobalConfigInventoryDocument {
-	t.Helper()
-	return readCommittedOperatorInventory[committedGlobalConfigInventoryDocument](
-		t,
-		globalConfigTopologyBaselinePath,
-	)
 }
 
 func committedIdentityInputInventory(t *testing.T) committedIdentityInputInventoryDocument {
