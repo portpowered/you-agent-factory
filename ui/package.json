@@ -109,7 +109,6 @@
     "@vitest/browser": "4.1.3",
     "@vitest/browser-playwright": "4.1.3",
     "@vitest/coverage-v8": "4.1.3",
-    "@you-agent-factory/model-providers": "file:../packages/model-providers",
     "happy-dom": "^20.9.0",
     "http-server": "^14.1.1",
     "jest-axe": "^10.0.0",

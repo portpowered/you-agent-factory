@@ -1,16 +1,16 @@
 // @vitest-environment node
 
-import catalog from "@you-agent-factory/model-providers/catalog" with {
+import { describe, expect, it } from "vitest";
+import catalog from "../../packages/model-providers/generated/catalog.json" with {
   type: "json",
 };
-import providerManifestSchema from "@you-agent-factory/model-providers/schemas/provider-manifest" with {
+import providerManifestSchema from "../../packages/model-providers/generated/provider-manifest.schema.json" with {
   type: "json",
 };
 import type {
   ProviderCatalog,
   ProviderManifest,
-} from "@you-agent-factory/model-providers/types";
-import { describe, expect, it } from "vitest";
+} from "../../packages/model-providers/types/index.js";
 
 import { buildModelProviderReferenceInput } from "./model-provider-reference-input";
 

@@ -1,21 +1,21 @@
-import catalog from "@you-agent-factory/model-providers/catalog" with {
-  type: "json",
-};
-import catalogSchema from "@you-agent-factory/model-providers/schemas/provider-catalog" with {
-  type: "json",
-};
-import providerManifestSchema from "@you-agent-factory/model-providers/schemas/provider-manifest" with {
-  type: "json",
-};
-import type {
-  ProviderCatalog,
-  ProviderManifest,
-} from "@you-agent-factory/model-providers/types";
 import Ajv2020, {
   type ErrorObject,
   type ValidateFunction,
 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import catalog from "../../packages/model-providers/generated/catalog.json" with {
+  type: "json",
+};
+import catalogSchema from "../../packages/model-providers/generated/provider-catalog.schema.json" with {
+  type: "json",
+};
+import providerManifestSchema from "../../packages/model-providers/generated/provider-manifest.schema.json" with {
+  type: "json",
+};
+import type {
+  ProviderCatalog,
+  ProviderManifest,
+} from "../../packages/model-providers/types/index.js";
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 
