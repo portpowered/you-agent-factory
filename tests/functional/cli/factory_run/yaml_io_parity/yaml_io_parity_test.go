@@ -111,10 +111,9 @@ func TestYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t *testing.T
 
 func TestRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
 	for _, test := range []struct {
-		name     string
-		prepare  func(*testing.T) []string
-		wants    []string
-		noPrompt bool
+		name    string
+		prepare func(*testing.T) []string
+		wants   []string
 	}{
 		{
 			name: "malformed YAML",
@@ -139,44 +138,6 @@ func TestRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
 				return []string{"--factory", path}
 			},
 			wants: []string{"factory.yaml", "(YAML)", "parse factory config"},
-		},
-		{
-			name: "runtime JSON representation mismatch",
-			prepare: func(t *testing.T) []string {
-				dir := t.TempDir()
-				writeFile(t, filepath.Join(dir, "factory.json"), `{"name":["invalid"]}`)
-				return []string{"--dir", dir, "--no-record", "--quiet"}
-			},
-			wants:    []string{"factory.json", "(JSON)", "parse factory config"},
-			noPrompt: true,
-		},
-		{
-			name: "runtime blocking definition",
-			prepare: func(t *testing.T) []string {
-				dir := t.TempDir()
-				writeFile(t, filepath.Join(dir, "factory.json"), `{
-					"name":"invalid",
-					"workTypes":[{
-						"name":"task",
-						"states":[
-							{"name":"init","type":"INITIAL"},
-							{"name":"complete","type":"TERMINAL"},
-							{"name":"failed","type":"FAILED"}
-						]
-					}],
-					"workstations":[{
-						"name":"execute",
-						"worker":"missing-worker",
-						"inputs":[{"workType":"task","state":"init"}],
-						"outputs":[{"workType":"task","state":"complete"}],
-						"onFailure":[{"workType":"task","state":"failed"}],
-						"type":"MODEL_WORKSTATION"
-					}]
-				}`)
-				return []string{"--dir", dir, "--no-record", "--quiet"}
-			},
-			wants:    []string{"factory.worker.danglingReference", "missing-worker"},
-			noPrompt: true,
 		},
 		{
 			name: "unsupported extension",
@@ -208,12 +169,74 @@ func TestRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runner := support.NewRecordingCommandRunner("runtime must not execute")
 			args := append([]string{"you", "run"}, test.prepare(t)...)
-			if !test.noPrompt {
-				args = append(args, "runtime must not start")
-			}
+			args = append(args, "runtime must not start")
 			inputs := support.FakeInputs(t.Context(), args)
 			inputs.Input.WorkingDirectory = t.TempDir()
 			err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil")
+			}
+			diagnostic := err.Error() + "\n" + inputs.Stderr()
+			for _, want := range test.wants {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
+				}
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+			}
+		})
+	}
+}
+
+func TestRejectedRuntimeDefinitionsFailBeforeProviderExecution(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		body  string
+		wants []string
+	}{
+		{
+			name:  "JSON representation mismatch",
+			body:  `{"name":["invalid"]}`,
+			wants: []string{"factory.json", "(JSON)", "parse factory config"},
+		},
+		{
+			name: "blocking topology",
+			body: `{
+				"name":"invalid",
+				"workTypes":[{
+					"name":"task",
+					"states":[
+						{"name":"init","type":"INITIAL"},
+						{"name":"complete","type":"TERMINAL"},
+						{"name":"failed","type":"FAILED"}
+					]
+				}],
+				"workstations":[{
+					"name":"execute",
+					"worker":"missing-worker",
+					"inputs":[{"workType":"task","state":"init"}],
+					"outputs":[{"workType":"task","state":"complete"}],
+					"onFailure":[{"workType":"task","state":"failed"}],
+					"type":"MODEL_WORKSTATION"
+				}]
+			}`,
+			wants: []string{"factory.worker.danglingReference", "missing-worker"},
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "factory.json"), test.body)
+			runner := support.NewRecordingCommandRunner("runtime must not execute")
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--dir", dir, "--no-record", "--quiet",
+			})
+			inputs.Input.WorkingDirectory = t.TempDir()
+			err := support.BuildProcess(
+				t,
+				serviceedges.Edges{ProviderCommandRunner: runner},
+			).Execute(inputs.Input)
 			if err == nil {
 				t.Fatal("Process.Execute() error = nil")
 			}
