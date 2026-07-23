@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -37,9 +36,16 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	root, err := newGenericRepresentativeFamily(
 		registry,
 		sessionRegistry,
-		representativePersistentFlagBindings(globals, diagnostics, operatorDefaults),
 		sessionBindings,
 		representativeSourceValues(options),
+		func(inputs resolvedinput.Inputs) error {
+			return applyRepresentativeResolvedInputs(
+				inputs,
+				globals,
+				diagnostics,
+				operatorDefaults,
+			)
+		},
 	)
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
@@ -64,9 +70,9 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 func newGenericRepresentativeFamily(
 	representativeRegistry *commandregistry.Registry,
 	sessionRegistry *commandregistry.Registry,
-	flagBindings climanifestcobra.PersistentFlagBindings,
 	sessionBindings climanifestcobra.SessionFamilyBindings,
 	sourceValues climanifestcobra.SourceCandidateProvider,
+	rootInputs climanifestcobra.ResolvedInputsBinding,
 ) (*cobra.Command, error) {
 	manifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
@@ -95,7 +101,6 @@ func newGenericRepresentativeFamily(
 		handlers[record.Handler.ID] = productionGenericCobraHandler(
 			commandID,
 			registered,
-			flagBindings,
 		)
 	}
 	inputs := make(climanifestcobra.InputBindingRegistry)
@@ -106,9 +111,7 @@ func newGenericRepresentativeFamily(
 		CobraHandlers: handlers,
 		Inputs:        inputs,
 		SourceValues:  sourceValues,
-		RootInputs: func(inputs resolvedinput.Inputs) error {
-			return applyRepresentativeResolvedInputs(inputs, flagBindings)
-		},
+		RootInputs:    rootInputs,
 	})
 	if err != nil {
 		return nil, err
@@ -179,7 +182,6 @@ func applySessionGenericFlagUsages(
 func productionGenericCobraHandler(
 	commandID string,
 	handlers commandregistry.CommandHandlers,
-	bindings climanifestcobra.PersistentFlagBindings,
 ) climanifestcobra.CobraHandler {
 	return func(
 		cmd *cobra.Command,
@@ -212,62 +214,41 @@ func genericSessionUsesDeprecatedPort(commandID string) bool {
 
 func applyRepresentativeResolvedInputs(
 	inputs resolvedinput.Inputs,
-	bindings climanifestcobra.PersistentFlagBindings,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
 ) error {
-	targets := map[string]struct {
-		value any
-		read  func(resolvedinput.Inputs, string) (any, error)
-	}{
-		"you.flag.debug": {
-			value: bindings.Debug,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.Bool(id)
-			},
-		},
-		"you.flag.default-worker-model": {
-			value: bindings.DefaultWorkerModel,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.String(id)
-			},
-		},
-		"you.flag.default-worker-model-provider": {
-			value: bindings.DefaultWorkerModelProvider,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.String(id)
-			},
-		},
-		"you.flag.json": {
-			value: bindings.JSON,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.Bool(id)
-			},
-		},
-		"you.flag.server": {
-			value: bindings.Server,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.String(id)
-			},
-		},
-		"you.flag.verbose": {
-			value: bindings.Verbose,
-			read: func(inputs resolvedinput.Inputs, id string) (any, error) {
-				return inputs.Bool(id)
-			},
-		},
+	debug, err := inputs.Bool("you.flag.debug")
+	if err != nil {
+		return err
 	}
-	for inputID, target := range targets {
-		value, err := target.read(inputs, inputID)
-		if err != nil {
-			return err
-		}
-		if err := assignRepresentativeGenericValue(
-			map[string]any{inputID: value},
-			inputID,
-			target.value,
-		); err != nil {
-			return err
-		}
+	defaultWorkerModel, err := inputs.String("you.flag.default-worker-model")
+	if err != nil {
+		return err
 	}
+	defaultWorkerModelProvider, err := inputs.String("you.flag.default-worker-model-provider")
+	if err != nil {
+		return err
+	}
+	jsonOutput, err := inputs.Bool("you.flag.json")
+	if err != nil {
+		return err
+	}
+	server, err := inputs.String("you.flag.server")
+	if err != nil {
+		return err
+	}
+	verbose, err := inputs.Bool("you.flag.verbose")
+	if err != nil {
+		return err
+	}
+
+	diagnostics.debug = debug
+	operatorDefaults.defaultWorkerModel = defaultWorkerModel
+	operatorDefaults.defaultWorkerModelProvider = defaultWorkerModelProvider
+	globals.json = jsonOutput
+	globals.server = server
+	diagnostics.verbose = verbose
 	return nil
 }
 
@@ -397,32 +378,6 @@ func buildRunSubmitProductionCommands(
 		return runSubmitProductionCommands{}, err
 	}
 	return runSubmitProductionCommands{Run: components.Run, Submit: components.Submit}, nil
-}
-
-func representativePersistentFlagBindings(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
-) climanifestcobra.PersistentFlagBindings {
-	return climanifestcobra.PersistentFlagBindings{
-		Verbose:                    &diagnostics.verbose,
-		Debug:                      &diagnostics.debug,
-		Server:                     &globals.server,
-		JSON:                       &globals.json,
-		DefaultWorkerModelProvider: &operatorDefaults.defaultWorkerModelProvider,
-		DefaultWorkerModel:         &operatorDefaults.defaultWorkerModel,
-		FlagUsages: map[string]string{
-			"verbose": "emit concise command diagnostics to stderr",
-			"debug":   "emit lower-level command diagnostics where supported (implies --verbose)",
-			"server":  "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port",
-			"json":    "emit structured JSON on stdout for supported commands; diagnostics remain on stderr",
-			"default-worker-model-provider": fmt.Sprintf(
-				"default worker model provider for model workers with omitted modelProvider (%s; DEFAULT resolves through lower-precedence concrete provider)",
-				interfaces.AcceptedPublicWorkerModelProviderSummary(),
-			),
-			"default-worker-model": "default worker model for model workers with omitted model",
-		},
-	}
 }
 
 func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) *cobra.Command {

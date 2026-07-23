@@ -26,6 +26,11 @@ primary-result behavior.
   `root.BuildProcess` with exact Factory-loading/materialization, listener,
   runtime-host, provider, and browser edges; do not substitute source-shape
   assertions for observable help output and zero effect calls.
+- Root/global CLI inputs have one writable definition path:
+  `contracts/cli/commands.json`. `climanifestcobra` generically projects those
+  records into Cobra and resolved inputs; `make cli-manifest-check` rejects
+  handwritten root persistent-flag registration outside that projection
+  boundary.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.

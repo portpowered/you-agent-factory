@@ -13,18 +13,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// PersistentFlagBindings supplies live variables for root persistent flags.
-type PersistentFlagBindings struct {
-	Verbose                    *bool
-	Debug                      *bool
-	Server                     *string
-	JSON                       *bool
-	DefaultWorkerModelProvider *string
-	DefaultWorkerModel         *string
-	// FlagUsages supplies help text while metadata lacks per-flag descriptions.
-	FlagUsages map[string]string
-}
-
 const genericInputAnnotationPrefix = "infinite-you/input-id/"
 const genericArgumentAnnotationPrefix = "infinite-you/argument-value/"
 
