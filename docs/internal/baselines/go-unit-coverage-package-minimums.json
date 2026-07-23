@@ -195,10 +195,6 @@
       "minimum": 80.64
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/fusion",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/goal",
       "minimum": 67.34
     },
@@ -209,10 +205,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/promptassets",
       "minimum": 96.82
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/quorum",
-      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review",
