@@ -13,7 +13,10 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
 )
 
-const stagingDirectory = "packages/api/generated"
+const (
+	apiStagingDirectory             = "packages/api/generated"
+	packagedFactorySchemasDirectory = "packages/packaged-factories/schemas"
+)
 
 // Drift describes every difference between canonical joined output and package
 // staging. Paths are repository-relative and sorted within each category.
@@ -76,8 +79,11 @@ func shouldRunArtifactCheck(expected map[string][]byte, staged map[string]staged
 func filterArtifactsByStagingDirectory(actual map[string]stagedFile) map[string]stagedFile {
 	filtered := make(map[string]stagedFile, len(actual))
 	for path, item := range actual {
-		if strings.HasPrefix(path, stagingDirectory) {
-			filtered[path] = item
+		for _, directory := range artifactDirectories() {
+			if strings.HasPrefix(path, directory+"/") {
+				filtered[path] = item
+				break
+			}
 		}
 	}
 	return filtered
@@ -186,6 +192,12 @@ func artifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDepe
 	}
 	expected[FactorySchemaAuthoredPath] = factorySchema
 	expected[factorySchemaTarget] = factorySchema
+	expected[packagedFactorySchemaJSON] = bytes.Clone(factorySchema)
+	factorySchemaYAML, err := marshalFactorySchemaYAML(factorySchema)
+	if err != nil {
+		return nil, err
+	}
+	expected[packagedFactorySchemaYAML] = factorySchemaYAML
 	standaloneSchemas, err := dependencies.GenerateStandaloneSchemas(repositoryRoot)
 	if err != nil {
 		return nil, err
@@ -240,9 +252,22 @@ func stagedArtifacts(repositoryRoot string) (map[string]stagedFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository root: %w", err)
 	}
-	base := filepath.Join(root, filepath.FromSlash(stagingDirectory))
 	actual := make(map[string]stagedFile)
-	err = filepath.WalkDir(base, func(path string, entry os.DirEntry, walkErr error) error {
+	for _, directory := range artifactDirectories() {
+		base := filepath.Join(root, filepath.FromSlash(directory))
+		if err := walkStagedArtifacts(root, base, actual); err != nil {
+			return nil, err
+		}
+	}
+	return actual, nil
+}
+
+func artifactDirectories() [2]string {
+	return [2]string{apiStagingDirectory, packagedFactorySchemasDirectory}
+}
+
+func walkStagedArtifacts(root, base string, actual map[string]stagedFile) error {
+	err := filepath.WalkDir(base, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if path == base && os.IsNotExist(walkErr) {
 				return filepath.SkipDir
@@ -268,9 +293,9 @@ func stagedArtifacts(repositoryRoot string) (map[string]stagedFile, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read package staging: %w", err)
+		return fmt.Errorf("read package staging: %w", err)
 	}
-	return actual, nil
+	return nil
 }
 
 func authoredArtifactDrift(repositoryRoot, path string, expected []byte) (category, repositoryPath string) {

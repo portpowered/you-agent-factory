@@ -43,7 +43,7 @@ func TestArtifactsWithDependenciesOrchestratesPipelineInExpectedOrder(t *testing
 		},
 		GenerateSchema: func(_ string) ([]byte, error) {
 			callLog = append(callLog, "generateSchema")
-			return []byte("schema"), nil
+			return []byte("{\"type\":\"object\"}\n"), nil
 		},
 		GenerateStandaloneSchemas: func(_ string) (map[string][]byte, error) {
 			callLog = append(callLog, "generateStandaloneSchemas")
@@ -137,7 +137,7 @@ func TestArtifactsWithDependencies_PropagatesManifestFailure(t *testing.T) {
 			return []contractjoiner.Document{}, nil
 		},
 		ReadRawArtifact: func(string) ([]byte, error) { return []byte("raw"), nil },
-		GenerateSchema:  func(string) ([]byte, error) { return []byte("schema"), nil },
+		GenerateSchema:  func(string) ([]byte, error) { return []byte("{\"type\":\"object\"}\n"), nil },
 		GenerateStandaloneSchemas: func(string) (map[string][]byte, error) {
 			return map[string][]byte{}, nil
 		},

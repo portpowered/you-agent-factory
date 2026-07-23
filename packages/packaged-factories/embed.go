@@ -7,15 +7,16 @@ import (
 	"io/fs"
 )
 
-//go:embed factories
+//go:embed factories schemas
 var authored embed.FS
 
 // Source returns the embedded, read-only authored source tree.
 //
 // Paths use forward slashes and are relative to this package, beginning with
-// "factories/". Factory catalog, validation, installation, and lifecycle policy
-// remain owned by their existing backend services. Bytes returned by filesystem
-// reads are detached and may be modified without affecting later reads.
+// "factories/" or "schemas/". Factory catalog, validation, installation, and
+// lifecycle policy remain owned by their existing backend services. Bytes
+// returned by filesystem reads are detached and may be modified without
+// affecting later reads.
 func Source() fs.FS {
 	return authored
 }
