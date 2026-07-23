@@ -14,7 +14,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -389,72 +388,7 @@ const (
 	responseStreamPrimaryResultHeader     = "--- primary result ---"
 	responseStreamInvocationOutcomeHeader = "--- invocation outcome ---"
 	maxHumanProgressLineBytes             = 1024
-
-	responseStreamJSONRecordResponseEvent    = "response_event"
-	responseStreamJSONRecordInvocationResult = "invocation_result"
 )
-
-// responseStreamRenderer writes ordered canonical progress output followed by
-// the final invocation result.
-type responseStreamRenderer interface {
-	stopProgressRendering()
-	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
-}
-
-// humanResponseStreamRenderer prints canonical response-event progress to
-// stdout and keeps the final invocation result separate from transient output.
-type humanResponseStreamRenderer struct {
-	stream factoryvisualization.ResponseStream
-}
-
-func newHumanResponseStreamRenderer(
-	output io.Writer,
-	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
-) *humanResponseStreamRenderer {
-	if output == nil {
-		panic("response-stream output is nil")
-	}
-	if presentation == nil {
-		panic("response presentation service is nil")
-	}
-	if responseEvents == nil {
-		panic("Factory response-event validator is nil")
-	}
-	return &humanResponseStreamRenderer{stream: presentation.OpenBestEffortResponseStream(
-		output,
-		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
-			line, ok := formatHumanResponseEvent(responseEvents, event)
-			return []byte(line), ok
-		},
-	)}
-}
-
-func (r *humanResponseStreamRenderer) stopProgressRendering() {
-	if r == nil {
-		return
-	}
-	_ = r.stream.CloseAndDrain()
-}
-
-func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
-	result apisurface.FactoryInvocationResult,
-) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
-	}
-	_, err := r.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
-		if result.Status == interfaces.InvocationTerminalStatusCompleted {
-			text, err := invocationPrimaryResultText(result.PrimaryResult)
-			if err != nil {
-				return err
-			}
-			return writeHumanPrimaryResult(writer, progressSeen, text)
-		}
-		return writeHumanInvocationOutcome(writer, progressSeen, result)
-	})
-	return err
-}
 
 func writeHumanInvocationOutcome(
 	output io.Writer,
@@ -551,27 +485,303 @@ func normalizeHumanProgressField(value string) string {
 	return strings.Join(strings.Fields(normalized), " ")
 }
 
-// jsonResponseStreamRenderer emits canonical response-event NDJSON followed by
-// the shared invocation response.
-type jsonResponseStreamRenderer struct {
-	stream factoryvisualization.ResponseStream
+const (
+	factoryEventJSONRecordType                 = "factory_event"
+	factoryEventJSONInvocationResultRecordType = "invocation_result"
+)
+
+type factoryEventRenderer interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	stopProgressRendering()
+	writeFinalInvocationResult(apisurface.FactoryInvocationResult) error
 }
 
-func newJSONResponseStreamRenderer(
+func invocationFactoryEventRenderer(
+	cfg RunConfig,
+	presentation factoryvisualization.ResponsePresentation,
+) factoryEventRenderer {
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return nil
+	}
+	if cfg.JSONOutput {
+		return newJSONFactoryEventRenderer(cfg.Output, presentation)
+	}
+	return newHumanFactoryEventRenderer(cfg.Output, presentation)
+}
+
+type factoryEventStream interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+}
+
+type humanFactoryEventRenderer struct {
+	stream factoryEventStream
+}
+
+func newHumanFactoryEventRenderer(
 	output io.Writer,
 	presentation factoryvisualization.ResponsePresentation,
-) *jsonResponseStreamRenderer {
+) *humanFactoryEventRenderer {
 	if output == nil {
-		panic("response-stream output is nil")
+		panic("Factory Event output is nil")
 	}
 	if presentation == nil {
-		panic("response presentation service is nil")
+		panic("Factory Event presentation service is nil")
 	}
-	return &jsonResponseStreamRenderer{stream: presentation.OpenLosslessResponseStream(
+	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
 		output,
-		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
-			encoded, err := json.Marshal(responseStreamJSONResponseEventRecord{
-				RecordType: responseStreamJSONRecordResponseEvent,
+		formatHumanFactoryEvent,
+	)}
+}
+
+func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
+	var message string
+	switch event.Type {
+	case interfaces.FactoryEventTypeWorkRequest:
+		message = formatHumanWorkAccepted(event)
+	case interfaces.FactoryEventTypeSessionStarted:
+		message = "Factory Session started"
+	case interfaces.FactoryEventTypeSessionCompleted:
+		message = formatHumanSessionCompleted(event)
+	case interfaces.FactoryEventTypeDispatchQueued:
+		message = formatHumanDispatchQueued(event)
+	case interfaces.FactoryEventTypeDispatchRequest:
+		message = formatHumanDispatchStarted(event)
+	case interfaces.FactoryEventTypeDispatchResponse:
+		message = formatHumanDispatchCompleted(event)
+	case interfaces.FactoryEventTypeDispatchInterrupted:
+		message = formatHumanDispatchInterrupted(event)
+	case interfaces.FactoryEventTypeInferenceRequest:
+		message = formatHumanInferenceStarted(event)
+	case interfaces.FactoryEventTypeInferenceResponse:
+		message = formatHumanInferenceCompleted(event)
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged:
+		message = formatHumanOrchestratorPhase(event)
+	case interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
+		message = formatHumanOrchestratorCheckpoint(event)
+	case interfaces.FactoryEventTypeSessionResultUpdated:
+		message = formatHumanResultUpdated(event)
+	default:
+		return nil, false
+	}
+	sequence := event.Context.Sequence
+	if event.Context.SessionSequence != nil {
+		sequence = *event.Context.SessionSequence
+	}
+	return []byte(fmt.Sprintf("[%d] %s", sequence, message)), true
+}
+
+func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
+	payload, ok := decodeFactoryEventPayload[work.WorkRequestEventPayload](event)
+	if !ok || len(payload.Works) == 0 {
+		return withHumanLifecycleSubject("work accepted", firstFactoryEventWorkID(event))
+	}
+	if len(payload.Works) > 1 {
+		return fmt.Sprintf("work accepted: %d items", len(payload.Works))
+	}
+	subject := payload.Works[0].Name
+	if strings.TrimSpace(subject) == "" {
+		subject = payload.Works[0].WorkID
+	}
+	return withHumanLifecycleSubject("work accepted", subject)
+}
+
+func formatHumanSessionCompleted(event interfaces.FactoryEvent) string {
+	payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionCompletedEventPayload](event)
+	if !ok || payload.FinalStatus == "" {
+		return "Factory Session completed"
+	}
+	message := "Factory Session completed: " + string(payload.FinalStatus)
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanDispatchQueued(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchQueuedEventPayload](event)
+	subject := stringPointerValue(payload.Label)
+	if subject == "" {
+		subject = stringPointerValue(event.Context.DispatchID)
+	}
+	return withHumanLifecycleSubject("workstation queued", subject)
+}
+
+func formatHumanDispatchStarted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchRequestEventPayload](event)
+	return withHumanLifecycleSubject("workstation started", payload.TransitionID)
+}
+
+func formatHumanDispatchCompleted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.DispatchResponseEventPayload](event)
+	label := "workstation completed"
+	if payload.Outcome == workerexecution.OutcomeFailed {
+		label = "workstation failed"
+	}
+	message := withHumanLifecycleSubject(label, payload.TransitionID)
+	if payload.Outcome != "" && payload.Outcome != workerexecution.OutcomeAccepted && payload.Outcome != workerexecution.OutcomeFailed {
+		message += " (" + string(payload.Outcome) + ")"
+	}
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanDispatchInterrupted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.DispatchInterruptedEventPayload](event)
+	return withHumanLifecycleFailure(
+		withHumanLifecycleSubject("workstation interrupted", stringPointerValue(event.Context.DispatchID)),
+		payload.Reason,
+	)
+}
+
+func formatHumanInferenceStarted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.InferenceRequestEventPayload](event)
+	return withHumanLifecycleAttempt("inference started", payload.Attempt)
+}
+
+func formatHumanInferenceCompleted(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[workerexecution.InferenceResponseEventPayload](event)
+	label := "inference completed"
+	if payload.Outcome == workerexecution.InferenceOutcomeFailed {
+		label = "inference failed"
+	}
+	message := withHumanLifecycleAttempt(label, payload.Attempt)
+	if payload.FailureDetail != nil {
+		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
+	}
+	return message
+}
+
+func formatHumanOrchestratorPhase(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.OrchestratorPhaseChangedEventPayload](event)
+	message := "workflow phase"
+	if phase := boundedHumanProgressPayload(stringPointerValue(event.Context.PhaseName)); phase != "" {
+		message += " " + phase
+	}
+	if payload.PhaseStatus != "" {
+		message += ": " + string(payload.PhaseStatus)
+	}
+	return message
+}
+
+func formatHumanOrchestratorCheckpoint(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.OrchestratorCheckpointWrittenEventPayload](event)
+	message := withHumanLifecycleSubject("workflow checkpoint written", payload.Label)
+	if payload.ResumabilityStatus != "" {
+		message += " (" + string(payload.ResumabilityStatus) + ")"
+	}
+	return message
+}
+
+func formatHumanResultUpdated(event interfaces.FactoryEvent) string {
+	payload, _ := decodeFactoryEventPayload[interfaces.FactorySessionResultUpdatedEventPayload](event)
+	message := "final output updated"
+	if payload.ResultStatus != "" {
+		message += ": " + string(payload.ResultStatus)
+	}
+	return message
+}
+
+func decodeFactoryEventPayload[T any](event interfaces.FactoryEvent) (T, bool) {
+	var payload T
+	if len(event.Payload) == 0 || json.Unmarshal(event.Payload, &payload) != nil {
+		return payload, false
+	}
+	return payload, true
+}
+
+func firstFactoryEventWorkID(event interfaces.FactoryEvent) string {
+	if event.Context.WorkIDs == nil || len(*event.Context.WorkIDs) == 0 {
+		return ""
+	}
+	return (*event.Context.WorkIDs)[0]
+}
+
+func withHumanLifecycleSubject(label, subject string) string {
+	if subject = boundedHumanProgressPayload(subject); subject != "" {
+		return label + ": " + subject
+	}
+	return label
+}
+
+func withHumanLifecycleAttempt(label string, attempt int) string {
+	if attempt > 0 {
+		return fmt.Sprintf("%s (attempt %d)", label, attempt)
+	}
+	return label
+}
+
+func withHumanLifecycleFailure(message, failure string) string {
+	if failure = boundedHumanProgressPayload(failure); failure != "" {
+		return message + " — " + failure
+	}
+	return message
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
+	if renderer != nil {
+		renderer.stream.PresentFactoryEvents(events)
+	}
+}
+
+func (renderer *humanFactoryEventRenderer) stopProgressRendering() {
+	if renderer != nil {
+		_ = renderer.stream.CloseAndDrain()
+	}
+}
+
+func (renderer *humanFactoryEventRenderer) writeFinalInvocationResult(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if renderer == nil {
+		return fmt.Errorf("Factory Event renderer is nil")
+	}
+	_, err := renderer.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
+		if result.Status == interfaces.InvocationTerminalStatusCompleted {
+			text, textErr := invocationPrimaryResultText(result.PrimaryResult)
+			if textErr != nil {
+				return textErr
+			}
+			return writeHumanPrimaryResult(writer, progressSeen, text)
+		}
+		return writeHumanInvocationOutcome(writer, progressSeen, result)
+	})
+	return err
+}
+
+type jsonFactoryEventRenderer struct {
+	stream factoryEventStream
+}
+
+func newJSONFactoryEventRenderer(
+	output io.Writer,
+	presentation factoryvisualization.ResponsePresentation,
+) *jsonFactoryEventRenderer {
+	if output == nil {
+		panic("Factory Event output is nil")
+	}
+	if presentation == nil {
+		panic("Factory Event presentation service is nil")
+	}
+	return &jsonFactoryEventRenderer{stream: presentation.OpenLosslessFactoryEventStream(
+		output,
+		func(event interfaces.FactoryEvent) ([]byte, bool) {
+			event, ok := factoryEventForPublicPresentation(event)
+			if !ok {
+				return nil, false
+			}
+			encoded, err := json.Marshal(factoryEventJSONRecord{
+				RecordType: factoryEventJSONRecordType,
 				Event:      event,
 			})
 			return encoded, err == nil
@@ -579,33 +789,31 @@ func newJSONResponseStreamRenderer(
 	)}
 }
 
-func (r *jsonResponseStreamRenderer) stopProgressRendering() {
-	if r == nil {
-		return
+func (renderer *jsonFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
+	if renderer != nil {
+		renderer.stream.PresentFactoryEvents(events)
 	}
-	_ = r.stream.CloseAndDrain()
 }
 
-func (r *jsonResponseStreamRenderer) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
-	if r == nil {
-		return
+func (renderer *jsonFactoryEventRenderer) stopProgressRendering() {
+	if renderer != nil {
+		_ = renderer.stream.CloseAndDrain()
 	}
-	r.stream.PresentResponseEvents(events)
 }
 
-func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
+func (renderer *jsonFactoryEventRenderer) writeFinalInvocationResult(
 	result apisurface.FactoryInvocationResult,
 ) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
+	if renderer == nil {
+		return fmt.Errorf("Factory Event renderer is nil")
 	}
-	first, err := r.stream.Finalize(func(writer io.Writer, _ bool) error {
-		encoded, encodeErr := json.Marshal(responseStreamJSONInvocationResultRecord{
-			RecordType: responseStreamJSONRecordInvocationResult,
-			Invocation: apisurface.InvocationResponseFromResult(result),
+	first, err := renderer.stream.Finalize(func(writer io.Writer, _ bool) error {
+		encoded, encodeErr := json.Marshal(factoryEventJSONInvocationResultRecord{
+			RecordType: factoryEventJSONInvocationResultRecordType,
+			Response:   apisurface.InvocationResponseFromResult(result),
 		})
 		if encodeErr != nil {
-			return fmt.Errorf("marshal response-stream JSON record: %w", encodeErr)
+			return fmt.Errorf("marshal Factory Event terminal record: %w", encodeErr)
 		}
 		encoded = append(encoded, '\n')
 		written, writeErr := writer.Write(encoded)
@@ -615,17 +823,17 @@ func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
 		return writeErr
 	})
 	if !first {
-		return fmt.Errorf("response-stream invocation result already written")
+		return fmt.Errorf("Factory Event invocation result already written")
 	}
 	return err
 }
 
-type responseStreamJSONResponseEventRecord struct {
-	RecordType string                               `json:"recordType"`
-	Event      factorysessions.FactoryResponseEvent `json:"event"`
+type factoryEventJSONRecord struct {
+	RecordType string                  `json:"recordType"`
+	Event      interfaces.FactoryEvent `json:"event"`
 }
 
-type responseStreamJSONInvocationResultRecord struct {
+type factoryEventJSONInvocationResultRecord struct {
 	RecordType string                        `json:"recordType"`
-	Invocation factoryapi.InvocationResponse `json:"invocation"`
+	Response   factoryapi.InvocationResponse `json:"response"`
 }

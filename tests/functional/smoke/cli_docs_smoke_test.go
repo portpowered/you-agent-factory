@@ -35,10 +35,10 @@ var docsSmokeTopics = []docsSmokeTopic{
 		"you docs config",
 		"you docs sessions",
 		"### Primary-result mode (default)",
-		"### Human response-stream mode",
+		"### Human Factory Event stream mode",
 		"### NDJSON automation mode",
 		"--output response-stream",
-		"recordType=response_event",
+		"recordType=factory_event",
 		"recordType=invocation_result",
 		"invocationReturn",
 	}, absent: []string{

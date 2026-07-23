@@ -10,13 +10,17 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
 )
 
 const runtimeLoggingSmokeEnvKey = "AGENT_FACTORY_RUNTIME_LOGGING_SMOKE_ENV"
@@ -107,6 +111,83 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 		assertRuntimeRecordsDoNotDuplicateEnvDiagnostics(t, result.records)
 		assertRuntimeStartupRollingPolicy(t, result.records, result.logPath, rollingConfig)
 	})
+
+	t.Run("ExplicitTelemetryPolicyProducesStructuredArtifacts", func(t *testing.T) {
+		assertExplicitRuntimeTelemetryArtifacts(t, rollingConfig)
+	})
+}
+
+func assertExplicitRuntimeTelemetryArtifacts(t *testing.T, rollingConfig logging.RuntimeLogConfig) {
+	t.Helper()
+	artifactPaths, err := platformartifact.NewReserver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewReserver() error = %v", err)
+	}
+	at := time.Date(2026, time.July, 22, 21, 0, 0, 0, time.UTC)
+	logOpener, err := logging.NewRuntimeLogOpener(artifactPaths)
+	if err != nil {
+		t.Fatalf("NewRuntimeLogOpener() error = %v", err)
+	}
+	logSink, err := logOpener.Open(logging.RuntimeLogOpeningRequest{
+		BaseLogger: zap.NewNop(), RuntimeInstanceID: "runtime-compaction", RootDirectory: t.TempDir(),
+		StartTimeUTC: at, CollisionID: "log", Config: rollingConfig,
+	})
+	if err != nil {
+		t.Fatalf("open runtime log: %v", err)
+	}
+	if got := logSink.Config(); got != rollingConfig {
+		t.Fatalf("runtime log config = %#v, want %#v", got, rollingConfig)
+	}
+	metricsConfig := platformmetrics.RuntimeMetricsConfig{MaxSize: 1, MaxBackups: 2, MaxAge: 3, Compress: true}
+	metricsOpener, err := platformmetrics.NewRuntimeMetricsOpener(artifactPaths)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsOpener() error = %v", err)
+	}
+	metricsWriter, err := metricsOpener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
+		SessionID: "session-compaction", RuntimeInstanceID: "runtime-compaction",
+		FolderPath: "factory", FactoryDirectory: "factory", RootDirectory: t.TempDir(),
+		StartTimeUTC: at, CollisionID: "metrics", Config: metricsConfig,
+	})
+	if err != nil {
+		t.Fatalf("open runtime metrics: %v", err)
+	}
+	if got := metricsWriter.Config(); got != metricsConfig {
+		t.Fatalf("runtime metrics config = %#v, want %#v", got, metricsConfig)
+	}
+	if err := metricsWriter.WriteMetric(t.Context(), map[string]any{
+		"metric_name": "session_response_stream.compacted", "dispatch_id": "dispatch-7", "reason": "TRUNCATED",
+	}); err != nil {
+		t.Fatalf("write runtime metric: %v", err)
+	}
+	logSink.Logger().Warn("session response stream compacted internal provider progress",
+		zap.String("dispatch_id", "dispatch-7"), zap.Int("dropped_sequence_count", 2))
+	if err := metricsWriter.Close(); err != nil {
+		t.Fatalf("close runtime metrics: %v", err)
+	}
+	if err := logSink.Close(); err != nil {
+		t.Fatalf("close runtime log: %v", err)
+	}
+	metric := requireRuntimeTelemetryJSONLine(t, metricsWriter.Path())
+	if metric["metric_name"] != "session_response_stream.compacted" || metric["dispatch_id"] != "dispatch-7" || metric["reason"] != "TRUNCATED" {
+		t.Fatalf("runtime compaction metric = %#v, want correlated compaction record", metric)
+	}
+	logRecord := requireRuntimeLogMessage(t, readRuntimeLoggingSmokeRecords(t, logSink.Path()), "session response stream compacted internal provider progress")
+	if logRecord["dispatch_id"] != "dispatch-7" || logRecord["dropped_sequence_count"] != float64(2) {
+		t.Fatalf("runtime compaction log = %#v, want correlated compaction fields", logRecord)
+	}
+}
+
+func requireRuntimeTelemetryJSONLine(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime metric %s: %v", path, err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &record); err != nil {
+		t.Fatalf("runtime metric %s is not one JSON record: %v", path, err)
+	}
+	return record
 }
 
 type runtimeLoggingSmokeResult struct {

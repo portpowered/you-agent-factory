@@ -335,6 +335,10 @@ type RuntimeOptions struct {
 	ChildExecutorMode string
 }
 
+// FactoryEventConsumer observes ordered canonical events for one synchronous
+// execution. It is invocation-local and is never serialized or persisted.
+type FactoryEventConsumer func([]interfaces.FactoryEvent)
+
 // ResumeSessionRequest resumes one interrupted durable session from persisted
 // checkpoint summaries and shared session state.
 type ResumeSessionRequest struct {
@@ -351,6 +355,7 @@ type StartRequest struct {
 	RequestedPolicy map[string]any
 	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
+	EventConsumer   FactoryEventConsumer `json:"-"`
 }
 
 // ResolvedSource is the customer-visible resolved source identity for one session.

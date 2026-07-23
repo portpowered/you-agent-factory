@@ -2,6 +2,7 @@ package baseline_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const goalFailureProcessUnreachableServer = "http://127.0.0.1:1"
@@ -90,19 +93,6 @@ func goalFailureProcessEnvironment(homeDir string) []string {
 	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
 }
 
-func assertGoalFailureProcessQuiet(t *testing.T, result goalFailureProcessResult) {
-	t.Helper()
-	if result.stdout.Len() != 0 || result.stderr.Len() != 0 {
-		t.Fatalf("quiet output = stdout %q stderr %q, want both empty", result.stdout.String(), result.stderr.String())
-	}
-	combined := result.stdout.String() + result.stderr.String()
-	for _, marker := range goalFailureProcessQuietForbiddenMarkers {
-		if strings.Contains(combined, marker) {
-			t.Fatalf("quiet output contains forbidden marker %q: %q", marker, combined)
-		}
-	}
-}
-
 func writeGoalFailureInvalidTopology(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -113,7 +103,7 @@ func writeGoalFailureInvalidTopology(t *testing.T) (string, string) {
 	return dir, factoryPath
 }
 
-func TestFailureBaseline_QuietLeak_InvalidTopologySuppressesTerminalOnOperationalFailure(t *testing.T) {
+func TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure(t *testing.T) {
 	dir, factoryPath := writeGoalFailureInvalidTopology(t)
 	result := executeGoalFailureProcess(t, "", dir, serviceedges.Edges{},
 		"run", "--factory", factoryPath, "--no-record", "--quiet", "invalid-topology-baseline",
@@ -124,7 +114,23 @@ func TestFailureBaseline_QuietLeak_InvalidTopologySuppressesTerminalOnOperationa
 	if !strings.Contains(result.err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", result.err.Error())
 	}
-	assertGoalFailureProcessQuiet(t, result)
+	if result.stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no quiet terminal value", result.stdout.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(result.stderr.Bytes(), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", err, result.stderr.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError ||
+		!strings.Contains(response.Message, "invalid graph references") {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
+	for _, marker := range goalFailureProcessQuietForbiddenMarkers {
+		if strings.Contains(result.stderr.String(), marker) {
+			t.Fatalf("stderr contains forbidden marker %q: %q", marker, result.stderr.String())
+		}
+	}
 }
 
 func TestFailureBaseline_NoServer_ModelsListCommandReportsUnreachableEndpoint(t *testing.T) {

@@ -169,39 +169,75 @@ stdout. Redirect it directly:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-### Human response-stream mode
+Add `--quiet` when the same terminal-only contract must also suppress operator
+diagnostics. Quiet stdout is the raw primary result: it has no lifecycle text,
+event records, JSON wrapper, or provider-session chunks. Live and `--replay`
+invocations use the same quiet presentation rule.
 
-Select `--output response-stream` to render live progress for people on the
-terminal. The stream ends with the same primary result as primary-result mode:
+### Single-JSON automation mode
+
+Add global `--json` without `--output response-stream` to write exactly one
+`InvocationResponse` JSON object. Lifecycle records and provider-session chunks
+are not included. Live and `--replay` invocations use the same single-response
+presentation rule:
+
+```bash
+you --json run --factory ./factory.json "Summarize the changelog"
+```
+
+### Human Factory Event stream mode
+
+Select `--output response-stream` to render the ordered canonical Factory Event
+lifecycle for people on the terminal. The same consumer is used for live and
+`--replay` invocations, and the stream ends with the same primary result as
+primary-result mode:
 
 ```bash
 you run --named team-review --output response-stream "Review the release notes"
 ```
 
+Human lifecycle lines summarize Work acceptance, Factory Session start and
+completion, workstation queue/start/outcome, inference start/outcome,
+JavaScript phase and checkpoint changes, and final-output availability. They
+retain canonical event order without printing provider tokens, deltas,
+tool-call chunks, or provider-session chunks. Redirecting stdout preserves this
+human presentation; terminal detection does not silently select another format.
+
 ### NDJSON automation mode
 
 Add global `--json` with `--output response-stream` for newline-delimited
 automation output. Each non-empty stdout line is one complete JSON record.
-Streamed events use `recordType=response_event` with a nested public
-`FactoryResponseEvent` that matches the session API contract. An available
+Streamed events use `recordType=factory_event` with a nested canonical
+`FactoryEvent`, including its unchanged session sequence context. An available
 invocation response ends with exactly one terminal `recordType=invocation_result`
-record. That terminal record is always the final line, including when stdout is
-slow. NDJSON mode does not emit retired private progress, compaction, gap, or
-`primary_result` record shapes from earlier releases.
+record whose `response` field is the `InvocationResponse`. That terminal record
+is always the final line, including when stdout is slow. Provider response,
+diagnostic, Provider Session, delta, and tool-call fields are omitted from event
+payloads at this presentation boundary. NDJSON mode does not emit retired
+private progress, compaction, gap, or `primary_result` record shapes from
+earlier releases. The CLI never emits a raw `FactoryResponseEvent` or a
+`recordType=response_event` record.
 
 ```bash
 you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
 ```
 
+### Invocation failures
+
+Every one-shot invocation failure writes exactly one `ErrorResponse` JSON
+object to stderr and exits unsuccessfully, in every output mode. Failures that
+occur before a terminal response leave stdout empty. When the Factory Session
+returns a failed `InvocationResponse`, single-JSON and NDJSON modes still write
+that terminal response once to stdout; human stream mode writes its terminal
+outcome, while quiet mode writes no terminal value. Provider response chunks
+are never used as error output.
+
 ### Mode availability
 
-`--output response-stream` is not available for `--work`, continuous, replay,
-or other non-invocation run shapes. For primary-result automation without
-response events, global `--json` preserves the invocation response contract:
-
-```bash
-you --json run --factory ./factory.json "Summarize the changelog"
-```
+`--output response-stream` is available for live and replayed one-shot Factory
+invocations. It is not available for `--work`, continuous, or other
+non-invocation run shapes. Use single-JSON mode when automation needs the
+terminal invocation response without Factory Events.
 
 Factory authoring and validation live under `you docs config`. JavaScript
 orchestrator authoring uses `you docs javascript-workflows`; execution uses the
