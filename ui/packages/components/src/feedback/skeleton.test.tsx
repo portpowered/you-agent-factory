@@ -8,7 +8,9 @@ import { Skeleton } from "./skeleton";
 
 describe("Skeleton", () => {
   it("renders a non-interactive loading placeholder with package tokens", () => {
-    renderPackageComponent(<Skeleton className="h-4 w-24" data-testid="skeleton" />);
+    renderPackageComponent(
+      <Skeleton className="h-4 w-24" data-testid="skeleton" />,
+    );
 
     const skeleton = screen.getByTestId("skeleton");
     expect(skeleton).toHaveAttribute("aria-hidden", "true");

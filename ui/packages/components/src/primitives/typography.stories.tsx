@@ -109,7 +109,9 @@ export const MobileTypographyRoles: Story = {
   render: () => (
     <div className="grid w-full min-w-0 max-w-xs gap-3">
       <Heading level="section">Section heading</Heading>
-      <Text variant="dense">Dense metadata remains readable on narrow screens</Text>
+      <Text variant="dense">
+        Dense metadata remains readable on narrow screens
+      </Text>
       <div className="min-w-0 w-full">
         <Text truncate>{LONG_LABEL}</Text>
       </div>

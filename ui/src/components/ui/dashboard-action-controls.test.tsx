@@ -1,8 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
-import { DashboardActionButton } from "./dashboard-action-button";
 import { ActionRow } from "@you-agent-factory/components";
+import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 describe("DashboardActionButton", () => {
@@ -145,9 +145,7 @@ describe("ActionRow", () => {
       />,
     );
 
-    const sections = container.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    const sections = container.querySelectorAll("[data-action-row-section]");
     expect(sections).toHaveLength(2);
     expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "statuses",
@@ -172,9 +170,7 @@ describe("ActionRow", () => {
       />,
     );
 
-    let sections = container.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    let sections = container.querySelectorAll("[data-action-row-section]");
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "actions",
@@ -189,9 +185,7 @@ describe("ActionRow", () => {
       />,
     );
 
-    sections = container.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    sections = container.querySelectorAll("[data-action-row-section]");
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "statuses",

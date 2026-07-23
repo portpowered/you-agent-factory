@@ -1,4 +1,4 @@
-import { Text, SurfacePanel } from "../../../components/ui";
+import { SurfacePanel, Text } from "../../../components/ui";
 import {
   AUTHORED_BODY_TEXT_CLASS,
   AuthoredBodyText,

@@ -4,10 +4,10 @@ export const COMPONENTS_CATEGORY = "factory-emulator" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
-export { FactoryEmulatorControls } from "./factory-emulator-controls";
 export type {
   FactoryEmulatorAction,
   FactoryEmulatorControlsProps,
   FactoryEmulatorRuntimeStatus,
   FactoryEmulatorSpeed,
 } from "./factory-emulator-controls";
+export { FactoryEmulatorControls } from "./factory-emulator-controls";

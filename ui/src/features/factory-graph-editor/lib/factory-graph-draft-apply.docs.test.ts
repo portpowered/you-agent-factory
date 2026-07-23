@@ -22,11 +22,14 @@ const baseFactory: CanonicalFactoryDefinition = {
 
 describe("buildDraftAppliedFactoryDefinition docs", () => {
   it("adds bundled docs without disturbing unrelated bundled files", () => {
-    const draft = applyFactoryGraphAddEntityDraft(createEmptyFactoryGraphDraft(), {
-      fileName: "overview.md",
-      inlineContent: "# Overview\n",
-      kind: "doc",
-    });
+    const draft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        fileName: "overview.md",
+        inlineContent: "# Overview\n",
+        kind: "doc",
+      },
+    );
 
     expect(
       buildDraftAppliedFactoryDefinition(baseFactory, draft).supportingFiles

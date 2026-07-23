@@ -1,6 +1,6 @@
 import type { FactoryPreviewDiagnostic } from "../../../api/factory-preview";
-import { workflowPreviewPanelMessages } from "../messages/panel";
 import { useFactoryPreview } from "../hooks/useWorkflowPreview";
+import { workflowPreviewPanelMessages } from "../messages/panel";
 
 export interface WorkflowPreviewPanelProps {
   projectRoot: string;

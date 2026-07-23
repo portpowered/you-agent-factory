@@ -10,7 +10,9 @@ import {
 
 describe("backend runtime cache scope", () => {
   it("normalizes blank backend scope values to unsafe cache reuse", () => {
-    expect(normalizeBackendRuntimeCacheScope("  local-abc  ")).toBe("local-abc");
+    expect(normalizeBackendRuntimeCacheScope("  local-abc  ")).toBe(
+      "local-abc",
+    );
     expect(normalizeBackendRuntimeCacheScope("")).toBeNull();
     expect(normalizeBackendRuntimeCacheScope("   ")).toBeNull();
     expect(normalizeBackendRuntimeCacheScope(undefined)).toBeNull();

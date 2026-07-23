@@ -78,7 +78,10 @@ export function readFactoryGraphEditorPreferencesForScope(
 export function writeFactoryGraphEditorPreferencesForScope(
   factoryViewScopeKey: string,
   preferences: FactoryGraphEditorViewPreferences,
-  storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = window.localStorage,
+  storage: Pick<
+    Storage,
+    "getItem" | "setItem" | "removeItem"
+  > = window.localStorage,
 ): void {
   try {
     const storedRecord = readStoredFactoryGraphEditorPreferences(storage);
@@ -114,7 +117,10 @@ export function writeFactoryGraphEditorPreferencesForScope(
 
 export function clearFactoryGraphEditorPreferencesForScope(
   factoryViewScopeKey: string,
-  storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = window.localStorage,
+  storage: Pick<
+    Storage,
+    "getItem" | "setItem" | "removeItem"
+  > = window.localStorage,
 ): void {
   writeFactoryGraphEditorPreferencesForScope(
     factoryViewScopeKey,
@@ -139,7 +145,9 @@ function normalizeFactoryGraphEditorViewPreferences(
   };
 }
 
-function normalizeHiddenNodeClasses(value: unknown): ReadonlySet<FactoryGraphNodeKind> {
+function normalizeHiddenNodeClasses(
+  value: unknown,
+): ReadonlySet<FactoryGraphNodeKind> {
   if (!Array.isArray(value)) {
     return new Set();
   }
@@ -149,7 +157,8 @@ function normalizeHiddenNodeClasses(value: unknown): ReadonlySet<FactoryGraphNod
   );
   const hiddenNodeClasses = value.filter(
     (kind): kind is FactoryGraphNodeKind =>
-      typeof kind === "string" && allowedKinds.has(kind as FactoryGraphNodeKind),
+      typeof kind === "string" &&
+      allowedKinds.has(kind as FactoryGraphNodeKind),
   );
 
   return new Set(hiddenNodeClasses);

@@ -30,11 +30,14 @@ describe("currentActivityGraphNodeHoverClassName", () => {
   it.each([
     ["activeFlow", { activeFlow: true }],
     ["muted", { muted: true }],
-  ] as const)("keeps hover emphasis when graph context is %s", (_label, state) => {
-    expect(currentActivityGraphNodeHoverClassName(state)).toBe(
-      CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS,
-    );
-  });
+  ] as const)(
+    "keeps hover emphasis when graph context is %s",
+    (_label, state) => {
+      expect(currentActivityGraphNodeHoverClassName(state)).toBe(
+        CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS,
+      );
+    },
+  );
 
   it.each([
     ["selected", { selected: true }],

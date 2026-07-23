@@ -20,8 +20,8 @@ import {
   editableGraphFactoryDefinition,
   editableGraphFactoryReplayLines,
   exportFactoryDefinition,
-  exportFactoryReplayLines,
   exportFactoryPngFromDashboard,
+  exportFactoryReplayLines,
   installCapturedDownloadHook,
   openImportDialogForDroppedPng,
   saveGraphEditorTopology,
@@ -143,9 +143,11 @@ describe.sequential("factory name preservation browser integration", () => {
           .click();
         const importOutcome = await Promise.race([
           (async () => {
-            await expect.poll(async () => sessionFactoryPutRequests.length, {
-              timeout: uiInteractionTimeoutMs,
-            }).toBe(1);
+            await expect
+              .poll(async () => sessionFactoryPutRequests.length, {
+                timeout: uiInteractionTimeoutMs,
+              })
+              .toBe(1);
             return "request";
           })(),
           importDialog
@@ -263,9 +265,11 @@ describe.sequential("factory name preservation browser integration", () => {
           .click();
         const importOutcome = await Promise.race([
           (async () => {
-            await expect.poll(async () => sessionFactoryPutRequests.length, {
-              timeout: uiInteractionTimeoutMs,
-            }).toBe(1);
+            await expect
+              .poll(async () => sessionFactoryPutRequests.length, {
+                timeout: uiInteractionTimeoutMs,
+              })
+              .toBe(1);
             return "request";
           })(),
           importDialog

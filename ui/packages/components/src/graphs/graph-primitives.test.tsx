@@ -1,16 +1,15 @@
 // @vitest-environment happy-dom
 
 import { Position, ReactFlowProvider } from "@xyflow/react";
-import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
-
 import {
   GraphEdge,
   GraphNodeButton,
+  type GraphNodeHandle,
   GraphNodeShell,
   GraphViewportSurface,
-  type GraphNodeHandle,
 } from "@you-agent-factory/components/graphs";
+import type { ReactElement } from "react";
+import { describe, expect, it } from "vitest";
 import { renderPackageComponent, screen } from "../testing/render";
 
 const genericHandles: GraphNodeHandle[] = [
@@ -39,7 +38,9 @@ describe("@you-agent-factory/components/graphs primitives", () => {
     renderWithReactFlow(
       <GraphViewportSurface aria-label="Graph viewport" className="h-64 w-96">
         <GraphNodeShell handles={genericHandles} nodeKind="example">
-          <GraphNodeButton aria-label="Example node">Example node</GraphNodeButton>
+          <GraphNodeButton aria-label="Example node">
+            Example node
+          </GraphNodeButton>
         </GraphNodeShell>
         <svg aria-hidden="true" className="absolute inset-0">
           <GraphEdge
@@ -59,15 +60,20 @@ describe("@you-agent-factory/components/graphs primitives", () => {
       </GraphViewportSurface>,
     );
 
-    expect(screen.getByRole("region", { name: "Graph viewport" })).toHaveAttribute(
-      "data-graph-viewport-surface",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Example node" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Graph viewport" }),
+    ).toHaveAttribute("data-graph-viewport-surface", "true");
+    expect(
+      screen.getByRole("button", { name: "Example node" }),
+    ).toBeInTheDocument();
     expect(
       document.querySelector('[data-node-handle-badge="input-target"]'),
     ).toBeInTheDocument();
-    expect(document.querySelector('[data-edge-id="edge-1"]')).toBeInTheDocument();
-    expect(document.querySelector('[data-graph-node-kind="example"]')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-edge-id="edge-1"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-graph-node-kind="example"]'),
+    ).toBeInTheDocument();
   });
 });

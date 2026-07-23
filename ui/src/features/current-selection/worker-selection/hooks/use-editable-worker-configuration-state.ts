@@ -33,11 +33,7 @@ export function useEditableWorkerConfigurationState(
   const isWorkerSelection = selection?.kind === "worker" && workerName != null;
   const messages = getWorkerDetailMessages(locale);
   const { selectedEditableValues, sessionState, setSessionState } =
-    useEditableWorkerSession(
-      editableDefinition,
-      workerName,
-      isWorkerSelection,
-    );
+    useEditableWorkerSession(editableDefinition, workerName, isWorkerSelection);
 
   if (!isWorkerSelection || !workerName) {
     return undefined;
@@ -103,9 +99,7 @@ function buildReadyEditableWorkerConfigurationState({
   selectedEditableValues,
   workerName,
 }: {
-  editableDefinition: NonNullable<
-    CurrentFactoryDocument
-  >;
+  editableDefinition: NonNullable<CurrentFactoryDocument>;
   sessionState: EditableWorkerSessionState;
   setSessionState: (
     updater: (

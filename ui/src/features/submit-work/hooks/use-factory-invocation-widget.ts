@@ -28,6 +28,7 @@ export interface FactoryInvocationStatusState {
   response?: SessionFactoryInvocationResponse;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the hook keeps invocation state, submission, and feedback wiring in one public controller boundary.
 export function useFactoryInvocationWidget(
   sessionID: string | null | undefined,
   messages: SubmitWorkMessages,
@@ -37,7 +38,10 @@ export function useFactoryInvocationWidget(
     (state) => state.incrementRefreshToken,
   );
   const signature = currentFactory.data?.invocationSignature;
-  const projection = projectInvocationForm(signature, currentFactory.data?.examples);
+  const projection = projectInvocationForm(
+    signature,
+    currentFactory.data?.examples,
+  );
   const signatureKey = useMemo(
     () => (signature ? JSON.stringify(signature) : null),
     [signature],
@@ -122,7 +126,8 @@ export function useFactoryInvocationWidget(
         }
         setStatus({
           kind:
-            invocationFieldError || error.code.startsWith("INVOCATION_ARGUMENT_")
+            invocationFieldError ||
+            error.code.startsWith("INVOCATION_ARGUMENT_")
               ? "validation-error"
               : "error",
           message: error.message,
@@ -153,7 +158,12 @@ export function useFactoryInvocationWidget(
       );
     },
     setFieldValue: (name: string, value: string) => {
-      setInvocationArgumentValues(name, [value], setFieldValues, setFieldErrors);
+      setInvocationArgumentValues(
+        name,
+        [value],
+        setFieldValues,
+        setFieldErrors,
+      );
     },
     setRepeatedFieldValue: (name: string, values: string[]) => {
       setInvocationArgumentValues(name, values, setFieldValues, setFieldErrors);

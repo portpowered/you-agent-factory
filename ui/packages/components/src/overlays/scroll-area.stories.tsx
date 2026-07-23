@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-
-import { ScrollArea, ScrollBar } from "./scroll-area";
-import { SCROLL_AREA_HORIZONTAL_ANCHOR, SCROLL_AREA_MOBILE_ANCHOR } from "./overlay-story-copy";
+import {
+  SCROLL_AREA_HORIZONTAL_ANCHOR,
+  SCROLL_AREA_MOBILE_ANCHOR,
+} from "./overlay-story-copy";
 import { overlayStoryDocs } from "./overlay-story-docs";
 import { verifyScrollAreaKeyboardFocus } from "./overlay-storybook-play";
+import { ScrollArea, ScrollBar } from "./scroll-area";
 
 const meta = {
   title: "Overlays/ScrollArea",

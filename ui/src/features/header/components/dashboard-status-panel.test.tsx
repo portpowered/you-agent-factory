@@ -74,7 +74,9 @@ describe("DashboardStatusPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Retry clean replay" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Retry clean replay" }),
+    ).toBeTruthy();
     expect(screen.getByText("Checkpoint reset required.")).toBeTruthy();
   });
 });

@@ -34,11 +34,8 @@ export function useCurrentActivityGraphFlowProjection({
   snapshot: DashboardSnapshot;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }) {
-  const {
-    computedLayout,
-    displayFactoryDefinition,
-    resolveGraphEdges,
-  } = projectionState;
+  const { computedLayout, displayFactoryDefinition, resolveGraphEdges } =
+    projectionState;
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
   );

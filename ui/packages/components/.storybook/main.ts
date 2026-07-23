@@ -1,8 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import { mergeConfig } from "vite";
 
@@ -13,9 +13,7 @@ const storybookDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(storybookDir, "..");
 const componentsPackageRoot = path.join(packageRoot, "src");
 
-function createComponentsPackageResolvePlugin(
-  packageSrcRoot: string,
-): Plugin {
+function createComponentsPackageResolvePlugin(packageSrcRoot: string): Plugin {
   const categoryAliases = new Map(
     COMPONENT_CATEGORY_EXPORT_PATHS.map((categoryPath) => [
       `@you-agent-factory/components/${categoryPath}`,

@@ -93,9 +93,7 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(workstationRequest).queryByText("2026-04-08T12:00:00Z"),
     ).toBeNull();
-    expect(
-      within(workstationRequest).getByText("timeout"),
-    ).toBeTruthy();
+    expect(within(workstationRequest).getByText("timeout")).toBeTruthy();
     expect(
       within(workstationRequest).getByText("Provider timed out."),
     ).toBeTruthy();

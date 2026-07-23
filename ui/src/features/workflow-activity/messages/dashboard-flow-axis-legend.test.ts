@@ -45,15 +45,18 @@ describe("getDashboardFlowAxisLegendMessages", () => {
       "グラフの凡例 を閉じる",
       "キュー の凡例アイコン",
     ],
-  ] as const)("resolves %s helper labels through the locale catalog", (locale, title, expectedExpandLabel, expectedCollapseLabel, expectedIconLabel) => {
-    const messages = getDashboardFlowAxisLegendMessages(locale);
+  ] as const)(
+    "resolves %s helper labels through the locale catalog",
+    (locale, title, expectedExpandLabel, expectedCollapseLabel, expectedIconLabel) => {
+      const messages = getDashboardFlowAxisLegendMessages(locale);
 
-    expect(messages.expandToggleLabel(title)).toBe(expectedExpandLabel);
-    expect(messages.collapseToggleLabel(title)).toBe(expectedCollapseLabel);
-    expect(messages.iconLabel(messages.iconLabels.queue)).toBe(
-      expectedIconLabel,
-    );
-  });
+      expect(messages.expandToggleLabel(title)).toBe(expectedExpandLabel);
+      expect(messages.collapseToggleLabel(title)).toBe(expectedCollapseLabel);
+      expect(messages.iconLabel(messages.iconLabels.queue)).toBe(
+        expectedIconLabel,
+      );
+    },
+  );
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getDashboardFlowAxisLegendMessages("en");

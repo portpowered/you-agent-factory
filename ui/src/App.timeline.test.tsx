@@ -13,9 +13,7 @@ import {
 
 function getStateNodeByLabel(label: string): HTMLElement {
   const displayLabel = label.split(":").at(-1) ?? label;
-  const button = screen.getByLabelText(
-    `Select ${displayLabel} work-state`,
-  );
+  const button = screen.getByLabelText(`Select ${displayLabel} work-state`);
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
@@ -30,7 +28,9 @@ function getStateNodeByLabel(label: string): HTMLElement {
 function expectStateNodeWorkCount(label: string, count: number): void {
   const stateNode = getStateNodeByLabel(label);
 
-  expect(within(stateNode).getByText(new RegExp(`${count} Work$`))).toBeTruthy();
+  expect(
+    within(stateNode).getByText(new RegExp(`${count} Work$`)),
+  ).toBeTruthy();
 }
 
 describe("App timeline reconstruction flows", () => {

@@ -164,7 +164,6 @@ describe("dashboard widget header seam", () => {
       ),
     ).toBeNull();
   });
-
 });
 
 describe("submit work dashboard widget header seam", () => {

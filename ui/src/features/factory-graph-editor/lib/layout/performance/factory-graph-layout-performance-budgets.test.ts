@@ -15,11 +15,12 @@ describe("factory graph layout performance budgets", () => {
       waypointEditMs: 5,
       waypointHistoryMs: 5,
     });
-    expect(FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred.initialProjectionMs).toBe(
-      35_000,
-    );
     expect(
-      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand.initialProjectionMs,
+      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred.initialProjectionMs,
+    ).toBe(35_000);
+    expect(
+      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand
+        .initialProjectionMs,
     ).toBe(90_000);
     expect(
       FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred

@@ -2,9 +2,9 @@ import { type ReactNode, useId } from "react";
 
 import {
   Checkbox,
-  Label,
   DashboardStatusPill,
   Input,
+  Label,
 } from "../../../../components/ui";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";

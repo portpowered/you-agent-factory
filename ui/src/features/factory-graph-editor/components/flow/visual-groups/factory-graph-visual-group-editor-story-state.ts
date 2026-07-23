@@ -44,7 +44,10 @@ function writePersistedFactoryToStorage(factory: SessionFactoryDocument): void {
     return;
   }
 
-  localStorage.setItem(VISUAL_GROUP_EDITOR_STORAGE_KEY, JSON.stringify(factory));
+  localStorage.setItem(
+    VISUAL_GROUP_EDITOR_STORAGE_KEY,
+    JSON.stringify(factory),
+  );
 }
 
 function clearPersistedFactoryStorage(): void {
@@ -92,7 +95,9 @@ export function buildVisualGroupEditorFetchMocks() {
       method: "PUT",
       path: "/factory-sessions/~default/factory",
       response: (_input: RequestInfo | URL, init?: RequestInit) => {
-        const savedFactory = parseSessionFactoryPutFactory(String(init?.body ?? "{}"));
+        const savedFactory = parseSessionFactoryPutFactory(
+          String(init?.body ?? "{}"),
+        );
         const nextDocument: SessionFactoryDocument = {
           ...savedFactory,
           version: incrementSessionFactoryVersion(
@@ -117,5 +122,6 @@ declare global {
 
 if (typeof window !== "undefined") {
   window.__resetVisualGroupEditorStory = resetVisualGroupEditorStoryState;
-  window.__getVisualGroupEditorPersistedFactory = getVisualGroupEditorPersistedFactory;
+  window.__getVisualGroupEditorPersistedFactory =
+    getVisualGroupEditorPersistedFactory;
 }

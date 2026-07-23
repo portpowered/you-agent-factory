@@ -1,3 +1,4 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { type ReactNode, useId } from "react";
 import type {
   DashboardInferenceAttempt,
@@ -5,9 +6,6 @@ import type {
   DashboardScriptResponse,
 } from "../../../../../api/dashboard/types";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import {
@@ -107,7 +105,9 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <WidgetDetailCopy>{messages.noScriptAttemptRecordedYet}</WidgetDetailCopy>
+          <WidgetDetailCopy>
+            {messages.noScriptAttemptRecordedYet}
+          </WidgetDetailCopy>
         )}
       </div>
     </CollapsibleDispatchAttemptSection>

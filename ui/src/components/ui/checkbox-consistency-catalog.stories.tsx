@@ -1,5 +1,5 @@
-import { expect, userEvent, within } from "storybook/test";
 import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
 import { expectStyledCheckboxInStory } from "../../testing/checkbox-story-helpers";
@@ -10,7 +10,10 @@ function CheckboxStateShowcaseStory() {
 
   return (
     <div className="flex flex-col gap-6 p-4">
-      <label className="inline-flex items-center gap-2" htmlFor="optional-setting">
+      <label
+        className="inline-flex items-center gap-2"
+        htmlFor="optional-setting"
+      >
         <Checkbox
           checked={optionalSetting}
           id="optional-setting"
@@ -18,7 +21,11 @@ function CheckboxStateShowcaseStory() {
         />
         Optional setting
       </label>
-      <Checkbox aria-label="Disabled setting" disabled onChange={() => undefined} />
+      <Checkbox
+        aria-label="Disabled setting"
+        disabled
+        onChange={() => undefined}
+      />
       <Checkbox
         aria-invalid="true"
         aria-label="Invalid setting"

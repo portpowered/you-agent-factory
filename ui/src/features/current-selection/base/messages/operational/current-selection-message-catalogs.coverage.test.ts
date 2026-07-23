@@ -381,78 +381,85 @@ const invokeWorkstationDetail = (
 };
 
 describe("current-selection message catalogs", () => {
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s current-selection detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getCurrentSelectionDetailMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeCurrentSelectionDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s current-selection detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getCurrentSelectionDetailMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeCurrentSelectionDetail,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s dispatch-history value", (locale) => {
-    assertCatalogValuesResolve(
-      getCurrentSelectionDispatchHistoryMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeDispatchHistory,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s dispatch-history value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getCurrentSelectionDispatchHistoryMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeDispatchHistory,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s workstation-detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getWorkstationDetailMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeWorkstationDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s workstation-detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getWorkstationDetailMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeWorkstationDetail,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s worker-detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getWorkerDetailMessages(locale) as unknown as Record<string, unknown>,
-      invokeWorkerDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s worker-detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getWorkerDetailMessages(locale) as unknown as Record<string, unknown>,
+        invokeWorkerDetail,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s resource-detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getResourceDetailMessages(locale) as unknown as Record<string, unknown>,
-      invokeResourceDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s resource-detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getResourceDetailMessages(locale) as unknown as Record<string, unknown>,
+        invokeResourceDetail,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s editable-configuration-controls value", (locale) => {
-    assertCatalogValuesResolve(
-      getEditableConfigurationControlsMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeEditableConfigurationControls,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s editable-configuration-controls value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getEditableConfigurationControlsMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeEditableConfigurationControls,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s work-type-detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getWorkTypeDetailMessages(locale) as unknown as Record<string, unknown>,
-      invokeWorkTypeDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s work-type-detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getWorkTypeDetailMessages(locale) as unknown as Record<string, unknown>,
+        invokeWorkTypeDetail,
+      );
+    },
+  );
 });

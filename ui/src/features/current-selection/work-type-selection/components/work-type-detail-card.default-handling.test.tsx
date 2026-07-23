@@ -200,9 +200,11 @@ describe("WorkTypeDetailCard default handling", () => {
       screen.getByRole("article", { name: "Current selection" });
 
     expect(
-      (await within(panel()).findByRole("checkbox", {
-        name: "Mark as default work type",
-      })).checked,
+      (
+        await within(panel()).findByRole("checkbox", {
+          name: "Mark as default work type",
+        })
+      ).checked,
     ).toBe(true);
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -223,9 +225,11 @@ describe("WorkTypeDetailCard default handling", () => {
     view.rerender(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     expect(
-      (await within(panel()).findByRole("checkbox", {
-        name: "Mark as default work type",
-      })).checked,
+      (
+        await within(panel()).findByRole("checkbox", {
+          name: "Mark as default work type",
+        })
+      ).checked,
     ).toBe(false);
     expect(within(panel()).queryByRole("status")).toBeNull();
   });

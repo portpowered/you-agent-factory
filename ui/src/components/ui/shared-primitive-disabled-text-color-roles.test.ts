@@ -7,9 +7,7 @@ import { inputVariants } from "./input";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
 
-const IN_SCOPE_FILES = [
-  "expandable-panel-trigger.tsx",
-] as const;
+const IN_SCOPE_FILES = ["expandable-panel-trigger.tsx"] as const;
 
 const FORBIDDEN_TRANSITIONAL_DISABLED_TEXT = /\btext-af-text-disabled\b/;
 
@@ -22,11 +20,12 @@ function expectNoTransitionalDisabledText(source: string): void {
 }
 
 describe("shared primitive disabled text color roles", () => {
-  it.each(
-    IN_SCOPE_FILES,
-  )("does not use transitional text-af-text-disabled in %s", (fileName) => {
-    expectNoTransitionalDisabledText(readComponentSource(fileName));
-  });
+  it.each(IN_SCOPE_FILES)(
+    "does not use transitional text-af-text-disabled in %s",
+    (fileName) => {
+      expectNoTransitionalDisabledText(readComponentSource(fileName));
+    },
+  );
 
   it("maps package-backed input placeholder and disabled copy to on-surface-disabled role utilities", () => {
     const className = inputVariants();

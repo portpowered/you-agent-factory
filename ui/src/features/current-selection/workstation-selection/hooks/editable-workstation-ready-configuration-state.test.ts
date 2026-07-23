@@ -365,7 +365,12 @@ describe("buildReadyEditableWorkstationConfigurationState model invoke handlers"
         slot: "audio",
         configText: "",
         defaultContentText: "",
-        selector: { label: "clip", role: "", slot: "input.audio", type: "AUDIO" },
+        selector: {
+          label: "clip",
+          role: "",
+          slot: "input.audio",
+          type: "AUDIO",
+        },
       },
     ]);
     readyState.onNameChange("Speak Story Invoke");

@@ -287,9 +287,7 @@ describe("ResourceDetailCard", () => {
         .getAttribute("aria-expanded"),
     ).toBe("true");
     expect(
-      screen.getByText(
-        "Loading editable resource configuration.",
-      ),
+      screen.getByText("Loading editable resource configuration."),
     ).toBeTruthy();
   });
 

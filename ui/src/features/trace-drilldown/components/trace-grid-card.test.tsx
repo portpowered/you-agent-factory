@@ -7,13 +7,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { vi } from "vitest";
-
 import {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SECTION_HEADING_CLASS,
 } from "@you-agent-factory/components/recipes";
+import type { ReactNode } from "react";
+import { vi } from "vitest";
 
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
   const actual =

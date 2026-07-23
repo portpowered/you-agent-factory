@@ -105,9 +105,7 @@ function buildReadyEditableWorkTypeConfigurationState({
   selectedEditableValues,
   workTypeName,
 }: {
-  editableDefinition: NonNullable<
-    CurrentFactoryDocument
-  >;
+  editableDefinition: NonNullable<CurrentFactoryDocument>;
   messages: ReturnType<typeof getWorkTypeDetailMessages>;
   sessionState: EditableWorkTypeSessionState;
   setSessionState: (

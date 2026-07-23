@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { expectStyledCheckbox } from "../../../../testing/checkbox-test-helpers";
 import { createEmptyEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
-import { expectStyledCheckbox } from "../../../../testing/checkbox-test-helpers";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import { FactoryGraphEditorAddWorkstationFields } from "./factory-graph-editor-add-workstation-fields";
 

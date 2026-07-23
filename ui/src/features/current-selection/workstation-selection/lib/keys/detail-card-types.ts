@@ -14,12 +14,12 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../../api/dashboard/types";
 import type { components } from "../../../../../api/generated/openapi";
+import type { EditableModelInvokeBindingDraft } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationBehavior } from "../../../../current-factory-definition/lib/workstation-behavior";
 import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
 } from "../../../../current-factory-definition/lib/workstation-editable-values";
-import type { EditableModelInvokeBindingDraft } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import type { DetailCardSaveState } from "../../../base/hooks/detail-card-save-types";
 import type { ApiRunnerID } from "../../messages/runner-openapi-enums";
@@ -156,7 +156,9 @@ export type EditableWorkstationConfigurationState =
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
       onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => void;
       onRunnerChange: (value: ApiRunnerID | null) => void;
-      onWorkstationTypeChange: (value: EditableWorkstationValues["workstationType"]) => void;
+      onWorkstationTypeChange: (
+        value: EditableWorkstationValues["workstationType"],
+      ) => void;
       onWorkerChange: (value: string) => void;
       operationOptionsState: EditableWorkstationOperationOptionsState;
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;

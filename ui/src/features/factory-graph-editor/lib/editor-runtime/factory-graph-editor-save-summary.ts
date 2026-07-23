@@ -53,7 +53,8 @@ export function buildFactoryGraphSaveSummary(
       hasLayoutChanges: summaryInput.hasLayoutChanges ?? false,
       hasPreferenceChanges: summaryInput.hasPreferenceChanges ?? false,
       hasTopologyChanges:
-        summaryInput.hasTopologyChanges ?? hasTopologyDraftChanges(summaryInput.draft),
+        summaryInput.hasTopologyChanges ??
+        hasTopologyDraftChanges(summaryInput.draft),
     });
   const kind = resolveFactoryGraphSaveSummaryKind(dirtyState);
   const messages = getFactoryGraphEditorMessages(locale);

@@ -1,17 +1,16 @@
 // @vitest-environment node
 
 import path from "node:path";
-import { createServer, type ViteDevServer } from "vite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
 import {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   COMPONENTS_PACKAGE_NAME,
 } from "@you-agent-factory/components";
-import stylesCss from "@you-agent-factory/components/styles.css?inline";
 import * as primitives from "@you-agent-factory/components/primitives";
-import { dashboardComponentsPackageName } from "./components-package-resolution";
+import stylesCss from "@you-agent-factory/components/styles.css?inline";
+import { createServer, type ViteDevServer } from "vite";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import viteConfig from "../../vite.config";
+import { dashboardComponentsPackageName } from "./components-package-resolution";
 
 const importerPath = path.join(
   import.meta.dirname,
@@ -30,7 +29,9 @@ describe("dashboard @you-agent-factory/components package resolution", () => {
   });
 
   it("imports the package root through the configured package path", () => {
-    expect(dashboardComponentsPackageName).toBe("@you-agent-factory/components");
+    expect(dashboardComponentsPackageName).toBe(
+      "@you-agent-factory/components",
+    );
     expect(COMPONENTS_PACKAGE_NAME).toBe("@you-agent-factory/components");
   });
 

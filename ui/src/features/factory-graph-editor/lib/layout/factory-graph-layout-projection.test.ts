@@ -10,7 +10,9 @@ import { projectFactoryGraphWithCanonicalLayout } from "./factory-graph-layout-p
 
 describe("factory graph canonical layout projection", () => {
   it("maps canonical topology plus layout to expected React Flow node positions", async () => {
-    const topology = buildFactoryGraphTopologyFromDefinition(baseFactoryDefinition);
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
     const canonicalLayout = moveFactoryLayoutNode(
       createDefaultFactoryLayout(),
       "workstation:draft",

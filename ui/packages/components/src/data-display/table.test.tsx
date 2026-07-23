@@ -40,7 +40,9 @@ describe("Table primitives", () => {
       screen.getByRole("table", { name: "Package table" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Caption text")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Alpha" })).toBeInTheDocument();
     expect(await axe(document.body)).toHaveNoViolations();
   });
@@ -61,11 +63,13 @@ describe("Table primitives", () => {
       </Table>,
     );
 
-    const scroller = screen.getByRole("table", { name: "Dense table" }).parentElement;
+    const scroller = screen.getByRole("table", {
+      name: "Dense table",
+    }).parentElement;
     expect(scroller).toHaveAttribute("data-size", "dense");
-    expect(screen.getByRole("columnheader", { name: "Name" }).className).toContain(
-      "group-data-[size=dense]/table:h-8",
-    );
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }).className,
+    ).toContain("group-data-[size=dense]/table:h-8");
     expect(screen.getByRole("cell", { name: "Alpha" }).className).toContain(
       "group-data-[size=dense]/table:py-2",
     );

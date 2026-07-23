@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   WidgetDetailCopy,
   WidgetEmptyState,
@@ -18,6 +16,7 @@ import {
   widgetFrameStoryShellStyle,
 } from "@you-agent-factory/components";
 import * as recipes from "@you-agent-factory/components/recipes";
+import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "./testing/render";
 
@@ -57,15 +56,21 @@ describe("@you-agent-factory/components widget frame exports", () => {
         <WidgetDetailCopy>Host-provided detail copy.</WidgetDetailCopy>
         <WidgetEmptyState>
           <WidgetEmptyStateTitle>No data</WidgetEmptyStateTitle>
-          <WidgetEmptyStateText>Provide content from the host.</WidgetEmptyStateText>
+          <WidgetEmptyStateText>
+            Provide content from the host.
+          </WidgetEmptyStateText>
         </WidgetEmptyState>
       </WidgetFrame>,
     );
 
-    expect(screen.getByRole("article", { name: "Package widget" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("article", { name: "Package widget" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("42 items")).toBeInTheDocument();
     expect(screen.getByText("Host-provided detail copy.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "No data" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "No data" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Provide content from the host."),
     ).toBeInTheDocument();

@@ -1,6 +1,7 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
-  DashboardActionButton,
   Code,
+  DashboardActionButton,
   DescriptionList,
   Text,
 } from "../../../../components/ui";
@@ -9,9 +10,6 @@ import {
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,

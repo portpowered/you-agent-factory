@@ -57,7 +57,9 @@ export function TerminalWorkSummaryCard({
       {status === "failed" &&
       normalizedFailureReason === undefined &&
       normalizedFailureMessage === undefined ? (
-        <WidgetDetailCopy>{messages.failureDetailsUnavailable}</WidgetDetailCopy>
+        <WidgetDetailCopy>
+          {messages.failureDetailsUnavailable}
+        </WidgetDetailCopy>
       ) : null}
       {executionDetails ? (
         <ExecutionDetailsSection details={executionDetails} now={now} />

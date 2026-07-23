@@ -3,8 +3,8 @@ import { rmSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
   expectNoHorizontalOverflow,
@@ -45,9 +45,7 @@ const packageRoot = path.resolve(
   "..",
 );
 const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
-const port = Number(
-  process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3818",
-);
+const port = Number(process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3818");
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
@@ -157,11 +155,7 @@ export async function verifyPackageFormFieldFocusStories({
       waitUntil: "networkidle",
     });
     await waitForStoryRender(page);
-    await expectTextLikeFocusRingVisible(
-      page,
-      'input[type="text"]',
-      storyId,
-    );
+    await expectTextLikeFocusRingVisible(page, 'input[type="text"]', storyId);
   }
 }
 
@@ -199,7 +193,9 @@ async function main() {
         return;
       }
 
-      reject(new Error(`build-storybook exited with code ${code ?? "unknown"}`));
+      reject(
+        new Error(`build-storybook exited with code ${code ?? "unknown"}`),
+      );
     });
   });
 

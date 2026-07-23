@@ -7,7 +7,9 @@ export const unavailableReplaySessionID = "dur-sess-js-unavailable-003";
 export const emptyReplaySessionID = "dur-sess-js-empty-004";
 export const errorReplaySessionID = "dur-sess-js-error-005";
 
-export function buildSuccessfulDurableSession(sessionId = successfulReplaySessionID) {
+export function buildSuccessfulDurableSession(
+  sessionId = successfulReplaySessionID,
+) {
   return {
     artifactRefs: [
       {
@@ -89,7 +91,9 @@ export function buildWarningDurableSession(sessionId = warningReplaySessionID) {
   };
 }
 
-export function buildAwaitingDurableSession(sessionId = awaitingReplaySessionID) {
+export function buildAwaitingDurableSession(
+  sessionId = awaitingReplaySessionID,
+) {
   return {
     artifactRefs: [],
     dialect: "you-workflow-v1",

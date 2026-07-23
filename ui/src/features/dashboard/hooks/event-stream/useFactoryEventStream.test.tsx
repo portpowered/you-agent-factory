@@ -103,6 +103,7 @@ describe("useFactoryEventStream resolved session identity", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: transport lifecycle cases share one query client and event-stream harness.
 describe("useFactoryEventStream transport", () => {
   let queryClient = createFactoryEventStreamQueryClient();
   const receivedEvents: unknown[] = [];
@@ -219,7 +220,10 @@ describe("useFactoryEventStream transport", () => {
           },
           sessionID: DEFAULT_FACTORY_SESSION_ID,
         }),
-      { initialProps: { enabled: true }, wrapper: createFactoryEventStreamTestWrapper(queryClient) },
+      {
+        initialProps: { enabled: true },
+        wrapper: createFactoryEventStreamTestWrapper(queryClient),
+      },
     );
 
     expect(replayHarness.getStreams()).toHaveLength(1);

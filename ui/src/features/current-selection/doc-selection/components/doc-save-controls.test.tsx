@@ -71,8 +71,6 @@ describe("EditableDocSaveHeaderAction", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Saving doc..." }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Saving doc..." })).toBeTruthy();
   });
 });

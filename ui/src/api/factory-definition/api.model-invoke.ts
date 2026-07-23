@@ -41,11 +41,7 @@ type FactoryWorkstationOperationBindingSelector =
   FactorySchemas["WorkstationOperationBindingSelector"];
 
 const MODEL_OPERATION_KEYS = new Set(["inputs", "name", "outputs"]);
-const MODEL_OPERATION_SLOT_KEYS = new Set([
-  "contentTypes",
-  "name",
-  "required",
-]);
+const MODEL_OPERATION_SLOT_KEYS = new Set(["contentTypes", "name", "required"]);
 const MODEL_OPERATION_CONTENT_TYPE_VALUES =
   new Set<FactoryModelOperationContentType>([
     "TEXT",
@@ -105,7 +101,12 @@ export function decodeModelOperation(
   const operation: FactoryModelOperation = {
     name: readRequiredString(record, "name", path),
   };
-  const inputs = readOptionalArray(record, "inputs", path, decodeModelOperationSlot);
+  const inputs = readOptionalArray(
+    record,
+    "inputs",
+    path,
+    decodeModelOperationSlot,
+  );
   const outputs = readOptionalArray(
     record,
     "outputs",
@@ -160,7 +161,12 @@ export function decodeWorkstationOperationBinding(
     path,
     decodeWorkstationOperationBindingSelector,
   );
-  const config = readOptionalArray(record, "config", path, decodeWorkContentPart);
+  const config = readOptionalArray(
+    record,
+    "config",
+    path,
+    decodeWorkContentPart,
+  );
   const defaultContent = readOptionalArray(
     record,
     "defaultContent",
@@ -245,11 +251,19 @@ function decodeWorkTextContentPart(
 ): FactoryWorkTextContentPart {
   rejectUnknownKeys(
     record,
-    new Set([...WORK_CONTENT_COMMON_FIELD_KEYS, ...WORK_TEXT_CONTENT_PART_KEYS]),
+    new Set([
+      ...WORK_CONTENT_COMMON_FIELD_KEYS,
+      ...WORK_TEXT_CONTENT_PART_KEYS,
+    ]),
     path,
   );
   const part: FactoryWorkTextContentPart = {
-    type: readRequiredEnum(record, "type", path, WORK_TEXT_CONTENT_PART_ENUM_VALUES),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      WORK_TEXT_CONTENT_PART_ENUM_VALUES,
+    ),
     text: readRequiredString(record, "text", path),
   };
   applyWorkContentCommonFields(record, path, part);
@@ -262,11 +276,19 @@ function decodeWorkImageContentPart(
 ): FactoryWorkImageContentPart {
   rejectUnknownKeys(
     record,
-    new Set([...WORK_CONTENT_COMMON_FIELD_KEYS, ...WORK_IMAGE_CONTENT_PART_KEYS]),
+    new Set([
+      ...WORK_CONTENT_COMMON_FIELD_KEYS,
+      ...WORK_IMAGE_CONTENT_PART_KEYS,
+    ]),
     path,
   );
   const part: FactoryWorkImageContentPart = {
-    type: readRequiredEnum(record, "type", path, WORK_IMAGE_CONTENT_PART_ENUM_VALUES),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      WORK_IMAGE_CONTENT_PART_ENUM_VALUES,
+    ),
     url: readRequiredString(record, "url", path),
   };
   const file = readOptionalString(record, "file", path);
@@ -283,11 +305,19 @@ function decodeWorkAudioContentPart(
 ): FactoryWorkAudioContentPart {
   rejectUnknownKeys(
     record,
-    new Set([...WORK_CONTENT_COMMON_FIELD_KEYS, ...WORK_AUDIO_CONTENT_PART_KEYS]),
+    new Set([
+      ...WORK_CONTENT_COMMON_FIELD_KEYS,
+      ...WORK_AUDIO_CONTENT_PART_KEYS,
+    ]),
     path,
   );
   const part: FactoryWorkAudioContentPart = {
-    type: readRequiredEnum(record, "type", path, WORK_AUDIO_CONTENT_PART_ENUM_VALUES),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      WORK_AUDIO_CONTENT_PART_ENUM_VALUES,
+    ),
     url: readRequiredString(record, "url", path),
   };
   const file = readOptionalString(record, "file", path);
@@ -304,11 +334,19 @@ function decodeWorkJsonContentPart(
 ): FactoryWorkJsonContentPart {
   rejectUnknownKeys(
     record,
-    new Set([...WORK_CONTENT_COMMON_FIELD_KEYS, ...WORK_JSON_CONTENT_PART_KEYS]),
+    new Set([
+      ...WORK_CONTENT_COMMON_FIELD_KEYS,
+      ...WORK_JSON_CONTENT_PART_KEYS,
+    ]),
     path,
   );
   const part: FactoryWorkJsonContentPart = {
-    type: readRequiredEnum(record, "type", path, WORK_JSON_CONTENT_PART_ENUM_VALUES),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      WORK_JSON_CONTENT_PART_ENUM_VALUES,
+    ),
     json: record.json,
   };
   applyWorkContentCommonFields(record, path, part);
@@ -354,7 +392,12 @@ function applyWorkContentCommonFields(
   const role = readOptionalString(record, "role", path);
   const contentType = readOptionalString(record, "contentType", path);
   const artifactId = readOptionalString(record, "artifactId", path);
-  const metadata = readOptionalObject(record, "metadata", path, decodeWorkContentMetadata);
+  const metadata = readOptionalObject(
+    record,
+    "metadata",
+    path,
+    decodeWorkContentMetadata,
+  );
   if (slot !== undefined) {
     part.slot = slot;
   }

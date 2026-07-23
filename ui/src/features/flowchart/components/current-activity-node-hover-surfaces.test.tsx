@@ -11,6 +11,7 @@ import {
   type CurrentActivityWorkstationNode,
   WorkstationNodeView,
 } from "../../graphs/components/workstation-node-view";
+import { activityGraphNodeSurfaceClassName } from "./current-activity-node-chrome";
 import {
   type CurrentActivityWorkTypeNode,
   WorkTypeNodeView,
@@ -19,7 +20,6 @@ import {
   type CurrentActivityWorkerNode,
   WorkerNodeView,
 } from "./current-activity-worker-node";
-import { activityGraphNodeSurfaceClassName } from "./current-activity-node-chrome";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -408,7 +408,11 @@ describe("Activity graph node surface tones", () => {
   it.each([
     ["worker", () => renderWorkerNode(), "bg-info-container"],
     ["workType", () => renderWorkTypeNode(), "bg-info-container"],
-    ["workstation", () => renderWorkstationNode(), "bg-surface-container-highest"],
+    [
+      "workstation",
+      () => renderWorkstationNode(),
+      "bg-surface-container-highest",
+    ],
   ] as const)(
     "applies shared surface mapping on %s nodes",
     (_nodeType, renderNode, expectedBackgroundClass) => {
@@ -427,12 +431,16 @@ describe("Activity graph node surface tones", () => {
     const activeWorkstationShell = renderWorkstationNode({
       active: true,
       activeFlow: true,
-    }).container.querySelector("[data-current-activity-node-type='workstation']");
+    }).container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
     const selectedWorkstationShell = renderWorkstationNode({
       active: true,
       onSelectWorkstation: vi.fn(),
       selectedWorkstation: true,
-    }).container.querySelector("[data-current-activity-node-type='workstation']");
+    }).container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
 
     expect(activeWorkstationShell?.className).toContain(
       "bg-surface-container-highest",

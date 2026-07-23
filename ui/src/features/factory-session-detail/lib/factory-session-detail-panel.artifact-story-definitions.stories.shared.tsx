@@ -221,7 +221,9 @@ export const ArtifactDrilldown = {
     });
     await userEvent.click(unavailableToggle);
     await expect(
-      canvas.getByText("Inline preview is unavailable for this durable artifact."),
+      canvas.getByText(
+        "Inline preview is unavailable for this durable artifact.",
+      ),
     ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(storySessionID),

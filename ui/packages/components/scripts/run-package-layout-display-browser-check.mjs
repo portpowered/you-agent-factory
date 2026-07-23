@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 import { verifyPackageLayoutDisplayStories } from "./verify-package-layout-display-storybook-responsive.mjs";
 
@@ -12,9 +12,7 @@ const packageRoot = path.resolve(
   "..",
 );
 const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
-const port = Number(
-  process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
-);
+const port = Number(process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817");
 const staticDir = path.join(packageRoot, "storybook-static");
 const storybookUrl = `http://${host}:${port}`;
 
@@ -99,7 +97,9 @@ async function ensureStorybookServer() {
         return;
       }
 
-      reject(new Error(`build-storybook exited with code ${code ?? "unknown"}`));
+      reject(
+        new Error(`build-storybook exited with code ${code ?? "unknown"}`),
+      );
     });
   });
 
@@ -135,7 +135,9 @@ const server = await ensureStorybookServer();
 
 try {
   await verifyPackageLayoutDisplayStories({ storybookUrl });
-  console.log("Package typography/layout/display Storybook browser verification passed.");
+  console.log(
+    "Package typography/layout/display Storybook browser verification passed.",
+  );
 } finally {
   await server.stop();
 }

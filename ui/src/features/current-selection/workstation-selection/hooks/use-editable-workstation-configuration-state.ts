@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-
-import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
+import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import {
   isModelInvokeWorkstationType,
   workstationUsesPromptOrientedEditing,
 } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
@@ -47,19 +46,18 @@ export function useEditableWorkstationConfigurationState(
   const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
   const { selectedEditableValues, sessionState, setSessionState } =
-    useEditableWorkstationSession(
-      editableDefinition,
-      selectedNode,
-      selection,
-    );
+    useEditableWorkstationSession(editableDefinition, selectedNode, selection);
   const draftWorkstationType =
-    sessionState?.draft.workstationType ?? selectedEditableValues?.workstationType;
+    sessionState?.draft.workstationType ??
+    selectedEditableValues?.workstationType;
   const usesPromptOrientedEditing =
     draftWorkstationType != null &&
     workstationUsesPromptOrientedEditing(draftWorkstationType);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedEditableValues?.workstationName,
-    isNodeSelection && selectedEditableValues != null && usesPromptOrientedEditing,
+    isNodeSelection &&
+      selectedEditableValues != null &&
+      usesPromptOrientedEditing,
   );
   const shouldValidatePrompt =
     isNodeSelection &&

@@ -49,9 +49,7 @@ const productColumns: DataTableColumn<ProductRow>[] = [
     cell: (row) => (
       <span
         className={
-          row.status === "active"
-            ? "text-af-success"
-            : "text-af-text-subtle"
+          row.status === "active" ? "text-af-success" : "text-af-text-subtle"
         }
       >
         {row.status === "active" ? "Active" : "Draft"}

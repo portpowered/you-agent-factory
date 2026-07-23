@@ -3,22 +3,22 @@ import "@xyflow/react/dist/style.css";
 import {
   Background,
   Controls,
-  ReactFlow,
-  ReactFlowProvider,
   type Edge,
   type Node,
   type NodeProps,
+  ReactFlow,
+  ReactFlowProvider,
 } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import { GRAPH_EDGE_TYPES } from "./graph-edge";
+import { GraphNodeButton } from "./graph-node-button";
+import { GraphNodeShell } from "./graph-node-shell";
+import type { GraphNodeState } from "./graph-node-state";
 import {
   desktopInteractiveGraphNodes,
   type GraphInteractiveFixtureNode,
 } from "./graph-story-fixtures";
-import { GraphNodeButton } from "./graph-node-button";
-import { GraphNodeShell } from "./graph-node-shell";
-import type { GraphNodeState } from "./graph-node-state";
 import { GraphViewportSurface } from "./graph-viewport-surface";
 
 type GenericGraphFlowNodeData = GraphInteractiveFixtureNode & {
@@ -27,7 +27,9 @@ type GenericGraphFlowNodeData = GraphInteractiveFixtureNode & {
   shellState: GraphNodeState;
 };
 
-function GenericGraphFlowNode({ data }: NodeProps<Node<GenericGraphFlowNodeData>>) {
+function GenericGraphFlowNode({
+  data,
+}: NodeProps<Node<GenericGraphFlowNodeData>>) {
   return (
     <div className="w-44 max-w-full sm:w-52">
       <GraphNodeShell

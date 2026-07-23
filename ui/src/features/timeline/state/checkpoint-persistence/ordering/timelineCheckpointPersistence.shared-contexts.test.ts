@@ -116,7 +116,6 @@ describe("timeline checkpoint shared IndexedDB contexts", () => {
       streamIdentity: IDENTITY_A,
     });
   });
-
 });
 
 describe("timeline checkpoint shared IndexedDB session isolation", () => {
@@ -183,18 +182,19 @@ describe("timeline checkpoint shared IndexedDB session isolation", () => {
     fixture.controls.completeTransaction();
     await Promise.all([writeA, writeB]);
 
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)))
-      .toMatchObject({
-        checkpoint: { afterEventId: "event-a", selectedTick: 11 },
-        streamIdentity: IDENTITY_A,
-      });
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_B)))
-      .toMatchObject({
-        checkpoint: { afterEventId: "event-b", selectedTick: 22 },
-        streamIdentity: IDENTITY_B,
-      });
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)),
+    ).toMatchObject({
+      checkpoint: { afterEventId: "event-a", selectedTick: 11 },
+      streamIdentity: IDENTITY_A,
+    });
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_B)),
+    ).toMatchObject({
+      checkpoint: { afterEventId: "event-b", selectedTick: 22 },
+      streamIdentity: IDENTITY_B,
+    });
   });
-
 });
 
 describe("timeline checkpoint shared IndexedDB invalidation settlement", () => {
@@ -310,8 +310,9 @@ describe("timeline checkpoint shared IndexedDB invalidation", () => {
       { requestedSessionID: DEFAULT_FACTORY_SESSION_ID, userInitiated: true },
     );
     expect(fixture.controls.pendingOperations()).toEqual([]);
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)))
-      .toMatchObject({ checkpoint: { afterEventId: "current-event" } });
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)),
+    ).toMatchObject({ checkpoint: { afterEventId: "current-event" } });
 
     const staleWrite = persistTimelineCheckpoint(
       fixture.createIndexedDBContext(),
@@ -324,8 +325,9 @@ describe("timeline checkpoint shared IndexedDB invalidation", () => {
     fixture.controls.succeed("put");
     fixture.controls.completeTransaction();
     await staleWrite;
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)))
-      .toMatchObject({ checkpoint: { afterEventId: "current-event" } });
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)),
+    ).toMatchObject({ checkpoint: { afterEventId: "current-event" } });
 
     const staleClear = clearTimelineCheckpoint(
       fixture.createIndexedDBContext(),
@@ -336,8 +338,9 @@ describe("timeline checkpoint shared IndexedDB invalidation", () => {
     fixture.controls.succeed("delete");
     fixture.controls.completeTransaction();
     await staleClear;
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)))
-      .toMatchObject({ checkpoint: { afterEventId: "current-event" } });
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_A)),
+    ).toMatchObject({ checkpoint: { afterEventId: "current-event" } });
 
     await clearTimelineCheckpointsForSession(
       fixture.createIndexedDBContext(),
@@ -358,9 +361,11 @@ describe("timeline checkpoint shared IndexedDB invalidation", () => {
     await clearA;
     await flushPersistence();
 
-    expect(fixture.records.has(streamDerivedCheckpointStorageKey(IDENTITY_A)))
-      .toBe(false);
-    expect(fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_B)))
-      .toMatchObject({ checkpoint: { afterEventId: "session-b-event" } });
+    expect(
+      fixture.records.has(streamDerivedCheckpointStorageKey(IDENTITY_A)),
+    ).toBe(false);
+    expect(
+      fixture.records.get(streamDerivedCheckpointStorageKey(IDENTITY_B)),
+    ).toMatchObject({ checkpoint: { afterEventId: "session-b-event" } });
   });
 });

@@ -4,8 +4,8 @@ import { useState } from "react";
 
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import {
-  FactoryGraphEditorToolbar,
   type FactoryGraphEditorTool,
+  FactoryGraphEditorToolbar,
 } from "../controls/factory-graph-editor-controls";
 
 function renderToolbar({

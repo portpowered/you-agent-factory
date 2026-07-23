@@ -84,9 +84,13 @@ describe("WorkerEditableConfigurationModelFields", () => {
       screen.getByRole("combobox", { name: messages.executorProviderLabel }),
     ).toHaveTextContent(messages.localizeExecutorProvider("SCRIPT_WRAP"));
     expect(
-      screen.getByRole("checkbox", { name: messages.skipPermissionsFieldLabel }),
+      screen.getByRole("checkbox", {
+        name: messages.skipPermissionsFieldLabel,
+      }),
     ).toBeChecked();
-    expect(screen.getByText(messages.modelProviderFieldHelp)).toBeInTheDocument();
+    expect(
+      screen.getByText(messages.modelProviderFieldHelp),
+    ).toBeInTheDocument();
     expect(screen.getByText(messages.modelFieldHelp)).toBeInTheDocument();
     expect(
       screen.getByText(messages.skipPermissionsFieldHelp),
@@ -163,7 +167,9 @@ describe("WorkerEditableConfigurationModelFields", () => {
     const modelProviderSelect = screen.getByRole("combobox", {
       name: messages.modelProviderLabel,
     });
-    const modelInput = screen.getByRole("textbox", { name: messages.modelLabel });
+    const modelInput = screen.getByRole("textbox", {
+      name: messages.modelLabel,
+    });
     const modelLocalitySelect = screen.getByRole("combobox", {
       name: messages.modelLocalityLabel,
     });

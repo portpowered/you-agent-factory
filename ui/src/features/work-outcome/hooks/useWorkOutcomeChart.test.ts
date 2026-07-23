@@ -561,9 +561,9 @@ function createIndexedDBTestDouble() {
               value.storageKey,
               () => records.set(value.storageKey, value),
               () =>
-                (
-                  transaction.oncomplete as ((event: Event) => void) | null
-                )?.({} as Event),
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
             ),
         }),
       };

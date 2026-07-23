@@ -87,7 +87,9 @@ describe("resolveActiveGraphBulkSelectionSummary", () => {
   });
 
   it("returns null when bridge or selection is missing", () => {
-    expect(resolveActiveGraphBulkSelectionSummary(null, bulkBridgeSnapshot)).toBeNull();
+    expect(
+      resolveActiveGraphBulkSelectionSummary(null, bulkBridgeSnapshot),
+    ).toBeNull();
     expect(
       resolveActiveGraphBulkSelectionSummary(
         { kind: "worker", workerName: "writer" },

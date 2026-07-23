@@ -1,10 +1,10 @@
 import { formatList } from "../../../../components/ui/formatters";
+import { editableModelInvokeBindingsEqual } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type {
   EditableWorkstationCronDraft,
   EditableWorkstationDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftNamesEqual } from "../../../current-factory-definition/lib/workstation-guards";
-import { editableModelInvokeBindingsEqual } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationOverwriteField } from "../lib/keys/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -43,7 +43,8 @@ export function resolveEditableWorkstationOverwriteFields(
     fields.push("worker");
   }
   if (
-    sessionStartDraft.workstationType !== latestDefinitionDraft.workstationType &&
+    sessionStartDraft.workstationType !==
+      latestDefinitionDraft.workstationType &&
     draft.workstationType !== latestDefinitionDraft.workstationType
   ) {
     fields.push("workstationType");

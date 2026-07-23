@@ -1,13 +1,10 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import type { Meta, StoryObj } from "@storybook/react-vite";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { expect, userEvent, within } from "storybook/test";
 
-import {
-  ChartContainer,
-  ChartLegendContent,
-} from "./chart";
+import { ChartContainer, ChartLegendContent } from "./chart";
 import {
   sampleChartConfig,
   sampleChartData,

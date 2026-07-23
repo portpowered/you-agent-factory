@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-
+import { FormField } from "./package-form-field";
 import {
   PACKAGE_FORM_FIELD_LONG_LABEL,
   PACKAGE_FORM_FIELD_LONG_MESSAGE,
@@ -13,7 +13,6 @@ import {
   withMobileWidth,
   withStoryWidth,
 } from "./package-form-field-story-support";
-import { FormField } from "./package-form-field";
 
 const meta = {
   title: "Forms/FormField",
@@ -65,13 +64,17 @@ export const Disabled: Story = {
 
 export const HelperText: Story = {
   render: () => (
-    <PackageFormFieldStoryExample helperText={PACKAGE_FORM_FIELD_STORY_HELPER} />
+    <PackageFormFieldStoryExample
+      helperText={PACKAGE_FORM_FIELD_STORY_HELPER}
+    />
   ),
 };
 
 export const Warning: Story = {
   render: () => (
-    <PackageFormFieldStoryExample warningText={PACKAGE_FORM_FIELD_STORY_WARNING} />
+    <PackageFormFieldStoryExample
+      warningText={PACKAGE_FORM_FIELD_STORY_WARNING}
+    />
   ),
 };
 
@@ -87,7 +90,9 @@ export const ErrorState: Story = {
 
 export const Success: Story = {
   render: () => (
-    <PackageFormFieldStoryExample successText={PACKAGE_FORM_FIELD_STORY_SUCCESS} />
+    <PackageFormFieldStoryExample
+      successText={PACKAGE_FORM_FIELD_STORY_SUCCESS}
+    />
   ),
 };
 

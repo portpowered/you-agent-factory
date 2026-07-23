@@ -57,7 +57,12 @@ export const CodePanel = forwardRef<HTMLPreElement, CodePanelProps>(
 
     return (
       <pre
-        className={codePanelVariants({ className, maxHeight, padding, surface })}
+        className={codePanelVariants({
+          className,
+          maxHeight,
+          padding,
+          surface,
+        })}
         ref={ref}
         tabIndex={tabIndex ?? (isScrollable ? 0 : undefined)}
         {...props}

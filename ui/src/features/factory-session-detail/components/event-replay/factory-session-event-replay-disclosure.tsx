@@ -1,15 +1,12 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useId, useState } from "react";
-
 import {
   AlertPanel,
-  Label,
   DashboardStatusPill,
+  Label,
   Text,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { useFactorySessionEventReplay } from "../../hooks/use-factory-session-event-replay";
 import { buildFactorySessionEventReplayTimeline } from "../../lib/factory-session-event-replay-timeline";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
@@ -76,7 +73,9 @@ function EventReplayState({
 
   if (state.status === "loading") {
     return (
-      <WidgetDetailCopy id={detailRegionID}>{messages.eventReplayLoadingState}</WidgetDetailCopy>
+      <WidgetDetailCopy id={detailRegionID}>
+        {messages.eventReplayLoadingState}
+      </WidgetDetailCopy>
     );
   }
 
@@ -102,7 +101,9 @@ function EventReplayState({
 
   if (state.events.length === 0) {
     return (
-      <WidgetDetailCopy id={detailRegionID}>{messages.eventReplayEmptyState}</WidgetDetailCopy>
+      <WidgetDetailCopy id={detailRegionID}>
+        {messages.eventReplayEmptyState}
+      </WidgetDetailCopy>
     );
   }
 

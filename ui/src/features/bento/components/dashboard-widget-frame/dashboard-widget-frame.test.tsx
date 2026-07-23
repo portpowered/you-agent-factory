@@ -4,12 +4,13 @@ import {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SUBTITLE_CLASS,
   WIDGET_FRAME_SUPPORTING_LABELS_CLASS,
-  WidgetEmptyState,
   WidgetDetailCopy,
+  WidgetEmptyState,
   WidgetSubtitle,
 } from "@you-agent-factory/components/recipes";
 import { DashboardWidgetFrame } from "./dashboard-widget-frame";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget-frame chrome cases share one rendering contract and fixture vocabulary.
 describe("DashboardWidgetFrame chrome", () => {
   it("renders the shared widget frame contract with dashboard copy styles intact", () => {
     render(
@@ -106,7 +107,9 @@ describe("DashboardWidgetFrame chrome", () => {
 
     const card = screen.getByRole("article", { name: "Trace" });
 
-    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeTruthy();
+    expect(
+      card.querySelector("[data-radix-scroll-area-viewport]"),
+    ).toBeTruthy();
     expect(card.className).toContain("overflow-hidden");
   });
 

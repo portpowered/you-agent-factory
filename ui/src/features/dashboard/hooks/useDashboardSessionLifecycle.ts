@@ -70,7 +70,8 @@ export function useDashboardSessionLifecycle({
       return;
     }
 
-    const previousSessionID = sessionIDFromDashboardSessionKey(previousSessionKey);
+    const previousSessionID =
+      sessionIDFromDashboardSessionKey(previousSessionKey);
     resetLocalizedSessionState(
       previousSessionID !== null && previousSessionID === sessionID
         ? "invalidate"

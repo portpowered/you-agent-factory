@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  hasEditableWorkstationValidationErrors,
-  validateEditableWorkstationDraft,
-} from "./editable-workstation-configuration-validation";
-import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,
   modelWorkstationValues,
   nameValidationContext,
 } from "../../../../../testing/editable-workstation-configuration-validation-fixtures";
+import {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "./editable-workstation-configuration-validation";
 
 describe("validateEditableWorkstationDraft workstation name", () => {
   it("blocks empty, duplicate, and unchanged-after-trim names", () => {
@@ -20,7 +20,9 @@ describe("validateEditableWorkstationDraft workstation name", () => {
         editableWorkstationValidationMessages,
         nameValidationContext,
       ).name,
-    ).toBe(editableWorkstationValidationMessages.editableConfigurationNameRequired);
+    ).toBe(
+      editableWorkstationValidationMessages.editableConfigurationNameRequired,
+    );
 
     expect(
       validateEditableWorkstationDraft(

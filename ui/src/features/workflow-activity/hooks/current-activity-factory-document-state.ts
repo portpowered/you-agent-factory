@@ -23,25 +23,29 @@ export function useCurrentActivityFactoryDocumentState({
   eventFactory?: DashboardSnapshot["factory"] | null;
 } = {}): CurrentActivityFactoryDocumentState {
   const eventFactoryDocument = useMemo(
-    () => (eventFactory ? toCurrentFactoryDocumentFromEventFactory(eventFactory) : null),
+    () =>
+      eventFactory
+        ? toCurrentFactoryDocumentFromEventFactory(eventFactory)
+        : null,
     [eventFactory],
   );
 
-  const editableDefinitionQuery = useMemo((): CurrentActivityFactoryDocumentQuery => {
-    if (eventFactoryDocument) {
-      return {
-        data: eventFactoryDocument,
-        error: null,
-        status: "success",
-      };
-    }
+  const editableDefinitionQuery =
+    useMemo((): CurrentActivityFactoryDocumentQuery => {
+      if (eventFactoryDocument) {
+        return {
+          data: eventFactoryDocument,
+          error: null,
+          status: "success",
+        };
+      }
 
-    return {
-      data: undefined,
-      error: null,
-      status: "pending",
-    };
-  }, [eventFactoryDocument]);
+      return {
+        data: undefined,
+        error: null,
+        status: "pending",
+      };
+    }, [eventFactoryDocument]);
 
   return useMemo(
     () => ({

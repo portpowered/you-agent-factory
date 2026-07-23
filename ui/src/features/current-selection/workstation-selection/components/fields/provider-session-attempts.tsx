@@ -1,14 +1,7 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { DashboardProviderSession } from "../../../../../api/dashboard/types";
-
-import {
-  ButtonLink,
-  Code,
-  Text,
-} from "../../../../../components/ui";
+import { ButtonLink, Code, Text } from "../../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,

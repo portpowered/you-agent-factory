@@ -54,7 +54,9 @@ describe("graph-editor-harness layout waypoint helpers", () => {
   });
 
   it("buildMockGraphSavePayload throws when pending edits cannot be applied", () => {
-    const draftState = createHookTestGraphEditorDraftState({ hasChanges: true });
+    const draftState = createHookTestGraphEditorDraftState({
+      hasChanges: true,
+    });
     const graph = createMockEditableFactoryGraph(
       { factoryDocumentScopeKey: "session-default" },
       draftState,

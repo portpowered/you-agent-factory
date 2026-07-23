@@ -17,7 +17,8 @@ export const PACKAGE_FILE_INPUT_MOBILE_STORY_ID =
 export const PACKAGE_INPUT_FOCUS_STORY_ID = "forms-packageinput--focus";
 export const PACKAGE_TEXTAREA_FOCUS_STORY_ID = "forms-packagetextarea--focus";
 export const PACKAGE_CHECKBOX_FOCUS_STORY_ID = "forms-packagecheckbox--focus";
-export const PACKAGE_FILE_INPUT_FOCUS_STORY_ID = "forms-packagefileinput--focus";
+export const PACKAGE_FILE_INPUT_FOCUS_STORY_ID =
+  "forms-packagefileinput--focus";
 
 export const PACKAGE_FORM_MOBILE_STORY_IDS = [
   PACKAGE_INPUT_MOBILE_STORY_ID,
@@ -69,10 +70,7 @@ export async function verifyPackageFormMobileStories({
         waitUntil: "networkidle",
       });
       await waitForStoryRender(page);
-      await expectNoHorizontalOverflow(
-        page,
-        `${storyId} (${viewport.label})`,
-      );
+      await expectNoHorizontalOverflow(page, `${storyId} (${viewport.label})`);
       await expectVisibleLabelWithinViewport(
         page,
         formStoryLabel(storyId),

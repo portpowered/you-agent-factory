@@ -124,30 +124,33 @@ describe("react-flow-current-activity-card-import", () => {
       undefined,
       "This PNG appears truncated or malformed, so import stopped before any activation request.",
     ],
-  ] as const)("renders import error copy for %s", (code, details, expectedMessage) => {
-    const englishMessages = getWorkflowActivityGraphImportMessages("en");
-    render(
-      <GraphImportErrorPanel
-        error={
-          {
-            code,
-            details,
-            message: "Fallback error message.",
-          } satisfies ReadFactoryImportPngError
-        }
-        fileName="factory.png"
-        locale="en"
-        onDismiss={vi.fn()}
-      />,
-    );
+  ] as const)(
+    "renders import error copy for %s",
+    (code, details, expectedMessage) => {
+      const englishMessages = getWorkflowActivityGraphImportMessages("en");
+      render(
+        <GraphImportErrorPanel
+          error={
+            {
+              code,
+              details,
+              message: "Fallback error message.",
+            } satisfies ReadFactoryImportPngError
+          }
+          fileName="factory.png"
+          locale="en"
+          onDismiss={vi.fn()}
+        />,
+      );
 
-    expect(screen.getByRole("alert")).toBeTruthy();
-    expect(
-      screen.getByText(englishMessages.graphImportErrorTitle),
-    ).toBeTruthy();
-    expect(screen.getByText("factory.png")).toBeTruthy();
-    expect(screen.getByText(expectedMessage)).toBeTruthy();
-  });
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(
+        screen.getByText(englishMessages.graphImportErrorTitle),
+      ).toBeTruthy();
+      expect(screen.getByText("factory.png")).toBeTruthy();
+      expect(screen.getByText(expectedMessage)).toBeTruthy();
+    },
+  );
 
   it("renders localized dismiss copy and falls back to the backend-provided error message", () => {
     const onDismiss = vi.fn();

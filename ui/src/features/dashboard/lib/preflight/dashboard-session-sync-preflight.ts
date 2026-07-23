@@ -1,8 +1,10 @@
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
-import type { FactoryTimelineSyncIdentity } from "../../../timeline/public";
-import type { TimelineCheckpointStreamIdentity } from "../../../timeline/public";
+import type {
+  FactoryTimelineSyncIdentity,
+  TimelineCheckpointStreamIdentity,
+} from "../../../timeline/public";
 
 export interface DashboardSessionRecoveryState {
   reasonCode: string;
@@ -91,7 +93,8 @@ export function resolveDashboardSyncPreflight(
     return {
       kind: "non-recoverable",
       recovery: {
-        reasonCode: FactorySessionSyncPreflightReasonCode.invalid_target_reference,
+        reasonCode:
+          FactorySessionSyncPreflightReasonCode.invalid_target_reference,
         requestedSessionId: response.requestedSessionId,
       },
     };

@@ -1,7 +1,5 @@
 // @vitest-environment node
 
-import { describe, expect, it } from "vitest";
-
 import {
   COMPONENTS_CATEGORY,
   DataTable,
@@ -15,6 +13,7 @@ import {
   tableCellWrapClassName,
   tableNarrowContainerClassName,
 } from "@you-agent-factory/components/data-display";
+import { describe, expect, it } from "vitest";
 
 describe("data-display exports", () => {
   it("exposes table primitives and DataTable from the data-display entrypoint", () => {

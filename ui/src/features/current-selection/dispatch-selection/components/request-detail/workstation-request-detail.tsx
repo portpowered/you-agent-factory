@@ -38,7 +38,8 @@ export function WorkstationRequestDetailCard({
   const messages = useCurrentSelectionDetailMessages();
   const shellMessages = useCurrentSelectionShellMessages();
   const view = buildWorkstationRequestDetailView(request);
-  const showInferenceAttempts = !view.isScriptBackedRequest && !view.isAgentBackedRequest;
+  const showInferenceAttempts =
+    !view.isScriptBackedRequest && !view.isAgentBackedRequest;
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>

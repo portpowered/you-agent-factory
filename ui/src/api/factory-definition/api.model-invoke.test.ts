@@ -1,7 +1,4 @@
-import {
-  FactoryDefinitionAPIError,
-  normalizeFactoryDefinition,
-} from "./api";
+import { FactoryDefinitionAPIError, normalizeFactoryDefinition } from "./api";
 
 const modelInvokeFactoryPayload = {
   name: "tts-factory",

@@ -12,9 +12,12 @@ export const PACKAGE_LAYOUT_DISPLAY_STORY_IDS = {
   mobileActionRowWrapping: "layout-actionrow--mobile-action-row-wrapping",
   desktopActionRowLayout: "layout-actionrow--desktop-action-row-layout",
   mobileSurfacePanelLayout: "layout-surfacepanel--mobile-surface-panel-layout",
-  desktopSurfacePanelLayout: "layout-surfacepanel--desktop-surface-panel-layout",
-  mobileDescriptionList: "data-display-descriptionlist--mobile-description-list",
-  desktopDescriptionList: "data-display-descriptionlist--desktop-description-list",
+  desktopSurfacePanelLayout:
+    "layout-surfacepanel--desktop-surface-panel-layout",
+  mobileDescriptionList:
+    "data-display-descriptionlist--mobile-description-list",
+  desktopDescriptionList:
+    "data-display-descriptionlist--desktop-description-list",
 };
 
 export const PACKAGE_LAYOUT_DISPLAY_VIEWPORTS = [

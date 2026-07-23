@@ -1,6 +1,8 @@
+import {
+  EnumSelect,
+  OptionalEnumSelect,
+} from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
-
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import {
   FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
@@ -13,7 +15,6 @@ import {
   Input,
   Textarea,
 } from "../../../../components/ui";
-
 
 export function FactoryGraphEditorAddField({
   children,

@@ -31,24 +31,25 @@ describe("graph editor add placement regression", () => {
     },
   ];
 
-  it.each(
-    addDraftsByKind,
-  )("changes initial top-left when the viewport center moves for $kind adds", (draft) => {
-    const nearTopLeft = resolveInitialPlacementTopLeft({
-      draft,
-      nodes: [],
-      viewportCenter: prePanCenter,
-    });
-    const farTopLeft = resolveInitialPlacementTopLeft({
-      draft,
-      nodes: [],
-      viewportCenter: postPanCenter,
-    });
+  it.each(addDraftsByKind)(
+    "changes initial top-left when the viewport center moves for $kind adds",
+    (draft) => {
+      const nearTopLeft = resolveInitialPlacementTopLeft({
+        draft,
+        nodes: [],
+        viewportCenter: prePanCenter,
+      });
+      const farTopLeft = resolveInitialPlacementTopLeft({
+        draft,
+        nodes: [],
+        viewportCenter: postPanCenter,
+      });
 
-    expect(nearTopLeft).not.toBeNull();
-    expect(farTopLeft).not.toBeNull();
-    expect(nearTopLeft).not.toEqual(farTopLeft);
-  });
+      expect(nearTopLeft).not.toBeNull();
+      expect(farTopLeft).not.toBeNull();
+      expect(nearTopLeft).not.toEqual(farTopLeft);
+    },
+  );
 
   it("derives top-left from kind dimensions at the viewport center", () => {
     const viewportCenter = { x: 640, y: 360 };

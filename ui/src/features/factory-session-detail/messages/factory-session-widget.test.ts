@@ -5,7 +5,8 @@ import { getFactorySessionWidgetMessages } from "./factory-session-widget";
 describe("getFactorySessionWidgetMessages", () => {
   it("resolves supported locale copy", () => {
     expect(getFactorySessionWidgetMessages("en")).toEqual({
-      emptyState: "Select a live factory session to inspect orchestrator runtime.",
+      emptyState:
+        "Select a live factory session to inspect orchestrator runtime.",
       title: "Factory session",
     });
     expect(getFactorySessionWidgetMessages("zh-CN")).toEqual({

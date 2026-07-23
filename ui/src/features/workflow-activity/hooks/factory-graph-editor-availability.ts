@@ -6,8 +6,7 @@ export function findClassifierGraphEditorUnsupportedWorkstationName(
 ): string | undefined {
   const classifierWorkstation = factoryDefinition?.workstations?.find(
     (workstation) =>
-      workstation.type ===
-        WorkstationType.CLASSIFIER_WORKSTATION ||
+      workstation.type === WorkstationType.CLASSIFIER_WORKSTATION ||
       (workstation.classificationRoutes?.length ?? 0) > 0,
   );
 

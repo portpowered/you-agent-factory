@@ -1,7 +1,4 @@
-import {
-  FACTORY_EVENT_TYPES,
-  type FactoryEvent,
-} from "../../../api/events";
+import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { formatDateTime } from "../../../i18n/formatters";
 import type { FactorySessionDetailMessages } from "../messages/factory-session-detail";
 
@@ -99,7 +96,9 @@ function describeEvent(
       return {
         detail:
           summarizeText(asRecord(payload.failureDetail).message) ??
-          (status ? messages.eventReplayDispatchStatusDetail(status) : undefined) ??
+          (status
+            ? messages.eventReplayDispatchStatusDetail(status)
+            : undefined) ??
           summarizeText(asRecord(payload.resultArtifactRef).label),
         title: messages.eventReplayDispatchReconciledTitle,
         tone: mapStatusTone(status),
@@ -175,7 +174,9 @@ function buildReferenceSummary(
     references.push(messages.eventReplayPhaseLabel(phase));
   }
   if (event.context.dispatchId) {
-    references.push(messages.eventReplayDispatchLabel(event.context.dispatchId));
+    references.push(
+      messages.eventReplayDispatchLabel(event.context.dispatchId),
+    );
   }
   if (event.context.checkpointId) {
     references.push(
@@ -191,7 +192,9 @@ function buildReferenceSummary(
   }
 
   if (event.context.workIds && event.context.workIds.length > 0) {
-    references.push(messages.eventReplayWorkLabel(event.context.workIds.length));
+    references.push(
+      messages.eventReplayWorkLabel(event.context.workIds.length),
+    );
   }
 
   return references.length > 0
@@ -225,7 +228,10 @@ function extractArtifactIDs(payload: Record<string, unknown>): string[] {
   return [...new Set(ids)];
 }
 
-function compareFactoryReplayEvents(left: FactoryEvent, right: FactoryEvent): number {
+function compareFactoryReplayEvents(
+  left: FactoryEvent,
+  right: FactoryEvent,
+): number {
   const leftSequence = left.context.sessionSequence ?? left.context.sequence;
   const rightSequence = right.context.sessionSequence ?? right.context.sequence;
   if (leftSequence !== rightSequence) {
@@ -259,7 +265,9 @@ function humanizeEventText(value: string): string {
     .join(" ");
 }
 
-function mapStatusTone(status: string | undefined): FactorySessionEventReplayTone {
+function mapStatusTone(
+  status: string | undefined,
+): FactorySessionEventReplayTone {
   switch (status) {
     case "COMPLETED":
     case "FINAL":

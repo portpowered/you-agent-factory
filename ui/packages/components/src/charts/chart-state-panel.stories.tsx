@@ -45,11 +45,7 @@ export const Empty: Story = {
 
 export const ErrorState: Story = {
   args: {
-    action: (
-      <button type="button">
-        Retry chart load
-      </button>
-    ),
+    action: <button type="button">Retry chart load</button>,
     description: "The chart request failed. Try again later.",
     status: "error",
     title: "Unable to load chart",
@@ -82,11 +78,7 @@ export const EmbeddedEmpty: Story = {
 
 export const NarrowViewportError: Story = {
   args: {
-    action: (
-      <button type="button">
-        Retry chart load
-      </button>
-    ),
+    action: <button type="button">Retry chart load</button>,
     description: "The chart request failed. Try again later.",
     presentation: "embedded",
     status: "error",
@@ -111,9 +103,8 @@ export const NarrowViewportError: Story = {
       canvas.getByRole("button", { name: "Retry chart load" }),
     ).toBeVisible();
 
-    const shell = canvasElement.querySelector<HTMLElement>(
-      "[data-story-shell]",
-    );
+    const shell =
+      canvasElement.querySelector<HTMLElement>("[data-story-shell]");
     expect(shell).not.toBeNull();
     expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(
       true,

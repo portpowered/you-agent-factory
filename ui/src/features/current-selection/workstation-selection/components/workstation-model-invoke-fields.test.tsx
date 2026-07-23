@@ -6,14 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
-
-import { EditableConfigurationModelInvokeFields } from "./workstation-model-invoke-fields";
+import { EditableConfigurationSection } from "./editable/workstation-editable-configuration-section";
 import {
   buildEditableConfigurationSectionReadyState,
   editableConfigurationSectionMessages,
   expandEditableConfigurationSection,
 } from "./editable/workstation-editable-configuration-section.test-helpers";
-import { EditableConfigurationSection } from "./editable/workstation-editable-configuration-section";
+import { EditableConfigurationModelInvokeFields } from "./workstation-model-invoke-fields";
 
 let restoreBrowserShims: (() => void) | undefined;
 
@@ -48,9 +47,9 @@ describe("EditableConfigurationModelInvokeFields", () => {
 
     expandEditableConfigurationSection();
 
-    expect(screen.getByRole("combobox", { name: "Workstation type" })).toHaveTextContent(
-      "Model invoke (legacy)",
-    );
+    expect(
+      screen.getByRole("combobox", { name: "Workstation type" }),
+    ).toHaveTextContent("Model invoke (legacy)");
     expect(screen.getByLabelText("Worker")).toBeInTheDocument();
     expect(screen.getByLabelText("Operation")).toBeInTheDocument();
     expect(screen.getByText("Operation bindings")).toBeInTheDocument();
@@ -95,9 +94,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/Worker catalog unavailable/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Worker catalog unavailable/i)).toBeInTheDocument();
   });
 
   it("updates worker, operation, and binding fields", async () => {
@@ -289,8 +286,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
             workerName: "",
           },
           operationOptionsState: {
-            message:
-              "Select a model worker before choosing an operation.",
+            message: "Select a model worker before choosing an operation.",
             status: "empty",
           },
         })}
@@ -299,9 +295,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
     );
 
     expect(
-      screen.getByText(
-        "Select a model worker before choosing an operation.",
-      ),
+      screen.getByText("Select a model worker before choosing an operation."),
     ).toBeInTheDocument();
 
     rerender(
@@ -323,7 +317,9 @@ describe("EditableConfigurationModelInvokeFields", () => {
     );
 
     expect(
-      screen.getByText("Selected operation is no longer declared on the worker."),
+      screen.getByText(
+        "Selected operation is no longer declared on the worker.",
+      ),
     ).toBeInTheDocument();
   });
 });

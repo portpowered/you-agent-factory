@@ -2,23 +2,47 @@ import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderPackageComponent, screen, userEvent } from "../testing";
-import { FactoryEmulatorControls, type FactoryEmulatorControlsProps } from "./factory-emulator-controls";
+import {
+  FactoryEmulatorControls,
+  type FactoryEmulatorControlsProps,
+} from "./factory-emulator-controls";
 
 function renderControls(overrides: Partial<FactoryEmulatorControlsProps> = {}) {
   const props: FactoryEmulatorControlsProps = {
-    isPlaying: false, onPause: vi.fn(), onPlay: vi.fn(), onRestart: vi.fn(), onSpeedChange: vi.fn(), onStep: vi.fn(),
-    runtimeStatus: { label: "Ready", tone: "success" }, speed: 1, ...overrides,
+    isPlaying: false,
+    onPause: vi.fn(),
+    onPlay: vi.fn(),
+    onRestart: vi.fn(),
+    onSpeedChange: vi.fn(),
+    onStep: vi.fn(),
+    runtimeStatus: { label: "Ready", tone: "success" },
+    speed: 1,
+    ...overrides,
   };
-  return { props, ...renderPackageComponent(<FactoryEmulatorControls {...props} />) };
+  return {
+    props,
+    ...renderPackageComponent(<FactoryEmulatorControls {...props} />),
+  };
 }
 
 describe("FactoryEmulatorControls", () => {
   it("renders controlled actions, supported speeds, and host runtime status", () => {
-    renderControls({ isPlaying: true, runtimeStatus: { label: "Running" }, speed: 2 });
-    for (const name of ["Play", "Pause", "Step", "Restart"]) expect(screen.getByRole("button", { name })).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "Playback speed" })).toHaveValue("2");
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["0.5x", "1x", "2x", "4x"]);
-    expect(screen.getByRole("status", { name: "Runtime status" })).toHaveTextContent("Running");
+    renderControls({
+      isPlaying: true,
+      runtimeStatus: { label: "Running" },
+      speed: 2,
+    });
+    for (const name of ["Play", "Pause", "Step", "Restart"])
+      expect(screen.getByRole("button", { name })).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Playback speed" }),
+    ).toHaveValue("2");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["0.5x", "1x", "2x", "4x"]);
+    expect(
+      screen.getByRole("status", { name: "Runtime status" }),
+    ).toHaveTextContent("Running");
     expect(screen.getByRole("status")).toHaveAttribute("data-playing", "true");
   });
 
@@ -38,7 +62,9 @@ describe("FactoryEmulatorControls", () => {
   });
 
   it("honors host-reported unavailable actions and has no accessibility violations", async () => {
-    const { container } = renderControls({ disabledActions: ["pause", "restart"] });
+    const { container } = renderControls({
+      disabledActions: ["pause", "restart"],
+    });
     expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restart" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();

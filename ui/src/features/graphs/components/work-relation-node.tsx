@@ -1,12 +1,9 @@
 import type { Node, NodeProps } from "@xyflow/react";
-
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import {
-  activityGraphNodeSurfaceClassName,
-} from "../../flowchart/components/current-activity-node-chrome";
-import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import { activityGraphNodeSurfaceClassName } from "../../flowchart/components/current-activity-node-chrome";
 import {
   type ActivityGraphNodeHandle,
   ActivityGraphNodeShell,

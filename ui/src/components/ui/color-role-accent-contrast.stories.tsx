@@ -1,7 +1,6 @@
 import { expect, within } from "storybook/test";
-
-import { COLOR_PALETTE_IDS } from "../../theme/color-palette";
 import { applyDocumentColorPalette } from "../../theme/app-color-palette";
+import { COLOR_PALETTE_IDS } from "../../theme/color-palette";
 import { ColorRoleAccentContrastShowcase } from "./color-role-accent-contrast";
 
 export default {
@@ -48,7 +47,9 @@ export const PaletteSwitching = {
         paletteId,
       );
       await expect(canvas.getByText("Role fill")).toBeVisible();
-      await expect(canvas.getByText("Container + on-container ink")).toBeVisible();
+      await expect(
+        canvas.getByText("Container + on-container ink"),
+      ).toBeVisible();
     }
 
     applyDocumentColorPalette("factory-dark");

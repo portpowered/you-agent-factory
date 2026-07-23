@@ -4,9 +4,9 @@ import { Position, ReactFlowProvider } from "@xyflow/react";
 import {
   GraphEdge,
   GraphNodeButton,
+  type GraphNodeHandle,
   GraphNodeShell,
   GraphViewportSurface,
-  type GraphNodeHandle,
 } from "./index";
 
 const genericHandles: GraphNodeHandle[] = [
@@ -58,7 +58,10 @@ function GraphEdgeExample({
           >
             <GraphNodeButton>Target node</GraphNodeButton>
           </GraphNodeShell>
-          <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          >
             <GraphEdge
               data={edgeData}
               id="story-edge"

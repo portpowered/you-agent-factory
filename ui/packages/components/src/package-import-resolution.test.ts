@@ -1,12 +1,9 @@
 // @vitest-environment happy-dom
 
-import { beforeAll, describe, expect, it } from "vitest";
-
 import {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   COMPONENTS_PACKAGE_NAME,
 } from "@you-agent-factory/components";
-import stylesCss from "@you-agent-factory/components/styles.css?inline";
 import * as charts from "@you-agent-factory/components/charts";
 import * as dataDisplay from "@you-agent-factory/components/data-display";
 import * as factoryEmulator from "@you-agent-factory/components/factory-emulator";
@@ -19,10 +16,15 @@ import * as navigation from "@you-agent-factory/components/navigation";
 import * as overlays from "@you-agent-factory/components/overlays";
 import * as primitives from "@you-agent-factory/components/primitives";
 import * as recipes from "@you-agent-factory/components/recipes";
+import stylesCss from "@you-agent-factory/components/styles.css?inline";
 import * as testing from "@you-agent-factory/components/testing";
 import * as tokens from "@you-agent-factory/components/tokens";
-import { cn, COMPONENTS_CATEGORY as utilitiesCategory } from "@you-agent-factory/components/utilities";
 import * as utilities from "@you-agent-factory/components/utilities";
+import {
+  cn,
+  COMPONENTS_CATEGORY as utilitiesCategory,
+} from "@you-agent-factory/components/utilities";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   injectCompiledPackageTokenStyles,
@@ -61,10 +63,18 @@ describe("@you-agent-factory/components package import resolution", () => {
   it("imports the CSS entrypoint through the configured package path", () => {
     expect(typeof stylesCss).toBe("string");
     expect(stylesCss).not.toMatch(/@import\s+["'].*\/ui\/src\//);
-    expect(readDocumentCssVariable(documentRoot, "--color-primary")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--text-body-medium")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--text-title-large")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--color-af-foundation-background")).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--color-primary"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--text-body-medium"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--text-title-large"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--color-af-foundation-background"),
+    ).toBeTruthy();
   });
 
   it.each(COMPONENT_CATEGORY_EXPORT_PATHS)(

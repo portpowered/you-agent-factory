@@ -100,33 +100,34 @@ describe("multi-session timeline checkpoint identity regression", () => {
     );
   });
 
-  it.each(
-    checkpointInsertionOrders,
-  )("does not choose an arbitrary concrete checkpoint for ~default after %s then %s insertion", async (...order) => {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
-    await persistScenarioInOrder(indexedDB, order);
+  it.each(checkpointInsertionOrders)(
+    "does not choose an arbitrary concrete checkpoint for ~default after %s then %s insertion",
+    async (...order) => {
+      const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+      const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+      await persistScenarioInOrder(indexedDB, order);
 
-    const selectedA = await peekPersistedTimelineCheckpoint(
-      indexedDB,
-      A.streamIdentity.factorySessionID,
-    );
-    const selectedB = await peekPersistedTimelineCheckpoint(
-      indexedDB,
-      B.streamIdentity.factorySessionID,
-    );
-    const selectedC = await peekPersistedTimelineCheckpoint(
-      indexedDB,
-      C.streamIdentity.factorySessionID,
-    );
-    expectCheckpointToMatchScenario(selectedA?.checkpoint, A);
-    expectCheckpointToMatchScenario(selectedB?.checkpoint, B);
-    expectCheckpointToMatchScenario(selectedC?.checkpoint, C);
+      const selectedA = await peekPersistedTimelineCheckpoint(
+        indexedDB,
+        A.streamIdentity.factorySessionID,
+      );
+      const selectedB = await peekPersistedTimelineCheckpoint(
+        indexedDB,
+        B.streamIdentity.factorySessionID,
+      );
+      const selectedC = await peekPersistedTimelineCheckpoint(
+        indexedDB,
+        C.streamIdentity.factorySessionID,
+      );
+      expectCheckpointToMatchScenario(selectedA?.checkpoint, A);
+      expectCheckpointToMatchScenario(selectedB?.checkpoint, B);
+      expectCheckpointToMatchScenario(selectedC?.checkpoint, C);
 
-    await expect(
-      peekPersistedTimelineCheckpoint(indexedDB, DEFAULT_FACTORY_SESSION_ID),
-    ).resolves.toBe(null);
-  });
+      await expect(
+        peekPersistedTimelineCheckpoint(indexedDB, DEFAULT_FACTORY_SESSION_ID),
+      ).resolves.toBe(null);
+    },
+  );
 
   it("does not restore the previous generation's materialized cursor or outcome history", async () => {
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
@@ -151,35 +152,36 @@ describe("multi-session timeline checkpoint identity regression", () => {
     );
   });
 
-  it.each(
-    unresolvedSessionIDs,
-  )("returns no checkpoint for unresolved session identity %j", async (sessionID) => {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
-    await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[0]);
+  it.each(unresolvedSessionIDs)(
+    "returns no checkpoint for unresolved session identity %j",
+    async (sessionID) => {
+      const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+      const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+      await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[0]);
 
-    await expect(
-      peekPersistedTimelineCheckpoint(indexedDB, sessionID),
-    ).resolves.toBe(null);
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          A.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      A,
-    );
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          B.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      B,
-    );
-  });
+      await expect(
+        peekPersistedTimelineCheckpoint(indexedDB, sessionID),
+      ).resolves.toBe(null);
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            A.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        A,
+      );
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            B.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        B,
+      );
+    },
+  );
 });
 
 describe("multi-session timeline checkpoint targeted invalidation", () => {
@@ -212,110 +214,113 @@ describe("multi-session timeline checkpoint targeted invalidation", () => {
 });
 
 describe("multi-session timeline checkpoint clearing regression", () => {
-  it.each(
-    checkpointInsertionOrders,
-  )("keeps B intact when resolved session A is cleared after %s then %s insertion", async (...order) => {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
-    await persistScenarioInOrder(indexedDB, order);
+  it.each(checkpointInsertionOrders)(
+    "keeps B intact when resolved session A is cleared after %s then %s insertion",
+    async (...order) => {
+      const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+      const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+      await persistScenarioInOrder(indexedDB, order);
 
-    await clearTimelineCheckpointsForSession(
-      indexedDB,
-      A.streamIdentity.factorySessionID,
-    );
-    await expect(
-      peekPersistedTimelineCheckpoint(
+      await clearTimelineCheckpointsForSession(
         indexedDB,
         A.streamIdentity.factorySessionID,
-      ),
-    ).resolves.toBe(null);
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          B.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      B,
-    );
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          C.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      C,
-    );
-  });
-
-  it.each(
-    unresolvedSessionIDs,
-  )("does not clear concrete checkpoints for unresolved session identity %j", async (sessionID) => {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
-    await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[1]);
-
-    await clearTimelineCheckpointsForSession(indexedDB, sessionID);
-
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
+      );
+      await expect(
+        peekPersistedTimelineCheckpoint(
           indexedDB,
           A.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      A,
-    );
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          B.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      B,
-    );
-  });
+        ),
+      ).resolves.toBe(null);
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            B.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        B,
+      );
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            C.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        C,
+      );
+    },
+  );
 
-  it.each(
-    checkpointInsertionOrders,
-  )("does not clear either concrete checkpoint for ambiguous ~default after %s then %s insertion", async (...order) => {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
-    await persistScenarioInOrder(indexedDB, order);
+  it.each(unresolvedSessionIDs)(
+    "does not clear concrete checkpoints for unresolved session identity %j",
+    async (sessionID) => {
+      const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+      const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+      await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[1]);
 
-    await clearTimelineCheckpointsForSession(
-      indexedDB,
-      DEFAULT_FACTORY_SESSION_ID,
-    );
+      await clearTimelineCheckpointsForSession(indexedDB, sessionID);
 
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          A.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      A,
-    );
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          B.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      B,
-    );
-    expectCheckpointToMatchScenario(
-      (
-        await peekPersistedTimelineCheckpoint(
-          indexedDB,
-          C.streamIdentity.factorySessionID,
-        )
-      )?.checkpoint,
-      C,
-    );
-  });
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            A.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        A,
+      );
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            B.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        B,
+      );
+    },
+  );
+
+  it.each(checkpointInsertionOrders)(
+    "does not clear either concrete checkpoint for ambiguous ~default after %s then %s insertion",
+    async (...order) => {
+      const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+      const { A, B, C } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+      await persistScenarioInOrder(indexedDB, order);
+
+      await clearTimelineCheckpointsForSession(
+        indexedDB,
+        DEFAULT_FACTORY_SESSION_ID,
+      );
+
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            A.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        A,
+      );
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            B.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        B,
+      );
+      expectCheckpointToMatchScenario(
+        (
+          await peekPersistedTimelineCheckpoint(
+            indexedDB,
+            C.streamIdentity.factorySessionID,
+          )
+        )?.checkpoint,
+        C,
+      );
+    },
+  );
 });

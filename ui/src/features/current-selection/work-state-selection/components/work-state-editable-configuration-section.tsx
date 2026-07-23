@@ -1,11 +1,6 @@
 import { type ReactNode, useId } from "react";
 
-import {
-  Label,
-  Text,
-  Input,
-  SurfacePanel,
-} from "../../../../components/ui";
+import { Input, Label, SurfacePanel, Text } from "../../../../components/ui";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
 import {
@@ -154,10 +149,7 @@ function WorkStateEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <Text
-        className="m-0 text-on-surface-subtle"
-        variant="supporting"
-      >
+      <Text className="m-0 text-on-surface-subtle" variant="supporting">
         {messages.editableConfigurationSaveDisabledValidationDetail}
       </Text>
     </CurrentSelectionFormField>

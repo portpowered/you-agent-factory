@@ -17,7 +17,10 @@ type GraphDurationUnit =
   | "minute"
   | "second";
 
-const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> = {
+const GRAPH_DURATION_LABELS: Record<
+  string,
+  Record<GraphDurationUnit, string>
+> = {
   en: {
     hundredQuintillionYear: "Y",
     quintillionYear: "Z",
@@ -96,13 +99,34 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
   },
 };
 
-const GRAPH_DURATION_UNITS: ReadonlyArray<{ millis: number; unit: GraphDurationUnit }> = [
-  { unit: "hundredQuintillionYear", millis: 100_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
-  { unit: "quintillionYear", millis: 1_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
-  { unit: "hundredQuadrillionYear", millis: 100_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
-  { unit: "quadrillionYear", millis: 1_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
-  { unit: "hundredTrillionYear", millis: 100_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
-  { unit: "trillionYear", millis: 1_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+const GRAPH_DURATION_UNITS: ReadonlyArray<{
+  millis: number;
+  unit: GraphDurationUnit;
+}> = [
+  {
+    unit: "hundredQuintillionYear",
+    millis: 100_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
+  {
+    unit: "quintillionYear",
+    millis: 1_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
+  {
+    unit: "hundredQuadrillionYear",
+    millis: 100_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
+  {
+    unit: "quadrillionYear",
+    millis: 1_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
+  {
+    unit: "hundredTrillionYear",
+    millis: 100_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
+  {
+    unit: "trillionYear",
+    millis: 1_000_000_000_000 * 365 * 24 * 60 * 60 * 1000,
+  },
   { unit: "tenBillionYear", millis: 100_000_000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "hundredMillionYear", millis: 1_000_000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "myriadYear", millis: 10_000 * 365 * 24 * 60 * 60 * 1000 },
@@ -179,6 +203,11 @@ function getMaxGraphDurationValue(
   return 10 ** maxDigits - 1;
 }
 
-function getGraphDurationLabel(unit: GraphDurationUnit, locale: string): string {
-  return GRAPH_DURATION_LABELS[locale]?.[unit] ?? GRAPH_DURATION_LABELS.en[unit];
+function getGraphDurationLabel(
+  unit: GraphDurationUnit,
+  locale: string,
+): string {
+  return (
+    GRAPH_DURATION_LABELS[locale]?.[unit] ?? GRAPH_DURATION_LABELS.en[unit]
+  );
 }

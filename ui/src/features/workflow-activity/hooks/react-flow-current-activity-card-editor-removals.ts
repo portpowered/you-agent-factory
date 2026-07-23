@@ -6,16 +6,16 @@ import type {
   EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { buildFactoryGraphDocRemovalIntent } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
 import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-removals";
+import { buildFactoryGraphDocRemovalIntent } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
 import {
   buildFactoryGraphSelectionBatchRemovalPlan,
-  hasDeletableFactoryGraphSelection,
   type FactoryGraphSelectionBatchRemovalPlan,
   type FactoryGraphSelectionBatchRemovalSelection,
+  hasDeletableFactoryGraphSelection,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
@@ -74,7 +74,9 @@ export function useFactoryGraphRemovalController({
     [onNodeRemovedFromDraft],
   );
   const applyConfirmedBatchRemoval = useCallback(
-    (plan: Pick<FactoryGraphSelectionBatchRemovalPlan, "edgeIds" | "nodeIds">) => {
+    (
+      plan: Pick<FactoryGraphSelectionBatchRemovalPlan, "edgeIds" | "nodeIds">,
+    ) => {
       const result = editableGraph.actions.removeSelection({
         edgeIds: plan.edgeIds,
         nodeIds: plan.nodeIds,

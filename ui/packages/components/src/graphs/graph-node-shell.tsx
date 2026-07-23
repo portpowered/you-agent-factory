@@ -1,15 +1,15 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../utilities/cn";
-import { GraphNodeHandleBadge } from "./graph-node-handle-badge";
 import type { GraphNodeHandle } from "./graph-node-handle";
-import { GraphNodeStateIndicator } from "./graph-node-state-indicator";
+import { GraphNodeHandleBadge } from "./graph-node-handle-badge";
 import {
   GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
   type GraphNodeState,
   graphNodeShellStateAttributes,
   graphNodeShellStateClassName,
 } from "./graph-node-state";
+import { GraphNodeStateIndicator } from "./graph-node-state-indicator";
 
 export interface GraphNodeShellProps
   extends Omit<HTMLAttributes<HTMLElement>, "children"> {

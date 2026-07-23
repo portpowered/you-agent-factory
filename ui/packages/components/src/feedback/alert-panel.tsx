@@ -84,7 +84,7 @@ export const AlertPanel = forwardRef<HTMLDivElement, AlertPanelProps>(
     const resolvedRole = role ?? semanticConfig?.role;
     const resolvedAriaBusy = ariaBusy ?? semanticConfig?.busy;
     const shouldShowStatusLabel =
-      showStatusLabel ?? (semanticConfig?.statusLabel !== undefined);
+      showStatusLabel ?? semanticConfig?.statusLabel !== undefined;
     const statusLabel = semanticConfig?.statusLabel;
 
     return (
@@ -138,21 +138,23 @@ export const AlertPanelStatusLabel = forwardRef<
   );
 });
 
-export interface AlertPanelTitleProps extends HTMLAttributes<HTMLHeadingElement> {
+export interface AlertPanelTitleProps
+  extends HTMLAttributes<HTMLHeadingElement> {
   children?: ReactNode;
 }
 
-export const AlertPanelTitle = forwardRef<HTMLHeadingElement, AlertPanelTitleProps>(
-  function AlertPanelTitle({ className, ...props }, ref) {
-    return (
-      <h3
-        className={cn("m-0 text-body-medium !text-current", className)}
-        ref={ref}
-        {...props}
-      />
-    );
-  },
-);
+export const AlertPanelTitle = forwardRef<
+  HTMLHeadingElement,
+  AlertPanelTitleProps
+>(function AlertPanelTitle({ className, ...props }, ref) {
+  return (
+    <h3
+      className={cn("m-0 text-body-medium !text-current", className)}
+      ref={ref}
+      {...props}
+    />
+  );
+});
 
 export interface AlertPanelTextProps extends HTMLAttributes<HTMLElement> {
   as?: ElementType;

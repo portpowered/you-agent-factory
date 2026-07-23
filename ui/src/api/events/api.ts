@@ -1,10 +1,7 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
 import { factorySessionScopedPath } from "../session-routing";
-import {
-  extractAPIErrorPayload,
-  readAPIResponseBody,
-} from "../transport";
+import { extractAPIErrorPayload, readAPIResponseBody } from "../transport";
 import type { FactoryEvent } from "./types";
 import { FACTORY_EVENTS_ENDPOINT } from "./types";
 
@@ -157,8 +154,7 @@ export async function probeFactoryEventStreamRecovery(
   if (!response.ok) {
     const errorPayload = extractAPIErrorPayload(responseBody);
     throw new FactoryEventStreamRecoveryProbeError(
-      errorPayload?.message ??
-        "The factory event recovery probe failed.",
+      errorPayload?.message ?? "The factory event recovery probe failed.",
       {
         code:
           errorPayload?.code === "BAD_REQUEST" ||
@@ -232,10 +228,7 @@ export async function validateFactoryEventReconnectCursor(
 
 export function openFactoryEventStream(
   onEvent: (event: FactoryEvent) => void,
-  onStatusChange: (
-    status: FactoryEventStreamStatus,
-    message: string,
-  ) => void,
+  onStatusChange: (status: FactoryEventStreamStatus, message: string) => void,
   sessionID?: string | null,
   reconnect?: FactoryEventReconnectCursor,
 ): EventSourceLike | null {

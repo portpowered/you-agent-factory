@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  hasEditableWorkstationValidationErrors,
-  validateEditableWorkstationDraft,
-} from "./validation/editable-workstation-configuration-validation";
-import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,
   modelWorkstationValues,
 } from "../../../../testing/editable-workstation-configuration-validation-fixtures";
+import {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "./validation/editable-workstation-configuration-validation";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: grouped model-invoke validation cases share one fixture harness.
 describe("validateEditableWorkstationDraft model invoke", () => {

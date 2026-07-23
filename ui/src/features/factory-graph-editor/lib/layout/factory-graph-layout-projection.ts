@@ -1,10 +1,10 @@
 import type { FactoryGraphTopology } from "../draft/factory-graph-draft-types";
 import { buildFactoryGraphEditorLayout } from "../editor/factory-graph-editor-layout";
+import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
 import {
   type FactoryLayout,
   resolveProjectedLayoutPositions,
 } from "./factory-graph-layout-operations";
-import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
 
 export async function projectFactoryGraphWithCanonicalLayout(input: {
   autoLayoutTopology?: FactoryGraphTopology;

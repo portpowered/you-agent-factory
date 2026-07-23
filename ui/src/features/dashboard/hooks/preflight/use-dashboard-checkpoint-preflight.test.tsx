@@ -391,44 +391,47 @@ describe("useDashboardCheckpointPreflight superseded session races", () => {
     "non-recoverable invalidation",
     "stale cursor invalidation",
     "stream identity invalidation",
-  ])("ignores delayed session A %s after session B becomes active", async (outcome) => {
-    const race = await startSupersededSessionRace();
-    await settleSupersededSessionA(race.sessionAPreflight, outcome);
+  ])(
+    "ignores delayed session A %s after session B becomes active",
+    async (outcome) => {
+      const race = await startSupersededSessionRace();
+      await settleSupersededSessionA(race.sessionAPreflight, outcome);
 
-    expect(race.result.current.resolvedSessionID).toBe(SESSION_B);
-    expect(race.result.current.persistedCheckpoint?.selectedTick).toBe(22);
-    expect(race.restoreCheckpoint).toHaveBeenCalledTimes(1);
-    expect(race.restoreCheckpoint).toHaveBeenCalledWith(
-      expect.objectContaining({ factorySessionID: SESSION_B }),
-      expect.objectContaining({ selectedTick: 22 }),
-    );
-    expect(race.readCheckpointSpy).toHaveBeenCalledTimes(1);
-    expect(race.readCheckpointSpy).toHaveBeenCalledWith(
-      window.indexedDB,
-      expect.objectContaining({ factorySessionID: SESSION_B }),
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(remapSelectedSessionID).not.toHaveBeenCalled();
-    expect(race.setStreamState).not.toHaveBeenCalled();
-    expect(race.clearCheckpointsSpy).not.toHaveBeenCalled();
-    expect(race.removeQueriesSpy).not.toHaveBeenCalled();
-    expect(race.queryClient.getQueryData(["session-race", SESSION_A])).toBe(
-      "cache-a",
-    );
-    expect(race.queryClient.getQueryData(["session-race", SESSION_B])).toBe(
-      "cache-b",
-    );
-    expect(readSessionPersistenceInvalidationRecords()).toEqual([
-      {
-        correlationToken: correlationTokenForIdentityScope({
-          backendScopeID: `backend-${SESSION_B}`,
-          factorySessionID: SESSION_B,
-          logicalSessionKeyID: `logical-${SESSION_B}`,
-          streamGenerationID: `generation-${SESSION_B}`,
-        }),
-        outcome: "checkpoint_hit",
-        recoveryAction: "reuse_checkpoint",
-      },
-    ]);
-  });
+      expect(race.result.current.resolvedSessionID).toBe(SESSION_B);
+      expect(race.result.current.persistedCheckpoint?.selectedTick).toBe(22);
+      expect(race.restoreCheckpoint).toHaveBeenCalledTimes(1);
+      expect(race.restoreCheckpoint).toHaveBeenCalledWith(
+        expect.objectContaining({ factorySessionID: SESSION_B }),
+        expect.objectContaining({ selectedTick: 22 }),
+      );
+      expect(race.readCheckpointSpy).toHaveBeenCalledTimes(1);
+      expect(race.readCheckpointSpy).toHaveBeenCalledWith(
+        window.indexedDB,
+        expect.objectContaining({ factorySessionID: SESSION_B }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(remapSelectedSessionID).not.toHaveBeenCalled();
+      expect(race.setStreamState).not.toHaveBeenCalled();
+      expect(race.clearCheckpointsSpy).not.toHaveBeenCalled();
+      expect(race.removeQueriesSpy).not.toHaveBeenCalled();
+      expect(race.queryClient.getQueryData(["session-race", SESSION_A])).toBe(
+        "cache-a",
+      );
+      expect(race.queryClient.getQueryData(["session-race", SESSION_B])).toBe(
+        "cache-b",
+      );
+      expect(readSessionPersistenceInvalidationRecords()).toEqual([
+        {
+          correlationToken: correlationTokenForIdentityScope({
+            backendScopeID: `backend-${SESSION_B}`,
+            factorySessionID: SESSION_B,
+            logicalSessionKeyID: `logical-${SESSION_B}`,
+            streamGenerationID: `generation-${SESSION_B}`,
+          }),
+          outcome: "checkpoint_hit",
+          recoveryAction: "reuse_checkpoint",
+        },
+      ]);
+    },
+  );
 });

@@ -32,9 +32,7 @@ function expectDefinitionValue(
 }
 
 async function selectReviewRequest(dispatchID: string): Promise<void> {
-  fireEvent.click(
-    await screen.findByLabelText("Select Review workstation"),
-  );
+  fireEvent.click(await screen.findByLabelText("Select Review workstation"));
 
   const workstationSelection = await screen.findByRole("article", {
     name: "Current selection",
@@ -207,9 +205,7 @@ describe("App replay workstation request flows", () => {
       }),
     ).toBeNull();
 
-    fireEvent.click(
-      await screen.findByLabelText("Select Review workstation"),
-    );
+    fireEvent.click(await screen.findByLabelText("Select Review workstation"));
     fireEvent.click(
       screen.getByRole("button", {
         name: `Select work item ${runtimeDetailsFixtureIDs.activeWorkLabel}`,
@@ -225,7 +221,10 @@ describe("App replay workstation request flows", () => {
       }),
     ).toBeNull();
     expect(
-      getDispatchCard(pendingSelection, runtimeDetailsFixtureIDs.activeDispatchID),
+      getDispatchCard(
+        pendingSelection,
+        runtimeDetailsFixtureIDs.activeDispatchID,
+      ),
     ).toBeTruthy();
     expectDefinitionValue(pendingSelection, "Workstation dispatches", "1");
     expect(

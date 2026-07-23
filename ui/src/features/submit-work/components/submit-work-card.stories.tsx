@@ -211,9 +211,7 @@ export const LocalizedZhCN = {
     await expect(
       scope.getByRole("textbox", { name: "文本项 1" }),
     ).toBeVisible();
-    await expect(
-      scope.getByRole("button", { name: "提交工作" }),
-    ).toBeEnabled();
+    await expect(scope.getByRole("button", { name: "提交工作" })).toBeEnabled();
   },
 };
 

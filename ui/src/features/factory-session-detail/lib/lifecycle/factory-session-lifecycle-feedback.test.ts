@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { FactorySessionLifecycleControlResponse } from "../../../../api/factory-sessions";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 import {
-  resolveFactorySessionLifecycleFeedbackDisplay,
   type LifecycleControlFeedbackState,
+  resolveFactorySessionLifecycleFeedbackDisplay,
 } from "./factory-session-lifecycle-feedback";
 
 describe("factory session lifecycle feedback", () => {
@@ -23,7 +23,8 @@ describe("factory session lifecycle feedback", () => {
     );
 
     expect(display).toEqual({
-      detail: "Current durable status: Paused. Retry dispatch: dispatch-retry-1.",
+      detail:
+        "Current durable status: Paused. Retry dispatch: dispatch-retry-1.",
       outcomeLabel: "Accepted",
       role: "status",
       title: "Pause accepted",

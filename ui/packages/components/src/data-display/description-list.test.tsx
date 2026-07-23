@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-
-import { renderPackageComponent, screen } from "../testing/render";
 import { Label, Text } from "../primitives/typography";
+import { renderPackageComponent, screen } from "../testing/render";
 import { DescriptionList } from "./description-list";
 
 const LONG_LABEL =

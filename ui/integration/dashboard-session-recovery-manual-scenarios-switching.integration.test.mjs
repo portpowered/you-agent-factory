@@ -8,12 +8,12 @@ import {
   defaultFactorySessionID,
   expectNoBrowserErrors,
   openBrowserPage,
+  openDashboardWithSeededCheckpoint,
   resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
-  openDashboardWithSeededCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
   buildStreamIdentity,
@@ -28,10 +28,7 @@ import {
 
 async function tabReconnectWithoutStaleCursor(
   network,
-  {
-    defaultFactorySessionID,
-    resolvedDefaultFactorySessionID,
-  },
+  { defaultFactorySessionID, resolvedDefaultFactorySessionID },
 ) {
   const urls = await network.readEventStreamURLs();
   if (
@@ -48,7 +45,9 @@ async function tabReconnectWithoutStaleCursor(
     (url) =>
       url.includes(
         `/factory-sessions/${defaultFactorySessionID}/sync-preflight`,
-      ) && !url.includes("after_event_id") && !url.includes("after_sequence"),
+      ) &&
+      !url.includes("after_event_id") &&
+      !url.includes("after_sequence"),
   );
 }
 
@@ -69,12 +68,10 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
     "never sends a stale cursor or prior provider-session detail after switching provider account scope",
     async () => {
       const priorProviderScopeIdentity = buildStreamIdentity({
-        backendScopeID:
-          "/provider/local-account/factory::browser-integration",
+        backendScopeID: "/provider/local-account/factory::browser-integration",
       });
       const nextProviderScopeIdentity = buildStreamIdentity({
-        backendScopeID:
-          "/provider/remote-account/factory::browser-integration",
+        backendScopeID: "/provider/remote-account/factory::browser-integration",
       });
       const priorProviderSessionRef =
         "provider-session/local-account/browser-integration";
@@ -188,15 +185,12 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
           },
         );
 
-        await waitForDurableCheckpoint(
-          "tab one cursor reuse",
-          async () => {
-            const urls = await tabOneNetwork.readEventStreamURLs();
-            return urls.some((url) =>
-              eventStreamHasCursor(url, "multi-tab-event-4"),
-            );
-          },
-        );
+        await waitForDurableCheckpoint("tab one cursor reuse", async () => {
+          const urls = await tabOneNetwork.readEventStreamURLs();
+          return urls.some((url) =>
+            eventStreamHasCursor(url, "multi-tab-event-4"),
+          );
+        });
 
         const tabTwoPage = await browserPage.context.newPage();
         const tabTwoNetwork = await installNetworkCapture(tabTwoPage);
@@ -242,7 +236,8 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         );
 
         const tabTwoReloadPage = await browserPage.context.newPage();
-        const tabTwoReloadNetwork = await installNetworkCapture(tabTwoReloadPage);
+        const tabTwoReloadNetwork =
+          await installNetworkCapture(tabTwoReloadPage);
         await tabTwoReloadPage.goto(preview.previewURL, {
           waitUntil: "domcontentloaded",
         });

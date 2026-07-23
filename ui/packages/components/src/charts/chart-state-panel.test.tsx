@@ -43,13 +43,19 @@ describe("ChartStatePanel", () => {
     "renders $status state with caller copy and $role semantics",
     ({ description, role, status, title }) => {
       renderPackageComponent(
-        <ChartStatePanel description={description} status={status} title={title} />,
+        <ChartStatePanel
+          description={description}
+          status={status}
+          title={title}
+        />,
       );
 
       const panel = screen.getByRole(role);
       expect(panel).toHaveAttribute("data-chart-state", status);
       expect(panel).toHaveAttribute("data-chart-presentation", "standalone");
-      expect(screen.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { level: 3, name: title }),
+      ).toBeInTheDocument();
       expect(screen.getByText(description)).toBeInTheDocument();
     },
   );
@@ -83,11 +89,7 @@ describe("ChartStatePanel", () => {
   it("renders optional caller-supplied actions", () => {
     renderPackageComponent(
       <ChartStatePanel
-        action={
-          <button type="button">
-            Retry chart load
-          </button>
-        }
+        action={<button type="button">Retry chart load</button>}
         description="The chart request failed."
         status="error"
         title="Unable to load chart"
@@ -128,6 +130,8 @@ describe("ChartStatePanel", () => {
 
     const panel = screen.getByRole("status");
     expect(panel.className).toContain("min-w-0");
-    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.parentElement?.clientWidth ?? 0);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(
+      panel.parentElement?.clientWidth ?? 0,
+    );
   });
 });

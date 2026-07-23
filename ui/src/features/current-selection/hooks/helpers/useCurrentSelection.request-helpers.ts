@@ -1,3 +1,4 @@
+import { toDashboardAgentRunInspection } from "../../../../api/dashboard/agent-run-inspection-types";
 import type {
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
@@ -6,7 +7,6 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import { toDashboardAgentRunInspection } from "../../../../api/dashboard/agent-run-inspection-types";
 import { enrichWorkstationRequestWithWorkstationType } from "./useCurrentSelection.workstation-type-helpers";
 
 export type DispatchWorkstationRequest =
@@ -80,7 +80,9 @@ function enrichProjectedWorkstationRequests(
     },
   );
 
-  return changed ? Object.fromEntries(entries) : workstationRequestsByDispatchID;
+  return changed
+    ? Object.fromEntries(entries)
+    : workstationRequestsByDispatchID;
 }
 
 function hydrateProjectedInferenceAttempts(
@@ -308,7 +310,8 @@ export function toDashboardWorkstationRequest(
     script_response:
       request.response?.scriptResponse ?? request.response?.script_response,
     agent_run_inspection: toDashboardAgentRunInspection(
-      request.response?.agentRunInspection ?? request.response?.agent_run_inspection,
+      request.response?.agentRunInspection ??
+        request.response?.agent_run_inspection,
     ),
     started_at: request.request.startedAt ?? request.request.started_at,
     total_duration_millis:

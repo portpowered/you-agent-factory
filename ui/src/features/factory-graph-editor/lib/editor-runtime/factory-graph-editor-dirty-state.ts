@@ -38,11 +38,7 @@ export function hasAnyFactoryGraphEditorChanges(
 export function resolveFactoryGraphSaveSummaryKind(
   dirty: FactoryGraphEditorDirtyState,
 ): FactoryGraphSaveSummaryKind {
-  if (
-    !dirty.layoutDirty &&
-    !dirty.topologyDirty &&
-    !dirty.preferencesDirty
-  ) {
+  if (!dirty.layoutDirty && !dirty.topologyDirty && !dirty.preferencesDirty) {
     return "none";
   }
 

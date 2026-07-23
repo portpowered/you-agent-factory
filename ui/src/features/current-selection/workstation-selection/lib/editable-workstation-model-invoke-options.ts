@@ -1,9 +1,11 @@
-import type { EditableWorkstationDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
-import type { resolveEditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
   resolveModelOperationByName,
   resolveModelOperationInputSlots,
 } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import type {
+  EditableWorkstationDraft,
+  resolveEditableWorkstationValues,
+} from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { EditableWorkstationOperationOptionsState } from "./keys/detail-card-types";
 
 export function resolveModelInvokeOperationOptionsState(

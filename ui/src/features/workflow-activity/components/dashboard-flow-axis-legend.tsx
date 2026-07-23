@@ -1,9 +1,9 @@
 import { useId, useState } from "react";
 import {
-  Label,
-  Text,
   type DisclosureButtonProps,
+  Label,
   SurfacePanel,
+  Text,
 } from "../../../components/ui";
 import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";

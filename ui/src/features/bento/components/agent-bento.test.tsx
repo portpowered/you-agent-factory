@@ -382,36 +382,39 @@ describe("AgentBentoLayout", () => {
   it.each([
     ["right", ".react-resizable-handle-e", { clientX: 80, clientY: 120 }],
     ["bottom", ".react-resizable-handle-s", { clientX: 260, clientY: 220 }],
-  ])("persists layout changes from the %s resize handle", async (_label, selector, endPoint) => {
-    const { onLayoutChange } = renderBentoBoard();
-    const activityItem = getGridItem("Current activity");
-    const initialStyle = activityItem.getAttribute("style");
-    const resizeHandle = activityItem.querySelector(selector);
+  ])(
+    "persists layout changes from the %s resize handle",
+    async (_label, selector, endPoint) => {
+      const { onLayoutChange } = renderBentoBoard();
+      const activityItem = getGridItem("Current activity");
+      const initialStyle = activityItem.getAttribute("style");
+      const resizeHandle = activityItem.querySelector(selector);
 
-    if (!(resizeHandle instanceof HTMLElement)) {
-      throw new Error(`expected ${selector} resize handle`);
-    }
+      if (!(resizeHandle instanceof HTMLElement)) {
+        throw new Error(`expected ${selector} resize handle`);
+      }
 
-    fireEvent.mouseDown(resizeHandle, {
-      button: 0,
-      buttons: 1,
-      clientX: 240,
-      clientY: 120,
-    });
-    fireEvent.mouseMove(document, {
-      buttons: 1,
-      ...endPoint,
-    });
-    fireEvent.mouseUp(document, {
-      button: 0,
-      ...endPoint,
-    });
+      fireEvent.mouseDown(resizeHandle, {
+        button: 0,
+        buttons: 1,
+        clientX: 240,
+        clientY: 120,
+      });
+      fireEvent.mouseMove(document, {
+        buttons: 1,
+        ...endPoint,
+      });
+      fireEvent.mouseUp(document, {
+        button: 0,
+        ...endPoint,
+      });
 
-    await waitFor(() => {
-      expect(activityItem.getAttribute("style")).not.toBe(initialStyle);
-      expect(onLayoutChange).toHaveBeenCalled();
-    });
-  });
+      await waitFor(() => {
+        expect(activityItem.getAttribute("style")).not.toBe(initialStyle);
+        expect(onLayoutChange).toHaveBeenCalled();
+      });
+    },
+  );
 
   it("lets the inline add-widget card move through the shared grid handle and keeps a single add-widget instance", async () => {
     const onLayoutChange = vi.fn();

@@ -5,19 +5,19 @@ import { type ReactNode, useId } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  Label,
-  Text,
   FormDescription,
   FormError,
   Input,
+  Label,
   surfacePanelVariants,
+  Text,
 } from "../../../../../components/ui";
 import { formatList } from "../../../../../components/ui/formatters";
 import { cn } from "../../../../../lib/cn";
-import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
 import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation/workstation-type";
+import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
@@ -40,7 +40,6 @@ import type {
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { EditableConfigurationWorkstationGuardsField } from "../fields/workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "../fields/workstation-input-guards-field";
-import { EditableConfigurationModelInvokeFields } from "../workstation-model-invoke-fields";
 import { EditableConfigurationRunnerField } from "../fields/workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
@@ -49,6 +48,7 @@ import {
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "../fields/workstation-summary-field-values";
+import { EditableConfigurationModelInvokeFields } from "../workstation-model-invoke-fields";
 import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
 import { EditableConfigurationCronFields } from "./workstation-cron-fields";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
@@ -127,10 +127,14 @@ function EditableConfigurationReadyForm({
   const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
     type: state.draft.workstationType,
   });
-  const isModelInvoke = isModelInvokeWorkstationType(state.draft.workstationType);
+  const isModelInvoke = isModelInvokeWorkstationType(
+    state.draft.workstationType,
+  );
   const showWorkstationTypeField =
     requiresWorkerAssignment &&
-    supportsEditableWorkstationTypeConversion(state.initialValues.workstationType);
+    supportsEditableWorkstationTypeConversion(
+      state.initialValues.workstationType,
+    );
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>

@@ -1,23 +1,22 @@
-import { type FormEvent, useId } from "react";
-
-import type {
-  FactorySessionsAPIError,
-  FactorySessionTarget,
-} from "../../../api/factory-sessions";
 import {
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@you-agent-factory/components/overlays";
+import { type FormEvent, useId } from "react";
+import type {
+  FactorySessionsAPIError,
+  FactorySessionTarget,
+} from "../../../api/factory-sessions";
 import {
   AlertPanel,
   AlertPanelText,
   Button,
-  Text,
   Input,
   StandardListSelection,
   StandardListSelectionItem,
   SurfacePanel,
+  Text,
 } from "../../../components/ui";
 import {
   type FolderValidationState,
@@ -170,11 +169,7 @@ export function OpenSessionDialog({
   );
 }
 
-function ConfigLoadFailedPanel({
-  error,
-}: {
-  error: FactorySessionsAPIError;
-}) {
+function ConfigLoadFailedPanel({ error }: { error: FactorySessionsAPIError }) {
   return (
     <AlertPanel role="alert" tone="danger">
       <AlertPanelText>{error.message}</AlertPanelText>

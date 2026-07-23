@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installPackageBrowserTestShims } from "../testing/package-browser-shims";
 import {
@@ -132,15 +132,15 @@ describe("Select controlled value", () => {
       <WorkTypeSelect onValueChange={onValueChange} value="story" />,
     );
 
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
-      "Story",
-    );
+    expect(
+      screen.getByRole("combobox", { name: "Work type" }),
+    ).toHaveTextContent("Story");
 
     rerender(<WorkTypeSelect onValueChange={onValueChange} value="bug" />);
 
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
-      "Bug",
-    );
+    expect(
+      screen.getByRole("combobox", { name: "Work type" }),
+    ).toHaveTextContent("Bug");
   });
 
   it("calls onValueChange only when selecting a different enabled option", async () => {
@@ -182,16 +182,18 @@ describe("Select controlled value", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Work type" }));
     const listbox = await screen.findByRole("listbox");
-    const disabledOption = within(listbox).getByRole("option", { name: "Task" });
+    const disabledOption = within(listbox).getByRole("option", {
+      name: "Task",
+    });
 
     expect(disabledOption).toHaveAttribute("aria-disabled", "true");
     await user.click(disabledOption);
 
     expect(onValueChange).not.toHaveBeenCalled();
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
-      "Story",
-    );
+    expect(
+      screen.getByRole("combobox", { name: "Work type" }),
+    ).toHaveTextContent("Story");
   });
 
   it("skips disabled options during keyboard navigation", async () => {
@@ -227,9 +229,7 @@ describe("Select controlled open and keyboard focus", () => {
 
     expect(screen.queryByRole("listbox")).toBeNull();
 
-    rerender(
-      <WorkTypeSelect onOpenChange={onOpenChange} open value="story" />,
-    );
+    rerender(<WorkTypeSelect onOpenChange={onOpenChange} open value="story" />);
 
     expect(screen.getByRole("listbox")).toBeTruthy();
   });
@@ -238,7 +238,9 @@ describe("Select controlled open and keyboard focus", () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
 
-    renderPackageComponent(<ControlledOpenHarness onOpenChange={onOpenChange} />);
+    renderPackageComponent(
+      <ControlledOpenHarness onOpenChange={onOpenChange} />,
+    );
 
     const trigger = screen.getByRole("combobox", { name: "Work type" });
     trigger.focus();

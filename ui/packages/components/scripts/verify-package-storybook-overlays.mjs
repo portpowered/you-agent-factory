@@ -55,7 +55,8 @@ export const overlayStoryTexts = {
   "overlays-scrollarea--mobile-width":
     "Mobile scroll area content remains reachable at narrow widths.",
   "overlays-dialog--keyboard-focus": "Package dialog",
-  "overlays-popover--keyboard-focus": "Popover content from the component package",
+  "overlays-popover--keyboard-focus":
+    "Popover content from the component package",
   "overlays-collapsible--keyboard-focus":
     "Collapsible content rendered from the package overlays category",
   "overlays-scrollarea--keyboard-focus": "Scrollable field",
@@ -118,7 +119,10 @@ async function verifyOverlayViewportStory(
 ) {
   await page.setViewportSize(viewport);
   const iframeUrl = `${baseUrl}/iframe.html?id=${check.storyId}&viewMode=story`;
-  await page.goto(iframeUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.goto(iframeUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
   await page.waitForSelector("#storybook-root", { timeout: 10_000 });
   const storyRoot = page.locator("#storybook-root");
 
@@ -159,7 +163,10 @@ async function verifyOverlayViewportStory(
 
 async function verifyOverlayKeyboardStory(page, baseUrl, storyId) {
   const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
-  await page.goto(iframeUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.goto(iframeUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
   await page.waitForSelector("#storybook-root", { timeout: 10_000 });
   const storyRoot = page.locator("#storybook-root");
 
@@ -202,7 +209,9 @@ async function verifyOverlayKeyboardStory(page, baseUrl, storyId) {
       break;
     }
     case "overlays-scrollarea--keyboard-focus": {
-      const field = storyRoot.getByRole("textbox", { name: "Scrollable field" });
+      const field = storyRoot.getByRole("textbox", {
+        name: "Scrollable field",
+      });
       await field.waitFor({ state: "visible", timeout: 10_000 });
       await field.focus();
       const focused = await field.evaluate(
@@ -223,9 +232,7 @@ async function verifyOverlayKeyboardStory(page, baseUrl, storyId) {
 export async function verifyPackageOverlayStories({ page, baseUrl }) {
   for (const storyId of overlayKeyboardStoryIds) {
     await verifyOverlayKeyboardStory(page, baseUrl, storyId);
-    console.log(
-      `Verified package Storybook keyboard behavior for ${storyId}.`,
-    );
+    console.log(`Verified package Storybook keyboard behavior for ${storyId}.`);
   }
 
   for (const check of overlayViewportStoryChecks) {

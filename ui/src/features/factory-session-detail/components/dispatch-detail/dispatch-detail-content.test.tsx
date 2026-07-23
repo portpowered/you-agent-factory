@@ -57,7 +57,9 @@ const minimalDispatchFixture = {
 
 describe("DispatchDetailContent", () => {
   it("renders successful dispatch status, execution metadata, provider sessions, and artifact links", () => {
-    const data = normalizeFactorySessionDispatchDetail(successfulDispatchFixture);
+    const data = normalizeFactorySessionDispatchDetail(
+      successfulDispatchFixture,
+    );
 
     render(<DispatchDetailContent data={data} />);
 
@@ -68,12 +70,8 @@ describe("DispatchDetailContent", () => {
     expect(screen.getByText("Provider sessions")).toBeTruthy();
     expect(screen.getByText("session_id · sess_codex_1")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "artifact-final-1" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "artifact-log-2" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "artifact-final-1" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "artifact-log-2" })).toBeTruthy();
     expect(screen.getByText("QUEUED")).toBeTruthy();
     expect(screen.getByText("RUNNING")).toBeTruthy();
     expect(screen.getByText("work-alpha")).toBeTruthy();

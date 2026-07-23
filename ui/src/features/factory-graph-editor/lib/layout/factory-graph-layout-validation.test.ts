@@ -1,9 +1,8 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout validation scenarios stay grouped around shared topology fixtures.
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: layout validation scenarios stay grouped around shared topology fixtures.
 import { describe, expect, it } from "vitest";
-
-import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import { setFactoryLayoutEdgeWaypoints } from "./factory-graph-layout-edge-waypoints";
 import { createDefaultFactoryLayout } from "./factory-graph-layout-operations";
 import {
@@ -95,9 +94,9 @@ describe("factory-graph-layout-validation", () => {
     );
     const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
 
-    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual(
-      expected,
-    );
+    expect(
+      collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds),
+    ).toEqual(expected);
   });
 
   it("reports stale edge layout references against pending topology", () => {
@@ -106,14 +105,18 @@ describe("factory-graph-layout-validation", () => {
     );
     const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout = setFactoryLayoutEdgeWaypoints(
-      setFactoryLayoutEdgeWaypoints(createDefaultFactoryLayout(), VALID_EDGE_ID, [
-        { x: 120, y: 80 },
-      ]),
+      setFactoryLayoutEdgeWaypoints(
+        createDefaultFactoryLayout(),
+        VALID_EDGE_ID,
+        [{ x: 120, y: 80 }],
+      ),
       STALE_EDGE_ID,
       [{ x: 40, y: 60 }],
     );
 
-    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual([
+    expect(
+      collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds),
+    ).toEqual([
       {
         code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
         path: "factory.layout.edges[1].id",
@@ -139,7 +142,9 @@ describe("factory-graph-layout-validation", () => {
       ],
     };
 
-    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual([
+    expect(
+      collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds),
+    ).toEqual([
       {
         code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
         path: "factory.layout.edges[0].waypoints[1]",
@@ -283,12 +288,17 @@ describe("factory-graph-layout-validation", () => {
     const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout: ReturnType<typeof createDefaultFactoryLayout> = {
       schemaVersion: 1,
-      edges: [{ waypoints: [{ x: 1, y: 2 }] } as { id?: string; waypoints: { x: number; y: number }[] }],
+      edges: [
+        { waypoints: [{ x: 1, y: 2 }] } as {
+          id?: string;
+          waypoints: { x: number; y: number }[];
+        },
+      ],
     };
 
-    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual(
-      [],
-    );
+    expect(
+      collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds),
+    ).toEqual([]);
   });
 
   it("returns the original layout when there are no edge layout entries to prune", () => {
@@ -551,8 +561,11 @@ describe("factory-graph-layout-validation", () => {
       ],
     };
 
-    const { layout: prunedLayout, prunedGroupMemberNodeIds, rejectedGroupIds } =
-      pruneFactoryLayoutGroupsForTopology(layout, validNodeIds);
+    const {
+      layout: prunedLayout,
+      prunedGroupMemberNodeIds,
+      rejectedGroupIds,
+    } = pruneFactoryLayoutGroupsForTopology(layout, validNodeIds);
 
     expect(prunedGroupMemberNodeIds).toEqual([
       "workstation:missing",

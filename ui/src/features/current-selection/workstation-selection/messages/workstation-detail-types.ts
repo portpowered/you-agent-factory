@@ -66,7 +66,9 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
-  editableConfigurationModelInvokeBindingDuplicate: (slotName: string) => string;
+  editableConfigurationModelInvokeBindingDuplicate: (
+    slotName: string,
+  ) => string;
   editableConfigurationModelInvokeBindingRequired: (slotName: string) => string;
   editableConfigurationModelInvokeBindingsSummary: string;
   editableConfigurationModelInvokeOperationInvalid: string;
@@ -87,7 +89,10 @@ export interface WorkstationDetailMessages {
   modelInvokeBindingSelectorSlotFieldLabel: string;
   modelInvokeBindingSelectorTypeFieldLabel: string;
   modelInvokeBindingSelectorTypeNoneOption: string;
-  modelInvokeBindingSlotHeading: (slotName: string, requirement: string) => string;
+  modelInvokeBindingSlotHeading: (
+    slotName: string,
+    requirement: string,
+  ) => string;
   modelInvokeOperationFieldLabel: string;
   editableConfigurationCronExpiryWindowInvalid: (value: string) => string;
   editableConfigurationCronJitterInvalid: (value: string) => string;

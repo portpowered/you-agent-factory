@@ -47,43 +47,31 @@ describe("worker-workstation taxonomy helpers", () => {
   });
 
   it("accepts legacy worker aliases for model-provider and poller behavior", () => {
-    expect(isInferenceWorkerType(WorkerType.INFERENCE_WORKER)).toBe(
-      true,
-    );
+    expect(isInferenceWorkerType(WorkerType.INFERENCE_WORKER)).toBe(true);
     expect(isInferenceWorkerType(WorkerType.MODEL_WORKER)).toBe(true);
-    expect(isModelProviderWorkerType(WorkerType.AGENT_WORKER)).toBe(
-      true,
-    );
+    expect(isModelProviderWorkerType(WorkerType.AGENT_WORKER)).toBe(true);
     expect(isPollerWorkerType(WorkerType.HOSTED_WORKER)).toBe(true);
     expect(isPollerWorkerType(WorkerType.POLLER_WORKER)).toBe(true);
   });
 
   it("accepts legacy workstation aliases for inference and agent runs", () => {
-    expect(
-      isInferenceRunWorkstationType(WorkstationType.INFERENCE_RUN),
-    ).toBe(true);
-    expect(
-      isInferenceRunWorkstationType(WorkstationType.MODEL_INVOKE),
-    ).toBe(true);
-    expect(isAgentRunWorkstationType(WorkstationType.AGENT_RUN)).toBe(
+    expect(isInferenceRunWorkstationType(WorkstationType.INFERENCE_RUN)).toBe(
+      true,
+    );
+    expect(isInferenceRunWorkstationType(WorkstationType.MODEL_INVOKE)).toBe(
+      true,
+    );
+    expect(isAgentRunWorkstationType(WorkstationType.AGENT_RUN)).toBe(true);
+    expect(isAgentRunWorkstationType(WorkstationType.MODEL_WORKSTATION)).toBe(
       true,
     );
     expect(
-      isAgentRunWorkstationType(
-        WorkstationType.MODEL_WORKSTATION,
-      ),
-    ).toBe(true);
-    expect(
-      isLegacyRunnableWorkstationType(
-        WorkstationType.MODEL_WORKSTATION,
-      ),
+      isLegacyRunnableWorkstationType(WorkstationType.MODEL_WORKSTATION),
     ).toBe(true);
   });
 
   it("keeps legacy worker types selectable while preferring new taxonomy options", () => {
-    expect(
-      resolveEditableWorkerTypeOptions(WorkerType.MODEL_WORKER),
-    ).toEqual([
+    expect(resolveEditableWorkerTypeOptions(WorkerType.MODEL_WORKER)).toEqual([
       WorkerType.MODEL_WORKER,
       ...EDITABLE_WORKER_TYPES,
     ]);

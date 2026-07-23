@@ -103,6 +103,10 @@ export function isFactoryGraphEditorReactFlowSelectionNoOp(
   items: FactoryGraphEditorSelectionItems,
   mode: "add" | "replace",
 ): boolean {
-  const nextState = applyFactoryGraphEditorReactFlowSelection(state, items, mode);
+  const nextState = applyFactoryGraphEditorReactFlowSelection(
+    state,
+    items,
+    mode,
+  );
   return areFactoryGraphEditorSelectionStatesEqual(state, nextState);
 }

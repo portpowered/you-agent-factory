@@ -23,18 +23,20 @@ describe("useDocDetailState", () => {
   it("loads nested doc text from the graph-editor pending factory", () => {
     const nestedDocPath = "factory/docs/standards/review.md";
     act(() => {
-      useGraphEditorPendingFactoryBridge.getState().setPendingFactoryDefinition({
-        name: "Current Factory",
-        supportingFiles: {
-          bundledFiles: [
-            {
-              content: { encoding: "utf-8", inline: "# Review standards\n" },
-              targetPath: nestedDocPath,
-              type: "DOC",
-            },
-          ],
-        },
-      });
+      useGraphEditorPendingFactoryBridge
+        .getState()
+        .setPendingFactoryDefinition({
+          name: "Current Factory",
+          supportingFiles: {
+            bundledFiles: [
+              {
+                content: { encoding: "utf-8", inline: "# Review standards\n" },
+                targetPath: nestedDocPath,
+                type: "DOC",
+              },
+            ],
+          },
+        });
     });
 
     const { result } = renderHook(() =>
@@ -51,18 +53,20 @@ describe("useDocDetailState", () => {
 
   it("loads doc text from the graph-editor pending factory when the saved event factory does not list it yet", () => {
     act(() => {
-      useGraphEditorPendingFactoryBridge.getState().setPendingFactoryDefinition({
-        name: "Current Factory",
-        supportingFiles: {
-          bundledFiles: [
-            {
-              content: { encoding: "utf-8", inline: "# Playbook\n" },
-              targetPath: "factory/docs/playbook.md",
-              type: "DOC",
-            },
-          ],
-        },
-      });
+      useGraphEditorPendingFactoryBridge
+        .getState()
+        .setPendingFactoryDefinition({
+          name: "Current Factory",
+          supportingFiles: {
+            bundledFiles: [
+              {
+                content: { encoding: "utf-8", inline: "# Playbook\n" },
+                targetPath: "factory/docs/playbook.md",
+                type: "DOC",
+              },
+            ],
+          },
+        });
     });
 
     const { result } = renderHook(() =>
@@ -82,7 +86,9 @@ describe("useDocDetailState", () => {
       ({
         savedBundledDoc,
       }: {
-        savedBundledDoc?: Parameters<typeof useDocDetailState>[0]["savedBundledDoc"];
+        savedBundledDoc?: Parameters<
+          typeof useDocDetailState
+        >[0]["savedBundledDoc"];
       }) =>
         useDocDetailState({
           savedBundledDoc,

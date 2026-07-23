@@ -1,7 +1,7 @@
 import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
-import { normalizeEditableInputGuards } from "../workstation-guards";
 import type { EditableWorkstationInputDraft } from "../workstation-editable-values";
+import { normalizeEditableInputGuards } from "../workstation-guards";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]

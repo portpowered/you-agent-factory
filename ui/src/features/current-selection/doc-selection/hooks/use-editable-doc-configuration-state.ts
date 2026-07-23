@@ -101,9 +101,7 @@ function buildReadyEditableDocConfigurationState({
   selectedEditableValues,
   targetPath,
 }: {
-  editableDefinition: NonNullable<
-    CurrentFactoryDocument
-  >;
+  editableDefinition: NonNullable<CurrentFactoryDocument>;
   sessionState: EditableDocSessionState;
   setSessionState: (
     updater: (

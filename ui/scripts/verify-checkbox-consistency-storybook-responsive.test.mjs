@@ -50,7 +50,9 @@ describe("verify-checkbox-consistency-storybook-responsive", () => {
 
     expect(chromium.launch).toHaveBeenCalledTimes(1);
     expect(verifyCurrentSelectionCheckboxSurfaceMock).toHaveBeenCalledTimes(2);
-    expect(verifyFactoryGraphEditorCheckboxSurfaceMock).toHaveBeenCalledTimes(2);
+    expect(verifyFactoryGraphEditorCheckboxSurfaceMock).toHaveBeenCalledTimes(
+      2,
+    );
     expect(verifySharedCheckboxStatesMock).toHaveBeenCalledTimes(1);
     expect(browser.close).toHaveBeenCalledTimes(1);
   });

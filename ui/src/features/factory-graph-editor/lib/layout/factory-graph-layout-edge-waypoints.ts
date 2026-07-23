@@ -1,8 +1,8 @@
 import type { components } from "../../../../api/generated/openapi";
 import {
+  FACTORY_LAYOUT_SCHEMA_VERSION,
   type FactoryLayout,
   type FactoryLayoutPoint,
-  FACTORY_LAYOUT_SCHEMA_VERSION,
 } from "./factory-graph-layout-operations";
 
 export type FactoryLayoutEdge = NonNullable<
@@ -56,7 +56,10 @@ export function setFactoryLayoutEdgeWaypoints(
     }
 
     const { waypoints: _removed, ...remainingEdge } = edges[existingIndex];
-    if (Object.keys(remainingEdge).length === 1 && remainingEdge.id === edgeId) {
+    if (
+      Object.keys(remainingEdge).length === 1 &&
+      remainingEdge.id === edgeId
+    ) {
       edges.splice(existingIndex, 1);
     } else {
       edges[existingIndex] = remainingEdge as FactoryLayoutEdge;
@@ -147,7 +150,11 @@ export function moveFactoryLayoutEdgeWaypoint(
   }
 
   const currentWaypoints = factoryLayoutEdgeWaypoints(layout, edgeId);
-  if (!currentWaypoints || waypointIndex < 0 || waypointIndex >= currentWaypoints.length) {
+  if (
+    !currentWaypoints ||
+    waypointIndex < 0 ||
+    waypointIndex >= currentWaypoints.length
+  ) {
     return layout;
   }
 

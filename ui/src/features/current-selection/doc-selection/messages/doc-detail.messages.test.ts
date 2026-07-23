@@ -11,7 +11,9 @@ describe("getDocDetailMessages", () => {
       const messages = getDocDetailMessages(locale);
 
       expect(messages.editableConfigurationHeading.length).toBeGreaterThan(0);
-      expect(messages.editableConfigurationSaveAction.length).toBeGreaterThan(0);
+      expect(messages.editableConfigurationSaveAction.length).toBeGreaterThan(
+        0,
+      );
       expect(
         messages.editableConfigurationFileNameRequired.length,
       ).toBeGreaterThan(0);

@@ -30,7 +30,7 @@ function createCheckboxLocator({
   return {
     evaluate: vi.fn(async (callback) => callback({ className })),
     getAttribute: vi.fn(async (name) =>
-      name === "aria-invalid" ? ariaInvalid ?? null : null,
+      name === "aria-invalid" ? (ariaInvalid ?? null) : null,
     ),
     isChecked: vi.fn(async () => checked),
     isDisabled: vi.fn(async () => disabled),

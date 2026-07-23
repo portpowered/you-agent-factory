@@ -201,18 +201,16 @@ describe("CurrentActivityGraphViewport", () => {
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
-  it.each([
-    { editorMode: false },
-    { editorMode: true },
-  ])("does not render the top-right work-state phase legend when editorMode is $editorMode", ({
-    editorMode,
-  }) => {
-    const { container } = renderViewport({ editorMode });
+  it.each([{ editorMode: false }, { editorMode: true }])(
+    "does not render the top-right work-state phase legend when editorMode is $editorMode",
+    ({ editorMode }) => {
+      const { container } = renderViewport({ editorMode });
 
-    expect(
-      container.querySelector("[data-factory-graph-work-state-phase-legend]"),
-    ).toBeNull();
-  });
+      expect(
+        container.querySelector("[data-factory-graph-work-state-phase-legend]"),
+      ).toBeNull();
+    },
+  );
 
   it.each([
     {
@@ -230,35 +228,34 @@ describe("CurrentActivityGraphViewport", () => {
       kind: "resource",
       renderedNodeId: "resource:gpu",
     },
-  ])("maps rendered $kind nodes to factory graph ids before editor node deletion", async ({
-    expectedNodeId,
-    kind,
-    renderedNodeId,
-  }) => {
-    const handleEditorNodeClick = vi.fn();
+  ])(
+    "maps rendered $kind nodes to factory graph ids before editor node deletion",
+    async ({ expectedNodeId, kind, renderedNodeId }) => {
+      const handleEditorNodeClick = vi.fn();
 
-    renderViewport({
-      activeTool: "delete",
-      editorMode: true,
-      nodes: [
-        {
-          data: {
-            factoryGraphNodeId: expectedNodeId,
-            kind,
+      renderViewport({
+        activeTool: "delete",
+        editorMode: true,
+        nodes: [
+          {
+            data: {
+              factoryGraphNodeId: expectedNodeId,
+              kind,
+            },
+            id: renderedNodeId,
+            position: { x: 0, y: 0 },
           },
-          id: renderedNodeId,
-          position: { x: 0, y: 0 },
-        },
-      ],
-      onEditorNodeClick: handleEditorNodeClick,
-    });
+        ],
+        onEditorNodeClick: handleEditorNodeClick,
+      });
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: renderedNodeId }),
-    );
+      fireEvent.click(
+        await screen.findByRole("button", { name: renderedNodeId }),
+      );
 
-    expect(handleEditorNodeClick).toHaveBeenCalledWith(expectedNodeId);
-  });
+      expect(handleEditorNodeClick).toHaveBeenCalledWith(expectedNodeId);
+    },
+  );
 
   it.each([
     {
@@ -286,53 +283,56 @@ describe("CurrentActivityGraphViewport", () => {
       target: "workstation:review",
       targetFactoryGraphNodeId: "workstation:review",
     },
-  ])("maps rendered edge endpoints to factory graph ids before edge deletion", async ({
-    expectedEdgeId,
-    renderedEdgeId,
-    source,
-    sourceFactoryGraphNodeId,
-    target,
-    targetFactoryGraphNodeId,
-  }) => {
-    const handleEditorEdgeClick = vi.fn();
+  ])(
+    "maps rendered edge endpoints to factory graph ids before edge deletion",
+    async ({
+      expectedEdgeId,
+      renderedEdgeId,
+      source,
+      sourceFactoryGraphNodeId,
+      target,
+      targetFactoryGraphNodeId,
+    }) => {
+      const handleEditorEdgeClick = vi.fn();
 
-    renderViewport({
-      activeTool: "delete",
-      editorMode: true,
-      edges: [
-        {
-          id: renderedEdgeId,
-          source,
-          target,
-        },
-      ],
-      nodes: [
-        {
-          data: {
-            factoryGraphNodeId: sourceFactoryGraphNodeId,
-            kind: "resource",
+      renderViewport({
+        activeTool: "delete",
+        editorMode: true,
+        edges: [
+          {
+            id: renderedEdgeId,
+            source,
+            target,
           },
-          id: source,
-          position: { x: 0, y: 0 },
-        },
-        {
-          data: {
-            factoryGraphNodeId: targetFactoryGraphNodeId,
-            kind: "worker",
+        ],
+        nodes: [
+          {
+            data: {
+              factoryGraphNodeId: sourceFactoryGraphNodeId,
+              kind: "resource",
+            },
+            id: source,
+            position: { x: 0, y: 0 },
           },
-          id: target,
-          position: { x: 0, y: 0 },
-        },
-      ],
-      onEditorEdgeClick: handleEditorEdgeClick,
-    });
+          {
+            data: {
+              factoryGraphNodeId: targetFactoryGraphNodeId,
+              kind: "worker",
+            },
+            id: target,
+            position: { x: 0, y: 0 },
+          },
+        ],
+        onEditorEdgeClick: handleEditorEdgeClick,
+      });
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: renderedEdgeId }),
-    );
+      fireEvent.click(
+        await screen.findByRole("button", { name: renderedEdgeId }),
+      );
 
-    expect(handleEditorEdgeClick).toHaveBeenCalledWith(expectedEdgeId);
-  });
+      expect(handleEditorEdgeClick).toHaveBeenCalledWith(expectedEdgeId);
+    },
+  );
 
   it("keeps canonical edge ids unchanged before editor edge deletion", async () => {
     const handleEditorEdgeClick = vi.fn();

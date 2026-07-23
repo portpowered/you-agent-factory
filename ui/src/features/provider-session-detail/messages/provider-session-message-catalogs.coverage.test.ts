@@ -80,29 +80,31 @@ const invokeProviderSessionWidget = (
 };
 
 describe("provider-session-detail message catalogs", () => {
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s provider-session detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getProviderSessionDetailMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeProviderSessionDetail,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s provider-session detail value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getProviderSessionDetailMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeProviderSessionDetail,
+      );
+    },
+  );
 
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s provider-session widget value", (locale) => {
-    assertCatalogValuesResolve(
-      getProviderSessionWidgetMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeProviderSessionWidget,
-    );
-  });
+  it.each(SUPPORTED_LOCALES)(
+    "resolves every %s provider-session widget value",
+    (locale) => {
+      assertCatalogValuesResolve(
+        getProviderSessionWidgetMessages(locale) as unknown as Record<
+          string,
+          unknown
+        >,
+        invokeProviderSessionWidget,
+      );
+    },
+  );
 
   it("uses localized repeated labels for non-default provider-session locales", () => {
     expect(getProviderSessionDetailMessages("ja").assistantMessageLabel).toBe(

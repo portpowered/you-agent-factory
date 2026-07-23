@@ -3,17 +3,17 @@
 import "@xyflow/react/dist/style.css";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import { GraphInteractiveExample } from "./graph-interactive-example";
-import { desktopInteractiveGraphNodes } from "./graph-story-fixtures";
+import { installReactFlowTestShims } from "../testing/react-flow-test-shims";
 import {
   fireEvent,
   renderPackageComponent,
   screen,
   waitFor,
 } from "../testing/render";
-import { installReactFlowTestShims } from "../testing/react-flow-test-shims";
+import { GraphInteractiveExample } from "./graph-interactive-example";
+import { desktopInteractiveGraphNodes } from "./graph-story-fixtures";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: interactive graph cases share one React Flow shim lifecycle.
 describe("graph interactive examples", () => {
   let restoreReactFlowShims: (() => void) | undefined;
 
@@ -34,7 +34,9 @@ describe("graph interactive examples", () => {
       expect(screen.getByRole("button", { name: "Ready node" })).toBeVisible();
     });
 
-    expect(screen.getByRole("region", { name: "Interactive graph example" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Interactive graph example" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Connection failed");
     expect(
       document.querySelector('[data-graph-node-state="loading"]'),
@@ -68,7 +70,9 @@ describe("graph interactive examples", () => {
       <GraphInteractiveExample fixtureNodes={desktopInteractiveGraphNodes} />,
     );
 
-    const readyButton = await screen.findByRole("button", { name: "Ready node" });
+    const readyButton = await screen.findByRole("button", {
+      name: "Ready node",
+    });
     readyButton.focus();
     fireEvent.click(readyButton);
 
@@ -88,7 +92,9 @@ describe("graph interactive examples", () => {
       <GraphInteractiveExample fixtureNodes={desktopInteractiveGraphNodes} />,
     );
 
-    const disabledButton = await screen.findByRole("button", { name: "Disabled node" });
+    const disabledButton = await screen.findByRole("button", {
+      name: "Disabled node",
+    });
     const loadingButton = screen.getByRole("button", { name: "Loading node" });
 
     expect(disabledButton).toBeDisabled();
@@ -109,11 +115,17 @@ describe("graph interactive examples", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Zoom In" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Zoom In" }),
+      ).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: "Zoom Out" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Fit View" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Zoom Out" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Fit View" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Example edge")).toBeInTheDocument();
     expect(
       document.querySelector('[data-node-handle-badge="input-target"]'),

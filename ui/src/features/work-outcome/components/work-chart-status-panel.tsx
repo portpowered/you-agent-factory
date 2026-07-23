@@ -1,10 +1,10 @@
+import type { ChartPresentation } from "@you-agent-factory/components/charts";
+import { Skeleton } from "@you-agent-factory/components/feedback";
 import {
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
 } from "@you-agent-factory/components/recipes";
-import type { ChartPresentation } from "@you-agent-factory/components/charts";
-import { Skeleton } from "@you-agent-factory/components/feedback";
 import { cn } from "../../../lib/cn";
 
 // tailwind-exception: intrinsic-sizing

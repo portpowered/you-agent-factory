@@ -132,8 +132,12 @@ describe("WorkerEditableConfigurationHostedFields", () => {
     expect(
       screen.getByText(messages.linearPollIntervalFieldHelp),
     ).toBeInTheDocument();
-    expect(screen.getByText(messages.linearTeamIdsFieldHelp)).toBeInTheDocument();
-    expect(screen.getByText(messages.linearStateIdsFieldHelp)).toBeInTheDocument();
+    expect(
+      screen.getByText(messages.linearTeamIdsFieldHelp),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(messages.linearStateIdsFieldHelp),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(messages.linearMappingWorkTypeFieldHelp),
     ).toBeInTheDocument();
@@ -219,17 +223,22 @@ describe("WorkerEditableConfigurationHostedFields", () => {
       { target: { value: "assignee.id" } },
     );
 
-    expect(state.onAuthSecretRefChange).toHaveBeenCalledWith("secrets/other-key");
+    expect(state.onAuthSecretRefChange).toHaveBeenCalledWith(
+      "secrets/other-key",
+    );
     expect(state.onLinearPollIntervalChange).toHaveBeenCalledWith("45s");
     expect(state.onLinearTeamIdsTextChange).toHaveBeenCalledWith("team-b");
     expect(state.onLinearStateIdsTextChange).toHaveBeenCalledWith("state-b");
     expect(state.onLinearMappingWorkTypeChange).toHaveBeenCalledWith("task");
-    expect(state.onLinearMappingStateChange).toHaveBeenCalledWith("in-progress");
+    expect(state.onLinearMappingStateChange).toHaveBeenCalledWith(
+      "in-progress",
+    );
     expect(state.onLinearClaimAssigneeFieldChange).toHaveBeenCalledWith(
       "assignee.id",
     );
   });
 
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the accessibility regression keeps the complete hosted-field error and aria relationship matrix together.
   it("shows validation errors with accessible ids and aria relationships", () => {
     renderHostedFields(
       {},
@@ -307,7 +316,10 @@ describe("WorkerEditableConfigurationHostedFields", () => {
       "aria-describedby",
       "editable-worker-linear-mapping-state-error",
     );
-    expect(linearClaimAssigneeFieldInput).toHaveAttribute("aria-invalid", "true");
+    expect(linearClaimAssigneeFieldInput).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(linearClaimAssigneeFieldInput).toHaveAttribute(
       "aria-describedby",
       "editable-worker-linear-claim-assignee-field-error",
@@ -337,7 +349,9 @@ describe("WorkerEditableConfigurationHostedFields", () => {
       ),
     ).toHaveAttribute("id", "editable-worker-linear-mapping-work-type-error");
     expect(
-      screen.getByText(messages.editableConfigurationLinearMappingStateRequired),
+      screen.getByText(
+        messages.editableConfigurationLinearMappingStateRequired,
+      ),
     ).toHaveAttribute("id", "editable-worker-linear-mapping-state-error");
     expect(screen.getByText("Invalid claim assignee field.")).toHaveAttribute(
       "id",
@@ -350,7 +364,10 @@ describe("WorkerEditableConfigurationHostedFields", () => {
 
     expect(
       screen.getByRole("textbox", { name: messages.authSecretRefFieldLabel }),
-    ).toHaveAttribute("aria-describedby", "editable-worker-auth-secret-ref-hint");
+    ).toHaveAttribute(
+      "aria-describedby",
+      "editable-worker-auth-secret-ref-hint",
+    );
     expect(
       screen.getByRole("textbox", {
         name: messages.linearPollIntervalFieldLabel,
@@ -361,7 +378,10 @@ describe("WorkerEditableConfigurationHostedFields", () => {
     );
     expect(
       screen.getByRole("textbox", { name: messages.linearTeamIdsFieldLabel }),
-    ).toHaveAttribute("aria-describedby", "editable-worker-linear-team-ids-hint");
+    ).toHaveAttribute(
+      "aria-describedby",
+      "editable-worker-linear-team-ids-hint",
+    );
     expect(
       screen.getByRole("textbox", { name: messages.linearStateIdsFieldLabel }),
     ).toHaveAttribute(

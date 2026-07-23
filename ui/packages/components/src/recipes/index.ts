@@ -3,18 +3,15 @@ export const COMPONENTS_CATEGORY = "recipes" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
-export {
-  WidgetFrameDisclosure,
-  WidgetFrameDisclosureIcon,
-  WidgetFrameDisclosurePanel,
-  WidgetFrameDisclosureTrigger,
-} from "./widget-frame-disclosure";
+export type { WidgetFrameProps } from "./widget-frame";
+export { WidgetFrame } from "./widget-frame";
 export type {
-  WidgetFrameDisclosureIconProps,
-  WidgetFrameDisclosurePanelProps,
-  WidgetFrameDisclosureProps,
-  WidgetFrameDisclosureTriggerProps,
-} from "./widget-frame-disclosure";
+  WidgetDetailCopyProps,
+  WidgetEmptyStateProps,
+  WidgetEmptyStateTextProps,
+  WidgetEmptyStateTitleProps,
+  WidgetSubtitleProps,
+} from "./widget-frame-content";
 export {
   WidgetDetailCopy,
   WidgetEmptyState,
@@ -23,23 +20,17 @@ export {
   WidgetSubtitle,
 } from "./widget-frame-content";
 export type {
-  WidgetDetailCopyProps,
-  WidgetEmptyStateProps,
-  WidgetEmptyStateTextProps,
-  WidgetEmptyStateTitleProps,
-  WidgetSubtitleProps,
-} from "./widget-frame-content";
-export { WidgetFrameSkeleton } from "./widget-frame-skeleton";
+  WidgetFrameDisclosureIconProps,
+  WidgetFrameDisclosurePanelProps,
+  WidgetFrameDisclosureProps,
+  WidgetFrameDisclosureTriggerProps,
+} from "./widget-frame-disclosure";
 export {
-  WidgetErrorState,
-  WidgetLoadingState,
-  WidgetSuccessState,
-} from "./widget-frame-states";
-export type {
-  WidgetErrorStateProps,
-  WidgetLoadingStateProps,
-  WidgetSuccessStateProps,
-} from "./widget-frame-states";
+  WidgetFrameDisclosure,
+  WidgetFrameDisclosureIcon,
+  WidgetFrameDisclosurePanel,
+  WidgetFrameDisclosureTrigger,
+} from "./widget-frame-disclosure";
 export {
   WIDGET_FRAME_MIN_WIDTH_CLASS,
   WIDGET_FRAME_OVERFLOW_TOLERANCE_PX,
@@ -50,8 +41,17 @@ export {
   widgetFrameHasNoHorizontalOverflow,
   widgetFrameStoryShellStyle,
 } from "./widget-frame-layout";
-export { WidgetFrame } from "./widget-frame";
-export type { WidgetFrameProps } from "./widget-frame";
+export { WidgetFrameSkeleton } from "./widget-frame-skeleton";
+export type {
+  WidgetErrorStateProps,
+  WidgetLoadingStateProps,
+  WidgetSuccessStateProps,
+} from "./widget-frame-states";
+export {
+  WidgetErrorState,
+  WidgetLoadingState,
+  WidgetSuccessState,
+} from "./widget-frame-states";
 export {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SECTION_HEADING_CLASS,

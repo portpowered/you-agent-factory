@@ -207,7 +207,10 @@ function collectFormControlUsage(sourceText, filePath) {
         );
       }
 
-      if (isSelectModulePath(modulePath) || isApprovedSelectHelperModulePath(modulePath)) {
+      if (
+        isSelectModulePath(modulePath) ||
+        isApprovedSelectHelperModulePath(modulePath)
+      ) {
         const namedBindings = importClause?.namedBindings;
         if (namedBindings && ts.isNamedImports(namedBindings)) {
           for (const element of namedBindings.elements) {
@@ -259,7 +262,9 @@ function collectFormControlUsage(sourceText, filePath) {
   return violations;
 }
 
-function buildAllowlistMap(allowlist = approvedFeatureFormControlUsageAllowlist) {
+function buildAllowlistMap(
+  allowlist = approvedFeatureFormControlUsageAllowlist,
+) {
   return new Map(allowlist.map((entry) => [entry.relativeFilePath, entry]));
 }
 

@@ -1,5 +1,10 @@
 import { validateEditableWorkstationCronDraft } from "../../../../current-factory-definition/lib/editable-workstation-cron-validation";
 import {
+  isModelInvokeWorkstationType,
+  resolveModelOperationByName,
+  validateEditableModelInvokeBindings,
+} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import {
   workerSupportsPollerBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../../../current-factory-definition/lib/workstation-behavior";
@@ -7,13 +12,8 @@ import type {
   EditableWorkstationDraft,
   resolveEditableWorkstationValues,
 } from "../../../../current-factory-definition/lib/workstation-editable-values";
-import {
-  isModelInvokeWorkstationType,
-  resolveModelOperationByName,
-  validateEditableModelInvokeBindings,
-} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
-import { isValidUppercaseModelOperationName } from "../../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
+import { isValidUppercaseModelOperationName } from "../../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
@@ -215,7 +215,8 @@ function appendModelInvokeValidationErrors(
   Object.assign(
     validationErrors,
     validateEditableModelInvokeBindings(draft.operationBindings, operation, {
-      bindingDuplicate: messages.editableConfigurationModelInvokeBindingDuplicate,
+      bindingDuplicate:
+        messages.editableConfigurationModelInvokeBindingDuplicate,
       bindingRequired: messages.editableConfigurationModelInvokeBindingRequired,
       bindingSummary: messages.editableConfigurationModelInvokeBindingsSummary,
     }),

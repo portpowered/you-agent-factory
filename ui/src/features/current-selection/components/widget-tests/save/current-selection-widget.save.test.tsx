@@ -2,16 +2,14 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
-
-import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
-
 import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../../../api/current-factory-definition";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { staleFactoryVersionTarget } from "../../../../../testing/factory-validation-target-fixtures";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import {
@@ -1131,7 +1129,8 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -1156,7 +1155,8 @@ describe("CurrentSelectionWidget resource save flow", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "voice-model",
           selection: { kind: "resource", resourceName: "voice-model" },
         })}
@@ -1213,7 +1213,8 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -1235,7 +1236,8 @@ describe("CurrentSelectionWidget resource save flow", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "voice-model",
           selection: { kind: "resource", resourceName: "voice-model" },
         })}
@@ -1271,7 +1273,8 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}

@@ -1262,9 +1262,7 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.queryByText(messages.openSessionFolderUnknownError),
     ).toBeNull();
-    expect(
-      screen.queryByRole("tab", { name: "broken-project" }),
-    ).toBeNull();
+    expect(screen.queryByRole("tab", { name: "broken-project" })).toBeNull();
   });
 
   it("keeps config-load diagnostics inline when the selected target fails during open", async () => {
@@ -1357,9 +1355,7 @@ describe("DashboardSessionTabs", () => {
         name: messages.openSessionCreateFactoryLabel,
       }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("tab", { name: "broken-project" }),
-    ).toBeNull();
+    expect(screen.queryByRole("tab", { name: "broken-project" })).toBeNull();
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {

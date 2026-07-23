@@ -2,11 +2,11 @@ import type { ReactNode } from "react";
 
 import {
   Checkbox,
-  Label,
-  Text,
   FormDescription,
   FormError,
   Input,
+  Label,
+  Text,
 } from "../../../../../components/ui";
 import { CurrentSelectionFormField } from "../../../base/public";
 import type {

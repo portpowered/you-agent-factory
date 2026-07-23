@@ -1,5 +1,5 @@
 import type { Decorator } from "@storybook/react-vite";
-import { useId, type ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 
 import { PackageCheckbox } from "./package-checkbox";
 import {
@@ -143,7 +143,9 @@ export function PackageFormFieldGroupedControlStoryExample({
 
   return (
     <FormFieldGroup aria-describedby={descriptionId}>
-      <FormFieldGroupLabel>{PACKAGE_FORM_FIELD_GROUP_LABEL}</FormFieldGroupLabel>
+      <FormFieldGroupLabel>
+        {PACKAGE_FORM_FIELD_GROUP_LABEL}
+      </FormFieldGroupLabel>
       <FormDescription id={descriptionId}>
         {PACKAGE_FORM_FIELD_GROUP_DESCRIPTION}
       </FormDescription>

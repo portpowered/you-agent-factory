@@ -1,3 +1,7 @@
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@you-agent-factory/components/overlays";
 import { useId, useState } from "react";
 import {
   CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
@@ -7,13 +11,12 @@ import {
 } from "../../../../../components/prompt-editor";
 import { VerticalResizableWidth } from "../../../../../components/prompt-editor/vertical-resizable-width";
 import {
-  Label,
-  Text,
   ExpandablePanelTrigger,
   FormError,
+  Label,
   SurfacePanel,
+  Text,
 } from "../../../../../components/ui";
-import { Collapsible, CollapsibleContent } from "@you-agent-factory/components/overlays";
 import { cn } from "../../../../../lib/cn";
 import {
   CurrentSelectionFormField,

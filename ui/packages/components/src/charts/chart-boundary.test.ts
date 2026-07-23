@@ -46,7 +46,9 @@ describe("chart package boundary", () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempRoots.map((tempRoot) => rm(tempRoot, { force: true, recursive: true })),
+      tempRoots.map((tempRoot) =>
+        rm(tempRoot, { force: true, recursive: true }),
+      ),
     );
     tempRoots = [];
   });

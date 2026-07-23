@@ -15,9 +15,10 @@ const dialogEventState = {
 };
 
 vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@you-agent-factory/components/overlays")
-  >();
+  const actual =
+    await importOriginal<
+      typeof import("@you-agent-factory/components/overlays")
+    >();
 
   return {
     ...actual,

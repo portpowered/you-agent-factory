@@ -3,11 +3,11 @@ import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { ApiRunnerID } from "../messages/runner-openapi-enums";
 import {
   resolveDraftForBehaviorChange,
   updateEditableWorkstationCronDraft,
 } from "./editable-workstation-cron-draft-mutators";
-import type { ApiRunnerID } from "../messages/runner-openapi-enums";
 
 export type EditableWorkstationSessionDraftState = {
   draft: EditableWorkstationDraft;

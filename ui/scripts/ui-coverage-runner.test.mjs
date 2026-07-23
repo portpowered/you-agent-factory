@@ -13,7 +13,6 @@ import { expect, test, vi } from "vitest";
 import {
   buildMainCoveredShardPhase,
   buildUiCoveragePhases,
-  isolatedReactFlowCoverageFiles,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
@@ -23,6 +22,7 @@ import {
   formatPhaseElapsed,
   getMainCoveredMaxWorkers,
   getUiCoverageShardTotal,
+  isolatedReactFlowCoverageFiles,
   mainCoveredPhaseName,
   mainCoveredShardBlobPath,
   parseUiCoverageMerge,
@@ -34,9 +34,7 @@ import {
   runUiCoverage,
   uiCoveragePhases,
 } from "./ui-coverage-runner.mjs";
-import {
-  formatSlowFileSummaryLines,
-} from "./ui-test-cost-report.mjs";
+import { formatSlowFileSummaryLines } from "./ui-test-cost-report.mjs";
 
 const fixtureLogSnippet = readFileSync(
   join(

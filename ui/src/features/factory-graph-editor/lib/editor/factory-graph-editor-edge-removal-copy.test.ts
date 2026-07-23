@@ -66,10 +66,13 @@ describe("factory graph editor edge removal copy", () => {
       "story state membership",
       "",
     ],
-  ] as const)("describes %s edge removal copy", (graphEdge, expectedLabel, expectedDescription) => {
-    expect(describeEdgeLabel(graphEdge)).toBe(expectedLabel);
-    expect(buildEdgeRemovalDescription(graphEdge)).toBe(expectedDescription);
-  });
+  ] as const)(
+    "describes %s edge removal copy",
+    (graphEdge, expectedLabel, expectedDescription) => {
+      expect(describeEdgeLabel(graphEdge)).toBe(expectedLabel);
+      expect(buildEdgeRemovalDescription(graphEdge)).toBe(expectedDescription);
+    },
+  );
 
   it("returns empty copy for visibility bypass edges", () => {
     const graphEdge = edge(

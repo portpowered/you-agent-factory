@@ -2,14 +2,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import { PackageCheckbox } from "./package-checkbox";
 import { PackageFileInput } from "./package-file-input";
-import { PackageInput, inputVariants } from "./package-input";
+import { inputVariants, PackageInput } from "./package-input";
 import { PackageTextarea, textareaVariants } from "./package-textarea";
 
 describe("Package input primitives", () => {
@@ -138,7 +134,9 @@ describe("Package input primitives", () => {
     expect(input.hasAttribute("disabled")).toBe(true);
     expect(input.hasAttribute("required")).toBe(true);
 
-    const checkbox = screen.getByRole("checkbox", { name: "Required checkbox" });
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Required checkbox",
+    });
     expect(checkbox.getAttribute("name")).toBe("enabled");
     expect(checkbox.hasAttribute("disabled")).toBe(true);
     expect(checkbox.hasAttribute("required")).toBe(true);

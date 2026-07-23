@@ -1,12 +1,10 @@
 import type { DashboardSnapshot } from "../api/dashboard";
-import { FactoryOrchestratorKind } from "../api/generated/openapi";
 import type {
   FactorySession,
   FactorySessionSummary,
 } from "../api/factory-sessions/api";
-import {
-  isDefaultFactorySessionID,
-} from "../api/session-routing";
+import { FactoryOrchestratorKind } from "../api/generated/openapi";
+import { isDefaultFactorySessionID } from "../api/session-routing";
 
 export const APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID =
   "a1b2c3d4-e5f6-4789-a012-3456789abcde";
@@ -17,8 +15,7 @@ function resolvedFactorySessionID(summary: FactorySessionSummary): string {
     : summary.id;
 }
 
-const DEFAULT_LOGICAL_SESSION_KEY_ID =
-  "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const DEFAULT_LOGICAL_SESSION_KEY_ID = "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 function jsonResponse(
   body: unknown,
@@ -38,8 +35,8 @@ export function buildAppShellStreamIdentity(
   summary: FactorySessionSummary,
   snapshot: DashboardSnapshot,
 ) {
-  const streamIdentity =
-    buildFactorySessionResponse(summary, snapshot).runtime.streamIdentity;
+  const streamIdentity = buildFactorySessionResponse(summary, snapshot).runtime
+    .streamIdentity;
   if (!streamIdentity) {
     throw new Error("expected app-shell factory session stream identity");
   }
@@ -128,15 +125,17 @@ export function handleFactorySessionPreflightRequest({
         checkpointReusable: false,
         reasonCode: "session_not_found",
         reconnectCursor: {
-          provided:
-            searchParams.has("after_event_id") || afterSequence != null,
+          provided: searchParams.has("after_event_id") || afterSequence != null,
           validForStreamGeneration: false,
         },
         requestedSessionId: requestedSessionID,
       });
     }
 
-    const sessionResponse = buildFactorySessionResponse(sessionSummary, snapshot);
+    const sessionResponse = buildFactorySessionResponse(
+      sessionSummary,
+      snapshot,
+    );
     const streamGenerationId =
       sessionResponse.runtime.streamIdentity?.streamGenerationID ??
       sessionResponse.runtime.lifecycle.updatedAt;
@@ -150,7 +149,9 @@ export function handleFactorySessionPreflightRequest({
       reconnectCursor: {
         afterEventId: searchParams.get("after_event_id") ?? undefined,
         afterSequence:
-          afterSequence == null ? undefined : Number.parseInt(afterSequence, 10),
+          afterSequence == null
+            ? undefined
+            : Number.parseInt(afterSequence, 10),
         provided: searchParams.has("after_event_id") || afterSequence != null,
         validForStreamGeneration: true,
       },

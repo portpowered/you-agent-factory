@@ -1,11 +1,10 @@
 import { useMemo } from "react";
-
-import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import {
+  type FactoryBundledDocFile,
   factoryBundledDocDisplayLabel,
   findFactoryBundledDocFile,
-  type FactoryBundledDocFile,
 } from "../../../workflow-activity/lib/factory-bundled-docs";
+import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 
 export type DocDetailState =
   | { status: "loading" }
@@ -47,9 +46,5 @@ export function useDocDetailState(
       inlineContent: bundledFile.content?.inline ?? "",
       targetPath,
     };
-  }, [
-    pendingFactoryDefinition,
-    savedBundledDoc,
-    targetPath,
-  ]);
+  }, [pendingFactoryDefinition, savedBundledDoc, targetPath]);
 }

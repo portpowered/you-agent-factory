@@ -53,11 +53,13 @@ const signature = {
 
 describe("factory invocation form projection", () => {
   it("projects signature-backed dashboard controls from canonical parameter data", () => {
-    const projection = projectInvocationForm(signature, [{
-      args: { input: "hello" },
-      description: { type: "LOCALIZABLE_ASSET", value: "Basic invocation" },
-      name: "basic",
-    }]);
+    const projection = projectInvocationForm(signature, [
+      {
+        args: { input: "hello" },
+        description: { type: "LOCALIZABLE_ASSET", value: "Basic invocation" },
+        name: "basic",
+      },
+    ]);
 
     expect(projection.examples).toHaveLength(1);
     expect(projection.outputContract?.mode).toBe("FILE");
@@ -101,13 +103,16 @@ describe("factory invocation form projection", () => {
 
 describe("factory invocation form serialization", () => {
   it("serializes dashboard field state into InvocationRequest.args", () => {
-    const args = serializeInvocationArgs(projectInvocationForm(signature).fields, {
-      confirm: ["false"],
-      input: ["hello world"],
-      outputPath: ["/tmp/report.txt"],
-      tag: ["alpha", "beta", ""],
-      attachment: ["/tmp/source.txt"],
-    });
+    const args = serializeInvocationArgs(
+      projectInvocationForm(signature).fields,
+      {
+        confirm: ["false"],
+        input: ["hello world"],
+        outputPath: ["/tmp/report.txt"],
+        tag: ["alpha", "beta", ""],
+        attachment: ["/tmp/source.txt"],
+      },
+    );
 
     expect(args).toEqual({
       attachment: "/tmp/source.txt",

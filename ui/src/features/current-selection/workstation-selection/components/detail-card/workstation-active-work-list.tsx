@@ -1,11 +1,9 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { DashboardActionButton } from "../../../../../components/ui";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
 import {

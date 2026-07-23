@@ -630,7 +630,10 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const requestDetailsRegion = expandDispatchSection(dispatchHistory, "Summary");
+    const requestDetailsRegion = expandDispatchSection(
+      dispatchHistory,
+      "Summary",
+    );
     const requestDetails = within(requestDetailsRegion);
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
@@ -1754,11 +1757,7 @@ describe("WorkItemDetailCard localization", () => {
       throw new Error("expected localized dispatch history card");
     }
 
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "摘要",
-      "展开",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "摘要", "展开");
     expect(within(requestDetails).getByText("开始时间")).toBeTruthy();
     expect(
       within(getDetailRow(requestDetails, "开始时间")).getByText(
@@ -2049,10 +2048,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(secondResponseBody).getByText("Ready for the next workstation."),
     ).toBeTruthy();
 
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "Summary",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "Summary");
     const traceButton = within(requestDetails).getByRole("button", {
       name: "trace-active-story",
     });
@@ -2191,10 +2187,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected pending script dispatch history card");
     }
 
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "Summary",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "Summary");
     expect(
       within(requestDetails).getByText(
         "Prompt details are not applicable to this script-backed dispatch.",
@@ -2284,10 +2277,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getByText("Active Story", { selector: "strong" }),
     ).toBeTruthy();
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "Summary",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "Summary");
     expect(
       within(requestDetails).getByText(
         dashboardWorkstationRequestFixtures.ready.dispatch_id,
@@ -2358,12 +2348,14 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     }
 
     expect(
-      within(dispatchCard).getByText("Unknown dispatch", { selector: "strong" }),
+      within(dispatchCard).getByText("Unknown dispatch", {
+        selector: "strong",
+      }),
     ).toBeTruthy();
     expect(
-      within(
-        expandDispatchSection(dispatchCard, "Summary"),
-      ).getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id),
+      within(expandDispatchSection(dispatchCard, "Summary")).getByText(
+        dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
+      ),
     ).toBeTruthy();
   });
 
@@ -2502,10 +2494,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected script success dispatch history card");
     }
 
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "Summary",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "Summary");
     expect(
       within(requestDetails).getAllByText("Succeeded").length,
     ).toBeGreaterThan(0);
@@ -2592,10 +2581,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected script failure dispatch history card");
     }
 
-    const requestDetails = expandDispatchSection(
-      dispatchCard,
-      "Summary",
-    );
+    const requestDetails = expandDispatchSection(dispatchCard, "Summary");
     expect(
       within(requestDetails).getAllByText("Timed out").length,
     ).toBeGreaterThan(0);

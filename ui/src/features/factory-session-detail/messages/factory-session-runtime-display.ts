@@ -55,9 +55,7 @@ export function formatFactoryOrchestratorKind(
   locale?: string | null,
 ): string {
   const messages = getFactorySessionDetailMessages(locale);
-  return (
-    messages.orchestratorKindLabels[orchestratorKind] ?? orchestratorKind
-  );
+  return messages.orchestratorKindLabels[orchestratorKind] ?? orchestratorKind;
 }
 
 export function formatFactorySessionScriptStatus(

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-
+import {
+  createDefaultFactoryLayout,
+  hasFactoryLayoutChanges,
+} from "../factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
   createFactoryLayoutGroup,
@@ -9,15 +12,13 @@ import {
   applyFactoryLayoutCommand,
   createCreateFactoryLayoutGroupCommand,
   createUpdateFactoryLayoutGroupCommand,
-  invertFactoryLayoutCommand,
   type FactoryLayoutCommand,
+  invertFactoryLayoutCommand,
 } from "./factory-graph-layout-commands";
-import {
-  createDefaultFactoryLayout,
-  hasFactoryLayoutChanges,
-} from "../factory-graph-layout-operations";
 
-function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
+function requireCommand(
+  command: FactoryLayoutCommand | null,
+): FactoryLayoutCommand {
   expect(command).not.toBeNull();
   if (!command) {
     throw new Error("Expected layout command to be created.");

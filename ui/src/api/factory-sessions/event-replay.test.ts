@@ -1,4 +1,3 @@
-import { FACTORY_EVENT_TYPES } from "../events";
 import {
   awaitingReplaySessionID,
   buildAwaitingDurableSession,
@@ -16,6 +15,7 @@ import {
   unavailableReplaySessionID,
   warningReplaySessionID,
 } from "../../testing/factory-session-event-replay-fixtures";
+import { FACTORY_EVENT_TYPES } from "../events";
 import {
   listFactorySessionEventReplay,
   parseFactoryEventReplayStream,
@@ -28,16 +28,21 @@ describe("factory session event replay API", () => {
 
   it("parses a durable factory session replay stream into ordered Factory Events", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(buildSuccessfulReplayEventStream(successfulReplaySessionID), {
-        headers: {
-          "Content-Type": "text/event-stream",
+      new Response(
+        buildSuccessfulReplayEventStream(successfulReplaySessionID),
+        {
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+          status: 200,
         },
-        status: 200,
-      }),
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const events = await listFactorySessionEventReplay(successfulReplaySessionID);
+    const events = await listFactorySessionEventReplay(
+      successfulReplaySessionID,
+    );
 
     expect(events).toEqual(
       expect.arrayContaining([
@@ -70,14 +75,14 @@ describe("factory session event replay API", () => {
   });
 
   it("skips non-message SSE blocks and returns an empty event list for sparse history", () => {
-    expect(parseFactoryEventReplayStream(buildEmptyReplayEventStream())).toEqual(
-      [],
-    );
+    expect(
+      parseFactoryEventReplayStream(buildEmptyReplayEventStream()),
+    ).toEqual([]);
   });
 
   it("rejects malformed Factory Event payloads", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response("data: {\"id\":\"evt-1\"}\n\n", {
+      new Response('data: {"id":"evt-1"}\n\n', {
         headers: {
           "Content-Type": "text/event-stream",
         },
@@ -96,7 +101,9 @@ describe("factory session event replay API", () => {
 
 describe("factory session event replay shared fixtures", () => {
   it("parses warning and awaiting durable replay fixtures into ordered Factory Events", () => {
-    expect(parseFactoryEventReplayStream(buildWarningReplayEventStream())).toEqual([
+    expect(
+      parseFactoryEventReplayStream(buildWarningReplayEventStream()),
+    ).toEqual([
       expect.objectContaining({
         id: "evt-w1",
         type: "JAVASCRIPT_CHECKPOINT_REF",
@@ -111,14 +118,20 @@ describe("factory session event replay shared fixtures", () => {
       }),
     ]);
 
-    expect(parseFactoryEventReplayStream(buildAwaitingReplayEventStream())).toEqual([
+    expect(
+      parseFactoryEventReplayStream(buildAwaitingReplayEventStream()),
+    ).toEqual([
       expect.objectContaining({
-        context: expect.objectContaining({ sessionId: awaitingReplaySessionID }),
+        context: expect.objectContaining({
+          sessionId: awaitingReplaySessionID,
+        }),
         id: "session-started/dur-sess-js-awaiting-001",
         type: FACTORY_EVENT_TYPES.sessionStarted,
       }),
       expect.objectContaining({
-        context: expect.objectContaining({ sessionId: awaitingReplaySessionID }),
+        context: expect.objectContaining({
+          sessionId: awaitingReplaySessionID,
+        }),
         id: "session-result-updated/dur-sess-js-awaiting-001",
         type: FACTORY_EVENT_TYPES.sessionResultUpdated,
       }),
@@ -152,7 +165,9 @@ describe("factory session event replay shared fixtures", () => {
       sessionId: errorReplaySessionID,
       status: "FAILED",
     });
-    expect(buildWarningDurableSession(unavailableReplaySessionID)).toMatchObject({
+    expect(
+      buildWarningDurableSession(unavailableReplaySessionID),
+    ).toMatchObject({
       sessionId: unavailableReplaySessionID,
       status: "FAILED",
     });

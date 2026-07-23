@@ -49,8 +49,12 @@ describe("DataTable row rendering", () => {
     expect(
       screen.getByRole("table", { name: "Sample data table" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Role" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Role" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Alpha" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Beta" })).toBeInTheDocument();
   });
@@ -135,8 +139,12 @@ describe("DataTable explicit states", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-busy", "true");
     expect(status).toHaveTextContent("Loading table rows");
-    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("cell", { name: "Alpha" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).toBeInTheDocument();
   });
 
   it("renders an explicit empty state without relying on row data", () => {
@@ -152,7 +160,9 @@ describe("DataTable explicit states", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("No matching rows");
-    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("cell", { name: "Alpha" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders an explicit error state with alert semantics", () => {
@@ -170,7 +180,9 @@ describe("DataTable explicit states", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Unable to load table data",
     );
-    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("cell", { name: "Alpha" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders semantic success state rows when data is present", () => {
@@ -202,12 +214,13 @@ describe("DataTable layout", () => {
       />,
     );
 
-    const scroller = screen.getByRole("table", { name: "Dense data table" })
-      .parentElement;
+    const scroller = screen.getByRole("table", {
+      name: "Dense data table",
+    }).parentElement;
     expect(scroller).toHaveAttribute("data-size", "dense");
-    expect(screen.getByRole("columnheader", { name: "Name" }).className).toContain(
-      "group-data-[size=dense]/table:px-3",
-    );
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }).className,
+    ).toContain("group-data-[size=dense]/table:px-3");
   });
 
   it("renders long cell content with host-provided containment classes", () => {

@@ -47,15 +47,17 @@ describe("CurrentSelectionWidgetSaveNotifications", () => {
         docSave={buildIdleSaveHook() as never}
         docSaveState={{ status: "success" }}
         editableConfigurationState={null}
-        editableDocConfigurationState={{
-          draft: {
-            fileName: "guide.md",
-            inlineContent: "# Guide\n",
-            originalExtension: ".md",
-          },
-          pendingTargetPath: "factory/docs/guide.md",
-          status: "ready",
-        } as never}
+        editableDocConfigurationState={
+          {
+            draft: {
+              fileName: "guide.md",
+              inlineContent: "# Guide\n",
+              originalExtension: ".md",
+            },
+            pendingTargetPath: "factory/docs/guide.md",
+            status: "ready",
+          } as never
+        }
         editableResourceConfigurationState={null}
         editableWorkStateConfigurationState={null}
         editableWorkerConfigurationState={null}

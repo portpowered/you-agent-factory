@@ -49,7 +49,9 @@ export const Dense: Story = {
   render: () => (
     <SurfacePanel className="grid gap-2" padding="compact" radius="lg">
       <Heading level="section">Compact panel</Heading>
-      <Text variant="dense">Dense panel body copy supplied by the host application</Text>
+      <Text variant="dense">
+        Dense panel body copy supplied by the host application
+      </Text>
     </SurfacePanel>
   ),
 };
@@ -95,8 +97,8 @@ export const Wide: Story = {
     <SurfacePanel className="grid w-full max-w-4xl gap-4" radius="2xl">
       <Heading level="section">Wide surface panel</Heading>
       <Text>
-        Surface panels preserve border, spacing, radius, and content structure at
-        wider dashboard widths.
+        Surface panels preserve border, spacing, radius, and content structure
+        at wider dashboard widths.
       </Text>
       <ActionRow
         actions={<DemoButton>Open details</DemoButton>}
@@ -114,9 +116,15 @@ export const MobileSurfacePanelLayout: Story = {
     },
   },
   render: () => (
-    <SurfacePanel className="grid w-full min-w-0 max-w-xs gap-3" padding="compact" radius="lg">
+    <SurfacePanel
+      className="grid w-full min-w-0 max-w-xs gap-3"
+      padding="compact"
+      radius="lg"
+    >
       <Heading level="section">Mobile panel</Heading>
-      <Text variant="dense">Dense panel content remains readable on narrow screens.</Text>
+      <Text variant="dense">
+        Dense panel content remains readable on narrow screens.
+      </Text>
       <ActionRow
         className="min-w-0 w-full"
         actions={
@@ -142,7 +150,8 @@ export const DesktopSurfacePanelLayout: Story = {
     <SurfacePanel className="grid w-full max-w-2xl gap-4" radius="2xl">
       <Heading level="section">Desktop panel</Heading>
       <Text>
-        Surface panel structure remains readable at wider dashboard viewport sizes.
+        Surface panel structure remains readable at wider dashboard viewport
+        sizes.
       </Text>
       <ActionRow
         actions={<DemoButton>Primary action</DemoButton>}

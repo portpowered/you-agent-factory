@@ -68,8 +68,9 @@ export function useCurrentActivityImportController({
   const { activateImport, activationState, clearActivationError } =
     useFactoryImportActivation({
       activateFactory,
-      currentFactoryDocument:
-        currentActivityImportDocumentFromFactory(currentFactoryDefinition),
+      currentFactoryDocument: currentActivityImportDocumentFromFactory(
+        currentFactoryDefinition,
+      ),
       onActivated: handleFactoryActivated,
       sessionID,
     });

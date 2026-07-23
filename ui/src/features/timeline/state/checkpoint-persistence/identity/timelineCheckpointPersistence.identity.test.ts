@@ -36,18 +36,21 @@ describe("timeline checkpoint concrete stream identity", () => {
     "session-a-uuid",
     "not-a-real-session",
     "00000000-0000-0000-0000-000000000000",
-  ])("refuses unresolved non-UUID Factory Session identity %s", async (factorySessionID) => {
-    const { indexedDB, records } =
-      createTimelineCheckpointIndexedDBTestDouble();
-    const identity = { ...STREAM_IDENTITY, factorySessionID };
+  ])(
+    "refuses unresolved non-UUID Factory Session identity %s",
+    async (factorySessionID) => {
+      const { indexedDB, records } =
+        createTimelineCheckpointIndexedDBTestDouble();
+      const identity = { ...STREAM_IDENTITY, factorySessionID };
 
-    await persistTimelineCheckpoint(indexedDB, checkpointFixture(), identity);
+      await persistTimelineCheckpoint(indexedDB, checkpointFixture(), identity);
 
-    expect(records.size).toBe(0);
-    await expect(
-      readTimelineCheckpoint(indexedDB, identity),
-    ).resolves.toBeNull();
-  });
+      expect(records.size).toBe(0);
+      await expect(
+        readTimelineCheckpoint(indexedDB, identity),
+      ).resolves.toBeNull();
+    },
+  );
 
   it("normalizes whitespace and UUID case before storing and matching identity", async () => {
     const { indexedDB, records } =

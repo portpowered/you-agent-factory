@@ -1,11 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ReactFlowProvider } from "@xyflow/react";
 
-import {
-  GraphNodeButton,
-  GraphNodeShell,
-  type GraphNodeHandle,
-} from "./index";
+import { GraphNodeButton, type GraphNodeHandle, GraphNodeShell } from "./index";
 
 const genericHandles: GraphNodeHandle[] = [
   {

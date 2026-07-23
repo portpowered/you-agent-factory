@@ -49,9 +49,7 @@ function requestSummaryRegion() {
     throw new Error("expected selected-work dispatch history card");
   }
 
-  return within(
-    within(dispatchCard).getByRole("region", { name: "Summary" }),
-  );
+  return within(within(dispatchCard).getByRole("region", { name: "Summary" }));
 }
 
 function expandRequestSummary() {

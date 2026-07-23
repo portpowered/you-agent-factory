@@ -1,6 +1,6 @@
+import type { DashboardSessionBracket } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import type { DashboardSessionBracket } from "../../../../api/dashboard";
 import type { ReplayWorldState } from "./types";
 
 function stringValue(value: string | null | undefined): string | undefined {
@@ -11,7 +11,9 @@ function stringValue(value: string | null | undefined): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-function ensureSessionBracket(state: ReplayWorldState): DashboardSessionBracket {
+function ensureSessionBracket(
+  state: ReplayWorldState,
+): DashboardSessionBracket {
   if (!state.sessionBracket) {
     state.sessionBracket = {};
   }
@@ -35,7 +37,9 @@ function mergeSessionBracketIdentity(
   }
 }
 
-function cloneStringSlice(values: string[] | null | undefined): string[] | undefined {
+function cloneStringSlice(
+  values: string[] | null | undefined,
+): string[] | undefined {
   if (!values || values.length === 0) {
     return undefined;
   }

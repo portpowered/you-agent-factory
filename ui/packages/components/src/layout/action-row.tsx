@@ -4,8 +4,7 @@ import { cn } from "../utilities/cn";
 
 const ACTION_ROW_CLASS =
   "flex min-w-0 flex-wrap items-center gap-2 max-md:justify-start";
-const ACTION_ROW_SECTION_CLASS =
-  "flex min-w-0 flex-wrap items-center gap-2";
+const ACTION_ROW_SECTION_CLASS = "flex min-w-0 flex-wrap items-center gap-2";
 
 export interface ActionRowProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {

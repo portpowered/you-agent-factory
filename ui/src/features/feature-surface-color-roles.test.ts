@@ -51,15 +51,16 @@ describe("feature surface color roles (US-009)", () => {
     (path) => !path.endsWith("feature-surface-color-roles.test.ts"),
   );
 
-  it.each(
-    featureSources.map((path) => [relativeFeaturePath(path), path]),
-  )("%s avoids transitional neutral and accent class tokens", (_label, filePath) => {
-    const source = readFileSync(filePath, "utf8");
+  it.each(featureSources.map((path) => [relativeFeaturePath(path), path]))(
+    "%s avoids transitional neutral and accent class tokens",
+    (_label, filePath) => {
+      const source = readFileSync(filePath, "utf8");
 
-    for (const pattern of FORBIDDEN_TRANSITIONAL_PATTERNS) {
-      expect(source).not.toMatch(pattern);
-    }
-  });
+      for (const pattern of FORBIDDEN_TRANSITIONAL_PATTERNS) {
+        expect(source).not.toMatch(pattern);
+      }
+    },
+  );
 
   it("representative graph and header surfaces use role utilities", () => {
     const activityNodeShell = readFileSync(

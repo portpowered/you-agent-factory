@@ -1,13 +1,18 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
-
 import { buildWorkstationGuardSelectorCompletionItems } from "../../../../../components/prompt-editor";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
 

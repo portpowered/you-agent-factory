@@ -156,7 +156,9 @@ describe("replay fixture projections", () => {
 
   it("rejects unknown replay fixture ids at the helper boundary", () => {
     expect(() =>
-      loadReplayFixtureEvents("unknown-fixture" as keyof typeof replayFixtureCatalog),
+      loadReplayFixtureEvents(
+        "unknown-fixture" as keyof typeof replayFixtureCatalog,
+      ),
     ).toThrowError("Unknown replay fixture: unknown-fixture");
   });
 });

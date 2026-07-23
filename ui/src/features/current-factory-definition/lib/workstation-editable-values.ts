@@ -1,41 +1,14 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { components } from "../../../api/generated/openapi";
-import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/public";
 import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
+import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/public";
 import {
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
   resolveRunnerSelection,
 } from "./runner-selection";
-import {
-  DEFAULT_WORKSTATION_BEHAVIOR,
-  type EditableWorkstationBehavior,
-  resolveEditableWorkstationBehavior,
-  resolveEditableWorkstationBehaviorOptions,
-} from "./workstation-behavior";
-import {
-  normalizeEditableInputGuards,
-  resolveFactoryWorkstationNameOptions,
-  rewriteWorkstationVisitCountReferences,
-} from "./workstation-guards";
-import {
-  buildCanonicalModelInvokeBindingsFromDraft,
-  isModelInvokeWorkstationType,
-  resolveCompatibleModelWorkerNames,
-  resolveEditableModelInvokeBindings,
-  resolveModelOperationByName,
-  resolveModelOperationsByWorkerName,
-  resolveModelWorkerOperations,
-  syncEditableModelInvokeBindingsForOperation,
-} from "./workstation/workstation-model-invoke";
-import type { EditableModelInvokeBindingDraft } from "./workstation/workstation-model-invoke";
 import { preferredInferenceRunWorkstationType } from "./worker-workstation-taxonomy";
-import {
-  type EditableWorkstationType,
-  resolveEditableWorkstationType,
-  resolveEditableWorkstationTypeOptions,
-} from "./workstation/workstation-type";
 import {
   applyEditableWorkstationInputs,
   resolveCanonicalWorkstation,
@@ -47,6 +20,33 @@ import {
   resolveWorkerOptions,
   resolveWorkerTypeByName,
 } from "./workstation/workstation-editable-resolution";
+import type { EditableModelInvokeBindingDraft } from "./workstation/workstation-model-invoke";
+import {
+  buildCanonicalModelInvokeBindingsFromDraft,
+  isModelInvokeWorkstationType,
+  resolveCompatibleModelWorkerNames,
+  resolveEditableModelInvokeBindings,
+  resolveModelOperationByName,
+  resolveModelOperationsByWorkerName,
+  resolveModelWorkerOperations,
+  syncEditableModelInvokeBindingsForOperation,
+} from "./workstation/workstation-model-invoke";
+import {
+  type EditableWorkstationType,
+  resolveEditableWorkstationType,
+  resolveEditableWorkstationTypeOptions,
+} from "./workstation/workstation-type";
+import {
+  DEFAULT_WORKSTATION_BEHAVIOR,
+  type EditableWorkstationBehavior,
+  resolveEditableWorkstationBehavior,
+  resolveEditableWorkstationBehaviorOptions,
+} from "./workstation-behavior";
+import {
+  normalizeEditableInputGuards,
+  resolveFactoryWorkstationNameOptions,
+  rewriteWorkstationVisitCountReferences,
+} from "./workstation-guards";
 import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<
@@ -151,7 +151,8 @@ export function resolveEditableWorkstationValues(
     factory.runner,
     workerModelProvider,
   );
-  const modelOperationsByWorkerName = resolveModelOperationsByWorkerName(factory);
+  const modelOperationsByWorkerName =
+    resolveModelOperationsByWorkerName(factory);
 
   return {
     behavior,
@@ -193,7 +194,8 @@ export function resolveEditableWorkstationValues(
     workstationName: workstation.name,
     workstationOptions: resolveFactoryWorkstationNameOptions(factory),
     workstationType,
-    workstationTypeOptions: resolveEditableWorkstationTypeOptions(workstationType),
+    workstationTypeOptions:
+      resolveEditableWorkstationTypeOptions(workstationType),
   };
 }
 

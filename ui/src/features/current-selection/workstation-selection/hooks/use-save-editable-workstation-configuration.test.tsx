@@ -669,6 +669,7 @@ function buildModelInvokeSaveScenario() {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the fixture builder keeps the complete ready-state defaults visible for save-hook cases.
 function buildReadyEditableConfigurationState(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
   cron?: {
@@ -742,7 +743,14 @@ function buildReadyEditableConfigurationState(overrides?: {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
+      runnerOptions: [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi",
+      ],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],

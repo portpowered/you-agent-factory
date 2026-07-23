@@ -1,8 +1,8 @@
 import {
   Button,
   Label,
-  Text,
   surfacePanelVariants,
+  Text,
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";

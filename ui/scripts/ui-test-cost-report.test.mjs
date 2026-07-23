@@ -47,7 +47,9 @@ test("categorizes covered and browser integration paths", () => {
   ).toBe("replay-timeline");
   expect(categorizeUiTestFile("src/App.import.test.tsx")).toBe("import-export");
   expect(
-    categorizeUiTestFile("scripts/dashboard-shell-storybook-responsive.test.mjs"),
+    categorizeUiTestFile(
+      "scripts/dashboard-shell-storybook-responsive.test.mjs",
+    ),
   ).toBe("script-style");
   expect(
     categorizeUiTestFile(
@@ -55,7 +57,9 @@ test("categorizes covered and browser integration paths", () => {
     ),
   ).toBe("react-flow-graph");
   expect(
-    categorizeUiTestFile("integration/event-stream-replay.integration.test.mjs"),
+    categorizeUiTestFile(
+      "integration/event-stream-replay.integration.test.mjs",
+    ),
   ).toBe("replay-timeline");
   expect(
     categorizeUiTestFile(

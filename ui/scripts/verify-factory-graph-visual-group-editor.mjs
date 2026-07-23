@@ -86,7 +86,9 @@ export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   await page.reload({ waitUntil: "networkidle" });
   await waitForStoryRender(page);
   if (page.url() !== currentUrl) {
-    throw new Error("Reload navigated away from the visual group editor story.");
+    throw new Error(
+      "Reload navigated away from the visual group editor story.",
+    );
   }
 
   const editModeAfterReload = page.getByRole("button", { name: "Edit mode" });
@@ -156,7 +158,9 @@ async function expectLabelField(page, value) {
 async function expectChecked(locator, checked) {
   const actual = await locator.isChecked();
   if (actual !== checked) {
-    throw new Error(`Expected checkbox checked=${checked} but found ${actual}.`);
+    throw new Error(
+      `Expected checkbox checked=${checked} but found ${actual}.`,
+    );
   }
 }
 

@@ -88,13 +88,16 @@ describe("factory session detail lifecycle control states", () => {
     expect(terminateButton.getAttribute("aria-busy")).toBeNull();
 
     pauseRequest.resolve(
-      jsonResponse({
-        detail: "Pause request was queued.",
-        operation: "PAUSE",
-        outcome: "ACCEPTED",
-        sessionId: "dur-sess-js-running-001",
-        status: "PAUSED",
-      }, 202),
+      jsonResponse(
+        {
+          detail: "Pause request was queued.",
+          operation: "PAUSE",
+          outcome: "ACCEPTED",
+          sessionId: "dur-sess-js-running-001",
+          status: "PAUSED",
+        },
+        202,
+      ),
     );
 
     await waitFor(() => {
@@ -103,8 +106,9 @@ describe("factory session detail lifecycle control states", () => {
   });
 
   it("submits lifecycle controls from keyboard activation", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch).mockImplementation(
-      async (input, init) => {
+    const fetchMock = vi
+      .mocked(globalThis.fetch)
+      .mockImplementation(async (input, init) => {
         const url = String(input);
 
         if (url.endsWith("/factory-sessions/dur-sess-js-running-001")) {
@@ -137,18 +141,20 @@ describe("factory session detail lifecycle control states", () => {
           url.endsWith("/factory-sessions/dur-sess-js-running-001/pause") &&
           init?.method === "POST"
         ) {
-          return jsonResponse({
-            detail: "Pause request was queued.",
-            operation: "PAUSE",
-            outcome: "ACCEPTED",
-            sessionId: "dur-sess-js-running-001",
-            status: "PAUSED",
-          }, 202);
+          return jsonResponse(
+            {
+              detail: "Pause request was queued.",
+              operation: "PAUSE",
+              outcome: "ACCEPTED",
+              sessionId: "dur-sess-js-running-001",
+              status: "PAUSED",
+            },
+            202,
+          );
         }
 
         return new Response("not found", { status: 404 });
-      },
-    );
+      });
 
     renderWithQueryClient(
       <FactorySessionDetailPanel sessionID="dur-sess-js-running-001" />,

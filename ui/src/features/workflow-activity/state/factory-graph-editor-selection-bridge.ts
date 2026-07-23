@@ -1,7 +1,6 @@
 import { create } from "zustand";
-
-import type { FactoryGraphEditorSelectionTarget } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection";
 import type { FactoryGraphBulkSelectionSummary } from "../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
+import type { FactoryGraphEditorSelectionTarget } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection";
 
 export type FactoryGraphEditorSelectionBridgeSnapshot = {
   bulkSelectionSummary: FactoryGraphBulkSelectionSummary | null;

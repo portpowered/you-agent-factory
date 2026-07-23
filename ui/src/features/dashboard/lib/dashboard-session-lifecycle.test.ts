@@ -37,11 +37,15 @@ describe("sessionIDFromDashboardSessionKey", () => {
   });
 
   it("returns the session id when no refresh suffix is present", () => {
-    expect(sessionIDFromDashboardSessionKey("session-beta")).toBe("session-beta");
+    expect(sessionIDFromDashboardSessionKey("session-beta")).toBe(
+      "session-beta",
+    );
   });
 
   it("strips the refresh token suffix from combined keys", () => {
-    expect(sessionIDFromDashboardSessionKey("session-beta::2")).toBe("session-beta");
+    expect(sessionIDFromDashboardSessionKey("session-beta::2")).toBe(
+      "session-beta",
+    );
   });
 });
 

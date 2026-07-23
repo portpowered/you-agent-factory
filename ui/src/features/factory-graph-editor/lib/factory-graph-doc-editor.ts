@@ -39,9 +39,9 @@ export function suggestDefaultDocFileName(
   factoryDefinition: CanonicalFactoryDefinition | null,
 ): string {
   const existingFileNames = new Set(
-    listFactoryDocTargetPaths(factoryDefinition ?? { name: "Current Factory" }).map(
-      (targetPath) => factoryBundledDocDisplayLabel(targetPath),
-    ),
+    listFactoryDocTargetPaths(
+      factoryDefinition ?? { name: "Current Factory" },
+    ).map((targetPath) => factoryBundledDocDisplayLabel(targetPath)),
   );
 
   if (!existingFileNames.has(DEFAULT_DOC_FILE_NAME)) {

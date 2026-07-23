@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   AlertPanel,
   AlertPanelText,
@@ -10,6 +8,7 @@ import {
 } from "@you-agent-factory/components";
 import * as dataDisplay from "@you-agent-factory/components/data-display";
 import * as feedback from "@you-agent-factory/components/feedback";
+import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "./testing/render";
 

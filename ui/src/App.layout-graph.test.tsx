@@ -20,9 +20,7 @@ import {
 
 function getStateNodeByLabel(label: string): HTMLElement {
   const displayLabel = label.split(":").at(-1) ?? label;
-  const button = screen.getByLabelText(
-    `Select ${displayLabel} work-state`,
-  );
+  const button = screen.getByLabelText(`Select ${displayLabel} work-state`);
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
@@ -217,24 +215,24 @@ describe("App layout and graph behavior", () => {
         ).toMatch(/trace:\d+:\d+:\d+:\d+/);
       },
     },
-  ])("migrates stored dashboard layout for $name", async ({
-    storedLayout,
-    assert,
-  }) => {
-    window.localStorage.setItem(
-      "agent-factory.dashboard.layout.v2",
-      JSON.stringify(storedLayout),
-    );
+  ])(
+    "migrates stored dashboard layout for $name",
+    async ({ storedLayout, assert }) => {
+      window.localStorage.setItem(
+        "agent-factory.dashboard.layout.v2",
+        JSON.stringify(storedLayout),
+      );
 
-    await renderAppWithDashboardShell({
-      snapshot: semanticWorkflowDashboardSnapshot,
-    });
+      await renderAppWithDashboardShell({
+        snapshot: semanticWorkflowDashboardSnapshot,
+      });
 
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    await assert(dashboardGrid);
-  });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      await assert(dashboardGrid);
+    },
+  );
 
   it("renders distinct graph semantics for topology places, active work, and retry outcomes", async () => {
     await renderAppWithDashboardShell({
@@ -246,14 +244,10 @@ describe("App layout and graph behavior", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Select work item Active Story" }),
     );
-    expect(
-      screen.getAllByLabelText(/Select .* workstation/),
-    ).toHaveLength(5);
+    expect(screen.getAllByLabelText(/Select .* workstation/)).toHaveLength(5);
     expect(screen.getByLabelText("Select agent-slot resource")).toBeTruthy();
     expect(screen.getByLabelText("Select reviewer worker")).toBeTruthy();
-    expect(
-      screen.getByLabelText("Select story work-type"),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Select story work-type")).toBeTruthy();
     expect(screen.queryByText("Active Work")).toBeNull();
     expect(getStateNodeByLabel("story:ready")).toBeTruthy();
     expect(getStateNodeByLabel("story:blocked")).toBeTruthy();
@@ -311,9 +305,9 @@ describe("App layout and graph behavior", () => {
     });
     await waitFor(
       () => {
-        expect(
-          screen.getAllByLabelText(/Select .* workstation/),
-        ).toHaveLength(20);
+        expect(screen.getAllByLabelText(/Select .* workstation/)).toHaveLength(
+          20,
+        );
       },
       { timeout: 30_000 },
     );

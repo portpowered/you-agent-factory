@@ -30,6 +30,7 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+
 const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;

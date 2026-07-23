@@ -2,13 +2,13 @@ import type { CanonicalFactoryDefinition } from "../../../../api/current-factory
 import { buildPendingFactoryDefinition } from "../draft/factory-graph-draft-apply";
 import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
 import { removeFactoryGraphSelection } from "../operations/factory-graph-operations";
+import { createEmptyFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 import {
   applyFactoryGraphSelectionBatchRemoval,
   buildFactoryGraphSelectionBatchRemovalPlan,
   hasDeletableFactoryGraphSelection,
   pruneFactoryGraphEditorSelectionAfterRemoval,
 } from "./factory-graph-editor-selection-batch-delete";
-import { createEmptyFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -176,9 +176,7 @@ describe("factory graph editor selection batch delete apply", () => {
     };
 
     const nextState = pruneFactoryGraphEditorSelectionAfterRemoval(state, {
-      edgeIds: [
-        "workstation-output:workstation:review->work-state:story:done",
-      ],
+      edgeIds: ["workstation-output:workstation:review->work-state:story:done"],
       nodeIds: ["resource:gpu"],
     });
 

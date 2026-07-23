@@ -26,9 +26,7 @@ try {
     waitForStoryRender,
   });
 
-  console.log(
-    "Visual group editor save/reload browser verification passed.",
-  );
+  console.log("Visual group editor save/reload browser verification passed.");
   await browser.close();
 } finally {
   await server.stop();
