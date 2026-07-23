@@ -1223,6 +1223,12 @@ response-stream output.
   schemas and artifacts only through the documented
   `@you-agent-factory/packaged-factories` public export specifiers; manifest
   locators are integrity metadata, not browser or filesystem lookup paths.
+- Derive website Packaged Factory inventory and detail models with the pure
+  projectors in `ui/src/features/packaged-factories/lib/projection.ts`. Preserve
+  stable public names as identity, resolve only exact locale keys before the
+  package-owned base value, and represent missing descriptions and examples as
+  explicit presentation states rather than copying fallback catalog metadata
+  into the website.
 - Invocation-interpolated worker `modelProvider` and `model` fields are resolved
   at dispatch time. A packaged factory that must be runnable without role flags
   should declare parameter `defaultValue`s in its invocation signature; operator

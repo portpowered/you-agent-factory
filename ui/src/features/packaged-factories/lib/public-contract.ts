@@ -271,6 +271,7 @@ function artifactExport(
   slug: string,
   format: "json" | "yaml",
 ): PackagedFactoryPublicExport {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `@you-agent-factory/packaged-factories/factories/${slug}.${format}`;
 }
 
