@@ -45,6 +45,24 @@ func TestProductionCLIObservationReportsResolvedGlobalsByStableManifestID(t *tes
 	assertResolvedGlobal(t, changed, "you.flag.server", "https://factory.example", resolvedinput.SourceCLIFlag, true)
 }
 
+func TestProductionCLIObservationResolvesGlobalsAcrossStaticFamilyDepths(t *testing.T) {
+	defaulted, err := productionCLIObservation(t, "docs", "run")
+	if err != nil {
+		t.Fatalf("observe top-level static family: %v", err)
+	}
+	assertResolvedGlobal(t, defaulted, "you.flag.server", "http://localhost:7437", resolvedinput.SourceManifestDefault, false)
+
+	changed, err := productionCLIObservation(
+		t,
+		"factory", "list", "--dir", "factory",
+		"--server", "https://factory.example",
+	)
+	if err != nil {
+		t.Fatalf("observe deep static family: %v", err)
+	}
+	assertResolvedGlobal(t, changed, "you.flag.server", "https://factory.example", resolvedinput.SourceCLIFlag, true)
+}
+
 func TestProductionCLIObservationRejectsRetiredRootGlobalWithoutResolvedSnapshot(t *testing.T) {
 	observation, err := productionCLIObservation(t, "--api-port", "9000", "session", "list")
 	if err == nil || !strings.Contains(err.Error(), "unknown flag: --api-port") {
