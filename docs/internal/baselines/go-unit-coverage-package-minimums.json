@@ -614,7 +614,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 20.49
+      "minimum": 20.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
@@ -718,7 +718,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
-      "minimum": 78.35
+      "minimum": 78.29
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",

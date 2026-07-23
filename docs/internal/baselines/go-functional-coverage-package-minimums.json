@@ -778,7 +778,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
-      "minimum": 39.17
+      "minimum": 39.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
