@@ -4342,8 +4342,8 @@ export interface components {
       provider?: components["schemas"]["HostedWorkerProvider"];
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
-      /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
-      modelProvider?: components["schemas"]["WorkerModelProvider"];
+      /** @description Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
+      modelProvider?: components["schemas"]["WorkerModelProvider"] | string;
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
       /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */

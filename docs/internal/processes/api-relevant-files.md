@@ -128,10 +128,11 @@ Use this map when changing the public REST contract.
   compare exact checked-in paths and bytes without writing; this one comparison
   protects authored-inventory coverage, paired Factory equivalence, schema
   validation, and manifest locator/hash integrity.
-  Exact `${parameter}` placeholders on enum-backed `workers[].modelProvider`
-  fields are an intentional canonical-mapper compatibility form: preserve them
-  in artifact bytes and use a concrete representative only for package-schema
-  validation, because the accepted OpenAPI enum remains concrete-provider-only.
+  Exact `${parameter}` placeholders on `workers[].modelProvider` are part of
+  the accepted Factory contract alongside concrete provider enum values. Keep
+  the OpenAPI one-of placeholder grammar aligned with canonical mapping, and
+  validate emitted catalog JSON and decoded YAML directly without substituting
+  a validation-only provider.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, standalone JSON Schema projections from
   canonical bundled OpenAPI component graphs, and the package contract

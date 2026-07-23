@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+	"github.com/portpowered/infinite-you/internal/testpath"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
@@ -81,6 +85,61 @@ func TestGenerateArtifactsEmbedsDocumentsInputsAndPreservesMetadataExactly(t *te
 	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.RequiredTools) != 1 ||
 		cfg.ResourceManifest.RequiredTools[0].Command != "external-tool" {
 		t.Fatalf("validation-only dependency changed: %#v", cfg.ResourceManifest)
+	}
+}
+
+func TestGeneratedFusionJSONAndYAMLValidateDirectlyAgainstPackagedSchema(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	schemaPath := filepath.Join(repositoryRoot, "packages", "packaged-factories", testSchemaPath)
+	schemaPayload, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("read packaged Factory schema: %v", err)
+	}
+	var schemaDocument any
+	if err := json.Unmarshal(schemaPayload, &schemaDocument); err != nil {
+		t.Fatalf("decode packaged Factory schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(testSchemaPath, schemaDocument); err != nil {
+		t.Fatalf("register packaged Factory schema: %v", err)
+	}
+	schema, err := compiler.Compile(testSchemaPath)
+	if err != nil {
+		t.Fatalf("compile packaged Factory schema: %v", err)
+	}
+
+	generatedRoot := filepath.Join(
+		repositoryRoot,
+		"packages",
+		"packaged-factories",
+		"generated",
+		"factories",
+		"fusion",
+	)
+	for _, format := range []string{"json", "yaml"} {
+		format := format
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			payload, err := os.ReadFile(filepath.Join(generatedRoot, "factory."+format))
+			if err != nil {
+				t.Fatalf("read generated Fusion %s: %v", format, err)
+			}
+			var document any
+			if format == "json" {
+				err = json.Unmarshal(payload, &document)
+			} else {
+				err = yaml.Unmarshal(payload, &document)
+			}
+			if err != nil {
+				t.Fatalf("decode generated Fusion %s: %v", format, err)
+			}
+			if err := schema.Validate(document); err != nil {
+				t.Fatalf("unmodified generated Fusion %s does not validate directly: %v", format, err)
+			}
+		})
 	}
 }
 

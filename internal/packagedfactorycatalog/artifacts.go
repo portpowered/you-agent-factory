@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"reflect"
-	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -125,31 +124,7 @@ func validateArtifactSchema(schema *jsonschema.Schema, payload []byte) error {
 	if err := json.Unmarshal(payload, &document); err != nil {
 		return err
 	}
-	normalizeSchemaValidationCompatibility(document)
 	return schema.Validate(document)
-}
-
-// The canonical Factory input mapper intentionally accepts exact invocation
-// placeholders on enum-backed worker modelProvider fields. The accepted
-// OpenAPI schema remains concrete-provider-only, so schema validation uses a
-// concrete representative while canonical mapping and domain validation above
-// continue to validate and preserve the authored placeholder itself.
-func normalizeSchemaValidationCompatibility(document any) {
-	root, ok := document.(map[string]any)
-	if !ok {
-		return
-	}
-	workers, _ := root["workers"].([]any)
-	for _, value := range workers {
-		worker, ok := value.(map[string]any)
-		if !ok {
-			continue
-		}
-		provider, _ := worker["modelProvider"].(string)
-		if strings.HasPrefix(provider, "${") && strings.HasSuffix(provider, "}") {
-			worker["modelProvider"] = "CODEX"
-		}
-	}
 }
 
 func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte) error {

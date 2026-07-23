@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
@@ -225,6 +226,57 @@ func TestPackagedFactorySchemasAreEquivalentCanonicalProjections(t *testing.T) {
 	definitions := document["$defs"].(map[string]any)
 	if _, ok := definitions["FactoryInvocationExample"]; !ok {
 		t.Fatal("Factory schema does not include the reachable invocation-example contract")
+	}
+}
+
+func TestFactorySchemaAcceptsExactProviderPlaceholdersAndRejectsOtherStrings(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	payload := testArtifactsForRepository(t, repositoryRoot)[contractstaging.FactorySchemaAuthoredPath]
+	var schemaDocument any
+	if err := json.Unmarshal(payload, &schemaDocument); err != nil {
+		t.Fatalf("decode Factory schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(contractstaging.FactorySchemaAuthoredPath, schemaDocument); err != nil {
+		t.Fatalf("register Factory schema: %v", err)
+	}
+	schema, err := compiler.Compile(contractstaging.FactorySchemaAuthoredPath)
+	if err != nil {
+		t.Fatalf("compile Factory schema: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		modelProvider string
+		wantValid     bool
+	}{
+		{name: "concrete provider", modelProvider: "CODEX", wantValid: true},
+		{name: "exact placeholder", modelProvider: "${modelProvider}", wantValid: true},
+		{name: "arbitrary provider", modelProvider: "MYSTERY", wantValid: false},
+		{name: "mixed placeholder", modelProvider: "prefix-${modelProvider}", wantValid: false},
+		{name: "spaced placeholder", modelProvider: "${model provider}", wantValid: false},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			document := map[string]any{
+				"name": "provider-contract",
+				"workers": []any{
+					map[string]any{"name": "worker", "modelProvider": test.modelProvider},
+				},
+			}
+			err := schema.Validate(document)
+			if test.wantValid && err != nil {
+				t.Fatalf("schema rejected modelProvider %q: %v", test.modelProvider, err)
+			}
+			if !test.wantValid && err == nil {
+				t.Fatalf("schema accepted invalid modelProvider %q", test.modelProvider)
+			}
+		})
 	}
 }
 

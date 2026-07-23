@@ -6227,7 +6227,7 @@ type Worker struct {
 	// ModelLocality Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
 	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
 
-	// ModelProvider Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+	// ModelProvider Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.

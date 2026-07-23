@@ -72,6 +72,7 @@ type FactoryLayoutPoint = FactorySchemas["FactoryLayoutPoint"];
 type FactoryLayoutPreferences = FactorySchemas["FactoryLayoutPreferences"];
 type FactoryLayoutViewport = FactorySchemas["FactoryLayoutViewport"];
 type FactoryWorker = FactorySchemas["Worker"];
+type FactoryWorkerModelProvider = FactorySchemas["WorkerModelProvider"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryClassificationRoute = FactorySchemas["ClassificationRoute"];
 type FactoryWorkstation = FactorySchemas["Workstation"];
@@ -300,9 +301,14 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
   WorkerType.MODEL_WORKER,
   WorkerType.HOSTED_WORKER,
 ]);
-const WORKER_MODEL_PROVIDER_VALUES = new Set<
-  NonNullable<FactoryWorker["modelProvider"]>
->(["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"]);
+const WORKER_MODEL_PROVIDER_VALUES = new Set<FactoryWorkerModelProvider>([
+  "CLAUDE",
+  "CODEX",
+  "CURSOR",
+  "GEMINI",
+  "KIRO",
+  "OPENCODE",
+]);
 const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
@@ -919,7 +925,7 @@ function readOptionalWorkerModelProvider(
   }
   if (
     WORKER_MODEL_PROVIDER_VALUES.has(
-      modelProvider as NonNullable<FactoryWorker["modelProvider"]>,
+      modelProvider as FactoryWorkerModelProvider,
     )
   ) {
     return modelProvider as FactoryWorker["modelProvider"];

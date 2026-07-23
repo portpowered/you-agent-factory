@@ -199,11 +199,11 @@ response-stream output.
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
 - `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
-  on enum-backed authored fields that support invocation interpolation (for
-  example `workers[].modelProvider`) instead of rejecting them as invalid public
-  enum values at the JSON boundary. Keep ordinary non-placeholder values on the
-  existing strict enum normalization path so packaged and customer-authored
-  factories can use the same interpolation-enabled authored fields.
+  on authored fields that support invocation interpolation (for example
+  `workers[].modelProvider`) instead of rejecting them as invalid public enum
+  values at the JSON boundary. Keep the exact-placeholder pattern aligned with
+  the accepted OpenAPI one-of, and keep ordinary non-placeholder values on the
+  existing strict enum normalization path.
 - `pkg/initializer/runtimeconstruction/operatordefaults/operator_defaults_runtime.go`
   is the
   startup-time runtime-validation seam for operator-defaulted model workers.
