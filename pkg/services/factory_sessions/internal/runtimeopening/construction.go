@@ -99,29 +99,18 @@ func PrepareRuntime(
 	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, prepared.Recordings.ReplayPath, root.BaseLogger); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
-	selectedDefinitionPath := prepared.Definition.Directory
-	if prepared.Recordings.ReplayPath == "" && prepared.Definition.SourcePath != "" {
-		selectedDefinitionPath, err = logicaltarget.AbsolutizeFactoryDirectory(
-			prepared.Definition.SourcePath,
-			resolveHome,
-		)
-		if err != nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil,
-				fmt.Errorf("resolve factory source: %w", err)
-		}
-	} else if prepared.Recordings.ReplayPath == "" {
-		if namedPaths == nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("named Factory path resolver is required")
-		}
-		resolvedDir, resolveErr := namedPaths.ResolveCurrentDir(prepared.Definition.Directory)
-		if resolveErr != nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("resolve factory dir: %w", resolveErr)
-		}
-		prepared.Definition.Directory, err = logicaltarget.AbsolutizeFactoryDirectory(resolvedDir, resolveHome)
-		if err != nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		selectedDefinitionPath = prepared.Definition.Directory
+	var resolveCurrentDir func(string) (string, error)
+	if namedPaths != nil {
+		resolveCurrentDir = namedPaths.ResolveCurrentDir
+	}
+	selectedDefinitionPath, err := resolveDefinitionPath(
+		&prepared.Definition,
+		prepared.Recordings.ReplayPath,
+		resolveCurrentDir,
+		resolveHome,
+	)
+	if err != nil {
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
 	load, err = LoadRuntime(
 		selectedDefinitionPath,
@@ -262,6 +251,36 @@ func NewWorkerExecution(
 		now,
 		contentMaterializer,
 	)
+}
+
+func resolveDefinitionPath(
+	definition *factorydefinitions.RuntimeOpeningRequest,
+	replayPath string,
+	resolveCurrentDir func(string) (string, error),
+	resolveHome factorysessions.HomeDirectoryResolver,
+) (string, error) {
+	if replayPath != "" {
+		return definition.Directory, nil
+	}
+	if definition.SourcePath != "" {
+		resolved, err := logicaltarget.AbsolutizeFactoryDirectory(definition.SourcePath, resolveHome)
+		if err != nil {
+			return "", fmt.Errorf("resolve factory source: %w", err)
+		}
+		return resolved, nil
+	}
+	if resolveCurrentDir == nil {
+		return "", fmt.Errorf("named Factory path resolver is required")
+	}
+	resolvedDir, err := resolveCurrentDir(definition.Directory)
+	if err != nil {
+		return "", fmt.Errorf("resolve factory dir: %w", err)
+	}
+	definition.Directory, err = logicaltarget.AbsolutizeFactoryDirectory(resolvedDir, resolveHome)
+	if err != nil {
+		return "", fmt.Errorf("resolve factory dir: %w", err)
+	}
+	return definition.Directory, nil
 }
 
 func operatorConfigPath(request factorysessions.SessionRuntimeOpeningRequest) (string, error) {

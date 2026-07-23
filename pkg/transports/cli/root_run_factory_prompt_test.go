@@ -51,7 +51,7 @@ func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T)
 	for _, want := range []string{
 		"run --dir factory",
 		"run --named @you/tts",
-		"run --factory ./factory.json",
+		"run --factory ./factory.yaml",
 		"echo \"Ship the login bugfix\" | you run --named @you/goal",
 		"run --named @you/goal --output response-stream",
 	} {
@@ -103,7 +103,7 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "you docs run") || !strings.Contains(runCmd.Long, "you docs sessions") {
 		t.Fatal("expected run command long help text to point to invocation reference docs")
 	}
-	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
+	if !strings.Contains(runCmd.Example, "run --factory ./factory.yaml \"Fix the lint issues\"") {
 		t.Fatal("expected run command examples to document simplified --factory run")
 	}
 	if !strings.Contains(flag.Usage, "piped stdin") {
@@ -127,7 +127,7 @@ func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "materialize lazily into that global root on first use and stay editable on disk") {
 		t.Fatal("expected run command long help text to document built-in materialization and editability")
 	}
-	if !strings.Contains(runCmd.Long, "run --named <factory> --help") || !strings.Contains(runCmd.Long, "run --factory <factory.json> --help") {
+	if !strings.Contains(runCmd.Long, "run --named <factory> --help") || !strings.Contains(runCmd.Long, "run --factory <factory.yaml> --help") {
 		t.Fatal("expected run command long help text to document signature-aware factory help entry points")
 	}
 	if !strings.Contains(runCmd.Long, "existing run-level flags available") {

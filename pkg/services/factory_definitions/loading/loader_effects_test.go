@@ -1,6 +1,7 @@
 package loading
 
 import (
+	"errors"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,34 @@ func TestLoaderFailsClosedWithoutLoadingFileSystem(t *testing.T) {
 	_, _, _, _, err := (&Loader{}).readFactoryConfigSource("factory.json")
 	if err == nil || !strings.Contains(err.Error(), "loading filesystem is required") {
 		t.Fatalf("error = %v, want missing loading filesystem", err)
+	}
+}
+
+func TestSourceContextErrorNamesAuthoredFormat(t *testing.T) {
+	t.Parallel()
+
+	want := fs.ErrInvalid
+	for _, test := range []struct {
+		path       string
+		wantFormat string
+	}{
+		{path: "factory.json", wantFormat: "(JSON)"},
+		{path: "factory.yaml", wantFormat: "(YAML)"},
+		{path: "factory.yml", wantFormat: "(YAML)"},
+		{path: "factory.toml", wantFormat: ""},
+	} {
+		test := test
+		t.Run(test.path, func(t *testing.T) {
+			t.Parallel()
+			err := sourceContextError(test.path, "parse factory config", want)
+			if !errors.Is(err, want) {
+				t.Fatalf("error = %v, want wrapped %v", err, want)
+			}
+			if !strings.Contains(err.Error(), test.path) ||
+				(test.wantFormat != "" && !strings.Contains(err.Error(), test.wantFormat)) {
+				t.Fatalf("error = %q, want path and format %q", err, test.wantFormat)
+			}
+		})
 	}
 }
 

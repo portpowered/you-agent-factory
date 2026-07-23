@@ -124,6 +124,22 @@ func TestRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
 			wants: []string{"factory.yaml", "YAML"},
 		},
 		{
+			name: "JSON representation mismatch",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.json"), `{"name":["invalid"]}`)
+				return []string{"--factory", path}
+			},
+			wants: []string{"factory.json", "(JSON)", "parse factory config"},
+		},
+		{
+			name: "YAML representation mismatch",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.yaml"), "name:\n  - invalid\n")
+				return []string{"--factory", path}
+			},
+			wants: []string{"factory.yaml", "(YAML)", "parse factory config"},
+		},
+		{
 			name: "unsupported extension",
 			prepare: func(t *testing.T) []string {
 				path := writeFile(t, filepath.Join(t.TempDir(), "factory.toml"), "name = 'factory'\n")
