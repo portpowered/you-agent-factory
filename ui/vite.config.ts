@@ -14,6 +14,36 @@ const packagedFactoriesPackageRoot = path.resolve(
   uiRoot,
   "../packages/packaged-factories",
 );
+const packagedFactoriesAliases = [
+  {
+    find: "@you-agent-factory/packaged-factories/manifest",
+    replacement: path.join(
+      packagedFactoriesPackageRoot,
+      "generated/manifest.json",
+    ),
+  },
+  {
+    find: "@you-agent-factory/packaged-factories/schemas/factory.json",
+    replacement: path.join(
+      packagedFactoriesPackageRoot,
+      "schemas/factory.schema.json",
+    ),
+  },
+  {
+    find: /^@you-agent-factory\/packaged-factories\/factories\/(.+)\.json$/,
+    replacement: path.join(
+      packagedFactoriesPackageRoot,
+      "generated/factories/$1/factory.json",
+    ),
+  },
+  {
+    find: /^@you-agent-factory\/packaged-factories\/factories\/(.+)\.yaml(\?raw)?$/,
+    replacement: path.join(
+      packagedFactoriesPackageRoot,
+      "generated/factories/$1/factory.yaml$2",
+    ),
+  },
+] as const;
 const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
 const factoryEmulatorPackageRoot = path.resolve(
   uiRoot,
@@ -243,6 +273,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: [
+      ...packagedFactoriesAliases,
       ...sharedReactAliases,
       ...createComponentsPackageAliases(componentsPackageRoot),
     ],

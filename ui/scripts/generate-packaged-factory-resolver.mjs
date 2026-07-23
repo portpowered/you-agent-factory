@@ -3,16 +3,40 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import manifest from "@you-agent-factory/packaged-factories/manifest" with {
-  type: "json",
-};
-
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const packagedFactoriesPackageRoot = path.resolve(
+  scriptDirectory,
+  "../../packages/packaged-factories",
+);
 const outputPath = path.resolve(
   scriptDirectory,
   "../src/features/packaged-factories/lib/generated/public-package-data.ts",
 );
 const packagePrefix = "@you-agent-factory/packaged-factories";
+const requiredPublicExports = [
+  "./manifest",
+  "./schemas/factory.json",
+  "./factories/*.json",
+  "./factories/*.yaml",
+];
+
+function resolvePublicExport(packageRoot, packageDefinition, specifier) {
+  const exportTarget = packageDefinition?.exports?.[specifier];
+  if (typeof exportTarget !== "string" || !exportTarget.startsWith("./")) {
+    throw new Error(
+      `[packaged-factory-resolver] package must expose ${specifier} as a local file`,
+    );
+  }
+
+  const resolvedTarget = path.resolve(packageRoot, exportTarget);
+  const relativeTarget = path.relative(packageRoot, resolvedTarget);
+  if (relativeTarget.startsWith("..") || path.isAbsolute(relativeTarget)) {
+    throw new Error(
+      `[packaged-factory-resolver] public export ${specifier} leaves the package root`,
+    );
+  }
+  return resolvedTarget;
+}
 
 function assertManifestIdentity(input) {
   if (
@@ -85,6 +109,29 @@ function generateResolver(input) {
   ].join("\n");
 }
 
+const packageDefinition = JSON.parse(
+  await readFile(
+    path.join(packagedFactoriesPackageRoot, "package.json"),
+    "utf8",
+  ),
+);
+for (const publicExport of requiredPublicExports) {
+  resolvePublicExport(
+    packagedFactoriesPackageRoot,
+    packageDefinition,
+    publicExport,
+  );
+}
+const manifest = JSON.parse(
+  await readFile(
+    resolvePublicExport(
+      packagedFactoriesPackageRoot,
+      packageDefinition,
+      "./manifest",
+    ),
+    "utf8",
+  ),
+);
 const expected = generateResolver(manifest);
 if (process.argv.includes("--check")) {
   const actual = await readFile(outputPath, "utf8").catch(() => "");
