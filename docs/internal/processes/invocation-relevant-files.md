@@ -12,6 +12,14 @@ primary-result behavior.
 - Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
   as production code. Keep topology fixtures readable by delegating independent
   identity, routing, and validation assertions to named test helpers.
+- Generic relationship presence must inspect every registered flag spelling.
+  Cobra marks the canonical flag when a shorthand is used, but aliases are
+  separate `pflag.Flag` records even when they share typed storage.
+- An inherited generic flag reuses its ancestor's persistent Cobra record, so
+  its projected metadata must match the declaration after normalizing only the
+  stable input ID, scope, inheritance reference, and lifecycle item ID.
+  Reject presentation or lifecycle differences during construction rather
+  than accepting child metadata that cannot be projected independently.
 - Adding an embedded packaged-factory definition also adds two measured backend
   packages to the unit and functional coverage manifests: record the definition
   package's observed numeric floor and the wrapper package's documented

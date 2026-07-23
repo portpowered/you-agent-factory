@@ -52,6 +52,61 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	assertProjectedArgumentCompletion(t, alpha, &dynamicCalls)
 }
 
+func TestNewCommandTreeProjectsMatchingInheritedPresentation(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutate     func(*climanifest.Flag)
+		wantHidden bool
+		wantNotice string
+	}{
+		{name: "active"},
+		{
+			name: "deprecated",
+			mutate: func(flag *climanifest.Flag) {
+				flag.Lifecycle = deprecatedLifecycle(flag.ID, "stable.alpha.flag.cluster", "use --cluster instead")
+			},
+			wantNotice: "use --cluster instead",
+		},
+		{
+			name: "hidden",
+			mutate: func(flag *climanifest.Flag) {
+				flag.Visibility = "hidden"
+			},
+			wantHidden: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticPresentationManifest()
+			if test.mutate != nil {
+				updatePresentationFlag(&manifest, "stable.root.flag.region", test.mutate)
+				updatePresentationFlag(&manifest, "stable.alpha.flag.region", test.mutate)
+			}
+			root, err := climanifestcobra.NewCommandTree(manifest, presentationBindings(manifest))
+			if err != nil {
+				t.Fatalf("NewCommandTree() error = %v", err)
+			}
+			alpha, err := findCommandByPath(root, "forge alpha")
+			if err != nil {
+				t.Fatal(err)
+			}
+			region := alpha.Flag("region")
+			if region == nil || region.Hidden != test.wantHidden || region.Deprecated != test.wantNotice {
+				t.Fatalf("inherited region = %#v, want hidden=%t deprecated=%q", region, test.wantHidden, test.wantNotice)
+			}
+			var output bytes.Buffer
+			alpha.SetOut(&output)
+			if err := alpha.Help(); err != nil {
+				t.Fatalf("Help() error = %v", err)
+			}
+			hasRegion := strings.Contains(output.String(), "--region")
+			if hasRegion == test.wantHidden {
+				t.Fatalf("help contains --region = %t, want %t:\n%s", hasRegion, !test.wantHidden, output.String())
+			}
+		})
+	}
+}
+
 func TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs(t *testing.T) {
 	manifest := syntheticFlagManifest()
 	alpha := manifest.Commands["stable.alpha"]
@@ -400,8 +455,29 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 				updatePresentationFlag(manifest, "stable.root.flag.region", func(flag *climanifest.Flag) {
 					flag.Enum = nil
 				})
+				updatePresentationFlag(manifest, "stable.alpha.flag.region", func(flag *climanifest.Flag) {
+					flag.Enum = nil
+				})
 			},
 			wantErr: `input "stable.root.flag.region": static completion requires declared choices`,
+		},
+		{
+			name: "inherited lifecycle differs from declaration",
+			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+				updatePresentationFlag(manifest, "stable.alpha.flag.region", func(flag *climanifest.Flag) {
+					flag.Lifecycle = deprecatedLifecycle(flag.ID, "stable.alpha.flag.cluster", "use --cluster instead")
+				})
+			},
+			wantErr: `input "stable.alpha.flag.region": inheritance target "stable.root.flag.region" has incompatible flag metadata`,
+		},
+		{
+			name: "inherited visibility differs from declaration",
+			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+				updatePresentationFlag(manifest, "stable.alpha.flag.region", func(flag *climanifest.Flag) {
+					flag.Visibility = "hidden"
+				})
+			},
+			wantErr: `input "stable.alpha.flag.region": inheritance target "stable.root.flag.region" has incompatible flag metadata`,
 		},
 		{
 			name: "missing dynamic binding",
@@ -876,4 +952,14 @@ func testRunSubmitBindings() climanifestcobra.RunSubmitFlagBindings {
 		Submit:              &submitcli.SubmitConfig{Context: context.Background()},
 		SubmitBatch:         &submitcli.BatchConfig{Context: context.Background()},
 	}
+}
+
+func replaceFlagSpelling(args []string, spelling string) []string {
+	replaced := append([]string(nil), args...)
+	for index, arg := range replaced {
+		if arg == "--alpha" {
+			replaced[index] = spelling
+		}
+	}
+	return replaced
 }

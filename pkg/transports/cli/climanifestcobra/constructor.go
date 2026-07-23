@@ -5,6 +5,7 @@ package climanifestcobra
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -914,10 +915,12 @@ func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error 
 }
 
 func validateInheritedFlag(inherited, declared climanifest.Flag) error {
-	if inherited.Long != declared.Long ||
-		inherited.ValueType != declared.ValueType ||
-		inherited.Repeatable != declared.Repeatable ||
-		inherited.Normalization != declared.Normalization {
+	comparable := inherited
+	comparable.ID = declared.ID
+	comparable.Scope = declared.Scope
+	comparable.InheritedFromID = declared.InheritedFromID
+	comparable.Lifecycle.ItemID = declared.Lifecycle.ItemID
+	if !reflect.DeepEqual(comparable, declared) {
 		return fmt.Errorf("inheritance target %q has incompatible flag metadata", declared.ID)
 	}
 	return nil

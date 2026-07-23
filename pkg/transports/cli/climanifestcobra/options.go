@@ -412,9 +412,10 @@ type plannedRelationship struct {
 }
 
 type plannedParticipant struct {
-	id     string
-	kind   string
-	public string
+	id        string
+	kind      string
+	public    string
+	flagNames []string
 }
 
 func planCommandArgumentsAndRelationships(plan []plannedCommand) error {
@@ -568,7 +569,10 @@ func effectiveParticipants(plan []plannedCommand, commandIndex int) map[string]p
 		}
 		for _, flag := range record.Flags {
 			if record.Path == commandPath || flag.Scope == "persistent" {
-				available[flag.ID] = plannedParticipant{id: flag.ID, kind: "flag", public: "--" + flag.Long}
+				names := append([]string{flag.Long}, flag.Aliases...)
+				available[flag.ID] = plannedParticipant{
+					id: flag.ID, kind: "flag", public: "--" + flag.Long, flagNames: names,
+				}
 			}
 		}
 	}
@@ -884,8 +888,12 @@ func validateRelationships(cmd *cobra.Command, relationships []plannedRelationsh
 
 func participantPresent(cmd *cobra.Command, participant plannedParticipant) bool {
 	if participant.kind == "flag" {
-		flag := lookupCommandFlag(cmd, strings.TrimPrefix(participant.public, "--"))
-		return flag != nil && flag.Changed
+		for _, name := range participant.flagNames {
+			if flag := lookupCommandFlag(cmd, name); flag != nil && flag.Changed {
+				return true
+			}
+		}
+		return false
 	}
 	encoded := cmd.Annotations[genericArgumentAnnotationPrefix+participant.id]
 	var value encodedArgumentValue

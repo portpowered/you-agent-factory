@@ -787,12 +787,15 @@ func TestNewCommandTreeEnforcesEveryRelationshipKindBeforeHandler(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assertRelationshipInvocation(t, test.relationship, test.accepted, true, "")
-			assertRelationshipInvocation(t, test.relationship, test.rejected, false, test.wantInputs)
+			for _, spelling := range []string{"--alpha", "--alternate-alpha", "-a"} {
+				t.Run(spelling, func(t *testing.T) {
+					assertRelationshipInvocation(t, test.relationship, replaceFlagSpelling(test.accepted, spelling), true, "")
+					assertRelationshipInvocation(t, test.relationship, replaceFlagSpelling(test.rejected, spelling), false, test.wantInputs)
+				})
+			}
 		})
 	}
 }
-
 func assertRelationshipInvocation(
 	t *testing.T,
 	relationship climanifest.Relationship,
@@ -918,8 +921,11 @@ func syntheticRelationshipManifest(relationship climanifest.Relationship) climan
 	delete(manifest.Commands, "stable.leaf")
 	command := syntheticCommand("stable.check", "check", "forge check", true)
 	command.Flags = map[string]climanifest.Flag{
-		"flag.alpha": {ID: "flag.alpha", Long: "alpha", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
-		"flag.beta":  {ID: "flag.beta", Long: "beta", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
+		"flag.alpha": {
+			ID: "flag.alpha", Long: "alpha", Shorthand: "a", Aliases: []string{"alternate-alpha"},
+			Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible",
+		},
+		"flag.beta": {ID: "flag.beta", Long: "beta", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
 	}
 	withActiveFlagLifecycle(command.Flags)
 	command.Arguments = map[string]climanifest.Argument{
