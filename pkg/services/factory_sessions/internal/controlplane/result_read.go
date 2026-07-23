@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 // ResultReadHost exposes live session projection and checkpoint seams for result reads.
@@ -39,7 +40,7 @@ func GetLiveFactorySessionResult(
 	if projection == nil {
 		return workflowresult.LiveSessionResult{}, fmt.Errorf("Factory Runtime session result projection is required")
 	}
-	result := factorysessions.ProjectSessionResult(
+	result := sessionprojection.ProjectSessionResult(
 		sessionID,
 		projectionCtx,
 		host.JavaScriptCheckpointStore(session),
@@ -68,6 +69,6 @@ func GetLiveFactorySessionPartialResult(
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
 		return workflowresult.PartialSessionResult{}, fmt.Errorf("%w", factorysessions.ErrResultUnavailable)
 	}
-	result := factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
+	result := sessionprojection.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
 	return result, nil
 }

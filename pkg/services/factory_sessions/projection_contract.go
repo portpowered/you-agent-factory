@@ -1,0 +1,57 @@
+package factorysessions
+
+import (
+	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+)
+
+// ProjectionContext carries the detached runtime inputs needed to project one
+// live Factory Session.
+type ProjectionContext struct {
+	Session                *LiveSession
+	FactoryCfg             *interfaces.FactoryConfig
+	Snapshot               *factory.StateSnapshot
+	LifecycleControlStatus string
+	BackendScopeID         string
+	LogicalSessionKeyID    string
+	NormalizedTarget       *RuntimeLogicalTarget
+	RuntimeStartedAt       time.Time
+	Enabled                []interfaces.EnabledTransition
+	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptSession      *interfaces.FactoryWorldSessionBracketState
+	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
+	Now                    time.Time
+}
+
+// ProjectionBuildInput contains the canonical runtime facts needed to build
+// one live Factory Session projection context.
+type ProjectionBuildInput struct {
+	Session             *LiveSession
+	RuntimeConfig       interfaces.RuntimeConfigLookup
+	Snapshot            *factory.StateSnapshot
+	BackendScopeID      string
+	LogicalSessionKey   string
+	NormalizedTarget    *RuntimeLogicalTarget
+	RuntimeStartedAt    time.Time
+	CheckpointStore     factory.JavaScriptCheckpointStore
+	Events              []interfaces.FactoryEvent
+	WorldStateProjector factory.WorldStateProjector
+	Now                 time.Time
+}
+
+// ReadProjection carries one live Factory Session read and records whether its
+// runtime projection was available.
+type ReadProjection struct {
+	Context          ProjectionContext
+	Runtime          RuntimeProjection
+	RuntimeAvailable bool
+}
+
+// SessionProjection is the Factory Sessions-owned result for one live session
+// detail read.
+type SessionProjection struct {
+	Context ProjectionContext
+	Runtime RuntimeProjection
+}

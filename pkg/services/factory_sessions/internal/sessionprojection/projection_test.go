@@ -1,6 +1,6 @@
 // backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
 // pkgmaintcheck:ignore-file-lines service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption.
-package factorysessions_test
+package sessionprojection_test
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 
@@ -59,31 +60,31 @@ func (sessionResultProjectionRole) ProjectSessionResults(
 }
 
 func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
-	return factorysessionmapping.RuntimeProjectionToAPI(ProjectRuntimeContract(ctx), ctx.NormalizedTarget)
+	return factorysessionmapping.RuntimeProjectionToAPI(sessionprojection.ProjectRuntimeContract(ctx), ctx.NormalizedTarget)
 }
 
 func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
 	return factorysessionmapping.SessionResponseToAPI(SessionProjection{
 		Context: ctx,
-		Runtime: ProjectRuntimeContract(ctx),
+		Runtime: sessionprojection.ProjectRuntimeContract(ctx),
 	})
 }
 
 func TestBuildProjectionContextRequiresExplicitProjectionTime(t *testing.T) {
-	if _, err := BuildProjectionContext(ProjectionBuildInput{}); err == nil ||
+	if _, err := sessionprojection.BuildProjectionContext(ProjectionBuildInput{}); err == nil ||
 		!strings.Contains(err.Error(), "projection time is required") {
-		t.Fatalf("BuildProjectionContext() error = %v, want required projection time", err)
+		t.Fatalf("sessionprojection.BuildProjectionContext() error = %v, want required projection time", err)
 	}
 
 	now := time.Date(2026, 7, 20, 16, 45, 0, 0, time.UTC)
-	ctx, err := BuildProjectionContext(ProjectionBuildInput{Now: now})
+	ctx, err := sessionprojection.BuildProjectionContext(ProjectionBuildInput{Now: now})
 	if err != nil {
-		t.Fatalf("BuildProjectionContext() error = %v", err)
+		t.Fatalf("sessionprojection.BuildProjectionContext() error = %v", err)
 	}
 	if !ctx.Now.Equal(now) {
 		t.Fatalf("projection time = %v, want %v", ctx.Now, now)
 	}
-	projection := ProjectRuntimeContract(ctx)
+	projection := sessionprojection.ProjectRuntimeContract(ctx)
 	if !projection.Lifecycle.UpdatedAt.Equal(now) {
 		t.Fatalf("projection updated at = %v, want %v", projection.Lifecycle.UpdatedAt, now)
 	}
@@ -196,7 +197,7 @@ func TestProjectRuntimeContract_DetachesTokenHistoryAcrossPublicMapping(t *testi
 			TotalVisits:         map[string]int{"process": 4},
 		},
 	}
-	domain := ProjectRuntimeContract(ProjectionContext{
+	domain := sessionprojection.ProjectRuntimeContract(ProjectionContext{
 		Session: &LiveSession{ID: "session-history"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "history",
@@ -251,7 +252,7 @@ func TestProjectRuntimeContract_OwnsDetachedJavaScriptStatusAndPublicMapping(t *
 		Now:        now,
 	}
 
-	domain := ProjectRuntimeContract(ctx)
+	domain := sessionprojection.ProjectRuntimeContract(ctx)
 	state.Phases[0] = "mutated"
 	if domain.Status != string(interfaces.RuntimeStatusIdle) || domain.JavaScript == nil {
 		t.Fatalf("domain runtime = %#v, want idle JavaScript projection", domain)
@@ -404,7 +405,7 @@ func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
 		CreatedAt: now.Add(-2 * time.Minute),
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
-	runtime := ProjectRuntimeContract(ProjectionContext{
+	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
 		Session: &LiveSession{ID: "session-paused"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
@@ -467,7 +468,7 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 					LastError: tc.lastError,
 				},
 			}
-			runtime := ProjectRuntimeContract(ProjectionContext{
+			runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
 				Session: &LiveSession{ID: "session-stop"},
 				FactoryCfg: &interfaces.FactoryConfig{
 					Name: "goal",
@@ -543,7 +544,7 @@ func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 		CreatedAt: now.Add(-2 * time.Minute),
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
-	runtime := ProjectRuntimeContract(ProjectionContext{
+	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
 		Session: &LiveSession{ID: "session-interrupted"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
@@ -602,7 +603,7 @@ func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkCo
 		CreatedAt: now.Add(-2 * time.Minute),
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
-	runtime := ProjectRuntimeContract(ProjectionContext{
+	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
 		Session: &LiveSession{ID: "session-interrupted-unmatched"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
@@ -853,7 +854,7 @@ func TestProjectCheckpointRef_OmitsRawCheckpointBodyFromPublicProjection(t *test
 				Kind: interfaces.OrchestratorKindJavaScript,
 			},
 		},
-		JavaScript: JavaScriptRuntimeStateFromCheckpoints(store, &interfaces.FactorySessionJavaScriptRuntimeState{
+		JavaScript: sessionprojection.JavaScriptRuntimeStateFromCheckpoints(store, &interfaces.FactorySessionJavaScriptRuntimeState{
 			Phase:        "review",
 			Phases:       []string{"plan", "review"},
 			ScriptStatus: "RUNNING",
@@ -907,7 +908,7 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 				Kind: interfaces.OrchestratorKindJavaScript,
 			},
 		},
-		JavaScript: JavaScriptRuntimeStateFromCheckpoints(store, &interfaces.FactorySessionJavaScriptRuntimeState{
+		JavaScript: sessionprojection.JavaScriptRuntimeStateFromCheckpoints(store, &interfaces.FactorySessionJavaScriptRuntimeState{
 			Phase:        "review",
 			Phases:       []string{"plan", "review"},
 			ScriptStatus: "RUNNING",
@@ -915,11 +916,11 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 		Now: now,
 	}
 
-	result := ProjectSessionResult("session-js", ctx, store, sessionResultProjectionRole{})
+	result := sessionprojection.ProjectSessionResult("session-js", ctx, store, sessionResultProjectionRole{})
 	if result.ResultArtifactRef == nil || result.ResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("result artifact ref = %#v", result.ResultArtifactRef)
 	}
-	partial := ProjectSessionPartialResult("session-js", ctx, store)
+	partial := sessionprojection.ProjectSessionPartialResult("session-js", ctx, store)
 	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("partial result artifact ref = %#v", partial.PartialResultArtifactRef)
 	}

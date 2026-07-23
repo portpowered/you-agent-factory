@@ -5,6 +5,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -34,12 +35,12 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	}
 	materialized := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 	names := runtimeWorkNames(materialized.Tokens)
-	sessionSummary := factorysessions.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
+	sessionSummary := sessionprojection.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
 	result := work.ReadSnapshot{Items: make([]work.ReadModel, 0, len(materialized.Tokens))}
 	for _, token := range materialized.Tokens {
 		_, inFlight := materialized.InFlightOnlyByID[token.ID]
 		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names)
-		item.StopSummary = runtimeWorkStopSummary(factorysessions.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
+		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
 	return result, nil

@@ -1754,56 +1754,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "JavaScriptRuntimeStateFromCheckpoints"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "ProjectCheckpointArtifactRef"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "ProjectCheckpointRef"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "ProjectCheckpointRefs"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "ProjectSessionPartialResult"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/checkpoints.go",
-      "target": "ProjectSessionResult"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/projection.go",
-      "target": "ProjectRuntimeContract"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/projection_build.go",
-      "target": "BuildProjectionContext"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/stop_summary.go",
-      "target": "ProjectFactorySessionStopSummary"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/stop_summary.go",
-      "target": "ProjectWorkStopSummary"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/types.go",
       "target": "CanonicalFactorySessionID"
     },

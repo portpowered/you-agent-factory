@@ -1,28 +1,10 @@
-package factorysessions
+package sessionprojection
 
 import (
 	"fmt"
-	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
-
-// ProjectionBuildInput contains the canonical runtime facts needed to build
-// one live Factory Session projection context.
-type ProjectionBuildInput struct {
-	Session             *LiveSession
-	RuntimeConfig       interfaces.RuntimeConfigLookup
-	Snapshot            *factory.StateSnapshot
-	BackendScopeID      string
-	LogicalSessionKey   string
-	NormalizedTarget    *RuntimeLogicalTarget
-	RuntimeStartedAt    time.Time
-	CheckpointStore     factory.JavaScriptCheckpointStore
-	Events              []interfaces.FactoryEvent
-	WorldStateProjector factory.WorldStateProjector
-	Now                 time.Time
-}
 
 // BuildProjectionContext combines runtime state, event projection, JavaScript
 // checkpoints, and enabled transitions in one Session-owned implementation.

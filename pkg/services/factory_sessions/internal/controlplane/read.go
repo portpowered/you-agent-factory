@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 // LiveReadHost exposes live session registry and projection seams owned by the composition root.
@@ -43,7 +44,7 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		}
 		reads = append(reads, factorysessions.ReadProjection{
 			Context:          projectionCtx,
-			Runtime:          factorysessions.ProjectRuntimeContract(projectionCtx),
+			Runtime:          sessionprojection.ProjectRuntimeContract(projectionCtx),
 			RuntimeAvailable: true,
 		})
 	}
@@ -80,6 +81,6 @@ func GetLiveFactorySession(
 	}
 	return factorysessions.SessionProjection{
 		Context: projectionCtx,
-		Runtime: factorysessions.ProjectRuntimeContract(projectionCtx),
+		Runtime: sessionprojection.ProjectRuntimeContract(projectionCtx),
 	}, nil
 }

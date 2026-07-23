@@ -1,4 +1,4 @@
-package factorysessions
+package sessionprojection
 
 import (
 	"strings"

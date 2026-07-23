@@ -1,4 +1,4 @@
-package factorysessions_test
+package sessionprojection_test
 
 import (
 	"testing"
@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -31,7 +32,7 @@ func TestProjectFactorySessionStopSummaryProjectsPetriDispatchStatuses(t *testin
 			} else {
 				snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: tc.outcome, EndTime: now, ConsumedTokens: []workerexecution.Token{*token}}}
 			}
-			summary := ProjectFactorySessionStopSummary("session-1", snapshot, nil)
+			summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)
 			if summary == nil || summary.LatestDispatch == nil || summary.LatestDispatch.Status != tc.want {
 				t.Fatalf("latest dispatch = %#v, want status %q", summary, tc.want)
 			}
@@ -44,13 +45,13 @@ func TestProjectFactorySessionStopSummaryAppliesCanonicalPrecedence(t *testing.T
 	snapshot, _ := stoppedWorkSnapshot(now, "blocked")
 	javascript := &interfaces.FactorySessionJavaScriptRuntimeState{Dispatches: []interfaces.FactorySessionDispatchState{{ID: "js-1", Status: "INTERRUPTED", DispatchKind: "JAVASCRIPT_AGENT"}}}
 
-	summary := ProjectFactorySessionStopSummary("session-1", snapshot, javascript)
+	summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, javascript)
 	if summary == nil || summary.StopKind != StopKindInterrupted {
 		t.Fatalf("stop summary = %#v, want JavaScript interruption before blocked Work", summary)
 	}
 
 	snapshot.LifecycleControlStatus = "PAUSED"
-	summary = ProjectFactorySessionStopSummary("session-1", snapshot, javascript)
+	summary = sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, javascript)
 	if summary == nil || summary.StopKind != StopKindPaused {
 		t.Fatalf("stop summary = %#v, want pause before interruption", summary)
 	}

@@ -16,6 +16,7 @@ import (
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -24,6 +25,19 @@ import (
 // implementation for injection into Factory Sessions-owned transports.
 func NewRequestPreparation() factorysessions.RequestPreparation {
 	return requestpreparation.New()
+}
+
+// NewWorkStopSummaryProjector constructs the owner-private stopped-state
+// projection policy for injection into Work-owned read adapters.
+func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
+	return func(request factorysessions.WorkStopSummaryRequest) *factorysessions.StopSummary {
+		return sessionprojection.ProjectWorkStopSummary(
+			request.SessionID,
+			request.Snapshot,
+			request.Token,
+			request.SessionStopSummary,
+		)
+	}
 }
 
 // NewService constructs the inert, process-scoped Factory Sessions service.

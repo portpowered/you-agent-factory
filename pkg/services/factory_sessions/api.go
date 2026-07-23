@@ -1,7 +1,5 @@
 package factorysessions
 
-import "strings"
-
 // CurrentFactoryName is the domain identifier for the current Factory selector.
 const CurrentFactoryName = "UNDEFINED"
 
@@ -12,12 +10,4 @@ type OpenRequest struct {
 	Target         *TargetRef
 	ValidateOnly   bool
 	InitNewFactory bool
-}
-
-func stringPointerOrNil(value string) *string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
 }

@@ -1,4 +1,4 @@
-package factorysessions
+package sessionprojection
 
 import (
 	"crypto/sha256"
@@ -14,40 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/artifactprojection"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-// ProjectionContext carries the runtime inputs needed to project one live session.
-type ProjectionContext struct {
-	Session                *LiveSession
-	FactoryCfg             *interfaces.FactoryConfig
-	Snapshot               *factory.StateSnapshot
-	LifecycleControlStatus string
-	BackendScopeID         string
-	LogicalSessionKeyID    string
-	NormalizedTarget       *RuntimeLogicalTarget
-	RuntimeStartedAt       time.Time
-	Enabled                []interfaces.EnabledTransition
-	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
-	JavaScriptSession      *interfaces.FactoryWorldSessionBracketState
-	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
-	Now                    time.Time
-}
-
-// ReadProjection carries one live Factory Session read and records whether its
-// runtime projection was available. List reads retain the summary when runtime
-// projection fails; detail reads return that failure directly.
-type ReadProjection struct {
-	Context          ProjectionContext
-	Runtime          RuntimeProjection
-	RuntimeAvailable bool
-}
-
-// SessionProjection is the Factory Sessions-owned result for one live session
-// detail read. Transports receive the completed runtime projection and only
-// convert it to their public representation.
-type SessionProjection struct {
-	Context ProjectionContext
-	Runtime RuntimeProjection
-}
 
 // ProjectRuntimeContract builds the Factory Session-owned orchestrator-aware
 // runtime projection for one session.

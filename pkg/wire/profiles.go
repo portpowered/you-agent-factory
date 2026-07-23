@@ -747,14 +747,7 @@ func provideResponseEventValidator() factorysessions.ResponseEventValidator {
 }
 
 func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
-	return func(request factorysessions.WorkStopSummaryRequest) *factorysessions.StopSummary {
-		return factorysessions.ProjectWorkStopSummary(
-			request.SessionID,
-			request.Snapshot,
-			request.Token,
-			request.SessionStopSummary,
-		)
-	}
+	return factorysessionwire.NewWorkStopSummaryProjector()
 }
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {

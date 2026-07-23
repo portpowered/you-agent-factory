@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -36,7 +37,7 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 
 func projectRuntimeToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySessionRuntime {
 	return factorysessionmapping.RuntimeProjectionToAPI(
-		factorysessions.ProjectRuntimeContract(ctx),
+		sessionprojection.ProjectRuntimeContract(ctx),
 		ctx.NormalizedTarget,
 	)
 }

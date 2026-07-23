@@ -7,8 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	. "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -85,19 +84,8 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	ctx := factorysessions.ProjectionContext{
-		Session: &factorysessions.LiveSession{ID: sessionID},
-		FactoryCfg: &interfaces.FactoryConfig{
-			Orchestrator: &interfaces.FactoryOrchestratorConfig{
-				Kind: interfaces.OrchestratorKindJavaScript,
-			},
-		},
-		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
-			ScriptStatus:  "FINISHED",
-			PrimaryResult: worldState.JavaScriptRuntime.PrimaryResult,
-			Artifacts:     worldState.JavaScriptRuntime.Artifacts,
-		},
-		Now: t0.Add(2 * time.Second),
+	if worldState.JavaScriptRuntime == nil {
+		t.Fatal("expected replayed JavaScript runtime state")
 	}
 	durableResult := apisurface.WorkflowSessionResultToAPI(ownerProjection.Durable)
 	if durableResult.PrimaryResult == nil || eventPayload.ResultSummary == nil {
@@ -109,41 +97,7 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 	if (*durableResult.ArtifactIds)[0] != (*eventPayload.ArtifactIds)[0] {
 		t.Fatalf("artifact ids differ: %q vs %q", (*durableResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
-	liveResult := factorysessions.ProjectSessionResult(
-		sessionID,
-		ctx,
-		replayProjectionCheckpointStore{},
-		replayResultProjectionRole{},
-	)
-	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.ID != (*eventPayload.ArtifactIds)[0] {
-		t.Fatalf("live result artifact = %#v, want id %q", liveResult.ResultArtifactRef, (*eventPayload.ArtifactIds)[0])
-	}
 }
-
-type replayProjectionCheckpointStore struct{}
-
-type replayResultProjectionRole struct{}
-
-func (replayResultProjectionRole) ProjectSessionResults(
-	input factory.SessionResultInput,
-) factory.SessionResultProjection {
-	result := factory.LiveSessionResult{SessionID: input.SessionID, Status: input.Status}
-	if input.ResultArtifact != nil {
-		ref := *input.ResultArtifact
-		result.ResultArtifactRef = &ref
-	}
-	return factory.SessionResultProjection{Live: result}
-}
-
-func (replayProjectionCheckpointStore) Put(interfaces.JavaScriptCheckpointRecord) {}
-func (replayProjectionCheckpointStore) List() []interfaces.JavaScriptCheckpointRecord {
-	return nil
-}
-func (replayProjectionCheckpointStore) Get(string) (interfaces.JavaScriptCheckpointRecord, bool) {
-	return interfaces.JavaScriptCheckpointRecord{}, false
-}
-
-var _ factory.JavaScriptCheckpointStore = replayProjectionCheckpointStore{}
 
 func TestReconstructFactoryWorldState_JavaScriptFixtureReconstructsPhaseCheckpointArtifactsWithoutPetriMarking(t *testing.T) {
 	t0 := time.Date(2026, 6, 8, 17, 5, 0, 0, time.UTC)

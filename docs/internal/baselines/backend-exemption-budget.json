@@ -87,7 +87,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_sessions/projection_test.go",
+      "target": "pkg/services/factory_sessions/internal/sessionprojection/projection_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
@@ -711,7 +711,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/projection_test.go#TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions",
+      "target": "pkg/services/factory_sessions/internal/sessionprojection/projection_test.go#TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1281,7 +1281,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_sessions/projection_test.go",
+      "target": "pkg/services/factory_sessions/internal/sessionprojection/projection_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },

@@ -11,8 +11,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 type sessionSyncPreflightTarget struct {
@@ -100,7 +101,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	return factorysessions.BuildProjectionContext(factorysessions.ProjectionBuildInput{
+	return sessionprojection.BuildProjectionContext(factorysessions.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg, Snapshot: snapshot,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
@@ -120,7 +121,7 @@ func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
 	if err != nil {
 		return factorysessioncursors.IdentityScope{}, err
 	}
-	runtime := factorysessions.ProjectRuntimeContract(projectionCtx)
+	runtime := sessionprojection.ProjectRuntimeContract(projectionCtx)
 	scope := factorysessioncursors.IdentityScope{
 		BackendScopeID:      runtimebinding.BackendScopeID(fs.backendScopeID, session),
 		LogicalSessionKeyID: projectionCtx.LogicalSessionKeyID,

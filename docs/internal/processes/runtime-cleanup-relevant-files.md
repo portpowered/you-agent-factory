@@ -648,6 +648,15 @@ HTTP projection adapter belongs with the HTTP transport rather than the root;
 top-level HTTP composition supplies that adapter without publishing transport
 collaborator interfaces from the contract root.
 
+Factory Session checkpoint, runtime, result, artifact, and stop-summary
+projection policy is owner-private under
+`pkg/services/factory_sessions/internal/sessionprojection`. Keep only detached
+projection inputs and result values at the service root. When a peer owner
+needs one exact projection operation, publish a plain function contract at the
+root and construct its private implementation through
+`pkg/services/factory_sessions/wire`; root Wire must not import the private
+projection package or reimplement its policy.
+
 Live Factory Session record construction is owner-private under
 `pkg/services/factory_sessions/internal/livesession`. Runtime and session
 assembly code may use that constructor after dependencies have been injected,
