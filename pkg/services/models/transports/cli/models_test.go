@@ -108,7 +108,7 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 			},
 			pull: func(cfg PullConfig) error {
 				called["pull"] = true
-				if cfg.ModelName != "model-b" || cfg.Server != server {
+				if cfg.ModelName != "model-b" || cfg.Server != server || cfg.Context.Err() != context.Canceled {
 					t.Fatalf("PullConfig = %#v", cfg)
 				}
 				return nil
@@ -124,16 +124,18 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 		nil,
 	)
 	cmd := &cobra.Command{Use: "models"}
-	cmd.SetContext(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
 	cmd.SetOut(io.Discard)
-	inspectInputs, inherited := resolvedModelsHandlerInputs(t, server)
+	inspectInputs, pullInputs, inherited := resolvedModelsHandlerInputs(t, server)
 	if err := handler.List(cmd, resolvedinput.Inputs{}, inherited); err != nil {
 		t.Fatal(err)
 	}
 	if err := handler.Inspect(cmd, inspectInputs, inherited); err != nil {
 		t.Fatal(err)
 	}
-	if err := handler.Pull(cmd, []string{"model-b"}); err != nil {
+	if err := handler.Pull(cmd, pullInputs, inherited); err != nil {
 		t.Fatal(err)
 	}
 	for _, operation := range []string{"list", "inspect", "pull"} {
@@ -146,7 +148,7 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 func resolvedModelsHandlerInputs(
 	t *testing.T,
 	server string,
-) (resolvedinput.Inputs, resolvedinput.Inputs) {
+) (resolvedinput.Inputs, resolvedinput.Inputs, resolvedinput.Inputs) {
 	t.Helper()
 	inherited, err := resolvedinput.Resolve(
 		[]resolvedinput.Definition{
@@ -178,7 +180,20 @@ func resolvedModelsHandlerInputs(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return inspectInputs, inherited
+	pullInputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsPullNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsPullNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-b"),
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inspectInputs, pullInputs, inherited
 }
 
 func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {

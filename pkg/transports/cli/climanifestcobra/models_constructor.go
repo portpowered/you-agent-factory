@@ -90,9 +90,9 @@ func NewModelsCommand(handler commandregistry.ModelsHandler) (*cobra.Command, er
 	return NewModelsCommandFromManifest(manifest, handler)
 }
 
-// NewModelsCommandFromManifest projects list and inspect through the generic
+// NewModelsCommandFromManifest projects list, inspect, and pull through the generic
 // constructor while retaining narrow legacy dispatch only for the later
-// invoke and pull migration slices.
+// invoke migration slice.
 func NewModelsCommandFromManifest(
 	manifest climanifest.Manifest,
 	handler commandregistry.ModelsHandler,
@@ -120,12 +120,17 @@ func NewModelsCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
 	}
+	pullRecord, err := manifest.CommandByID("you.models.pull")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
 	parent, err := buildResolvedModelsParent(
 		manifest,
 		rootRecord,
 		parentRecord,
 		listRecord,
 		inspectRecord,
+		pullRecord,
 		handler,
 	)
 	if err != nil {
@@ -143,6 +148,7 @@ func buildResolvedModelsParent(
 	parentRecord climanifest.Command,
 	listRecord climanifest.Command,
 	inspectRecord climanifest.Command,
+	pullRecord climanifest.Command,
 	handler commandregistry.ModelsHandler,
 ) (*cobra.Command, error) {
 	manifest.Commands = map[string]climanifest.Command{
@@ -150,6 +156,7 @@ func buildResolvedModelsParent(
 		parentRecord.ID:  parentRecord,
 		listRecord.ID:    listRecord,
 		inspectRecord.ID: inspectRecord,
+		pullRecord.ID:    pullRecord,
 	}
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
@@ -158,6 +165,7 @@ func buildResolvedModelsParent(
 		ResolvedCobraHandlers: ResolvedCobraHandlerRegistry{
 			listRecord.Handler.ID:    handler.List,
 			inspectRecord.Handler.ID: handler.Inspect,
+			pullRecord.Handler.ID:    handler.Pull,
 		},
 	})
 	if err != nil {
@@ -168,14 +176,14 @@ func buildResolvedModelsParent(
 		return nil, fmt.Errorf("build models command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
-	for _, id := range []string{listRecord.ID, inspectRecord.ID} {
+	for _, id := range []string{listRecord.ID, inspectRecord.ID, pullRecord.ID} {
 		command, _, findErr := parent.Find([]string{strings.TrimPrefix(id, parentRecord.ID+".")})
 		if findErr != nil {
 			return nil, fmt.Errorf("build models command: find %q: %w", id, findErr)
 		}
 		command.PreRunE = rejectDeprecatedPortFlag
-		if id == inspectRecord.ID {
-			preserveModelsExactArgumentDiagnostic(command, inspectRecord)
+		if id != listRecord.ID {
+			preserveModelsExactArgumentDiagnostic(command, manifest.Commands[id])
 		}
 	}
 	return parent, nil
@@ -211,7 +219,7 @@ func attachLegacyModelsLeaves(
 	if err != nil {
 		return err
 	}
-	for _, id := range []string{"you.models.invoke", "you.models.pull"} {
+	for _, id := range []string{"you.models.invoke"} {
 		commandRecord, commandErr := manifest.CommandByID(id)
 		if commandErr != nil {
 			return fmt.Errorf("build models command: %w", commandErr)

@@ -21,7 +21,9 @@ func (modelsHandlerStub) Inspect(*cobra.Command, resolvedinput.Inputs, resolvedi
 	return nil
 }
 func (modelsHandlerStub) Invoke(*cobra.Command, []string) error { return nil }
-func (modelsHandlerStub) Pull(*cobra.Command, []string) error   { return nil }
+func (modelsHandlerStub) Pull(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
 
 func TestDocsAndModelsCommandsAreConstructedIndependently(t *testing.T) {
 	docs, err := climanifestcobra.NewDocsCommand(
@@ -169,6 +171,75 @@ func TestGenericModelsInspectDispatchResolvesLocalAndInheritedInputs(t *testing.
 		Provenance: resolvedinput.SourceCLIFlag, Changed: true,
 	})
 	assertResolvedState(t, inherited, "you.flag.json", resolvedinput.State{
+		Provenance: resolvedinput.SourceManifestDefault, Default: true,
+	})
+}
+
+func TestGenericModelsPullDispatchResolvesLocalAndInheritedInputs(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelsRecord, err := manifest.CommandByID("you.models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pullRecord, err := manifest.CommandByID("you.models.pull")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Commands = map[string]climanifest.Command{
+		rootRecord.ID:   rootRecord,
+		modelsRecord.ID: modelsRecord,
+		pullRecord.ID:   pullRecord,
+	}
+
+	var local, inherited resolvedinput.Inputs
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			pullRecord.Handler.ID: func(
+				_ *cobra.Command,
+				gotLocal resolvedinput.Inputs,
+				gotInherited resolvedinput.Inputs,
+			) error {
+				local, inherited = gotLocal, gotInherited
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{"--json", "models", "pull", "OMNIVOICE_Q4_K_M"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(models pull) error = %v", err)
+	}
+	modelName, err := local.String("you.models.pull.arg.0")
+	if err != nil || modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("resolved model name = %q, %v", modelName, err)
+	}
+	assertResolvedState(t, local, "you.models.pull.arg.0", resolvedinput.State{
+		Provenance: resolvedinput.SourcePositionalArgument, Changed: true,
+	})
+	jsonOutput, err := inherited.Bool("you.flag.json")
+	if err != nil || !jsonOutput {
+		t.Fatalf("resolved json = %t, %v; want true", jsonOutput, err)
+	}
+	assertResolvedState(t, inherited, "you.flag.json", resolvedinput.State{
+		Provenance: resolvedinput.SourceCLIFlag, Changed: true,
+	})
+	assertResolvedState(t, inherited, "you.flag.server", resolvedinput.State{
 		Provenance: resolvedinput.SourceManifestDefault, Default: true,
 	})
 }

@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -131,6 +133,59 @@ func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	}
 	if !inspectJSON || !pullJSON {
 		t.Fatalf("json bindings = inspect %t pull %t, want true", inspectJSON, pullJSON)
+	}
+}
+
+func TestProductionModelsPullRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "pull"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "pull", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "pull", "--unknown"}, want: "unknown flag: --unknown"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				pull: func(modelscli.PullConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid pull input invoked Models service")
+			}
+		})
+	}
+}
+
+func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		pull: func(cfg modelscli.PullConfig) error {
+			if cfg.Context.Err() != context.Canceled {
+				t.Fatalf("pull context error = %v, want canceled", cfg.Context.Err())
+			}
+			return context.Canceled
+		},
+	}}).NewCommand(nil, nil, nil)
+	root.SetContext(ctx)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "pull", "model-a"})
+	if err := root.Execute(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("execute canceled models pull error = %v, want context.Canceled", err)
 	}
 }
 

@@ -46,6 +46,7 @@ func NewCommandHandler(
 
 const (
 	modelsInspectNameInputID = "you.models.inspect.arg.0"
+	modelsPullNameInputID    = "you.models.pull.arg.0"
 	serverInputID            = "you.flag.server"
 	jsonInputID              = "you.flag.json"
 	verboseInputID           = "you.flag.verbose"
@@ -160,15 +161,24 @@ func (h *CommandHandler) Invoke(cmd *cobra.Command, args []string) error {
 	return h.models.Invoke(cfg)
 }
 
-func (h *CommandHandler) Pull(cmd *cobra.Command, args []string) error {
+func (h *CommandHandler) Pull(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
 	if h == nil || h.models == nil {
 		return fmt.Errorf("models pull service is required")
 	}
-	cfg := PullConfig{Context: cmd.Context(), Output: cmd.OutOrStdout()}
-	if len(args) == 1 {
-		cfg.ModelName = args[0]
+	modelName, err := inputs.String(modelsPullNameInputID)
+	if err != nil {
+		return fmt.Errorf("read models pull model name: %w", err)
 	}
-	h.applyCommon(cmd, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics)
+	cfg := PullConfig{
+		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+	}
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models pull inputs: %w", err)
+	}
 	return h.models.Pull(cfg)
 }
 
