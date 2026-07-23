@@ -1025,10 +1025,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/session",
-      "minimum": 73.47
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
       "minimum": 16.56
     },
