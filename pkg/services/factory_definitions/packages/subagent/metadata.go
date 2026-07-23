@@ -5,12 +5,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	builtinsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent"
 )
-
-// BuiltInFactoryJSON is the canonical runnable @you/subagent definition owned
-// by the factory packages family.
-var BuiltInFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
 
 const (
 	// PackagedFactoryName is the canonical named factory identifier for @you/subagent.

@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
-	factorypackages "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages"
 )
 
 var settledScopedNamedFactoryPaths = retiredsurfaceguard.SettledScopedNamedFactoryPaths()
@@ -134,7 +134,7 @@ func TestRetiredEncodedPathResolution_MaterializeLeavesEncodedSiblingUntouched(t
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
 	result, err := packagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, factorypackages.All())
+		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
 	result, err := packagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, factorypackages.All())
+		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)
 	}
@@ -268,6 +268,15 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 			t.Fatalf("packaged factory dir = %q, must not use percent-encoded scoped leaf names", factory.FactoryDir)
 		}
 	}
+}
+
+func publishedPackagedDefinitions(t *testing.T) []interfaces.PackagedDefinition {
+	t.Helper()
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
+	}
+	return catalog.All()
 }
 
 func legacyEncodedFactoryDir(t *testing.T, factoriesRoot, scopedName string) string {

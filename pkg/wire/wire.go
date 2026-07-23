@@ -277,6 +277,7 @@ var BundleSet = wire.NewSet(
 	factoryDefinitionsServicesSet,
 	workerServiceSet,
 	cliCommandOperationsSet,
+	providePackagedFactoryDefinitions,
 	provideSystemInitializationService,
 	configinitcmd.NewInitializer,
 	provideRuntimeOpener,

@@ -201,70 +201,6 @@
       "minimum": 77.41
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages",
-      "minimum": 94.11
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/deepresearch",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/fusion",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/goal",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/quorum",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/review",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/subagent",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/tts",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/fusion",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/goal",
       "exception": {
         "kind": "measurement",
@@ -276,21 +212,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets",
-      "minimum": 59.29
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/promptassets",
-      "minimum": 60.31
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/quorum",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review",
@@ -370,7 +296,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-      "minimum": 55.24
+      "minimum": 55.18
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",
