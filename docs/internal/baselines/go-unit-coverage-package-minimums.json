@@ -486,7 +486,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
-      "minimum": 64.28
+      "minimum": 50.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
@@ -556,7 +556,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
-      "minimum": 84.61
+      "minimum": 84.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",

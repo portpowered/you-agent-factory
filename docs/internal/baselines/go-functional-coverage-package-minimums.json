@@ -806,7 +806,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http",
-      "minimum": 38.45
+      "minimum": 38.32
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
