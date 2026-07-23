@@ -10,7 +10,7 @@ import (
 // ProjectionContext carries the detached runtime inputs needed to project one
 // live Factory Session.
 type ProjectionContext struct {
-	Session                *LiveSession
+	Session                *ScopedLiveSessionSummary
 	FactorySessionID       string
 	FactoryCfg             *interfaces.FactoryConfig
 	Snapshot               *factory.StateSnapshot

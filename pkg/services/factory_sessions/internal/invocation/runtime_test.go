@@ -21,7 +21,7 @@ import (
 
 func newInvocationTestSessionState() *sessionruntime.Service {
 	clock := platformclock.Real{}
-	newStream := func() *factorysessions.SessionResponseStream {
+	newStream := func() *responsestream.SessionResponseStream {
 		return responsestream.NewSessionResponseStream(clock)
 	}
 	return sessionruntime.New(

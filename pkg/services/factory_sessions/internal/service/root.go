@@ -16,6 +16,7 @@ import (
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
 // runtime opening binds a clock selected from the invocation's external edges.
 type Root struct {
+	factorysessions.Service
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
@@ -81,6 +82,7 @@ func NewRoot(
 		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
 	}
 	return &Root{
+		Service:                      &legacyservice.Service{},
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		sessionResultProjection:      sessionResultProjection,
 		interpolation:                interpolation,
@@ -100,7 +102,7 @@ func NewRoot(
 
 // ForRuntime binds invocation-local runtime data to the already-constructed
 // service and returns an isolated live-session assembly.
-func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (roles.RuntimeAssembly, error) {
+func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessions.Service, error) {
 	if r == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
 	}
@@ -127,5 +129,9 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (roles.Runtime
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")
 	}
-	return assembly, nil
+	bound, ok := assembly.(factorysessions.Service)
+	if !ok {
+		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation does not expose the root service")
+	}
+	return bound, nil
 }

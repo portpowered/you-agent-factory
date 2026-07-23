@@ -24,6 +24,7 @@ import (
 // Assembly retains Factory Sessions-owned mutable registries while peer
 // services are constructed against its root resolver roles.
 type Assembly struct {
+	factorysessions.Service
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      streamManager
@@ -76,6 +77,7 @@ func NewAssembly(
 	}
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, clock, eventIDs, sessionIDs, responseStreamService)
 	return &Assembly{
+		Service:                      &Service{},
 		registry:                     registry,
 		state:                        state,
 		streams:                      runtimebinding.NewStreamManager(state),
@@ -94,6 +96,15 @@ func NewAssembly(
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
 	}
+}
+
+// ForRuntime keeps an already-bound runtime view stable when it is passed
+// through code that only knows the public Factory Sessions contract.
+func (a *Assembly) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Service, error) {
+	if a == nil {
+		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
+	}
+	return a, nil
 }
 
 func (a *Assembly) CurrentRuntime() *factorysessions.LiveRuntime {
@@ -263,6 +274,7 @@ func (a *Assembly) Complete(
 		a.responseStreams,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
+	a.Service = gateway
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, err

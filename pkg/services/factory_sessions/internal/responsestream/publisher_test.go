@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 )
 
@@ -263,7 +262,7 @@ func TestPublisher_SlowSubscriberDoesNotBlockAndReceivesCompactionSignal(t *test
 	}
 }
 
-func mustSubscribe(t *testing.T, stream *factorysessions.SessionResponseStream, sequence int64) *responsestream.Subscription {
+func mustSubscribe(t *testing.T, stream *responsestream.SessionResponseStream, sequence int64) *responsestream.Subscription {
 	t.Helper()
 
 	subscription, err := stream.Subscribe(sequence)

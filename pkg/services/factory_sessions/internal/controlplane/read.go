@@ -40,7 +40,12 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		if err != nil {
 			reads = append(reads, factorysessions.ReadProjection{
 				Context: factorysessions.ProjectionContext{
-					Session: session, FactorySessionID: livesession.CanonicalID(session),
+					Session: &factorysessions.ScopedLiveSessionSummary{
+						ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+						FolderPath: session.FolderPath, Project: session.Project,
+						IsDefault: session.IsDefault, Target: session.Target,
+					},
+					FactorySessionID: livesession.CanonicalID(session),
 				},
 			})
 			continue
@@ -57,7 +62,7 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		if left.IsDefault != right.IsDefault {
 			return left.IsDefault
 		}
-		return livesession.CanonicalID(left) < livesession.CanonicalID(right)
+		return left.ID < right.ID
 	})
 	return reads, nil
 }

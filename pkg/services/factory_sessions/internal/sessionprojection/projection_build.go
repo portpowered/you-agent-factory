@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
@@ -18,7 +19,7 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 		factoryCfg = input.RuntimeConfig.FactoryConfig()
 	}
 	result := ProjectionContext{
-		Session: input.Session, FactorySessionID: livesession.CanonicalID(input.Session),
+		Session: projectLiveSession(input.Session), FactorySessionID: livesession.CanonicalID(input.Session),
 		FactoryCfg: factoryCfg, Snapshot: input.Snapshot,
 		BackendScopeID: input.BackendScopeID, LogicalSessionKeyID: input.LogicalSessionKey,
 		NormalizedTarget: input.NormalizedTarget, RuntimeStartedAt: input.RuntimeStartedAt,
@@ -46,4 +47,15 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 		result.Enabled = append([]interfaces.EnabledTransition(nil), input.Snapshot.EnabledTransitions...)
 	}
 	return result, nil
+}
+
+func projectLiveSession(session *factorysessions.LiveSession) *factorysessions.ScopedLiveSessionSummary {
+	if session == nil {
+		return nil
+	}
+	return &factorysessions.ScopedLiveSessionSummary{
+		ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+		FolderPath: session.FolderPath, Project: session.Project,
+		IsDefault: session.IsDefault, Target: session.Target,
+	}
 }

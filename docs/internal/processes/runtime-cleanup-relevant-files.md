@@ -28,13 +28,20 @@ delegation to the target owner or part of an active removal lane.
 For services whose behavior depends on one Factory Session runtime, construct an
 inert process-scoped root through the service-local `wire` package and pass
 runtime-specific values through an owner-defined binding such as `ForRuntime`.
-Do not inject a callback that lets the runtime-opening consumer select or
-construct the concrete service.
+Keep that binding on the canonical root `Service` and return the same public
+`Service` contract, as Models and Factory Sessions do; do not introduce a
+Wire-owned binder or return a private runtime-assembly contract. Owner-private
+runtime opening may unwrap its own bound implementation internally, but
+cross-service consumers receive only the root contract. Do not inject a
+callback that lets the runtime-opening consumer select or construct the
+concrete service.
 
 Keep the product-facing service root to its canonical `Service` interface plus
 detached value contracts. Construction-only roles belong in the service-local
 `wire` package, implementation collaborators belong under `internal`, and
 cross-service consumers should own the narrow interface they actually call.
+List/read projections must carry detached summaries rather than mutable
+session registries, response stores, or live-session implementation pointers.
 
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout

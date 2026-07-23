@@ -60,7 +60,10 @@ func TestServiceOwnsOpenReadAndStop(t *testing.T) {
 		return nil, factorysessions.ErrSessionNotFound
 	}
 	dependencies.BuildProjectionContext = func(_ context.Context, session *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
-		return factorysessions.ProjectionContext{Session: session, FactorySessionID: session.ID}, nil
+		return factorysessions.ProjectionContext{
+			Session:          &factorysessions.ScopedLiveSessionSummary{ID: session.ID},
+			FactorySessionID: session.ID,
+		}, nil
 	}
 	dependencies.StopSession = func(id string) error { stopped = id; return nil }
 	service, err := liveruntimewire.NewService(dependencies)
@@ -73,11 +76,11 @@ func TestServiceOwnsOpenReadAndStop(t *testing.T) {
 		t.Fatalf("OpenForTarget = (%q, %v), want named", opened, err)
 	}
 	listed, err := service.List(context.Background())
-	if err != nil || len(listed) != 2 || listed[0].Context.Session != defaultSession {
+	if err != nil || len(listed) != 2 || listed[0].Context.Session.ID != defaultSession.ID {
 		t.Fatalf("List = (%#v, %v), want default-first sessions", listed, err)
 	}
 	read, err := service.Get(context.Background(), "named")
-	if err != nil || read.Context.Session != namedSession {
+	if err != nil || read.Context.Session.ID != namedSession.ID {
 		t.Fatalf("Get = (%#v, %v), want named session", read, err)
 	}
 	if err := service.Close(context.Background(), "named"); err != nil || stopped != "named" {

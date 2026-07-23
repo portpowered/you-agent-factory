@@ -133,7 +133,7 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 		},
 	}
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "~default", IsDefault: true},
+		Session: &ScopedLiveSessionSummary{ID: "~default", IsDefault: true},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
 		},
@@ -198,7 +198,7 @@ func TestProjectRuntimeContract_DetachesTokenHistoryAcrossPublicMapping(t *testi
 		},
 	}
 	domain := sessionprojection.ProjectRuntimeContract(ProjectionContext{
-		Session: &LiveSession{ID: "session-history"},
+		Session: &ScopedLiveSessionSummary{ID: "session-history"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "history",
 		},
@@ -243,7 +243,7 @@ func TestProjectRuntimeContract_OwnsDetachedJavaScriptStatusAndPublicMapping(t *
 		CompletedDispatches: 2,
 	}
 	ctx := ProjectionContext{
-		Session: &LiveSession{ID: "session-domain-projection"},
+		Session: &ScopedLiveSessionSummary{ID: "session-domain-projection"},
 		FactoryCfg: &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
 			Kind:       interfaces.OrchestratorKindJavaScript,
 			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
@@ -281,13 +281,11 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{
-			ID:      "session-js",
-			Project: "dynamic-workflow",
-			SessionState: SessionState{
-				FolderPath: folderPath,
-			},
-			Target: TargetRef{Kind: TargetKindDefault},
+		Session: &ScopedLiveSessionSummary{
+			ID:         "session-js",
+			Project:    "dynamic-workflow",
+			FolderPath: folderPath,
+			Target:     TargetRef{Kind: TargetKindDefault},
 		},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
@@ -350,13 +348,11 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{
-			ID:      "session-js",
-			Project: "dynamic-workflow",
-			SessionState: SessionState{
-				FolderPath: folderPath,
-			},
-			Target: TargetRef{Kind: TargetKindDefault},
+		Session: &ScopedLiveSessionSummary{
+			ID:         "session-js",
+			Project:    "dynamic-workflow",
+			FolderPath: folderPath,
+			Target:     TargetRef{Kind: TargetKindDefault},
 		},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
@@ -406,7 +402,7 @@ func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
 	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
-		Session: &LiveSession{ID: "session-paused"},
+		Session: &ScopedLiveSessionSummary{ID: "session-paused"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
 		},
@@ -469,7 +465,7 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 				},
 			}
 			runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
-				Session: &LiveSession{ID: "session-stop"},
+				Session: &ScopedLiveSessionSummary{ID: "session-stop"},
 				FactoryCfg: &interfaces.FactoryConfig{
 					Name: "goal",
 				},
@@ -545,7 +541,7 @@ func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
 	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
-		Session: &LiveSession{ID: "session-interrupted"},
+		Session: &ScopedLiveSessionSummary{ID: "session-interrupted"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -604,7 +600,7 @@ func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkCo
 		EnteredAt: now.Add(-1 * time.Minute),
 	}
 	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
-		Session: &LiveSession{ID: "session-interrupted-unmatched"},
+		Session: &ScopedLiveSessionSummary{ID: "session-interrupted-unmatched"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "goal",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -732,7 +728,7 @@ func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *
 		},
 	}
 	session := SessionResponse(ProjectionContext{
-		Session: &LiveSession{ID: "~default"},
+		Session: &ScopedLiveSessionSummary{ID: "~default"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
 		},
@@ -748,7 +744,7 @@ func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *
 func TestSessionResponse_JavaScriptRuntimeOmitsDispatchesAndPreservesArtifacts(t *testing.T) {
 	now := time.Date(2026, 6, 8, 16, 5, 0, 0, time.UTC)
 	session := SessionResponse(ProjectionContext{
-		Session: &LiveSession{ID: "session-js"},
+		Session: &ScopedLiveSessionSummary{ID: "session-js"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -848,7 +844,7 @@ func TestProjectCheckpointRef_OmitsRawCheckpointBodyFromPublicProjection(t *test
 	}}}
 
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "session-js"},
+		Session: &ScopedLiveSessionSummary{ID: "session-js"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
 				Kind: interfaces.OrchestratorKindJavaScript,
@@ -902,7 +898,7 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 		StoragePath: "/tmp/checkpoints/ckpt-1.json",
 	}}}
 	ctx := ProjectionContext{
-		Session: &LiveSession{ID: "session-js"},
+		Session: &ScopedLiveSessionSummary{ID: "session-js"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
 				Kind: interfaces.OrchestratorKindJavaScript,
@@ -941,7 +937,7 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 func TestProjectRuntime_LifecycleControlStatusReflectsCanonicalProjection(t *testing.T) {
 	now := time.Date(2026, 6, 20, 15, 0, 0, 0, time.UTC)
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "~default", IsDefault: true},
+		Session: &ScopedLiveSessionSummary{ID: "~default", IsDefault: true},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
 		},
@@ -966,7 +962,7 @@ func TestProjectRuntime_LifecycleControlStatusReflectsCanonicalProjection(t *tes
 func TestProjectRuntime_UntouchedIdleSessionPreservesRawFactoryState(t *testing.T) {
 	now := time.Date(2026, 6, 20, 15, 10, 0, 0, time.UTC)
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "~default", IsDefault: true},
+		Session: &ScopedLiveSessionSummary{ID: "~default", IsDefault: true},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
 		},
@@ -987,7 +983,7 @@ func TestProjectRuntime_UntouchedIdleSessionPreservesRawFactoryState(t *testing.
 func TestProjectRuntime_LifecycleControlStatusUnchangedWithoutControlEvents(t *testing.T) {
 	now := time.Date(2026, 6, 20, 15, 5, 0, 0, time.UTC)
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "~default", IsDefault: true},
+		Session: &ScopedLiveSessionSummary{ID: "~default", IsDefault: true},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
 		},

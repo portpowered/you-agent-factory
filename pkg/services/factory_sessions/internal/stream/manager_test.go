@@ -25,11 +25,11 @@ func streamResponseEventID() string {
 	return fmt.Sprintf("stream-response-event-%d", streamResponseEventIdentity.Add(1))
 }
 
-func newTestResponseStream() *factorysessions.SessionResponseStream {
+func newTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(streamTestClock)
 }
 
-func newTestResponseStreamRegistry() *factorysessions.ResponseStreamRegistry {
+func newTestResponseStreamRegistry() *responsestream.Registry {
 	return responsestream.NewRegistry(newTestResponseStream, streamTestClock)
 }
 
@@ -97,7 +97,7 @@ func (h *streamTestHost) ResponseStreams(_ *factorysessions.LiveSession) *factor
 	return h.streams
 }
 
-func (h *streamTestHost) NewResponseStream() *factorysessions.SessionResponseStream {
+func (h *streamTestHost) NewResponseStream() *responsestream.SessionResponseStream {
 	return newTestResponseStream()
 }
 

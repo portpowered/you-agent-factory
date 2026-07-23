@@ -91,7 +91,12 @@ func (h *readTestHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
 	return factorysessions.ProjectionContext{
-		Session: session, FactorySessionID: livesession.CanonicalID(session), Snapshot: h.snapshot,
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+			FolderPath: session.FolderPath, Project: session.Project,
+			IsDefault: session.IsDefault, Target: session.Target,
+		},
+		FactorySessionID: livesession.CanonicalID(session), Snapshot: h.snapshot,
 	}, nil
 }
 

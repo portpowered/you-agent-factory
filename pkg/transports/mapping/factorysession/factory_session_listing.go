@@ -61,7 +61,7 @@ func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactoryS
 // SessionSummaryToAPI maps one live Factory Session and its already-projected
 // canonical identity to the public summary.
 func SessionSummaryToAPI(
-	session *factorysessions.LiveSession,
+	session *factorysessions.ScopedLiveSessionSummary,
 	factorySessionID string,
 ) factoryapi.FactorySessionSummary {
 	if session == nil {

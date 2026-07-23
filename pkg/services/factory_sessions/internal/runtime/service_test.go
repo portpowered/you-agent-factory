@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
-func newRuntimeTestResponseStream() *factorysessions.SessionResponseStream {
+func newRuntimeTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(platformclock.Real{})
 }
 

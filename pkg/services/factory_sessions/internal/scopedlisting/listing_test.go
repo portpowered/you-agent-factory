@@ -38,10 +38,10 @@ func TestListOwnsSourceSelectionMergingAndOrdering(t *testing.T) {
 	t.Parallel()
 	live := &scopedLiveReader{reads: []factorysessions.ReadProjection{
 		{Context: factorysessions.ProjectionContext{
-			Session: &factorysessions.LiveSession{ID: "workspace-z"}, FactorySessionID: "workspace-z",
+			Session: &factorysessions.ScopedLiveSessionSummary{ID: "workspace-z"}, FactorySessionID: "workspace-z",
 		}},
 		{Context: factorysessions.ProjectionContext{
-			Session: &factorysessions.LiveSession{ID: "workspace-a"}, FactorySessionID: "workspace-a",
+			Session: &factorysessions.ScopedLiveSessionSummary{ID: "workspace-a"}, FactorySessionID: "workspace-a",
 		}, RuntimeAvailable: true, Runtime: factorysessions.RuntimeProjection{Status: "RUNNING"}},
 	}}
 	durable := &scopedDurableReader{result: factorysessions.ListSessionsResult{

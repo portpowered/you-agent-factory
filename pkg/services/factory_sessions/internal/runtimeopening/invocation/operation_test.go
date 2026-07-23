@@ -34,7 +34,7 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 	}
 	projection := factorysessions.ProjectionContext{
 		FactoryCfg: cfg,
-		Session:    &factorysessions.LiveSession{SessionState: factorysessions.SessionState{FactoryDir: factoryDir}},
+		Session:    &factorysessions.ScopedLiveSessionSummary{FactoryDir: factoryDir},
 	}
 	started, err := javaScriptStartRequest(projection, roles.InvocationTarget{
 		FactoryDir: factoryDir, MockWorkersConfig: &workers.MockWorkersConfig{},

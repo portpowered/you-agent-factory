@@ -386,7 +386,7 @@ func provideFactorySessionsService(
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-) (factorysessionwire.RuntimeBinder, error) {
+) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factorycheckpointstore.New()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)

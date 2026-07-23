@@ -54,7 +54,7 @@ func (h *resultReadTestHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
 	return factorysessions.ProjectionContext{
-		Session:    session,
+		Session:    &factorysessions.ScopedLiveSessionSummary{ID: session.ID},
 		FactoryCfg: h.factoryCfg,
 	}, nil
 }

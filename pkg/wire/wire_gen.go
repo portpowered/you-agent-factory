@@ -119,7 +119,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v17 := provideFactorySessionInvocationInputReader(edges2)
 	v18 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	runtimeBinder, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, v14, v15, homeDirectoryResolver, v16, namedPathResolver, v17, v18, logicalTargetResolveSymlinks)
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, v14, v15, homeDirectoryResolver, v16, namedPathResolver, v17, v18, logicalTargetResolveSymlinks)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ModelService:                    modelsService,
 		WorkFactory:                     v12,
 		AutomationFactory:               v13,
-		FactorySessionsService:          runtimeBinder,
+		FactorySessionsService:          factorysessionsService,
 		FactorySessionExecutionFactory:  v22,
 		RecordingsProjectionFactory:     v23,
 		RecordingsFactory:               v24,

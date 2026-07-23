@@ -29,6 +29,14 @@ type Service struct {
 	durable        durableexecution.Service
 }
 
+// ForRuntime keeps an already-bound Factory Sessions gateway stable.
+func (s *Service) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Service, error) {
+	if s == nil {
+		return nil, fmt.Errorf("Factory Sessions gateway is required")
+	}
+	return s, nil
+}
+
 // New constructs a session gateway with explicit host and dataplane dependencies.
 func New(host LegacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithResponseStreams(host, responseStreams)

@@ -16,6 +16,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type sessionGateway interface {
+	factorysessions.Service
+	JavaScriptCheckpointStore(*factorysessions.LiveSession) factoryruntime.JavaScriptCheckpointStore
+	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
+}
+
 // SubscribeFactoryEventsForSession routes session-scoped observation through
 // the Factory Sessions gateway.
 func (s *Service) SubscribeFactoryEventsForSession(
@@ -276,7 +282,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	)
 }
 
-func (fs *SessionRuntime) requireSessionGateway() factorysessions.Service {
+func (fs *SessionRuntime) requireSessionGateway() sessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
 	}

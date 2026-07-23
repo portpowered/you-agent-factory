@@ -106,7 +106,7 @@ type LiveSession struct {
 	Project                 string
 	Target                  TargetRef
 	RuntimeFactorySessionID string
-	ResponseEvents          *SessionResponseEventStore
+	ResponseEvents          *responseeventstore.SessionResponseEventStore
 	JavaScriptCheckpoints   factory.JavaScriptCheckpointStore
 }
 
@@ -127,11 +127,6 @@ func (s *LiveSession) CloseResponseEvents() {
 	}
 	s.ResponseEvents.Close()
 }
-
-// SessionResponseEventStore retains immutable FactoryResponseEvent records for
-// one live Factory Session runtime. It is separate from canonical factory event
-// history and from service-coordinator state.
-type SessionResponseEventStore = responseeventstore.SessionResponseEventStore
 
 // ResponseEventSubscription is the Factory Sessions-owned retained-then-live
 // cursor used by application and transport consumers.
@@ -163,18 +158,9 @@ var (
 	ErrResponseEventSubscriptionClosed = responseeventstore.ErrSubscriptionClosed
 )
 
-// SessionResponseStream keeps ordered internal provider progress for one live
-// Factory Session runtime. It is separate from canonical factory event history
-// and from service-coordinator state.
-type SessionResponseStream = responsestream.SessionResponseStream
-
 // SessionResponseStreamSet keeps the dispatch-keyed response streams owned by
 // one live Factory Session runtime.
 type SessionResponseStreamSet = responsestream.StreamSet
-
-// ResponseStreamRegistry owns the response streams for all live Factory
-// Sessions in one runtime scope.
-type ResponseStreamRegistry = responsestream.Registry
 
 // SessionResponseStreamEvent is the internal envelope for provider progress and
 // response fragments within one Factory Session runtime.

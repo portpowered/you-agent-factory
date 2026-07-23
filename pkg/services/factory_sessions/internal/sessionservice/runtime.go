@@ -49,7 +49,7 @@ type SessionRuntime struct {
 	runtimeMu        sync.RWMutex
 	runtimeState     runtimebinding.State
 	sessionState     *sessionruntime.Service
-	sessionGateway   factorysessions.Service
+	sessionGateway   sessionGateway
 	runtimeBuild     factory.ReplacementBuilder
 	runtimeLifecycle factory.Lifecycle
 	runtimeSidecars  RuntimeSidecars

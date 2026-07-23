@@ -7,6 +7,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -258,7 +259,7 @@ func (m *Manager) publishCanonicalResponseEvents(session *factorysessions.LiveSe
 	return nil
 }
 
-func (m *Manager) publishResponseEvent(store *factorysessions.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+func (m *Manager) publishResponseEvent(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	if m != nil && m.responses != nil {
 		return m.responses.Publish(store, event)
 	}

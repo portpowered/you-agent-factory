@@ -2,10 +2,7 @@
 // roles to canonical Wire without widening the product-facing root Service.
 package contracts
 
-import (
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-)
+import "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 
 type (
 	DirectoryInspection                  = roles.DirectoryInspection
@@ -21,7 +18,3 @@ type (
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
 )
-
-type RuntimeBinder interface {
-	ForRuntime(factorysessions.RuntimeBinding) (roles.RuntimeAssembly, error)
-}

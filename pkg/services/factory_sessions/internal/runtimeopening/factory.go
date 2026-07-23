@@ -33,7 +33,7 @@ type Factory struct {
 	modelService                    models.Service
 	workFactory                     WorkFactory
 	automationFactory               AutomationFactory
-	factorySessionsService          roles.RuntimeBinder
+	factorySessionsService          factorysessions.Service
 	factorySessionExecutionFactory  FactorySessionExecutionFactory
 	recordingsProjectionFactory     RecordingsProjectionFactory
 	recordingsFactory               RecordingsFactory
@@ -85,7 +85,7 @@ func NewFactory(
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsService roles.RuntimeBinder,
+	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingsFactory RecordingsFactory,

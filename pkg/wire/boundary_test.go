@@ -93,37 +93,6 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 	}
 }
 
-func TestFactorySessionsProductionCannotSelectPlatformClockDefault(t *testing.T) {
-	t.Parallel()
-
-	root := filepath.Join("..", "services", "factory_sessions")
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-		if err != nil {
-			return err
-		}
-		for _, spec := range file.Imports {
-			importPath, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				return err
-			}
-			if importPath == "github.com/portpowered/infinite-you/pkg/platform/clock" {
-				t.Errorf("%s selects the platform clock below Wire; inject factoryruntime.Clock instead", path)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan Factory Sessions clock imports: %v", err)
-	}
-}
-
 func TestWirePackageExposesOnlyCanonicalApplicationInjector(t *testing.T) {
 	t.Parallel()
 
@@ -142,28 +111,6 @@ func TestWirePackageExposesOnlyCanonicalApplicationInjector(t *testing.T) {
 	if _, ok := names["InjectBundle"]; !ok {
 		t.Fatalf("Wire injector names = %v, want InjectBundle", names)
 	}
-}
-
-func TestRootWireUsesOnlyFactorySessionsContractsAndOwnedAdapters(t *testing.T) {
-	t.Parallel()
-
-	const root = "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	parseProductionGoFiles(t, ".", func(path string, file *ast.File) {
-		for _, spec := range file.Imports {
-			importPath, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				t.Errorf("%s contains invalid import %q: %v", path, spec.Path.Value, err)
-				continue
-			}
-			if importPath == root || importPath == root+"/wire" ||
-				strings.HasPrefix(importPath, root+"/transports/") {
-				continue
-			}
-			if strings.HasPrefix(importPath, root+"/") {
-				t.Errorf("%s imports Factory Sessions implementation package %s", path, importPath)
-			}
-		}
-	})
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

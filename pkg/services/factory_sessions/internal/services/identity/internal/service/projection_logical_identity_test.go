@@ -46,14 +46,13 @@ func TestProjectRuntime_JavaScriptWorkflowSessionStreamIdentityIncludesLogicalFi
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	startedAt := now.Add(-5 * time.Minute)
 	runtime := projectRuntimeToAPI(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
-		Session: &factorysessions.LiveSession{
-			ID:      "session-js",
-			Project: "dynamic-workflow",
-			SessionState: factorysessions.SessionState{
-				FolderPath: t.TempDir(),
-			},
-			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID:         "session-js",
+			Project:    "dynamic-workflow",
+			FolderPath: t.TempDir(),
+			Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 		},
+		FactorySessionID: "session-js",
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -94,14 +93,13 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
 	runtime := projectRuntimeToAPI(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
-		Session: &factorysessions.LiveSession{
-			ID:      "session-js",
-			Project: "dynamic-workflow",
-			SessionState: factorysessions.SessionState{
-				FolderPath: t.TempDir(),
-			},
-			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID:         "session-js",
+			Project:    "dynamic-workflow",
+			FolderPath: t.TempDir(),
+			Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 		},
+		FactorySessionID: "session-js",
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{

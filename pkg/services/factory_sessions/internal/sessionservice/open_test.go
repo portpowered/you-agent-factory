@@ -21,7 +21,7 @@ import (
 
 var serviceTestClock = platformclock.Real{}
 
-func newServiceTestResponseStream() *factorysessions.SessionResponseStream {
+func newServiceTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(serviceTestClock)
 }
 
@@ -97,7 +97,12 @@ func (h *openTestHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
 	return factorysessions.ProjectionContext{
-		Session: session, FactorySessionID: livesession.CanonicalID(session),
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+			FolderPath: session.FolderPath, Project: session.Project,
+			IsDefault: session.IsDefault, Target: session.Target,
+		},
+		FactorySessionID: livesession.CanonicalID(session),
 	}, nil
 }
 
@@ -147,7 +152,7 @@ func (h *openTestHost) ResponseStreams(*factorysessions.LiveSession) *factoryses
 	return nil
 }
 
-func (h *openTestHost) NewResponseStream() *factorysessions.SessionResponseStream {
+func (h *openTestHost) NewResponseStream() *responsestream.SessionResponseStream {
 	return newServiceTestResponseStream()
 }
 

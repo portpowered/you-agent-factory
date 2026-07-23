@@ -273,7 +273,3 @@ type RuntimeAssembly interface {
 		invocationMetricsRecorder InvocationMetricsRecorder,
 	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, error)
 }
-
-type RuntimeBinder interface {
-	ForRuntime(factorysessions.RuntimeBinding) (RuntimeAssembly, error)
-}

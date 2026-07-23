@@ -56,7 +56,7 @@ func NewService(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-) (RuntimeBinder, error) {
+) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
 	}

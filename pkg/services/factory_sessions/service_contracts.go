@@ -7,7 +7,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"go.uber.org/zap"
 )
 
 // ModelInvocationTimeout is the Factory Sessions-owned lifecycle budget for a
@@ -53,11 +52,11 @@ type RuntimeBinding struct {
 // bound view serves the remaining application operations.
 type Service interface {
 	ExecutionService
+	ForRuntime(RuntimeBinding) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
 	GetFactorySession(context.Context, string) (SessionProjection, error)
-	ResolveFactorySession(string) *LiveSession
 	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error)
 	GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error)
@@ -79,9 +78,4 @@ type Service interface {
 	InterruptDurableFactorySessionDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
 	SubscribeSessionResponseStream(string, string, int64) (*SessionResponseStreamSubscription, error)
 	SessionResponseStreamDispatchIDs(string) ([]string, error)
-	ResponseStreams(*LiveSession) *SessionResponseStreamSet
-	CloseSessionResponseStreams(*LiveSession)
-	JavaScriptCheckpointStore(*LiveSession) factoryruntime.JavaScriptCheckpointStore
-	InferenceProgressPublisherFactory(*zap.Logger) func(string) ProgressPublisher
-	DispatchCompletionObserverFactory() func(string) func(string)
 }

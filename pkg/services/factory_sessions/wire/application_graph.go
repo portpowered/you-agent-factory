@@ -29,7 +29,6 @@ import (
 // private to Factory Sessions while the root Wire package composes exact roles.
 type (
 	ApplicationRuntime                   = roles.ApplicationRuntime
-	RuntimeAssembly                      = roles.RuntimeAssembly
 	DirectoryInspection                  = roles.DirectoryInspection
 	CursorPersistenceFileSystem          = roles.CursorPersistenceFileSystem
 	CursorPersistenceTemporaryFile       = roles.CursorPersistenceTemporaryFile
@@ -117,12 +116,6 @@ type (
 	StdioOpeningService               = executionopening.StdioOpeningService
 )
 
-// RuntimeBinder is the construction-only boundary used by canonical Wire to
-// bind invocation-local runtime values before publishing the root Service.
-type RuntimeBinder interface {
-	ForRuntime(factorysessions.RuntimeBinding) (RuntimeAssembly, error)
-}
-
 var (
 	NewCursorFileStore         = persistence.NewFileStore
 	NewRuntimeProjectStore     = runtimepersist.NewProjectStore
@@ -146,7 +139,7 @@ type RuntimeOpeningDependencies struct {
 	ModelService                    models.Service
 	WorkFactory                     WorkFactory
 	AutomationFactory               AutomationFactory
-	FactorySessionsService          RuntimeBinder
+	FactorySessionsService          factorysessions.Service
 	FactorySessionExecutionFactory  FactorySessionExecutionFactory
 	RecordingsProjectionFactory     RecordingsProjectionFactory
 	RecordingsFactory               RecordingsFactory
