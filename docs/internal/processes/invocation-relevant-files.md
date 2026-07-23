@@ -427,7 +427,11 @@ response-stream output.
   values on the invocation-local command for stable-ID handler access.
   Relationship evaluation uses stable flag or argument references and explicit
   CLI presence, runs in Cobra's pre-handler phase, and reports public input
-  spellings without exposing input values.
+  spellings without exposing input values. Deduplicate relationship participants
+  by effective semantic identity so an inherited record and its persistent
+  ancestor cannot count as separate inputs. Attach the complete Cobra hierarchy
+  before projecting flag-group annotations so inherited persistent flags are
+  resolvable without a construction panic.
   Generic help, lifecycle, and completion projection lives beside the docs
   transport boundary in
   `pkg/transports/cli/climanifestcobra/docs_constructor.go`. Validate command

@@ -485,6 +485,121 @@ func TestRelationshipSetsRejectDuplicatesContradictionsAndCyclesBeforeDispatch(t
 	}
 }
 
+func TestInheritedFlagGroupsConstructAndEnforceBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		kind     string
+		accepted []string
+		rejected []string
+	}{
+		{kind: "mutually-exclusive", accepted: []string{"alpha", "--mode"}, rejected: []string{"alpha", "--mode", "--other"}},
+		{kind: "conflict", accepted: []string{"alpha", "--mode"}, rejected: []string{"alpha", "--mode", "--other"}},
+		{kind: "required-together", accepted: []string{"alpha", "--mode", "--other"}, rejected: []string{"alpha", "--mode"}},
+		{kind: "at-least-one", accepted: []string{"alpha", "--mode"}, rejected: []string{"alpha"}},
+	}
+	for _, test := range tests {
+		t.Run(test.kind, func(t *testing.T) {
+			assertInheritedRelationshipInvocation(t, test.kind, test.accepted, true)
+			assertInheritedRelationshipInvocation(t, test.kind, test.rejected, false)
+		})
+	}
+}
+
+func TestInheritedFlagGroupsRejectDuplicateEffectiveParticipantsBeforeDispatch(t *testing.T) {
+	manifest := inheritedRelationshipManifest("mutually-exclusive")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Relationships = map[string]climanifest.Relationship{
+		"rel.inherited": relationship(
+			"rel.inherited",
+			"mutually-exclusive",
+			"feedback.root.flag.mode",
+			"feedback.alpha.flag.mode",
+		),
+	}
+	manifest.Commands[alpha.ID] = alpha
+
+	assertFeedbackConstructionFailure(
+		t,
+		manifest,
+		`relationship "rel.inherited" participants "feedback.root.flag.mode" and "feedback.alpha.flag.mode" resolve to the same input identity "feedback.root.flag.mode"`,
+	)
+}
+
+func assertInheritedRelationshipInvocation(t *testing.T, kind string, args []string, accepted bool) {
+	t.Helper()
+	manifest := inheritedRelationshipManifest(kind)
+	calls := 0
+	root, err := NewCommandTree(manifest, feedbackBindings(
+		manifest,
+		func(context.Context, map[string]any) error {
+			calls++
+			return nil
+		},
+	))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs(args)
+	err = root.Execute()
+	if accepted {
+		if err != nil || calls != 1 {
+			t.Fatalf("accepted invocation = (error %v, calls %d), want nil and one handler call", err, calls)
+		}
+		return
+	}
+	if err == nil || calls != 0 {
+		t.Fatalf("rejected invocation = (error %v, calls %d), want relationship error and zero handler calls", err, calls)
+	}
+}
+
+func inheritedRelationshipManifest(kind string) climanifest.Manifest {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	root := manifest.Commands["feedback.root"]
+	root.Flags = map[string]climanifest.Flag{
+		"feedback.root.flag.mode": inheritedRelationshipFlag(
+			"feedback.root.flag.mode",
+			"persistent",
+			"",
+			"mode",
+		),
+	}
+	manifest.Commands[root.ID] = root
+
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Flags = map[string]climanifest.Flag{
+		"feedback.alpha.flag.mode": inheritedRelationshipFlag(
+			"feedback.alpha.flag.mode",
+			"inherited",
+			"feedback.root.flag.mode",
+			"mode",
+		),
+		"feedback.alpha.flag.other": inheritedRelationshipFlag(
+			"feedback.alpha.flag.other",
+			"local",
+			"",
+			"other",
+		),
+	}
+	alpha.Relationships = map[string]climanifest.Relationship{
+		"rel.inherited": relationship(
+			"rel.inherited",
+			kind,
+			"feedback.alpha.flag.mode",
+			"feedback.alpha.flag.other",
+		),
+	}
+	manifest.Commands[alpha.ID] = alpha
+	return manifest
+}
+
+func inheritedRelationshipFlag(id, scope, inheritedFromID, long string) climanifest.Flag {
+	return climanifest.Flag{
+		ID: id, Long: long, Scope: scope, InheritedFromID: inheritedFromID,
+		ValueType: "bool", NoOptionDefault: "true", Completion: "none",
+		Visibility: "visible", Lifecycle: feedbackLifecycle(id),
+	}
+}
+
 func mixedCompletionArguments(optionalMode, requiredMode string) map[string]climanifest.Argument {
 	arguments := map[string]climanifest.Argument{
 		"feedback.alpha.arg.optional": {

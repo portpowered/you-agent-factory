@@ -185,6 +185,9 @@ func applySessionGenericFlagUsages(
 			continue
 		}
 		for _, flag := range record.Flags {
+			if flag.Scope == "inherited" {
+				continue
+			}
 			usage := usages[commandID+"."+flag.Long]
 			if usage == "" {
 				usage = usages[flag.Long]

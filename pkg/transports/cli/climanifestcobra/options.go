@@ -708,16 +708,19 @@ func validateRelationshipShape(
 		return plannedRelationship{}, fmt.Errorf("command %q relationship %q has incompatible when trigger", commandID, relationship.ID)
 	}
 	planned := plannedRelationship{record: relationship}
-	seen := make(map[string]bool)
+	seen := make(map[string]string)
 	for _, reference := range relationship.Participants {
 		participant, err := resolveParticipant(commandID, relationship.ID, reference, available)
 		if err != nil {
 			return plannedRelationship{}, err
 		}
-		if seen[participant.id] {
-			return plannedRelationship{}, fmt.Errorf("command %q relationship %q repeats participant %q", commandID, relationship.ID, participant.id)
+		if priorID, exists := seen[participant.identity]; exists {
+			return plannedRelationship{}, fmt.Errorf(
+				"command %q relationship %q participants %q and %q resolve to the same input identity %q",
+				commandID, relationship.ID, priorID, participant.id, participant.identity,
+			)
 		}
-		seen[participant.id] = true
+		seen[participant.identity] = participant.id
 		planned.participants = append(planned.participants, participant)
 	}
 	if relationship.When != nil {
@@ -725,8 +728,11 @@ func validateRelationshipShape(
 		if err != nil {
 			return plannedRelationship{}, err
 		}
-		if seen[when.id] {
-			return plannedRelationship{}, fmt.Errorf("command %q relationship %q trigger %q depends on itself", commandID, relationship.ID, when.id)
+		if participantID, exists := seen[when.identity]; exists {
+			return plannedRelationship{}, fmt.Errorf(
+				"command %q relationship %q trigger %q and participant %q resolve to the same input identity %q",
+				commandID, relationship.ID, when.id, participantID, when.identity,
+			)
 		}
 		planned.when = &when
 	}
@@ -768,7 +774,6 @@ func projectArgumentAndRelationshipRules(cmd *cobra.Command, plan plannedCommand
 			return assignArgumentValues(command, plan, raw)
 		}
 	}
-	projectCobraFlagGroupAnnotations(cmd, plan.relationships)
 	if len(plan.flags) == 0 && len(plan.relationships) == 0 {
 		return
 	}

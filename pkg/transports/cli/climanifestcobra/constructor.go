@@ -213,6 +213,15 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		}
 		built[item.parentPath].AddCommand(built[item.record.Path])
 	}
+	for _, item := range plan {
+		if err := projectCobraFlagGroupAnnotations(
+			built[item.record.Path],
+			item.record.ID,
+			item.relationships,
+		); err != nil {
+			return nil, fmt.Errorf("build generic command tree: %w", err)
+		}
+	}
 	return built[manifest.RootPath], nil
 }
 
@@ -736,7 +745,11 @@ func validateRequiredGenericFlags(cmd *cobra.Command, plan plannedCommand) error
 	return nil
 }
 
-func projectCobraFlagGroupAnnotations(cmd *cobra.Command, relationships []plannedRelationship) {
+func projectCobraFlagGroupAnnotations(
+	cmd *cobra.Command,
+	commandID string,
+	relationships []plannedRelationship,
+) error {
 	for _, relationship := range relationships {
 		names := make([]string, 0, len(relationship.participants))
 		for _, participant := range relationship.participants {
@@ -749,6 +762,14 @@ func projectCobraFlagGroupAnnotations(cmd *cobra.Command, relationships []planne
 		if len(names) == 0 {
 			continue
 		}
+		for _, name := range names {
+			if lookupCommandFlag(cmd, name) == nil {
+				return fmt.Errorf(
+					"command %q relationship %q cannot project unavailable flag %q",
+					commandID, relationship.record.ID, "--"+name,
+				)
+			}
+		}
 		switch relationship.record.Kind {
 		case "mutually-exclusive", "conflict":
 			cmd.MarkFlagsMutuallyExclusive(names...)
@@ -758,6 +779,7 @@ func projectCobraFlagGroupAnnotations(cmd *cobra.Command, relationships []planne
 			cmd.MarkFlagsOneRequired(names...)
 		}
 	}
+	return nil
 }
 
 func relationshipError(relationship plannedRelationship, message string) error {
