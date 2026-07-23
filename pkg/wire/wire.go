@@ -16,6 +16,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
@@ -45,6 +46,8 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
+	provideProviderRegistry,
+	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
 	factorysessionwire.NewRequestPreparation,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,

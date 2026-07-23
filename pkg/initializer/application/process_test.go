@@ -42,10 +42,7 @@ func TestProcessExecuteUsesInjectedLifecycleAndInvocationInputs(t *testing.T) {
 		lifecycleCalls++
 		return context.WithValue(parent, processContextTestKey{}, "injected"), func() { stopCalls++ }
 	}}
-	process, err := NewProcess(factory, initializer)
-	if err != nil {
-		t.Fatalf("NewProcess() error = %v", err)
-	}
+	process := newProcessForTest(t, factory, initializer)
 	stdinTTY, stdoutTTY := true, true
 	if err := process.Execute(Input{
 		Args: []string{"you"}, Env: homeEnvironmentForProcessTest(t.TempDir()),
@@ -75,10 +72,7 @@ func TestProcessExecuteHonorsExplicitTerminalEdgeOverrides(t *testing.T) {
 			return nil
 		}}
 	}}
-	process, err := NewProcess(factory, startupcli.Functions{})
-	if err != nil {
-		t.Fatalf("NewProcess() error = %v", err)
-	}
+	process := newProcessForTest(t, factory, startupcli.Functions{})
 	if err := process.Execute(Input{
 		Args: []string{"you"}, Env: homeEnvironmentForProcessTest(t.TempDir()),
 		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY, WorkingDirectory: t.TempDir(),
@@ -119,10 +113,7 @@ func TestProcessSupportsConcurrentDaemonAndClientInvocations(t *testing.T) {
 			return root
 		},
 	}
-	process, err := NewProcess(factory, startupcli.Functions{})
-	if err != nil {
-		t.Fatalf("NewProcess() error = %v", err)
-	}
+	process := newProcessForTest(t, factory, startupcli.Functions{})
 
 	daemonCtx, cancelDaemon := context.WithCancel(context.Background())
 	var daemonOutput bytes.Buffer
@@ -201,10 +192,7 @@ func TestProcessPropagatesInvocationWorkingDirectoryWithoutChangingHostProcess(t
 			}
 		},
 	}
-	process, err := NewProcess(factory, startupcli.Functions{})
-	if err != nil {
-		t.Fatalf("NewProcess() error = %v", err)
-	}
+	process := newProcessForTest(t, factory, startupcli.Functions{})
 	var output bytes.Buffer
 	if err := process.Execute(Input{
 		Args:             []string{"you"},
@@ -221,6 +209,25 @@ func TestProcessPropagatesInvocationWorkingDirectoryWithoutChangingHostProcess(t
 
 type processCommandFactory struct {
 	newCommand func(func(string) (string, bool)) *cobra.Command
+}
+
+func newProcessForTest(
+	t *testing.T,
+	factory startupcli.CommandFactory,
+	initializer startupcli.Initializer,
+) *Process {
+	t.Helper()
+	process, err := NewProcess(factory, initializer, processTestProviderRegistry{})
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	return process
+}
+
+type processTestProviderRegistry struct{}
+
+func (processTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
 }
 
 func (factory processCommandFactory) ExecuteCommand(input startupcli.CommandInvocation) error {

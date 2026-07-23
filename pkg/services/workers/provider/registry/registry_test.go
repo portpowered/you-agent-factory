@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -43,6 +44,31 @@ func TestNewJoinsSupportedCatalogManifestsWithoutProviderSideEffects(t *testing.
 	}
 	if _, selectable := registry.integrations["agy"]; selectable {
 		t.Fatal("not-supported catalog entry is selectable")
+	}
+}
+
+func TestBuiltInRegistrationsBuildAllSelectableBundledProviders(t *testing.T) {
+	t.Parallel()
+
+	registrations, err := BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	registry, err := New(registrations...)
+	if err != nil {
+		t.Fatalf("New(BuiltInRegistrations()) error = %v", err)
+	}
+
+	want := []string{"agy", "claude", "codex", "cursor", "gemini", "kiro", "opencode", "pi"}
+	if got := entryIdentities(registry.Entries()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("built-in manifest identities = %v, want %v", got, want)
+	}
+	cursor, err := registry.Lookup("agent")
+	if err != nil {
+		t.Fatalf("Lookup(cursor alias) error = %v", err)
+	}
+	if cursor.Identity() != "cursor" {
+		t.Fatalf("Lookup(cursor alias) identity = %q, want cursor", cursor.Identity())
 	}
 }
 

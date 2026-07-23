@@ -71,6 +71,9 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewEmptyMockWorkersConfig": {},
 		"NewProviderError":          {},
 	},
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {
+		"NewCapabilitySet": {},
+	},
 }
 
 var protectedTransportIndependentDomainRoots = []string{

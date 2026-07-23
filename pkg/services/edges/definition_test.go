@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -336,6 +338,27 @@ func TestMergeUsesCallerOwnedAgyPTYClock(t *testing.T) {
 	)
 	if merged.AgyPTYClock != replacement {
 		t.Fatal("Merge did not preserve the caller-owned Agy PTY clock edge")
+	}
+}
+
+func TestMergeAppendsAndDetachesProviderRegistrations(t *testing.T) {
+	t.Parallel()
+
+	defaultRegistration := inference.Registration{Manifest: inference.Manifest{ID: "customer.alpha"}}
+	addedRegistration := inference.Registration{Manifest: inference.Manifest{ID: "customer.beta"}}
+	defaults := []inference.Registration{defaultRegistration}
+	additions := []inference.Registration{addedRegistration}
+
+	merged := Merge(
+		Edges{ProviderRegistrations: defaults},
+		Edges{ProviderRegistrations: additions},
+	)
+	defaults[0] = addedRegistration
+	additions[0] = defaultRegistration
+
+	want := []inference.Registration{defaultRegistration, addedRegistration}
+	if !reflect.DeepEqual(merged.ProviderRegistrations, want) {
+		t.Fatalf("ProviderRegistrations = %#v, want detached append %#v", merged.ProviderRegistrations, want)
 	}
 }
 

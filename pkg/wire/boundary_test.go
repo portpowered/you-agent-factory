@@ -14,11 +14,28 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 )
+
+func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
+	t.Parallel()
+
+	providers, err := provideProviderRegistry(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
+	canonical, err := providers.CanonicalIdentity("agent")
+	if err != nil {
+		t.Fatalf("CanonicalIdentity(agent) error = %v", err)
+	}
+	if canonical != "cursor" {
+		t.Fatalf("CanonicalIdentity(agent) = %q, want cursor", canonical)
+	}
+}
 
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	t.Parallel()

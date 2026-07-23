@@ -112,6 +112,16 @@ func (r *Registry) Lookup(identity string) (Entry, error) {
 	return newEntry(r.manifests[canonical], true), nil
 }
 
+// CanonicalIdentity resolves a selectable canonical ID or alias to its
+// canonical string identity without exposing registry-owned values.
+func (r *Registry) CanonicalIdentity(identity string) (string, error) {
+	entry, err := r.Lookup(identity)
+	if err != nil {
+		return "", err
+	}
+	return string(entry.Identity()), nil
+}
+
 // MaximumCapabilities resolves a selectable provider without calling it and
 // returns the manifest-authoritative maximum capability set.
 func (r *Registry) MaximumCapabilities(identity string) (inference.CapabilitySet, error) {

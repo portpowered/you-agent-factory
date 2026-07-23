@@ -127,6 +127,7 @@ type Edges struct {
 	RuntimeHostObserver                factorysessions.RuntimeHostObserver
 	ModelPullMetricsRecorder           models.PullMetricsRecorder
 	ProviderOverride                   providercontract.Provider
+	ProviderRegistrations              []providercontract.Registration
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -162,6 +163,10 @@ type Edges struct {
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func Merge(defaults Edges, replacements Edges) Edges {
+	defaults.ProviderRegistrations = append(
+		append([]providercontract.Registration(nil), defaults.ProviderRegistrations...),
+		replacements.ProviderRegistrations...,
+	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
 	}

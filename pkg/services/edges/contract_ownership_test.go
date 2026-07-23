@@ -216,6 +216,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"RuntimeHostObserver":            {typeName: "factorysessions.RuntimeHostObserver", effect: "observe Factory Session runtime-host lifecycle"},
 		"ModelPullMetricsRecorder":       {typeName: "models.PullMetricsRecorder", effect: "publish managed-model pull metrics"},
 		"ProviderOverride":               {typeName: "providercontract.Provider", effect: "perform external provider inference"},
+		"ProviderRegistrations":          {typeName: "[]providercontract.Registration", effect: "append typed external provider integrations to process composition"},
 		"WorkersExecutablePathInspector": {typeName: "platformfilesystem.PathInspector", effect: "inspect the selected Worker executable path"},
 		"ScriptCommandRunner":            {typeName: "platformprocess.CommandRunner", effect: "launch external script processes"},
 		"WorkContentStagingFileSystem":   {typeName: "work.ContentStagingFileSystem", effect: "persist and clean up staged Work content"},

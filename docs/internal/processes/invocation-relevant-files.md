@@ -81,9 +81,10 @@ primary-result behavior.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
-  registry-owned typed manifest. Keep generated OpenAPI types out of this
-  Workers domain package: parse the exact bytes from `packages/model-providers`
-  into registry-owned values and validate them against the published schemas.
+  public inference-contract manifest. Keep generated OpenAPI types out of this
+  Workers domain boundary: parse the exact bytes from
+  `packages/model-providers` into Workers-owned values and validate them
+  against the published schemas.
   Construction must aggregate and sort normalized identity, collision,
   implementation-coverage, support-posture, and maximum-capability violations
   without calling provider discovery, request-sensitive capabilities, or
@@ -94,6 +95,15 @@ primary-result behavior.
   methods delegate to an Integration, validate the returned provider-neutral
   contract, and return canonical detached values; invocation access resolves
   the bound Integration without invoking it.
+- Provider registry composition is additive and inert. `pkg/services/edges`
+  aggregates `[]inferencecontract.Registration` unchanged and `edges.Merge`
+  appends into a detached slice; `pkg/wire` maps those public external bindings
+  into the registry and joins them with catalog-derived built-in registrations
+  exactly once. The application process retains only a narrow structural
+  canonical-identity projection of that same immutable registry so root-level
+  embedding tests can verify composition without importing service packages
+  into `pkg/initializer`. Keep `ProviderOverride` on its existing replacement
+  path until provider-native execution migrates to the neutral conductor.
 
 ## CLI run and submit command contracts
 
