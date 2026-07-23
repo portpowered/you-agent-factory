@@ -633,6 +633,13 @@ guard remains useful as resurrection protection even after production no
 longer declares the symbol; remove only allowlist entries that permitted the
 retired root construction shape.
 
+Live Factory Session record construction is owner-private under
+`pkg/services/factory_sessions/internal/livesession`. Runtime and session
+assembly code may use that constructor after dependencies have been injected,
+while the service root exposes only the detached `LiveSession` value contract.
+Keep the package-boundary synthetic denial for the retired root constructor so
+external consumers cannot reintroduce a parallel construction path.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

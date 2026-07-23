@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -74,7 +75,7 @@ func TestGetLiveFactorySessionSyncPreflight_DurableSessionReturnsNotFound(t *tes
 func TestGetLiveFactorySessionSyncPreflight_RemappedDefaultReturnsLogicalSessionRemap(t *testing.T) {
 	t.Parallel()
 
-	session := factorysessions.NewLiveSession("session-successor", "", "", "", factorysessions.TargetRef{}, nil, false, "", platformclock.Real{}, func() string { return "session-test-id" }, func() string { return "response-event-test-id" })
+	session := livesession.New("session-successor", "", "", "", factorysessions.TargetRef{}, nil, false, "", platformclock.Real{}, func() string { return "session-test-id" }, func() string { return "response-event-test-id" })
 	host := &syncPreflightTestHost{
 		target: controlplane.SyncPreflightTarget{
 			Session:  session,
@@ -105,7 +106,7 @@ func TestGetLiveFactorySessionSyncPreflight_RemappedDefaultReturnsLogicalSession
 func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *testing.T) {
 	t.Parallel()
 
-	session := factorysessions.NewLiveSession("session-live", "", "", "", factorysessions.TargetRef{}, nil, false, "", platformclock.Real{}, func() string { return "session-test-id" }, func() string { return "response-event-test-id" })
+	session := livesession.New("session-live", "", "", "", factorysessions.TargetRef{}, nil, false, "", platformclock.Real{}, func() string { return "session-test-id" }, func() string { return "response-event-test-id" })
 	host := &syncPreflightTestHost{
 		target: controlplane.SyncPreflightTarget{Session: session},
 		events: []interfaces.FactoryEvent{{Id: "evt-1", Context: interfaces.FactoryEventContext{Sequence: 1}}},

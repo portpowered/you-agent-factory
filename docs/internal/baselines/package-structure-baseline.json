@@ -1754,11 +1754,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/api.go",
-      "target": "NewLiveSession"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/checkpoints.go",
       "target": "JavaScriptRuntimeStateFromCheckpoints"
     },

@@ -7,6 +7,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
@@ -22,8 +23,8 @@ func registrySessionID() string { return "550e8400-e29b-41d4-a716-446655440000" 
 func TestRegistry_UpsertSelectAndRemove(t *testing.T) {
 	registry := sessionregistry.New()
 
-	defaultSession := NewLiveSession(DefaultSessionID, "/factories/alpha", "/workspace", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha", platformclock.Real{}, registrySessionID, registryResponseEventID)
-	betaSession := NewLiveSession("session-beta", "/factories/beta", "/workspace", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta", platformclock.Real{}, registrySessionID, registryResponseEventID)
+	defaultSession := livesession.New(DefaultSessionID, "/factories/alpha", "/workspace", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha", platformclock.Real{}, registrySessionID, registryResponseEventID)
+	betaSession := livesession.New("session-beta", "/factories/beta", "/workspace", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta", platformclock.Real{}, registrySessionID, registryResponseEventID)
 
 	registry.Upsert(defaultSession, true)
 	if got := registry.Current(); got != defaultSession {
@@ -99,7 +100,7 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 	registry := sessionregistry.New()
 	defaultID := "550e8400-e29b-41d4-a716-446655440001"
 	betaID := "550e8400-e29b-41d4-a716-446655440002"
-	registry.Upsert(NewLiveSession(
+	registry.Upsert(livesession.New(
 		defaultID,
 		"/factories/alpha",
 		"/workspace",
@@ -112,7 +113,7 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 		registrySessionID,
 		registryResponseEventID,
 	), true)
-	registry.Upsert(NewLiveSession(
+	registry.Upsert(livesession.New(
 		betaID,
 		"/factories/beta",
 		"/workspace",

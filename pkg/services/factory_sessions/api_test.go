@@ -19,8 +19,6 @@ func factorySessionTestResponseEventID() string {
 	return fmt.Sprintf("response-event-test-%d", factorySessionResponseEventIdentity.Add(1))
 }
 
-func factorySessionTestID() string { return "00000000-0000-4000-8000-000000000001" }
-
 func TestSessionErrorsMatchStableBoundarySentinels(t *testing.T) {
 	t.Parallel()
 
@@ -144,73 +142,4 @@ func publishResponseEventForSubscriptionTest(
 		t.Fatalf("Publish(%s, %s): %v", kind, dispatchID, err)
 	}
 	return event
-}
-
-func TestNewLiveSessionOwnsCanonicalResponseEventStore(t *testing.T) {
-	t.Parallel()
-
-	session := NewLiveSession(
-		DefaultSessionID,
-		"/factories/default",
-		"/workspace",
-		"/workspace",
-		TargetRef{Kind: TargetKindDefault},
-		nil,
-		true,
-		"default",
-		factorySessionTestClock,
-		factorySessionTestID,
-		factorySessionTestResponseEventID,
-	)
-	if session.ResponseEvents == nil {
-		t.Fatal("ResponseEvents = nil, want session-owned store")
-	}
-	if got := session.ResponseEvents.FactorySessionID(); got != CanonicalFactorySessionID(session) {
-		t.Fatalf("response event store session ID = %q, want %q", got, CanonicalFactorySessionID(session))
-	}
-}
-
-func TestNewLiveSessionRequiresExplicitClock(t *testing.T) {
-	t.Parallel()
-
-	if session := NewLiveSession(
-		"session-missing-clock",
-		"/factories/default",
-		"/workspace",
-		"/workspace",
-		TargetRef{Kind: TargetKindDefault},
-		nil,
-		true,
-		"default",
-		nil,
-		factorySessionTestID,
-		factorySessionTestResponseEventID,
-	); session != nil {
-		t.Fatalf("NewLiveSession without clock = %#v, want nil", session)
-	}
-}
-
-func TestNewLiveSessionDefaultUUIDKeepsRegistryIdentity(t *testing.T) {
-	t.Parallel()
-
-	sessionID := factorySessionTestID()
-	session := NewLiveSession(
-		sessionID,
-		"/factories/default",
-		"/workspace",
-		"/workspace",
-		TargetRef{Kind: TargetKindDefault},
-		nil,
-		true,
-		"default",
-		factorySessionTestClock,
-		factorySessionTestID,
-		factorySessionTestResponseEventID,
-	)
-	if got := CanonicalFactorySessionID(session); got != sessionID {
-		t.Fatalf("canonical session ID = %q, want registry UUID %q", got, sessionID)
-	}
-	if got := session.ResponseEvents.FactorySessionID(); got != sessionID {
-		t.Fatalf("response event store session ID = %q, want registry UUID %q", got, sessionID)
-	}
 }

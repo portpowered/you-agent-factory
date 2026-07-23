@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -272,7 +273,7 @@ func (s *Service) Register(registration Registration) string {
 }
 
 func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *factorysessions.LiveSession {
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		sessionID,
 		strings.TrimSpace(registration.FactoryDir),
 		strings.TrimSpace(registration.FolderPath),

@@ -1,11 +1,6 @@
 package factorysessions
 
-import (
-	"strings"
-
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
-)
+import "strings"
 
 // CurrentFactoryName is the domain identifier for the current Factory selector.
 const CurrentFactoryName = "UNDEFINED"
@@ -17,42 +12,6 @@ type OpenRequest struct {
 	Target         *TargetRef
 	ValidateOnly   bool
 	InitNewFactory bool
-}
-
-// NewLiveSession constructs a registry entry for a started session.
-func NewLiveSession(
-	sessionID string,
-	factoryDir string,
-	folderPath string,
-	executionBaseDir string,
-	target TargetRef,
-	handle any,
-	isDefault bool,
-	project string,
-	clock factory.Clock,
-	generateSessionID SessionIDGenerator,
-	eventIDs ResponseEventIDGenerator,
-) *LiveSession {
-	if clock == nil || generateSessionID == nil || eventIDs == nil {
-		return nil
-	}
-	session := &LiveSession{
-		ID: sessionID,
-		SessionState: SessionState{
-			FactoryDir:       factoryDir,
-			FolderPath:       folderPath,
-			ExecutionBaseDir: executionBaseDir,
-		},
-		Handle:    handle,
-		IsDefault: isDefault,
-		Project:   project,
-		Target:    target,
-	}
-	if err := EnsureRuntimeFactorySessionID(session, generateSessionID); err != nil {
-		return nil
-	}
-	session.ResponseEvents = responseeventstore.NewSessionResponseEventStore(CanonicalFactorySessionID(session), clock, eventIDs)
-	return session
 }
 
 func stringPointerOrNil(value string) *string {

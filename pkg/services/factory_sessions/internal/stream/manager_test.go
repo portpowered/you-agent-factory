@@ -10,6 +10,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
@@ -179,7 +180,7 @@ func TestManager_SubscribeAndPublishInferenceProgress(t *testing.T) {
 func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	t.Parallel()
 
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-canonical",
 		"/factory",
 		"/workspace",
@@ -210,7 +211,7 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 }
 
 func TestManager_CursorInvocationPublishesStructuredSnapshotAndUnresolvedToolGap(t *testing.T) {
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-cursor-structured", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID,
 	)
@@ -328,7 +329,7 @@ func assertCursorAuthoritativeSnapshot(t *testing.T, event responseevents.Factor
 func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
 	t.Parallel()
 
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-native-draft", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID,
 	)
@@ -366,7 +367,7 @@ func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testin
 func TestManager_SuppressesLegacyTerminalAfterProviderCanonicalDrafts(t *testing.T) {
 	t.Parallel()
 
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-adapter-terminal", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID,
 	)
@@ -401,7 +402,7 @@ func TestManager_SuppressesLegacyTerminalAfterProviderCanonicalDrafts(t *testing
 
 func TestManager_NativeFailureSuppressesLegacyMarkersSecondCanonicalProjection(t *testing.T) {
 	t.Parallel()
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-native-failure", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID,
 	)
@@ -435,7 +436,7 @@ func TestManager_NativeFailureSuppressesLegacyMarkersSecondCanonicalProjection(t
 
 func TestManager_RejectsInvalidProviderCanonicalDraftsWithoutLegacyFallback(t *testing.T) {
 	t.Parallel()
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		"sess-invalid-native", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID,
 	)

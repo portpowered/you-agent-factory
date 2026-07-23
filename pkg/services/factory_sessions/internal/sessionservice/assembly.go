@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
@@ -182,7 +183,7 @@ func (a *Assembly) Complete(
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
-	session := factorysessions.NewLiveSession(
+	session := livesession.New(
 		factorysessions.DefaultSessionID,
 		startupRuntime.Directory(),
 		startupRuntime.FolderDirectory(),
