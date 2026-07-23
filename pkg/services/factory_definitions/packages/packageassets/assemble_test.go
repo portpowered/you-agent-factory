@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 func TestAssemble_DiscoversFlatAndNestedScriptsInTargetOrder(t *testing.T) {
@@ -37,6 +39,33 @@ func TestAssemble_DiscoversFlatAndNestedScriptsInTargetOrder(t *testing.T) {
 	for i, expected := range want {
 		assertScriptEntry(t, files[i], expected)
 	}
+}
+
+func TestAssemble_DiscoversPortableDocumentsAndInputsWithExactContent(t *testing.T) {
+	definition := Definition{
+		Package:     "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example"}`),
+		Assets: fstest.MapFS{
+			"docs/guide.md":                    {Data: []byte("# Guide\n\nExact.\n")},
+			"inputs/task/default/request.json": {Data: []byte("{\n  \"input\": \"keep spaces  \"\n}\n")},
+		},
+	}
+
+	assembled, err := Assemble(definition)
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	files := assembledBundledFiles(t, assembled)
+	if len(files) != 2 {
+		t.Fatalf("bundled files = %#v, want document and input", files)
+	}
+	assertBundledEntry(
+		t, files[0], "factory/docs/guide.md", interfaces.BundledFileTypeDoc, "# Guide\n\nExact.\n",
+	)
+	assertBundledEntry(
+		t, files[1], "factory/inputs/task/default/request.json", interfaces.BundledFileTypeInput,
+		"{\n  \"input\": \"keep spaces  \"\n}\n",
+	)
 }
 
 func TestAssemble_AbsentOrEmptyScriptsContributeNoEntries(t *testing.T) {
@@ -297,18 +326,23 @@ func assembledBundledFiles(t *testing.T, payload []byte) []any {
 
 func assertScriptEntry(t *testing.T, entry any, want scriptAsset) {
 	t.Helper()
+	assertBundledEntry(t, entry, want.targetPath, "SCRIPT", want.content)
+}
+
+func assertBundledEntry(t *testing.T, entry any, targetPath, fileType, contentValue string) {
+	t.Helper()
 	file, ok := entry.(map[string]any)
 	if !ok {
 		t.Fatalf("bundled file = %#v, want object", entry)
 	}
-	if got := file["id"]; got != want.targetPath {
-		t.Errorf("id = %#v, want %q", got, want.targetPath)
+	if got := file["id"]; got != targetPath {
+		t.Errorf("id = %#v, want %q", got, targetPath)
 	}
-	if got := file["type"]; got != "SCRIPT" {
-		t.Errorf("type = %#v, want SCRIPT", got)
+	if got := file["type"]; got != fileType {
+		t.Errorf("type = %#v, want %s", got, fileType)
 	}
-	if got := file["targetPath"]; got != want.targetPath {
-		t.Errorf("targetPath = %#v, want %q", got, want.targetPath)
+	if got := file["targetPath"]; got != targetPath {
+		t.Errorf("targetPath = %#v, want %q", got, targetPath)
 	}
 	content, ok := file["content"].(map[string]any)
 	if !ok {
@@ -317,7 +351,7 @@ func assertScriptEntry(t *testing.T, entry any, want scriptAsset) {
 	if got := content["encoding"]; got != "utf-8" {
 		t.Errorf("encoding = %#v, want utf-8", got)
 	}
-	if got := content["inline"]; got != want.content {
-		t.Errorf("inline = %#v, want exact content %q", got, want.content)
+	if got := content["inline"]; got != contentValue {
+		t.Errorf("inline = %#v, want exact content %q", got, contentValue)
 	}
 }

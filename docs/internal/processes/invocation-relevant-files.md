@@ -833,16 +833,18 @@ response-stream output.
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
-  `pkg/factory/packages/packageassets` is the shared, side-effect-free packaged
+  `pkg/services/factory_definitions/packages/packageassets` is the shared,
+  side-effect-free packaged
   asset assembly entry point: package owners supply the authored `factory.json`
   and an explicit embedded `fs.FS`, and definitions call this assembler before
   their payload enters the catalog. It delegates prompt declarations to
-  `pkg/factory/packages/promptassets` and discovers regular UTF-8 `scripts/**`
-  assets as deterministic `SCRIPT` bundled files at matching
-  `factory/scripts/**` targets. Discovery rejects non-regular, unreadable, or
-  invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
-  bundled targets before the payload can reach config initialization. The
-  assembler attaches exact asset bytes but does not install or persist anything.
+  `pkg/services/factory_definitions/packages/promptassets` and discovers regular
+  UTF-8 `scripts/**`, `docs/**`, and `inputs/**` assets as deterministic
+  `SCRIPT`, `DOC`, and `INPUT` bundled files at matching `factory/**` targets.
+  Discovery rejects non-regular, unreadable, or invalid UTF-8 assets, and
+  assembly rejects unsafe or duplicate canonical bundled targets before the
+  payload can reach config initialization. The assembler attaches exact asset
+  bytes but does not install or persist anything.
   `pkg/initializer/configinit` passes each missing assembled catalog payload
   through the injected Factory Definitions `Persistence` boundary. That shared
   persistence path materializes `SCRIPT` entries at mode `0755`, writes only
