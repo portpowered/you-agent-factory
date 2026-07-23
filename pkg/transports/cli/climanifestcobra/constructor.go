@@ -483,6 +483,7 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 	}
 	handler := bindings.Handlers[record.Handler.ID]
 	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
+	resolvedCobraHandler := bindings.ResolvedCobraHandlers[record.Handler.ID]
 	cmd.RunE = func(command *cobra.Command, args []string) error {
 		if projectRootNoArgumentHelp(command, args, record) {
 			return nil
@@ -497,6 +498,17 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 			}
 			return cobraHandler(command, args, values, persistentInputs)
+		}
+		if resolvedCobraHandler != nil {
+			inputs, err := resolvedCommandInputs(command, record, values)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			persistentInputs, err := ResolvedPersistentInputs(command)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			return resolvedCobraHandler(command, inputs, persistentInputs)
 		}
 		return handler(command.Context(), values)
 	}

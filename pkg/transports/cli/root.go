@@ -928,16 +928,12 @@ func runCommandInputIsTTY(ctx context.Context) bool {
 func newProductionDocsCommand(
 	diagnostics *cliDiagnosticsOptions,
 ) (*cobra.Command, error) {
-	registry, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{
-		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
+	return climanifestcobra.NewDocsCommand(commandregistry.DocsResolvedRunE(
+		commandregistry.DocsBinding{
 			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
 			Verbose: diagnostics.verboseEnabled,
-		}),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewDocsCommand(registry)
+		},
+	))
 }
 
 func newProductionModelsCommand(

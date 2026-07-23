@@ -503,6 +503,12 @@ response-stream output.
   `pkg/transports/cli/climanifestcobra/constructor.go`, while its invocation-local
   typed flag values and stable-ID `InputValues` access live with the package's
   other binding state in `pkg/transports/cli/climanifestcobra/options.go`.
+  Canonical command adapters that still need Cobra-owned streams use
+  `GenericBindings.ResolvedCobraHandlers`: local arguments and flags are
+  resolved into `resolvedinput.Inputs` with explicit CLI/default provenance in
+  `pkg/transports/cli/climanifestcobra/bindings.go`, and inherited root inputs
+  arrive as a separate resolved snapshot. Keep raw argument slices and public
+  spellings out of these adapters.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.
@@ -534,6 +540,12 @@ response-stream output.
   command-name/alias collisions before creating Cobra commands; Cobra otherwise
   resolves the first matching sibling and can silently dispatch the wrong stable
   handler.
+  The detached docs/models family wrappers live in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go`; `you docs`
+  projects a root/docs subset through the generic constructor and then detaches
+  the docs command for composition into the production root. Its static topic
+  completion must use the authored argument enum, while the packaged docs
+  operation retains its established unsupported-topic diagnostic.
   Treat argument `doubleDash: terminates-flags` as the Cobra-compatible mode and
   fail construction for missing, unknown, or currently unrepresentable modes
   instead of accepting changed parsing semantics. Hidden positional inputs

@@ -8570,6 +8570,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": false,
           "minCardinality": 0,
           "maxCardinality": 1,
@@ -8599,9 +8600,17 @@
           ],
           "pattern": "",
           "completion": "static",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.docs.binding.topic",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -8766,6 +8775,12 @@
         },
         "acrossTiers": "replace",
         "multipleBindings": "reject"
+      },
+      "handlerBindings": {
+        "you.docs.binding.topic": {
+          "id": "you.docs.binding.topic",
+          "inputId": "you.docs.arg.0"
+        }
       },
       "channels": {
         "input": [

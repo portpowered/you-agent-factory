@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
@@ -80,6 +82,28 @@ func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
 	}
 	if len(models.Commands()) != 4 {
 		t.Fatalf("models child count = %d, want 4 generated leaves", len(models.Commands()))
+	}
+}
+
+func TestProductionDocsCompletionComesFromManifestTopicChoices(t *testing.T) {
+	docs, err := newProductionDocsCommand(&cliDiagnosticsOptions{})
+	if err != nil {
+		t.Fatalf("newProductionDocsCommand() error = %v", err)
+	}
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	record, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic, err := record.RequireArgumentAt(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(docs.ValidArgs, topic.Enum) {
+		t.Fatalf("docs completion = %#v, want manifest choices %#v", docs.ValidArgs, topic.Enum)
 	}
 }
 

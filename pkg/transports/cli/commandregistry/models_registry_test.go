@@ -20,18 +20,7 @@ func TestNewModelsRegistryRequiresHandler(t *testing.T) {
 	}
 }
 
-func TestDocsAndModelsRegistriesAreIndependent(t *testing.T) {
-	docs, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{DocsRunE: noopRunE})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := docs.Lookup("you.docs"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := docs.Lookup("you.models.list"); err == nil {
-		t.Fatal("docs registry unexpectedly contains Models handlers")
-	}
-
+func TestModelsRegistryContainsOnlyModelsHandlers(t *testing.T) {
 	models, err := commandregistry.NewModelsRegistry(modelsHandlerStub{})
 	if err != nil {
 		t.Fatal(err)

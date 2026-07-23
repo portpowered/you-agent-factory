@@ -1,10 +1,15 @@
 package climanifestcobra_test
 
 import (
+	"context"
+	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -16,15 +21,13 @@ func (modelsHandlerStub) Invoke(*cobra.Command, []string) error  { return nil }
 func (modelsHandlerStub) Pull(*cobra.Command, []string) error    { return nil }
 
 func TestDocsAndModelsCommandsAreConstructedIndependently(t *testing.T) {
-	docsRegistry, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{DocsRunE: noopRunE})
-	if err != nil {
-		t.Fatal(err)
-	}
 	modelsRegistry, err := commandregistry.NewModelsRegistry(modelsHandlerStub{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	docs, err := climanifestcobra.NewDocsCommand(docsRegistry)
+	docs, err := climanifestcobra.NewDocsCommand(
+		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +40,65 @@ func TestDocsAndModelsCommandsAreConstructedIndependently(t *testing.T) {
 	}
 	if docs.Parent() != nil || models.Parent() != nil {
 		t.Fatal("independent commands must remain detached before root composition")
+	}
+}
+
+func TestGenericDocsDispatchResolvesTopicByStableManifestID(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docsRecord, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Commands = map[string]climanifest.Command{
+		rootRecord.ID: rootRecord,
+		docsRecord.ID: docsRecord,
+	}
+
+	var got resolvedinput.Inputs
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			docsRecord.Handler.ID: func(
+				_ *cobra.Command,
+				inputs resolvedinput.Inputs,
+				_ resolvedinput.Inputs,
+			) error {
+				got = inputs
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{"docs", "models"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(docs models) error = %v", err)
+	}
+	topic, err := got.String("you.docs.arg.0")
+	if err != nil || topic != "models" {
+		t.Fatalf("resolved topic = %q, %v; want models", topic, err)
+	}
+	state, found := got.State("you.docs.arg.0")
+	wantState := resolvedinput.State{
+		Provenance: resolvedinput.SourcePositionalArgument,
+		Changed:    true,
+	}
+	if !found || !reflect.DeepEqual(state, wantState) {
+		t.Fatalf("resolved topic state = %#v, %t; want %#v", state, found, wantState)
 	}
 }
 

@@ -7,9 +7,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
 
@@ -55,14 +52,25 @@ func validateGenericHandlers(plan []plannedCommand, bindings GenericBindings) er
 		owners[handler.ID] = item.record.ID
 		genericHandler := bindings.Handlers[handler.ID]
 		cobraHandler := bindings.CobraHandlers[handler.ID]
-		if genericHandler != nil && cobraHandler != nil {
+		resolvedCobraHandler := bindings.ResolvedCobraHandlers[handler.ID]
+		bindingCount := 0
+		for _, present := range []bool{
+			genericHandler != nil,
+			cobraHandler != nil,
+			resolvedCobraHandler != nil,
+		} {
+			if present {
+				bindingCount++
+			}
+		}
+		if bindingCount > 1 {
 			return fmt.Errorf(
 				"command %q handler ID %q has multiple executable bindings",
 				item.record.ID,
 				handler.ID,
 			)
 		}
-		if genericHandler == nil && cobraHandler == nil {
+		if bindingCount == 0 {
 			return fmt.Errorf(
 				"command %q handler ID %q has no registered executable binding",
 				item.record.ID,
@@ -816,6 +824,9 @@ func projectFlagCompletion(cmd *cobra.Command, flag climanifest.Flag, bindings G
 func projectArgumentCompletion(cmd *cobra.Command, arguments []climanifest.Argument, bindings GenericBindings) {
 	for _, argument := range arguments {
 		if argument.Completion != "" && argument.Completion != "none" {
+			if argument.Position == 0 && argument.Completion == "static" {
+				cmd.ValidArgs = append([]string(nil), argument.Enum...)
+			}
 			cmd.ValidArgsFunction = func(
 				command *cobra.Command,
 				args []string,
@@ -944,32 +955,4 @@ func equalStrings(left, right []string) bool {
 		}
 	}
 	return true
-}
-
-// NewDocsCommand builds the independently injected `you docs` command.
-func NewDocsCommand(registry *commandregistry.Registry) (*cobra.Command, error) {
-	manifest, err := generated.ModelsDocsFamilyManifest()
-	if err != nil {
-		return nil, fmt.Errorf("build docs command: %w", err)
-	}
-	return NewDocsCommandFromManifest(manifest, registry)
-}
-
-// NewDocsCommandFromManifest builds `you docs` from authored manifest data.
-func NewDocsCommandFromManifest(manifest climanifest.Manifest, registry *commandregistry.Registry) (*cobra.Command, error) {
-	if registry == nil {
-		return nil, fmt.Errorf("build docs command: registry is required")
-	}
-	record, err := manifest.CommandByID("you.docs")
-	if err != nil {
-		return nil, fmt.Errorf("build docs command: %w", err)
-	}
-	cmd := commandFromManifest(record, true)
-	cmd.SilenceUsage = true
-	cmd.Args = positionalArgsFromManifest(record)
-	cmd.ValidArgs = docscli.SupportedTopicCommands()
-	if err := registry.AttachRunE(cmd, record.ID); err != nil {
-		return nil, fmt.Errorf("build docs command: %w", err)
-	}
-	return cmd, nil
 }
