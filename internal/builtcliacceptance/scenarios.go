@@ -75,6 +75,13 @@ func S24Scenarios() []Scenario {
 				"installed global factory copy without cross-run home/log contamination.",
 			TestName: "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy",
 		},
+		{
+			ID:    "s24-subagent",
+			Title: "Subagent",
+			DocumentedOutcome: "Named @you/subagent invocation returns the documented primary JSON terminal outcome on a " +
+				"deterministic mock-worker fixture.",
+			TestName: "TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON",
+		},
 	}
 }
 

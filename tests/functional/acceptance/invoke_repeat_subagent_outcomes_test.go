@@ -14,8 +14,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
 
 func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(t *testing.T) {
 	if testing.Short() {
@@ -142,6 +145,59 @@ func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseIns
 	}
 }
 
+func TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow built-CLI subagent primary JSON acceptance")
+	}
+	scenario := builtcliacceptance.ScenarioByID("s24-subagent")
+	if scenario == nil {
+		t.Fatal("S24 subagent scenario is not registered")
+	}
+
+	session, mockWorkersPath := prepareNamedSubagentAcceptanceSession(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	requestText := fmt.Sprintf("acceptance-subagent-primary-%d", time.Now().UnixNano())
+	result, err := session.Run(ctx, namedSubagentJSONRunArgs(session, mockWorkersPath, requestText)...)
+	session.RequireSuccess(t, "subagent-primary-json", result, err)
+
+	response := decodeInvocationResponse(t, result.Stdout)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("%s: status = %q, want COMPLETED", scenario.DocumentedOutcome, response.Status)
+	}
+	if got := invocationPrimaryResultText(t, response); got != packagedSubagentMockWorkerAcceptedSummary {
+		t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentMockWorkerAcceptedSummary)
+	}
+	if strings.Contains(result.Stdout, requestText) {
+		t.Fatalf("stdout echoed submitted request text %q", requestText)
+	}
+}
+
+func prepareNamedSubagentAcceptanceSession(t *testing.T) (*builtcliacceptance.Session, string) {
+	t.Helper()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	_, initOutcome := initializeConfig(t, ctx, session, "subagent-config-init")
+	configBody := []byte(`{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}`)
+	if writeErr := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); writeErr != nil {
+		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, writeErr)
+	}
+
+	return session, writePackagedSubagentMockWorkersConfig(t)
+}
+
 func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, goalText string) []string {
 	args := append([]string{"--json"}, session.RuntimeLogDirFlags()...)
 	args = append(args, session.ServerFlags()...)
@@ -155,6 +211,48 @@ func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, 
 		goalText,
 	)
 	return args
+}
+
+func namedSubagentJSONRunArgs(
+	session *builtcliacceptance.Session,
+	mockWorkersPath string,
+	requestText string,
+) []string {
+	args := append([]string{"--json"}, session.RuntimeLogDirFlags()...)
+	args = append(args, session.ServerFlags()...)
+	return append(args,
+		"run",
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		requestText,
+	)
+}
+
+func writePackagedSubagentMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
+				WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal packaged subagent mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-subagent-acceptance.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write packaged subagent mock-workers config: %v", err)
+	}
+	return path
 }
 
 func materializedNamedFactoryDir(t *testing.T, initialized configInitOutcome, factoryName string) string {

@@ -805,9 +805,11 @@ response-stream output.
   `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go` via
   built-CLI `models invoke` bootstrap readiness failures, repeated named
   `@you/goal` JSON invocations with distinct `requestId`/`traceId` and stable
-  installed-factory reuse.
-  S24 scenario-to-outcome mapping is canonical in `internal/builtcliacceptance/scenarios.go`
-  (`S24Scenarios`) and locked by `tests/functional/acceptance/scenario_matrix_test.go`;
+  installed-factory reuse, and the unrelated packaged `@you/subagent` primary
+  JSON outcome. S24 scenario-to-outcome documentation is canonical in
+  `internal/builtcliacceptance/scenarios.go` (`S24Scenarios`); observable
+  behavior is proved by the focused acceptance scenarios rather than
+  inventory-only test-name assertions.
   PR verification runs the focused suite through `make test-built-cli-acceptance`
   inside `make verify-tests`.
   Later S24 scenario stories should compose scenario assertions on top of this
