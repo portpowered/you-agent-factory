@@ -127,6 +127,11 @@
   tarball inventory and portable-file boundary after that drift gate; keep npm
   lifecycle scripts disabled and reject missing, unexpected, stale, escaping,
   symlinked, externally dependent, or digest-mismatched candidate contents.
+  `scripts/packaged-factories-package-consumer.mjs` owns the clean installed
+  data-contract proof: create the consumer outside the workspace, disable npm
+  scripts, lockfiles, workspaces, and links, resolve artifacts only through
+  public package specifiers, and validate both generated representations
+  against the installed schema before removing the consumer.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
