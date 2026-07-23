@@ -1,8 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
-import { App, PACKAGED_FACTORIES_PATH } from "./App";
+import { afterEach, vi } from "vitest";
+import { App, PACKAGED_FACTORIES_HOSTED_PATH } from "./App";
 import type {
   PackagedFactoryPublicDataSource,
   PackagedFactoryPublicExport,
@@ -74,13 +74,18 @@ function appSource(): PackagedFactoryPublicDataSource {
 }
 
 describe("Packaged Factories app route", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
   it("discovers, localizes, inspects, copies, and recovers through the shipped app path", async () => {
     const user = userEvent.setup();
     const copyText = vi.fn().mockResolvedValue(undefined);
+    window.history.pushState({}, "", PACKAGED_FACTORIES_HOSTED_PATH);
+
     render(
       <App
         initialLocale="zh-CN"
-        locationPathname={PACKAGED_FACTORIES_PATH}
         packagedFactoryCopyText={copyText}
         packagedFactorySource={appSource()}
       />,

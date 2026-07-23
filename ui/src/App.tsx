@@ -12,6 +12,7 @@ import { AppColorPaletteProvider } from "./theme";
 
 export const CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH = "/factory-emulator-demos";
 export const PACKAGED_FACTORIES_PATH = "/packaged-factories";
+export const PACKAGED_FACTORIES_HOSTED_PATH = `/dashboard/ui${PACKAGED_FACTORIES_PATH}`;
 
 export interface AppProps {
   browserLanguage?: string | null;
@@ -46,7 +47,8 @@ export function App({
           <main className="min-h-screen overflow-x-hidden bg-surface p-1 md:p-2">
             <CustomerFactoryEmulatorDemos />
           </main>
-        ) : pathname === PACKAGED_FACTORIES_PATH ? (
+        ) : pathname === PACKAGED_FACTORIES_PATH ||
+          pathname === PACKAGED_FACTORIES_HOSTED_PATH ? (
           <main className="min-h-screen overflow-x-hidden bg-surface p-4 md:p-6">
             <div className="mx-auto min-w-0 max-w-7xl">
               <PackagedFactoryInventory

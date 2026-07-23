@@ -1347,3 +1347,7 @@ response-stream output.
   replace workflow-result coverage.
 - A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
 - Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.
+- Dashboard feature routes must account for the production `/dashboard/ui/` SPA
+  mount as well as any intentional standalone development path. Prove new routes
+  with a built-preview browser test that navigates the hosted path directly;
+  component tests that inject a pathname do not verify production routing.
