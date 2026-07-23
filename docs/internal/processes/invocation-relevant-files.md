@@ -130,6 +130,13 @@ response-stream output.
 
 **Focused CLI and docs verification**
 
+- Canonical raw customer-boundary coverage:
+  `tests/functional/cli/factory_run/output` owns non-streaming presentation and
+  standard failure stderr/terminal-record behavior, while
+  `tests/functional/cli/factory_run/events` owns discriminated NDJSON event
+  integrity. These tests construct the process through `root.BuildProcess` and
+  use mock-worker `accept` or `reject` entries for deterministic success and
+  terminal failure without a live provider.
 - Documented commands reach the current CLI output-mode boundary:
   `pkg/transports/cli/root_docs_test.go`
   (`TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary`)
