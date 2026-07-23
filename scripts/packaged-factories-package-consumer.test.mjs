@@ -92,6 +92,13 @@ test("npm install disables lifecycle, lockfile, workspace, and link behavior", (
   assert.ok(arguments_.includes("ajv@8.20.0"));
   assert.ok(arguments_.includes("ajv-formats@3.0.1"));
   assert.ok(arguments_.includes("yaml@2.9.0"));
+
+  const registryTarget =
+    "@you-agent-factory/packaged-factories@0.0.0-dev.42.0123456789ab";
+  const registryArguments = npmInstallArguments(registryTarget, {
+    registry: true,
+  });
+  assert.ok(registryArguments.includes(registryTarget));
 });
 
 test("localized descriptions use exact locale then base fallback", () => {

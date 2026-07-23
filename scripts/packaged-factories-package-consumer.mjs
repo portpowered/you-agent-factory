@@ -31,8 +31,9 @@ const VERIFIER_DEPENDENCIES = Object.freeze([
   "ajv-formats@3.0.1",
   "yaml@2.9.0",
 ]);
+const REGISTRY_INSTALL_TIMEOUT_MS = 120_000;
 
-export function npmInstallArguments(tarballPath) {
+export function npmInstallArguments(packageTarget, { registry = false } = {}) {
   return [
     "install",
     "--ignore-scripts",
@@ -42,7 +43,7 @@ export function npmInstallArguments(tarballPath) {
     "--package-lock=false",
     "--workspaces=false",
     "--install-links=false",
-    resolve(tarballPath),
+    registry ? packageTarget : resolve(packageTarget),
     ...VERIFIER_DEPENDENCIES,
   ];
 }
@@ -65,6 +66,53 @@ export function runNpmInstall(consumerDirectory, tarballPath) {
         rejectPromise(
           new Error(
             `${DIAGNOSTIC_PREFIX} npm install failed with status ${status}\n${stderr.trim()}`,
+          ),
+        );
+        return;
+      }
+      resolvePromise();
+    });
+  });
+}
+
+export function runNpmRegistryInstall(
+  consumerDirectory,
+  packageTarget,
+  timeoutMs = REGISTRY_INSTALL_TIMEOUT_MS,
+) {
+  const arguments_ = npmInstallArguments(packageTarget, { registry: true });
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn("npm", arguments_, {
+      cwd: consumerDirectory,
+      shell: process.platform === "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      rejectPromise(error);
+    });
+    child.on("close", (status) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        rejectPromise(
+          new Error(`${DIAGNOSTIC_PREFIX} npm registry install timed out`),
+        );
+        return;
+      }
+      if (status !== 0) {
+        rejectPromise(
+          new Error(
+            `${DIAGNOSTIC_PREFIX} npm registry install failed with status ${status}\n${stderr.trim()}`,
           ),
         );
         return;
@@ -284,6 +332,30 @@ export async function installAndVerifyTarball({
   } finally {
     await rm(consumerDirectory, { recursive: true, force: true });
   }
+}
+
+export async function installAndVerifyRegistryPackage({
+  candidateVersion,
+  consumerDirectory,
+  expectedSourceCommit,
+  npmInstall = runNpmRegistryInstall,
+  packageName = PACKAGED_FACTORIES_PACKAGE_NAME,
+  requestedLocale,
+  workspaceDirectory,
+}) {
+  await writeFile(
+    join(consumerDirectory, "package.json"),
+    '{"name":"packaged-factories-registry-consumer","private":true}\n',
+  );
+  await npmInstall(consumerDirectory, `${packageName}@${candidateVersion}`);
+  return verifyInstalledPackage({
+    consumerDirectory,
+    expectedSourceCommit,
+    expectedVersion: candidateVersion,
+    packageName,
+    requestedLocale,
+    workspaceDirectory,
+  });
 }
 
 async function main() {

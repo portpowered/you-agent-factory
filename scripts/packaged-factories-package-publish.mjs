@@ -1,12 +1,6 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-
-import { installAndVerifyRegistryPackage } from "./api-package-consumer.mjs";
-import {
-	createNpmRegistryClient,
-	reconcileCandidate,
-} from "./api-package-registry.mjs";
 import {
 	PackagePublicationError,
 	PUBLICATION_FAILURES,
@@ -15,6 +9,11 @@ import {
 	publishCandidateTarball,
 	publishCandidateDirectory as publishPackageCandidateDirectory,
 } from "./package-publication.mjs";
+import { installAndVerifyRegistryPackage } from "./packaged-factories-package-consumer.mjs";
+import {
+	createNpmRegistryClient,
+	reconcileCandidate,
+} from "./packaged-factories-package-registry.mjs";
 
 export {
 	PackagePublicationError,
@@ -25,7 +24,7 @@ export {
 
 function productionDependencies(overrides = {}) {
 	return {
-		consumerDirectoryPrefix: "you-api-registry-consumer-",
+		consumerDirectoryPrefix: "you-packaged-factories-registry-consumer-",
 		createNpmRegistryClient,
 		installAndVerifyRegistryPackage,
 		reconcileCandidate,

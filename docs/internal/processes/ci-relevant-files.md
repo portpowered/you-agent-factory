@@ -140,6 +140,14 @@
   and preserves the exact tarball, candidate evidence, consumer evidence, and
   no-publish outcome for review. Keep generation, identity, inventory, pack,
   and installed-consumer failures stage-specific.
+  Protected-main publication must download that package's preserved candidate,
+  rebind its evidence source commit to the protected workflow head, and use the
+  shared `scripts/package-registry.mjs` and
+  `scripts/package-publication.mjs` mechanics. Package wrappers own exact npm
+  identity and installed-consumer semantics; shared orchestration owns local
+  digest verification, immutable-version reconciliation, publish-at-most-once
+  behavior, bounded visibility retries, and timeout/authentication/permission
+  diagnostics.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do

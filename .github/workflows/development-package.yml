@@ -225,6 +225,27 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Authorize and prepare the exact protected-main Packaged Factories candidate
+        run: >-
+          node scripts/packaged-factories-package-development-command.mjs
+          --action prepare-main
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/packaged-factories-development-candidate
+          --package-directory packages/packaged-factories
+          --prerequisite-result "${{ needs.validate.result }}"
+          --ref "${{ github.ref }}"
+          --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.sha }}"
+
+      - name: Upload the preserved Packaged Factories candidate and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-factories-development-main-candidate-${{ github.run_id }}
+          path: .artifacts/packaged-factories-development-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Prepare the canonical frontend package candidates
         run: >-
           make ui-public-package-publish-prepare
@@ -275,6 +296,12 @@ jobs:
           name: api-development-main-candidate-${{ github.run_id }}
           path: .artifacts/api-development-candidate
 
+      - name: Download the preserved Packaged Factories candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: packaged-factories-development-main-candidate-${{ github.run_id }}
+          path: .artifacts/packaged-factories-development-candidate
+
       - name: Download the canonical frontend package candidates
         uses: actions/download-artifact@v4
         with:
@@ -286,6 +313,18 @@ jobs:
           node scripts/api-package-development-command.mjs
           --action publish-main
           --candidate-directory .artifacts/api-development-candidate
+          --event-name "${{ github.event_name }}"
+          --prerequisite-result "${{ needs.validate.result }}"
+          --ref "${{ github.ref }}"
+          --repository "${{ github.repository }}"
+          --source-commit "${{ github.sha }}"
+          --workspace-directory "${{ github.workspace }}"
+
+      - name: Authorize, reconcile, publish, and verify the exact Packaged Factories candidate
+        run: >-
+          node scripts/packaged-factories-package-development-command.mjs
+          --action publish-main
+          --candidate-directory .artifacts/packaged-factories-development-candidate
           --event-name "${{ github.event_name }}"
           --prerequisite-result "${{ needs.validate.result }}"
           --ref "${{ github.ref }}"

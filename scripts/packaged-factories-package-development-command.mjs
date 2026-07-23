@@ -2,35 +2,24 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { prepareCandidate } from "./api-package-candidate.mjs";
 import {
 	assertDevelopmentPackageAction,
 	DEVELOPMENT_PACKAGE_ACTIONS,
-} from "./api-package-development-policy.mjs";
-import { validatePullRequestCandidate } from "./api-package-pr-dry-run.mjs";
-import { publishCandidateDirectory } from "./api-package-publish.mjs";
+} from "./package-development-policy.mjs";
+import { prepareCandidate } from "./packaged-factories-package-candidate.mjs";
+import { publishCandidateDirectory } from "./packaged-factories-package-publish.mjs";
 
 const productionDependencies = Object.freeze({
 	prepareCandidate,
 	publishCandidateDirectory,
-	validatePullRequestCandidate,
 });
 
-export async function executeDevelopmentPackageCommand(
+export async function executePackagedFactoriesDevelopmentCommand(
 	input,
 	dependencies = productionDependencies,
 ) {
 	const plan = assertDevelopmentPackageAction(input, input.action);
 	switch (input.action) {
-		case DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN:
-			return dependencies.validatePullRequestCandidate({
-				eventName: input.eventName,
-				outputDirectory: input.outputDirectory,
-				packageDirectory: input.packageDirectory,
-				runId: input.runId,
-				sourceCommit: plan.sourceCommit,
-				workspaceDirectory: input.workspaceDirectory,
-			});
 		case DEVELOPMENT_PACKAGE_ACTIONS.PREPARE_MAIN:
 			return dependencies.prepareCandidate({
 				outputDirectory: input.outputDirectory,
@@ -46,7 +35,7 @@ export async function executeDevelopmentPackageCommand(
 			});
 		default:
 			throw new Error(
-				`[api-package-development-command] unsupported action ${input.action}`,
+				`[packaged-factories-package-development-command] unsupported action ${input.action}`,
 			);
 	}
 }
@@ -60,7 +49,6 @@ async function main() {
 			"output-directory": { type: "string" },
 			"package-directory": { type: "string" },
 			"prerequisite-result": { type: "string" },
-			"pull-request-head-sha": { type: "string" },
 			ref: { type: "string" },
 			repository: { type: "string" },
 			"run-id": { type: "string" },
@@ -69,21 +57,20 @@ async function main() {
 		},
 		strict: true,
 	});
-	const result = await executeDevelopmentPackageCommand({
+	const result = await executePackagedFactoriesDevelopmentCommand({
 		action: values.action,
 		candidateDirectory: values["candidate-directory"],
 		eventName: values["event-name"],
 		outputDirectory: values["output-directory"],
 		packageDirectory: values["package-directory"],
 		prerequisiteResult: values["prerequisite-result"],
-		pullRequestHeadSha: values["pull-request-head-sha"],
 		ref: values.ref,
 		repository: values.repository,
 		runId: values["run-id"],
 		sourceCommit: values["source-commit"],
 		workspaceDirectory: values["workspace-directory"],
 	});
-	process.stdout.write(`${JSON.stringify(result.evidence ?? result)}\n`);
+	process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
 if (
