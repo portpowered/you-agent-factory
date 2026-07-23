@@ -2,19 +2,19 @@ type: object
 additionalProperties: false
 required:
   - name
+  - description
+  - args
 description: One example invocation for docs, help, and packaged-factory inspection.
 properties:
   name:
     type: string
+    minLength: 1
     description: Stable example name.
   description:
-    type: string
-    description: Customer-facing explanation of what the example does.
-  argv:
-    type: array
-    description: CLI-style argument vector rendered after factory selection.
-    items:
-      type: string
-  stdin:
-    type: string
-    description: Example stdin payload when the signature routes stdin into one parameter.
+    allOf:
+      - $ref: './NameValue.yaml'
+    description: Localized customer-facing explanation of what the example does.
+  args:
+    allOf:
+      - $ref: './FactoryInvocationArguments.yaml'
+    description: Structured invocation arguments; values are never parsed or executed while loading the Factory.

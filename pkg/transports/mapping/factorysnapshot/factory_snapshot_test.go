@@ -49,3 +49,20 @@ func TestToAPIHandlesAbsentAndMalformedSnapshots(t *testing.T) {
 		t.Fatalf("ToAPI(malformed) = (%#v, %v), want contextual decode error", got, err)
 	}
 }
+
+func TestObjectFromFactoryConfigRejectsUnrepresentableExampleArguments(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		Name: "invalid-example",
+		Examples: []interfaces.InvocationExampleConfig{{
+			Name:        "invalid",
+			Description: interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "Invalid"},
+			Args:        interfaces.InvocationExampleArguments{"count": 3},
+		}},
+	}
+	got, err := ObjectFromFactoryConfig(cfg)
+	if err == nil || got != nil || !strings.Contains(err.Error(), "map Factory snapshot boundary: factory.examples[0].args.count must be a string or array of strings") {
+		t.Fatalf("ObjectFromFactoryConfig() = (%#v, %v), want field-specific mapping error", got, err)
+	}
+}

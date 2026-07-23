@@ -12,6 +12,10 @@ properties:
   name:
     type: string
     description: Worker name referenced by Workstation.worker.
+  description:
+    allOf:
+      - $ref: './NameValue.yaml'
+    description: Optional localized customer-facing explanation of this worker.
   type:
     allOf:
       - $ref: './WorkerType.yaml'

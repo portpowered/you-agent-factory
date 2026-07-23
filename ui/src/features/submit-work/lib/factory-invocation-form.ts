@@ -35,10 +35,11 @@ export interface InvocationFormMessagesLike {
 
 export function projectInvocationForm(
   signature: FactoryInvocationSignature | undefined,
+  examples: components["schemas"]["FactoryInvocationExample"][] = [],
 ): InvocationFormProjection {
   const parameters = signature?.parameters ?? [];
   return {
-    examples: signature?.examples ?? [],
+    examples,
     fields: parameters.map(projectInvocationField),
     outputContract: signature?.outputContract,
   };
