@@ -108,6 +108,50 @@ test("source revision rejects an unrelated shallow-clone head", async () => {
 	}
 });
 
+test("source revision advances when the package generator changes", async () => {
+	const repositoryRoot = await mkdtemp(
+		join(tmpdir(), "you-model-provider-generator-git-"),
+	);
+	try {
+		await mkdir(
+			join(repositoryRoot, "packages/model-providers/providers/agy"),
+			{ recursive: true },
+		);
+		await mkdir(join(repositoryRoot, "scripts"), { recursive: true });
+		await writeFile(
+			join(
+				repositoryRoot,
+				"packages/model-providers/providers/agy/provider.yaml",
+			),
+			"id: agy\n",
+		);
+		const generatorPath = join(
+			repositoryRoot,
+			"scripts/model-provider-package.mjs",
+		);
+		await writeFile(generatorPath, "// initial generator\n");
+		await git(repositoryRoot, "init");
+		await git(repositoryRoot, "config", "user.name", "Provider Catalog Test");
+		await git(
+			repositoryRoot,
+			"config",
+			"user.email",
+			"provider-catalog@example.com",
+		);
+		await git(repositoryRoot, "add", "-A");
+		await git(repositoryRoot, "commit", "-m", "initial package source");
+
+		await writeFile(generatorPath, "// revised generator\n");
+		await git(repositoryRoot, "add", "-A");
+		await git(repositoryRoot, "commit", "-m", "revise package generator");
+
+		const head = (await git(repositoryRoot, "rev-parse", "HEAD")).trim();
+		assert.equal(await resolveSourceCommit(repositoryRoot), head);
+	} finally {
+		await rm(repositoryRoot, { recursive: true, force: true });
+	}
+});
+
 test("reviewed tarball inventory rejects provider sources and runtime code", () => {
 	assert.doesNotThrow(() => assertReviewedInventory(reviewedPackFiles));
 	assert.throws(

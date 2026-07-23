@@ -20,6 +20,7 @@ const sourceIdentityPaths = Object.freeze([
 	"api/openapi.yaml",
 	"internal/providercatalog",
 	`${packageDirectory}/providers`,
+	"scripts/model-provider-package.mjs",
 ]);
 const artifacts = Object.freeze([
 	{
