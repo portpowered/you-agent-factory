@@ -12,6 +12,12 @@ primary-result behavior.
 - Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
   as production code. Keep topology fixtures readable by delegating independent
   identity, routing, and validation assertions to named test helpers.
+- Direct `climanifestcobra` construction scenarios belong beside the owning
+  package. Functional CLI evidence must enter through `root.BuildProcess`; use
+  the injected `CLIObserver` edge when the customer-visible contract is the
+  detached command/input projection rather than a service side effect. Keep
+  the functional coverage floor aligned with only that boundary-compliant
+  evidence.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.

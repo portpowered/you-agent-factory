@@ -7,7 +7,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -64,4 +66,56 @@ func TestCanonicalFactoryGroupRejectsUnknownSubcommand(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `unknown command "not-a-command" for "you factory"`) {
 		t.Fatalf("Process.Execute(factory unknown) error = %v, want stable unknown-command diagnostic", err)
 	}
+}
+
+func TestCanonicalSchemaProjectionIsObservableThroughApplicationRoot(t *testing.T) {
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"run",
+		"--factory",
+		"factory.json",
+		"--output",
+		"response-stream",
+	})
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(run observation) error = %v", err)
+	}
+	if observation.Snapshot.Commands.RootPath != "you" {
+		t.Fatalf("observed root path = %q, want you", observation.Snapshot.Commands.RootPath)
+	}
+	run, found := observedCommand(observation, "you.run")
+	if !found {
+		t.Fatal("application-root observation omitted stable command you.run")
+	}
+	if run.Path != "you run" || !run.Runnable || !run.HandlerPresent {
+		t.Fatalf("observed run command = %#v, want runnable stable-ID handler projection", run)
+	}
+	factory, found := cliobservation.Flag(observation.Parse, "factory")
+	if !found || !factory.Changed || factory.Value != "factory.json" {
+		t.Fatalf("observed --factory parse = %#v found=%v", factory, found)
+	}
+	output, found := cliobservation.Flag(observation.Parse, "output")
+	if !found || !output.Changed || output.Value != "response-stream" {
+		t.Fatalf("observed --output parse = %#v found=%v", output, found)
+	}
+	if observation.Parse.CommandPath != "you run" {
+		t.Fatalf("observed parse command path = %q, want you run", observation.Parse.CommandPath)
+	}
+}
+
+func observedCommand(
+	observation cliobservation.Result,
+	id string,
+) (commandidentity.CommandRecord, bool) {
+	for _, command := range observation.Snapshot.Commands.Commands {
+		if command.IDCandidate == id {
+			return command, true
+		}
+	}
+	return commandidentity.CommandRecord{}, false
 }
