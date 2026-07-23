@@ -39,6 +39,7 @@ func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
 			]
 		}`,
 		`{"workerPresets":[{"id":"research","modelProvider":"\u00a0openai\u00a0","reasoningEffort":"\u00a0HIGH\u00a0"}]}`,
+		`{"workerPresets":[{"id":"extension","modelProvider":" customer.provider-v2 "}]}`,
 	} {
 		assertGlobalConfigValidates(t, schema, payload)
 	}
@@ -57,7 +58,7 @@ func TestGlobalConfigContract_RejectsUnsupportedDocumentShapes(t *testing.T) {
 		{name: "Unicode-whitespace preset id", payload: `{"workerPresets":[{"id":"\u00a0","modelProvider":"codex"}]}`},
 		{name: "missing preset provider", payload: `{"workerPresets":[{"id":"build"}]}`},
 		{name: "symbolic preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`},
-		{name: "unsupported preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`},
+		{name: "malformed preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"Customer_Provider"}]}`},
 		{name: "unsupported reasoning effort", payload: `{"workerPresets":[{"id":"build","modelProvider":"codex","reasoningEffort":"extreme"}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -136,7 +137,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	schemas := componentSchemas(t, doc)
 	assertSchemaPropertyRef(t, schemas, "InputType", "type", "#/components/schemas/InputKind")
 	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "type", "#/components/schemas/FactoryGuardType")
-	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "modelProvider", "#/components/schemas/ProviderIdentity")
 	assertSchemaArrayItemRef(t, schemas, "Factory", "guards", "#/components/schemas/FactoryGuard")
 	assertSchemaPropertyRef(t, schemas, "WorkState", "type", "#/components/schemas/WorkStateType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
@@ -145,7 +146,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 		schemas,
 		"Worker",
 		"modelProvider",
-		"#/components/schemas/WorkerModelProvider",
+		"#/components/schemas/ProviderIdentity",
 		`^\$\{[A-Za-z0-9_.-]+\}$`,
 	)
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")

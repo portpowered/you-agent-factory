@@ -586,7 +586,7 @@ func agentRunErrorSource(condition string) string {
 	case "unknown-preset":
 		return ""
 	case "unsupported-model-provider":
-		return `return agent.run({ prompt: "review", modelProvider: "not-a-provider" });`
+		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
 	default:

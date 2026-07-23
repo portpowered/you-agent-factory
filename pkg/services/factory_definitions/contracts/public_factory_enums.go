@@ -6,6 +6,7 @@ import (
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -427,9 +428,21 @@ func PublicWorkerModelProviderFromInternalRuntime(value string) string {
 	return normalizePublicFactoryEnumValue(value, internalFactoryWorkerModelProviderAliases, true)
 }
 
-// StrictPublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and rejects unknown values.
+// StrictPublicFactoryWorkerModelProvider canonicalizes built-in aliases and
+// preserves extension identities that use the provider contract's canonical
+// syntax. Registry membership is deliberately outside this authored boundary.
 func StrictPublicFactoryWorkerModelProvider(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, false)
+	trimmed := strings.TrimSpace(value)
+	if canonical := normalizePublicFactoryEnumValue(trimmed, internalFactoryWorkerModelProviderAliases, false); canonical != "" {
+		return canonical
+	}
+	if trimmed != value {
+		return ""
+	}
+	if err := workers.ProviderIdentity(value).Validate(); err != nil {
+		return ""
+	}
+	return value
 }
 
 // IsSymbolicWorkerModelProviderDefault reports whether value is the symbolic DEFAULT provider.
@@ -446,9 +459,6 @@ func CanonicalizeOperatorWorkerModelProviderInput(value string) (string, bool) {
 	}
 	if IsSymbolicWorkerModelProviderDefault(trimmed) {
 		return WorkerModelProviderDefault, true
-	}
-	if canonical := normalizePublicFactoryEnumValue(trimmed, internalFactoryWorkerModelProviderAliases, false); canonical != "" {
-		return canonical, true
 	}
 	if canonical := StrictPublicFactoryWorkerModelProvider(trimmed); canonical != "" {
 		return canonical, true
@@ -468,11 +478,11 @@ func CanonicalizeReasoningEffort(value string) (string, bool) {
 	}
 }
 
-// AcceptedPublicWorkerModelProviderSummary returns canonical provider names and
-// representative public aliases for operator-facing validation errors.
+// AcceptedPublicWorkerModelProviderSummary describes the open provider identity
+// syntax and representative compatibility aliases for validation errors.
 func AcceptedPublicWorkerModelProviderSummary() string {
-	return "accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; " +
-		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai"
+	return "use a canonical lowercase provider identity (1-128 bytes; lowercase letters, digits, dots, or hyphens), " +
+		"or a supported built-in identity or legacy alias"
 }
 
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.
