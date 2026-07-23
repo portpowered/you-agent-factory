@@ -111,8 +111,12 @@ primary-result behavior.
   legacy `cursor-cli` runner ID mapped only at the native-execution
   compatibility boundary. Preserve accepted public model-provider aliases
   (`openai` and `anthropic`) as collision-validated registry identity claims so
-  static lookup and routed selection cannot disagree, and defer unresolved
-  authored `${...}` provider templates to the existing default-selection path.
+  static lookup and routed selection cannot disagree. Carry the registry's
+  canonical legacy-provider selection through the workstation boundary into
+  the final `ProviderInferenceRequest.ModelProvider`; restoring the authored
+  alias there makes provider command behavior disagree with registry lookup.
+  Defer unresolved authored `${...}` provider templates to the existing
+  default-selection path.
   Other unknown, catalog-only, and not-supported identities fail before
   dispatch instead of falling through to the default Codex runner.
   Provider-native command construction and `ProviderOverride` execution remain

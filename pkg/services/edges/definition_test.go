@@ -356,7 +356,7 @@ func TestMergeAppendsAndDetachesProviderRegistrations(t *testing.T) {
 	defaults[0] = addedRegistration
 	additions[0] = defaultRegistration
 
-	want := []inference.Registration{defaultRegistration, addedRegistration}
+	want := inference.ProviderRegistrations{defaultRegistration, addedRegistration}
 	if !reflect.DeepEqual(merged.ProviderRegistrations, want) {
 		t.Fatalf("ProviderRegistrations = %#v, want detached append %#v", merged.ProviderRegistrations, want)
 	}

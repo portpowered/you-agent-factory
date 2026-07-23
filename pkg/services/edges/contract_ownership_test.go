@@ -253,9 +253,6 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 				t.Fatal("Edges is not a struct")
 			}
 			for _, field := range structure.Fields.List {
-				if collection, ok := field.Type.(*ast.ArrayType); ok && collection.Len == nil {
-					continue
-				}
 				var rendered bytes.Buffer
 				if err := printer.Fprint(&rendered, fileSet, field.Type); err != nil {
 					t.Fatalf("render Edges field type: %v", err)

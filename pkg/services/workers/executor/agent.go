@@ -373,7 +373,9 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 }
 
 func modelProviderForExecution(workerModelProvider string, selection workerexecution.ResolvedRunnerSelection) string {
-	if selection.Source == workerexecution.RunnerSelectionSourceWorkstation || selection.Source == workerexecution.RunnerSelectionSourceFactory {
+	if selection.Source == workerexecution.RunnerSelectionSourceWorkstation ||
+		selection.Source == workerexecution.RunnerSelectionSourceFactory ||
+		selection.Source == workerexecution.RunnerSelectionSourceLegacyProvider {
 		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
 			return provider
 		}
@@ -388,6 +390,8 @@ func modelProviderForRunnerID(runnerID string) string {
 	switch workerrunner.NormalizeRunnerID(runnerID) {
 	case workerexecution.RunnerIDCodex:
 		return string(modelprovider.ProviderCodex)
+	case string(modelprovider.ProviderClaude):
+		return string(modelprovider.ProviderClaude)
 	case workerexecution.RunnerIDGemini:
 		return string(modelprovider.ProviderGemini)
 	case workerexecution.RunnerIDKiro:

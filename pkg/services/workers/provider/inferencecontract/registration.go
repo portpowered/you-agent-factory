@@ -89,3 +89,7 @@ type Registration struct {
 	Manifest    Manifest
 	Integration Integration
 }
+
+// ProviderRegistrations is the additive pure configuration collection used to
+// contribute external registrations during process composition.
+type ProviderRegistrations []Registration
