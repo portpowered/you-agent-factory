@@ -388,6 +388,14 @@ response-stream output.
   Relationship evaluation uses stable flag or argument references and explicit
   CLI presence, runs in Cobra's pre-handler phase, and reports public input
   spellings without exposing input values.
+  Generic help, lifecycle, and completion projection lives beside the docs
+  transport boundary in
+  `pkg/transports/cli/climanifestcobra/docs_constructor.go`. Validate command
+  and flag lifecycle records, positional lifecycle records when authored, and
+  every completion mode before Cobra mutation. Static completion consumes
+  declared enum choices; dynamic completion callbacks are supplied through
+  `GenericBindings.Completions` keyed by stable input ID, never by a public flag
+  name or command path.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable

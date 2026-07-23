@@ -451,8 +451,12 @@ type plannedFlag struct {
 // NewCommandTree constructs a detached Cobra tree from one resolved CLI
 // manifest snapshot. It validates the complete command topology before
 // allocating any Cobra commands, so callers never receive a partial tree.
-func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
-	plan, err := planCommandTree(manifest)
+func NewCommandTree(manifest climanifest.Manifest, bindingSets ...GenericBindings) (*cobra.Command, error) {
+	bindings, err := resolveGenericBindings(bindingSets)
+	if err != nil {
+		return nil, fmt.Errorf("build generic command tree: %w", err)
+	}
+	plan, err := planCommandTree(manifest, bindings)
 	if err != nil {
 		return nil, fmt.Errorf("build generic command tree: %w", err)
 	}
@@ -467,6 +471,9 @@ func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
 		projectArgumentAndRelationshipRules(built[item.record.Path], item)
+		if err := projectGenericPresentation(built[item.record.Path], item, bindings); err != nil {
+			return nil, fmt.Errorf("build generic command tree: %w", err)
+		}
 	}
 	for _, item := range plan {
 		if item.parentPath == "" {
@@ -477,7 +484,7 @@ func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
 	return built[manifest.RootPath], nil
 }
 
-func planCommandTree(manifest climanifest.Manifest) ([]plannedCommand, error) {
+func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([]plannedCommand, error) {
 	if err := validateManifestHeader(manifest); err != nil {
 		return nil, err
 	}
@@ -494,6 +501,9 @@ func planCommandTree(manifest climanifest.Manifest) ([]plannedCommand, error) {
 		return nil, err
 	}
 	if err := planCommandArgumentsAndRelationships(plan); err != nil {
+		return nil, err
+	}
+	if err := validateGenericPresentation(plan, bindings); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -679,8 +689,8 @@ func projectCommand(record climanifest.Command) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     record.Usage.Line,
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
-		Long:    record.Documentation.Documentation.Description.CanonicalEnglish,
-		Example: record.Usage.Example,
+		Long:    commandLong(record),
+		Example: commandExamples(record),
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
 	}

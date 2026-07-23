@@ -220,7 +220,7 @@ func assertSyntheticChildren(t *testing.T, root *cobra.Command) {
 
 func assertSyntheticAlpha(t *testing.T, alpha *cobra.Command) {
 	t.Helper()
-	if alpha.Short != "Alpha title" || alpha.Long != "Alpha description" {
+	if alpha.Short != "Alpha title" || alpha.Long != "Alpha title\n\nAlpha description" {
 		t.Fatalf("alpha documentation = (%q, %q)", alpha.Short, alpha.Long)
 	}
 	if len(alpha.Aliases) != 1 || alpha.Aliases[0] != "a" {
@@ -510,6 +510,7 @@ func syntheticFlagManifest() climanifest.Manifest {
 			Visibility:    "visible",
 		},
 	}
+	withActiveFlagLifecycle(root.Flags)
 	manifest.Commands[root.ID] = root
 
 	alpha := manifest.Commands["stable.alpha"]
@@ -583,6 +584,7 @@ func syntheticFlagManifest() climanifest.Manifest {
 			Visibility: "hidden",
 		},
 	}
+	withActiveFlagLifecycle(alpha.Flags)
 	manifest.Commands[alpha.ID] = alpha
 	return manifest
 }
@@ -650,6 +652,7 @@ func syntheticCommand(id, name, path string, runnable bool) climanifest.Command 
 		Visibility: "visible",
 		Runnable:   runnable,
 		Usage:      climanifest.Usage{Line: name},
+		Lifecycle:  activeLifecycle(id),
 		Documentation: climanifest.Documentation{
 			Documentation: climanifest.DocumentationCopy{
 				Title:       climanifest.DocumentationField{CanonicalEnglish: titleName + " title"},
@@ -899,6 +902,7 @@ func syntheticArgumentManifest() climanifest.Manifest {
 			ValueType: "int64", MinCardinality: 0, MaxCardinality: -1, Variadic: true,
 		},
 	}
+	withNoneArgumentCompletion(command.Arguments)
 	manifest.Commands[command.ID] = command
 	return manifest
 }
@@ -913,15 +917,43 @@ func syntheticRelationshipManifest(relationship climanifest.Relationship) climan
 		"flag.alpha": {ID: "flag.alpha", Long: "alpha", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
 		"flag.beta":  {ID: "flag.beta", Long: "beta", Scope: "local", ValueType: "bool", NoOptionDefault: "true", Visibility: "visible"},
 	}
+	withActiveFlagLifecycle(command.Flags)
 	command.Arguments = map[string]climanifest.Argument{
 		"arg.target": {
 			ID: "arg.target", Name: "target", Position: 0, Kind: "positional",
 			ValueType: "string", MinCardinality: 0, MaxCardinality: 1,
 		},
 	}
+	withNoneArgumentCompletion(command.Arguments)
 	command.Relationships = map[string]climanifest.Relationship{relationship.ID: relationship}
 	manifest.Commands[command.ID] = command
 	return manifest
+}
+
+func activeLifecycle(id string) climanifest.Lifecycle {
+	return climanifest.Lifecycle{
+		FormatVersion: "1.0.0",
+		ItemID:        id,
+		State:         "active",
+		Since:         "1.0.0",
+	}
+}
+
+func withActiveFlagLifecycle(flags map[string]climanifest.Flag) {
+	for id, flag := range flags {
+		flag.Lifecycle = activeLifecycle(id)
+		if flag.Completion == "" {
+			flag.Completion = "none"
+		}
+		flags[id] = flag
+	}
+}
+
+func withNoneArgumentCompletion(arguments map[string]climanifest.Argument) {
+	for id, argument := range arguments {
+		argument.Completion = "none"
+		arguments[id] = argument
+	}
 }
 
 func updateSyntheticArgument(
