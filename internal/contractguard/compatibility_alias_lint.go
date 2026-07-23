@@ -24,6 +24,7 @@ var DefaultCompatibilityAliasBoundaryPrefixes = []string{
 	"packages/",
 	"pkg/transports/",
 	"pkg/factory/",
+	"pkg/services/factory_sessions/transports/mcp/",
 	"internal/testutil/",
 	"ui/src/api/workflow-preview/",
 	"ui/src/api/generated/",

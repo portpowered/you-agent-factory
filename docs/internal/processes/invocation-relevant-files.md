@@ -650,7 +650,7 @@ response-stream output.
   `tests/functional/smoke/response_stream_private_contract_closure_smoke_test.go`
   (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
   recordType constants and retired-record rejection live in
-  `pkg/services/factory_sessions/responsestream/ndjsoncontract`; the removal
+  `pkg/services/factory_sessions/internal/responsestream/ndjsoncontract`; the removal
   gate validates retired vocabulary directly, while CLI renderer tests decode
   public envelopes through transport-local canonical fixtures. Run these before deleting
   private NDJSON record types. The retired `responsestream/compat` mapper package

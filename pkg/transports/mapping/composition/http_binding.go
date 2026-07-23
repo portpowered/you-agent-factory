@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // HTTPBinding contains the representation-only roles bound to one opened
@@ -45,8 +46,8 @@ func NewHTTPBinder(
 func (binder *HTTPBinder) Bind(
 	runtime factoryruntime.Service,
 	definitions factorydefinitions.Service,
-	sessions factorysessions.Gateway,
-	invocations factorysessions.SessionInvoker,
+	sessions factorysessions.Service,
+	invocations factorysessionmapping.SessionInvoker,
 	execution factorysessions.ExecutionService,
 	workService work.Service,
 ) (HTTPBinding, error) {

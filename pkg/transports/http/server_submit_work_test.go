@@ -352,7 +352,8 @@ func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
 	_, workRole := newRecordingWorkRole()
 	srv := newWorkTransportTestServer(workRole)
-	srv.contentStaging.(*contentStagingFake).prepareContent = func(
+	staging := newContentStagingFake()
+	staging.prepareContent = func(
 		context.Context,
 		[]work.StagedSubmissionItem,
 	) ([]work.WorkContentPart, error) {
@@ -360,6 +361,7 @@ func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
 			Message: "items must contain at least one non-empty item",
 		}
 	}
+	srv.Adapter = srv.Adapter.WithContentStaging(staging)
 	rec := submitWorkRequest(t, srv, `{"name":"blank-items","workTypeName":"prd","items":[{"type":"text","text":"   \t"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one non-empty item")
 }

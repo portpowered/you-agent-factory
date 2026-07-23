@@ -3,16 +3,11 @@ package factorysessions
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/identity"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
@@ -31,9 +26,10 @@ type RuntimeInstanceIDGenerator func() string
 // SessionIDGenerator supplies opaque identities for live sessions, durable
 // sessions, and session-owned invocation requests. Wire selects the process
 // implementation and tests replace it only at the external edge.
-type SessionIDGenerator = factorysessionidentity.Generator
+type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
-type ResponseEventIDGenerator = responseeventstore.ResponseEventIDGenerator
+// ResponseEventIDGenerator supplies opaque identities for response events.
+type ResponseEventIDGenerator func() string
 
 // LiveRuntime is the host-independent runtime capability attached to a live
 // Factory Session. Process hosts retain their private lifecycle handles, while
@@ -84,218 +80,37 @@ type Target struct {
 // OpenResult is the internal outcome of opening or validating a session folder.
 type OpenResult struct {
 	SessionID       string
+	Session         *ScopedLiveSessionSummary
 	Targets         []Target
 	InitsNewFactory bool
 	FolderPath      string
 }
 
-// SessionState tracks session-owned runtime metadata that should stay attached
-// to the live session rather than mutable service-global configuration.
-type SessionState struct {
-	FactoryDir       string
-	FolderPath       string
-	ExecutionBaseDir string
+// ResponseEventCursor is the detached retained-then-live response-event value
+// returned by Service. Function fields keep cursor behavior explicit without
+// publishing an additional service-root interface.
+type ResponseEventCursor struct {
+	NextEvents   func(context.Context) ([]FactoryResponseEvent, error)
+	DrainEvents  func() ([]FactoryResponseEvent, error)
+	DetachCursor func()
 }
 
-// LiveSession tracks one live factory session and its runtime handle.
-// Handle is typed by the composition root (for example *service.liveRuntimeHandle).
-type LiveSession struct {
-	ID string
-	SessionState
-	Handle                  any
-	Runtime                 *LiveRuntime
-	IsDefault               bool
-	Project                 string
-	Target                  TargetRef
-	RuntimeFactorySessionID string
-	ResponseEvents          *SessionResponseEventStore
-	JavaScriptCheckpoints   factory.JavaScriptCheckpointStore
+func (c *ResponseEventCursor) Next(ctx context.Context) ([]FactoryResponseEvent, error) {
+	return c.NextEvents(ctx)
 }
 
-// CanonicalFactorySessionID returns the durable runtime identity for one live
-// session. Default-route sessions keep the ~default registry alias but expose a
-// UUID runtime identity to clients.
-func CanonicalFactorySessionID(session *LiveSession) string {
-	if session == nil {
-		return ""
-	}
-	if runtimeID := strings.TrimSpace(session.RuntimeFactorySessionID); runtimeID != "" {
-		return runtimeID
-	}
-	return strings.TrimSpace(session.ID)
-}
+func (c *ResponseEventCursor) Drain() ([]FactoryResponseEvent, error) { return c.DrainEvents() }
 
-// IsUUIDFactorySessionID reports whether sessionID is a UUID runtime identity.
-func IsUUIDFactorySessionID(sessionID string) bool {
-	_, err := uuid.Parse(strings.TrimSpace(sessionID))
-	return err == nil
-}
-
-// EnsureRuntimeFactorySessionID assigns a UUID runtime identity to default
-// sessions that still use the ~default registry alias.
-func EnsureRuntimeFactorySessionID(session *LiveSession, generateID SessionIDGenerator) error {
-	if session == nil {
-		return nil
-	}
-	if strings.TrimSpace(session.RuntimeFactorySessionID) != "" {
-		return nil
-	}
-	if session.ID == DefaultSessionID {
-		if generateID == nil {
-			return errors.New("Factory Session ID generator is required")
-		}
-		session.RuntimeFactorySessionID = strings.TrimSpace(generateID())
-		if session.RuntimeFactorySessionID == "" {
-			return errors.New("Factory Session ID generator returned an empty identity")
-		}
-	}
-	return nil
-}
-
-// CompleteResponseEvents marks the session-owned response-event publication
-// scope complete while retaining its immutable events for catch-up readers.
-func (s *LiveSession) CompleteResponseEvents() {
-	if s == nil || s.ResponseEvents == nil {
-		return
-	}
-	s.ResponseEvents.Complete()
-}
-
-// CloseResponseEvents closes the response-event store owned by this live
-// session and detaches its active subscribers.
-func (s *LiveSession) CloseResponseEvents() {
-	if s == nil || s.ResponseEvents == nil {
-		return
-	}
-	s.ResponseEvents.Close()
-}
-
-// BindResponseEventCompletion completes the session-owned response-event store
-// when its canonical FactoryEvent history observes terminal session completion.
-func BindResponseEventCompletion(
-	session *LiveSession,
-	addRecorder func(func(interfaces.FactoryEventType)),
-) {
-	if session == nil || addRecorder == nil {
-		return
-	}
-	addRecorder(func(eventType interfaces.FactoryEventType) {
-		if eventType == interfaces.FactoryEventTypeSessionCompleted {
-			session.CompleteResponseEvents()
-		}
-	})
-}
-
-// SessionResponseEventStore retains immutable FactoryResponseEvent records for
-// one live Factory Session runtime. It is separate from canonical factory event
-// history and from service-coordinator state.
-type SessionResponseEventStore = responseeventstore.SessionResponseEventStore
-
-// ResponseEventSubscription is the Factory Sessions-owned retained-then-live
-// cursor used by application and transport consumers.
-type ResponseEventSubscription = responseeventstore.Subscription
-
-// ResponseEventCursor is the Factory Sessions-owned retained-then-live
-// capability exposed to consumers. Callers depend on this role rather than the
-// concrete session store so tests can script the public event boundary.
-type ResponseEventCursor interface {
-	Next(context.Context) ([]FactoryResponseEvent, error)
-	Drain() ([]FactoryResponseEvent, error)
-	Detach()
-}
-
-// ResponseEventSubscribeOption configures one Factory Session response-event
-// subscription without exposing the concrete store package to consumers.
-type ResponseEventSubscribeOption = responseeventstore.SubscribeOption
+func (c *ResponseEventCursor) Detach() { c.DetachCursor() }
 
 var (
 	// ErrResponseEventStoreExpired reports that a completed response-event
 	// stream is outside its late-subscription retention window.
-	ErrResponseEventStoreExpired = responseeventstore.ErrStoreExpired
+	ErrResponseEventStoreExpired = errors.New("session response event store retention window has expired")
 	// ErrResponseEventSubscriptionClosed reports that a response-event cursor
 	// was detached or its owning store was closed.
-	ErrResponseEventSubscriptionClosed = responseeventstore.ErrSubscriptionClosed
+	ErrResponseEventSubscriptionClosed = errors.New("session response event store subscription is closed")
 )
-
-// WithResponseEventDispatchFilter limits a response-event subscription to one
-// dispatch identity.
-func WithResponseEventDispatchFilter(dispatchID string) ResponseEventSubscribeOption {
-	return responseeventstore.WithDispatchFilter(dispatchID)
-}
-
-// NewSessionResponseEventStore allocates an empty response-event store owned
-// by one live Factory Session runtime using the supplied process clock.
-func NewSessionResponseEventStore(factorySessionID string, clock factory.Clock, generateEventID ResponseEventIDGenerator) *SessionResponseEventStore {
-	return responseeventstore.NewSessionResponseEventStore(factorySessionID, clock, generateEventID)
-}
-
-// SessionResponseStream keeps ordered internal provider progress for one live
-// Factory Session runtime. It is separate from canonical factory event history
-// and from service-coordinator state.
-type SessionResponseStream = responsestream.SessionResponseStream
-
-// SessionResponseStreamSet keeps the dispatch-keyed response streams owned by
-// one live Factory Session runtime.
-type SessionResponseStreamSet = responsestream.StreamSet
-
-// ResponseStreamRegistry owns the response streams for all live Factory
-// Sessions in one runtime scope.
-type ResponseStreamRegistry = responsestream.Registry
-
-// SessionResponseStreamEvent is the internal envelope for provider progress and
-// response fragments within one Factory Session runtime.
-type SessionResponseStreamEvent = responsestream.Event
-
-// SessionResponseStreamEventKind identifies internal response-stream semantics.
-type SessionResponseStreamEventKind = responsestream.EventKind
-
-// SessionResponseStreamReadResult is the internal bounded catch-up view for
-// one response-stream subscriber resume point.
-type SessionResponseStreamReadResult = responsestream.ReadResult
-
-// SessionResponseStreamCompactionSummary records bounded fidelity loss for
-// stream subscribers that resume after truncation or coalescing.
-type SessionResponseStreamCompactionSummary = responsestream.CompactionSummary
-
-// SessionResponseStreamEventType identifies provider-neutral internal response
-// stream event semantics.
-type SessionResponseStreamEventType = responsestream.EventType
-
-// SessionResponseStreamRetentionLimits documents bounded-retention controls for
-// one internal session response stream.
-type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
-
-// SessionResponseStreamRetentionAccounting summarizes retained stream bytes,
-// event count, and oldest event timestamp for retention decisions.
-type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounting
-
-// NewSessionResponseStream allocates an empty internal response stream owned by
-// one live Factory Session runtime using the supplied process clock.
-func NewSessionResponseStream(clock factory.Clock) *SessionResponseStream {
-	return responsestream.NewSessionResponseStream(clock)
-}
-
-// NewResponseStreamRegistry allocates an empty runtime-scoped response-stream
-// registry from explicit stream and clock dependencies.
-func NewResponseStreamRegistry(
-	newStream func() *SessionResponseStream,
-	clock factory.Clock,
-) *ResponseStreamRegistry {
-	return responsestream.NewRegistry(newStream, clock)
-}
-
-// NewSessionResponseStreamSetWithFactory allocates a dispatch-keyed stream set
-// using the supplied stream constructor and process clock.
-func NewSessionResponseStreamSetWithFactory(
-	newStream func() *SessionResponseStream,
-	clock factory.Clock,
-) *SessionResponseStreamSet {
-	return responsestream.NewStreamSetWithFactory(newStream, clock)
-}
-
-// SessionResponseStreamSubscription is an internal live-session response-stream
-// cursor that can read retained and live dispatch progress.
-type SessionResponseStreamSubscription = responsestream.Subscription
 
 // RuntimeProjection is the Factory Session-owned live runtime read model.
 // Transport packages map this detached value to their public contract.

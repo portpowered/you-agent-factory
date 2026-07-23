@@ -11,12 +11,17 @@ import (
 
 // NewResponseEventSubscription maps a Factory Sessions-owned cursor onto the
 // transport serialization boundary.
-func NewResponseEventSubscription(cursor factorysessions.ResponseEventCursor) apisurface.FactoryResponseEventSubscription {
+func NewResponseEventSubscription(cursor ResponseEventCursor) apisurface.FactoryResponseEventSubscription {
 	return &responseEventSubscription{cursor: cursor}
 }
 
 type responseEventSubscription struct {
-	cursor factorysessions.ResponseEventCursor
+	cursor ResponseEventCursor
+}
+
+type ResponseEventCursor interface {
+	Next(context.Context) ([]factorysessions.FactoryResponseEvent, error)
+	Detach()
 }
 
 func (s *responseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {

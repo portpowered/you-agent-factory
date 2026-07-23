@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -49,11 +50,9 @@ func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 }
 
 func newAPITestServer(validator factorydefinitions.SubmittedDefinitionValidationOperation) *api.Server {
-	return api.NewServer(
-		nil, nil, nil, nil, nil, nil, nil, nil,
-		validator, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zap.NewNop(),
-	)
+	logger := zap.NewNop()
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{FactoryValidation: validator}, logger)
+	return api.NewServer(handler, nil, nil, logger)
 }
 
 // taxonomyCompatibilityValidator scripts the service-root finding whose HTTP

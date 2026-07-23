@@ -6,9 +6,32 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+// InvocationOperation is the exact Factory invocation capability consumed by
+// the run transport.
+type InvocationOperation interface {
+	InvokeModel(context.Context, factorysessions.InvocationTarget, string, models.Request) (models.Result, error)
+	ResolveModelInvocationFactoryDir(string) (string, error)
+	ExportModelInvocationArtifact(string, string) error
+	InvokeFactory(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
+}
+
+// DirectJavaScriptRunOperation is the exact direct-workflow capability
+// consumed by CLI selection.
+type DirectJavaScriptRunOperation interface {
+	Supports(string) bool
+	Run(context.Context, factorysessions.DirectJavaScriptRunRequest) error
+}
+
+// SessionInvoker is the exact live invocation role consumed by mapping tests.
+type SessionInvoker interface {
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
+}
 
 // SelectionFactory binds one parsed CLI RunConfig to the exact run operations
 // already selected by Wire. It does not construct services or lifecycle state.
@@ -17,9 +40,9 @@ type SelectionFactory func(RunConfig) processcontract.RunSelection
 func NewSelectionFactory(
 	open Opener,
 	buildRunner RuntimeRunnerBuilder,
-	invocation factorysessions.InvocationOperation,
+	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	directJavaScript factorysessions.DirectJavaScriptRunOperation,
+	directJavaScript DirectJavaScriptRunOperation,
 ) (SelectionFactory, error) {
 	if open == nil || buildRunner == nil || invocation == nil || presentation == nil || directJavaScript == nil {
 		return nil, fmt.Errorf("run transport operations are required")
@@ -36,9 +59,9 @@ type selection struct {
 	cfg              RunConfig
 	open             Opener
 	buildRunner      RuntimeRunnerBuilder
-	invocation       factorysessions.InvocationOperation
+	invocation       InvocationOperation
 	presentation     factoryvisualization.ResponsePresentation
-	directJavaScript factorysessions.DirectJavaScriptRunOperation
+	directJavaScript DirectJavaScriptRunOperation
 }
 
 func (s *selection) Open(
@@ -65,7 +88,7 @@ func (s *selection) Open(
 }
 
 type directJavaScriptApplication struct {
-	operation factorysessions.DirectJavaScriptRunOperation
+	operation DirectJavaScriptRunOperation
 	request   factorysessions.DirectJavaScriptRunRequest
 }
 

@@ -147,6 +147,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"FactorySessionReplayRecordingReader":             {typeName: "factorysessions.ReplayRecordingReader", effect: "read customer-selected portable Factory Session recordings"},
 		"FactorySessionInitialWorkReader":                 {typeName: "factorysessions.InitialWorkReader", effect: "read customer-selected initial Factory Session Work requests"},
 		"FactorySessionResolveHomeDirectory":              {typeName: "factorysessions.HomeDirectoryResolver", effect: "resolve Factory Session home-relative paths"},
+		"FactorySessionResolveLogicalTargetSymlinks":      {typeName: "factorysessions.LogicalTargetResolveSymlinks", effect: "canonicalize Factory Session logical target paths"},
 		"FactorySessionIDGenerator":                       {typeName: "factorysessions.SessionIDGenerator", effect: "generate opaque live and durable Factory Session identities"},
 		"FactorySessionRuntimeInstanceIDGenerator":        {typeName: "factorysessions.RuntimeInstanceIDGenerator", effect: "generate opaque Factory Session runtime instance identities"},
 		"FactorySessionResponseEventIDGenerator":          {typeName: "factorysessions.ResponseEventIDGenerator", effect: "generate opaque Factory Session response-event identities"},

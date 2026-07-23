@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -8,7 +9,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -17,7 +19,6 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -97,7 +98,7 @@ func provideSubmitBatchOperation(
 }
 func provideListSessionsOperation(
 	transport standardCLIHTTPProtocol,
-	prepare factorysessions.RequestPreparation,
+	prepare factorysessionwire.RequestPreparation,
 ) cli.ListSessionsOperation {
 	return sessioncli.NewList(transport.Protocol, prepare)
 }
@@ -226,4 +227,12 @@ func provideVisualizeWorkOperation(
 	visualize work.VisualizationOperation,
 ) cli.VisualizeWorkOperation {
 	return workcli.NewVisualize(visualize)
+}
+
+func provideCLIExecutionServiceBuilder(
+	build factorysessionwire.ExecutionServiceBuilder,
+) cli.ExecutionServiceBuilder {
+	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (cli.OwnedExecutionService, error) {
+		return build(ctx, provider, projectRoot, fixtureCatalogPath, childExecutorMode)
+	}
 }

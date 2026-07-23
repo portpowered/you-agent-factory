@@ -101,7 +101,7 @@ flowchart LR
     end
 
     subgraph currentSessions[Factory Session ownership]
-        currentSessionGateway[[pkg/services/factory_sessions/service]]
+        currentSessionGateway[[pkg/services/factory_sessions/internal/sessionservice]]
         currentControlPlane[[controlplane]]
         currentDataPlane[[dataplane]]
         currentExecution[[execution and durable lifecycle]]
@@ -197,7 +197,7 @@ flowchart LR
         currentLogs[(Runtime log files)]
         currentLogging[[pkg/logging]]
         currentReplay[[pkg/replay]]
-        currentSessionPersistence[[pkg/services/factory_sessions/cursors/persistence]]
+        currentSessionPersistence[[pkg/services/factory_sessions/internal/cursors/persistence]]
         currentInternalPlatform[[pkg/internal/metrics and cursorstorage]]
 
         currentLogging --> currentLogs

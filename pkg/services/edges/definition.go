@@ -66,6 +66,7 @@ type Edges struct {
 	FactorySessionExecutionOpeningFileSystem        factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection               factorysessions.DirectoryInspection
 	FactorySessionResolveHomeDirectory              factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks      factorysessions.LogicalTargetResolveSymlinks
 	FactorySessionIDGenerator                       factorysessions.SessionIDGenerator
 	FactorySessionRuntimeInstanceIDGenerator        factorysessions.RuntimeInstanceIDGenerator
 	FactorySessionResponseEventIDGenerator          factorysessions.ResponseEventIDGenerator
@@ -277,6 +278,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactorySessionResolveHomeDirectory != nil {
 		defaults.FactorySessionResolveHomeDirectory = replacements.FactorySessionResolveHomeDirectory
+	}
+	if replacements.FactorySessionResolveLogicalTargetSymlinks != nil {
+		defaults.FactorySessionResolveLogicalTargetSymlinks = replacements.FactorySessionResolveLogicalTargetSymlinks
 	}
 	if replacements.FactorySessionIDGenerator != nil {
 		defaults.FactorySessionIDGenerator = replacements.FactorySessionIDGenerator

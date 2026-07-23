@@ -12,10 +12,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {

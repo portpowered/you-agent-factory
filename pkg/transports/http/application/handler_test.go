@@ -6,11 +6,13 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -20,8 +22,10 @@ type validationRole struct {
 
 type runtimeRole struct{ factoryruntime.Service }
 type definitionRole struct{ factorydefinitions.Service }
-type sessionRole struct{ factorysessions.Gateway }
-type invocationRole struct{ factorysessions.SessionInvoker }
+type sessionRole struct{ factorysessions.Service }
+type invocationRole struct {
+	factorysessionmapping.SessionInvoker
+}
 type executionRole struct {
 	factorysessions.ExecutionService
 }
@@ -30,7 +34,7 @@ type modelRole struct{ models.Service }
 type workerRole struct{ workers.Service }
 type providerSessionRole struct{ providersessions.Service }
 type requestPreparationRole struct {
-	factorysessions.RequestPreparation
+	factorysessionshttp.RequestPreparation
 }
 type statusProjectorRole struct{}
 

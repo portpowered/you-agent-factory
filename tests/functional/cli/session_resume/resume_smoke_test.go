@@ -19,9 +19,9 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

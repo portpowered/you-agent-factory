@@ -71,7 +71,7 @@ func TestScanCompatibilityAliasViolations_AllowsApprovedBoundary(t *testing.T) {
 }`,
 		"contracts/cli/deprecated.json": `{"formatVersion":"1.0.0","family":"cli","records":{}}`,
 		"contracts/api/deprecated.json": `{"formatVersion":"1.0.0","family":"api","records":{}}`,
-		"pkg/transports/mcp/factorysession/tool.go": `package factorysession
+		"pkg/services/factory_sessions/transports/mcp/tool.go": `package factorysession
 
 const ToolWorkflowValidate = "you.workflow.validate"
 `,

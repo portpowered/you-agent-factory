@@ -107,7 +107,7 @@ func openInvocation(
 	logger *zap.Logger,
 	request *factoryapi.InvocationRequest,
 	recordPath resolvedRunRecordPath,
-	invocation factorysessions.InvocationOperation,
+	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) (*Operation, error) {
@@ -215,7 +215,7 @@ func runFactoryInvocation(
 	cfg RunConfig,
 	target factorysessions.InvocationTarget,
 	request factoryapi.InvocationRequest,
-	invocation factorysessions.InvocationOperation,
+	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 ) error {
 	if invocation == nil {

@@ -47,7 +47,7 @@ Distinct backend scopes, workspace folders, named targets, or provider
 boundaries produce distinct ids. The backend does not maintain a mutable
 allocation table for logical keys.
 
-Implementation lives in `pkg/services/factory_sessions/logicaltarget/`; the Factory
+Implementation lives in `pkg/services/factory_sessions/internal/logicaltarget/`; the Factory
 Session coordinator applies it when projecting live-session identities.
 
 ## Target normalization (behavioral rules)
@@ -266,9 +266,9 @@ remap, or default-alias behavior.
 
 | Area | Primary packages / tests |
 | --- | --- |
-| Target normalization | `pkg/services/factory_sessions/logicaltarget/normalize_test.go`, `pkg/services/factory_sessions/logicaltarget/derive_key_test.go`, `pkg/services/factory_sessions/logicaltarget/api_target_test.go` |
-| Key derivation stability | `pkg/services/factory_sessions/logicaltarget/derive_key_test.go`, `pkg/services/factory_sessions/controlplane/read_test.go` |
-| API resolution / sync preflight | `pkg/services/factory_sessions/controlplane/sync_preflight_test.go`, `pkg/transports/http/contracttests/openapi_contract_surface_test.go` |
+| Target normalization | `pkg/services/factory_sessions/internal/logicaltarget/normalize_test.go`, `pkg/services/factory_sessions/internal/logicaltarget/derive_key_test.go`, `pkg/services/factory_sessions/internal/logicaltarget/api_target_test.go` |
+| Key derivation stability | `pkg/services/factory_sessions/internal/logicaltarget/derive_key_test.go`, `pkg/services/factory_sessions/internal/controlplane/read_test.go` |
+| API resolution / sync preflight | `pkg/services/factory_sessions/internal/controlplane/sync_preflight_test.go`, `pkg/transports/http/contracttests/openapi_contract_surface_test.go` |
 | Public contract fields | `api/components/schemas/api/FactorySessionLogicalTarget.yaml`, `api/components/schemas/api/FactorySessionStreamIdentity.yaml`, `api/components/schemas/api/FactorySessionSyncPreflightResponse.yaml`; regenerate with `make generate-api` |
 | Dashboard preflight decisions | `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`, `ui/src/features/dashboard/lib/preflight/dashboard-session-sync-preflight.test.ts` |
 | Guarded checkpoint restore, remap, and recovery | `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx` |
@@ -283,7 +283,7 @@ remap, or default-alias behavior.
 Focused backend verification:
 
 ```bash
-go test ./pkg/services/factory_sessions/logicaltarget/... ./pkg/services/factory_sessions/controlplane ./pkg/services/factory_sessions/runtimebinding -count=1
+go test ./pkg/services/factory_sessions/internal/logicaltarget/... ./pkg/services/factory_sessions/internal/controlplane ./pkg/services/factory_sessions/internal/runtimebinding -count=1
 ```
 
 Focused frontend verification:

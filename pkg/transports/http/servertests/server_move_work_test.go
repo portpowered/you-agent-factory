@@ -172,7 +172,7 @@ func successfulMoveWorkAPI(t *testing.T, wantSessionID, workID, stateName, reque
 }
 
 func newMoveWorkTestServer(role moveWorkAPI) *api.Server {
-	return api.NewServer(
+	return newAPIServerFromRoles(
 		nil, nil, nil, nil, role, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)

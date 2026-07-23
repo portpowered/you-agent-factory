@@ -26,7 +26,7 @@ func newWorkReadProtocolServer(role strictWorkAPIFake) *Server {
 }
 
 func newRuntimeStatusTestServer(status factoryruntime.FactoryStatus) *Server {
-	return NewServer(
+	return newServerFromRoles(
 		nil,
 		strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
 			if sessionID != "" {

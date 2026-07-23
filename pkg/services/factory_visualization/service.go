@@ -11,7 +11,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -56,7 +55,7 @@ type ErrorReporter func(error)
 // RuntimeFactory constructs one inert visualization lifecycle for a selected
 // Factory Session runtime. Wire injects this operation into runtime assembly.
 type RuntimeFactory func(
-	factorysessions.RuntimeReader,
+	RuntimeReader,
 	recordings.ProjectionService,
 	Clock,
 	Sink,

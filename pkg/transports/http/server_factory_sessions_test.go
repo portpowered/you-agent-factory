@@ -24,6 +24,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"go.uber.org/zap"
@@ -35,7 +36,7 @@ func newLiveSessionTestServer(sessions apisurface.LiveSessionAPI) *Server {
 }
 
 type httpRequestPreparationFake struct {
-	factorysessions.RequestPreparation
+	factorysessionshttp.RequestPreparation
 }
 
 func (httpRequestPreparationFake) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
@@ -79,11 +80,11 @@ func newFactorySessionRolesTestServer(
 		status = statusRoles[0]
 	}
 	workRead, _ := workAPI.(apisurface.WorkReadAPI)
-	var liveLister factorysessions.LiveSessionListReader
+	var liveLister factorysessionshttp.LiveSessionListReader
 	if sessions != nil {
 		liveLister = httpLiveSessionListReader{sessions: sessions}
 	}
-	return NewServer(
+	return newServerFromRoles(
 		nil, status, sessions, workAPI, workRead, invocation, &modelshttp.Handler{},
 		definitions, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, liveLister, nil, nil,
@@ -978,11 +979,19 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-		return factoryapi.OpenFactorySessionResponse{}, factorysessions.NewValidationError(
-			factorysessions.ValidationReasonMissing,
-			"folderPath",
-			errors.New("folder validation failed"),
-		)
+		return factoryapi.OpenFactorySessionResponse{}, apiTestSessionValidationError{
+			message: "folder validation failed",
+			targets: []factoryapi.FactoryValidationTarget{{
+				Code:     "factory.session.field.missing",
+				Severity: factoryapi.FactoryValidationSeverityError,
+				Message:  "folder validation failed",
+				Subject: factoryapi.FactoryValidationSubject{
+					Type:     factoryapi.FactoryValidationSubjectTypeFactory,
+					Id:       "folderPath",
+					Location: factoryapi.FactoryValidationSubjectLocationReference,
+				},
+			}},
+		}
 	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/missing","validateOnly":true}`))

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -119,19 +119,14 @@ func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
 		Targets: []factorysessions.Target{{
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		}},
-	}
-	session := &factorysessions.LiveSession{
-		ID: "session-beta",
-		SessionState: factorysessions.SessionState{
-			FactoryDir:       "/workspace/factory/beta",
-			FolderPath:       "/workspace",
-			ExecutionBaseDir: "/workspace",
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID: "session-beta", FactoryDir: "/workspace/factory/beta",
+			FolderPath: "/workspace", Project: "demo",
+			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		},
-		Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
-		Project: "demo",
 	}
 
-	response := factorysession.OpenResultToAPI(result, session)
+	response := factorysession.OpenResultToAPI(result)
 	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
 		response.FolderPath == nil || *response.FolderPath != "/workspace" {
 		t.Fatalf("open hints = %#v, want init hint and trimmed folder", response)
@@ -186,33 +181,22 @@ func TestSyncPreflightResultToAPI_PreservesReconnectDecisionAndIdentity(t *testi
 func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testing.T) {
 	t.Parallel()
 
-	defaultSession := &factorysessions.LiveSession{
-		ID: factorysessions.DefaultSessionID,
-		SessionState: factorysessions.SessionState{
-			FactoryDir:       "/factories/default",
-			FolderPath:       "/workspace",
-			ExecutionBaseDir: "/workspace",
-		},
-		Target:                  factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		IsDefault:               true,
-		Project:                 "default-project",
-		RuntimeFactorySessionID: "11111111-1111-4111-8111-111111111111",
+	defaultSession := &factorysessions.ScopedLiveSessionSummary{
+		ID: factorysessions.DefaultSessionID, FactoryDir: "/factories/default",
+		FolderPath: "/workspace", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		IsDefault: true, Project: "default-project",
 	}
-	namedSession := &factorysessions.LiveSession{
-		ID: "session-beta",
-		SessionState: factorysessions.SessionState{
-			FactoryDir:       "/factories/beta",
-			FolderPath:       "/workspace",
-			ExecutionBaseDir: "/workspace",
-		},
+	namedSession := &factorysessions.ScopedLiveSessionSummary{
+		ID: "session-beta", FactoryDir: "/factories/beta", FolderPath: "/workspace",
 		Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
 		Project: "beta-project",
 	}
+	defaultRuntimeID := "11111111-1111-4111-8111-111111111111"
 	summaries := []factoryapi.FactorySessionSummary{
-		factorysession.SessionSummaryToAPI(defaultSession),
-		factorysession.SessionSummaryToAPI(namedSession),
+		factorysession.SessionSummaryToAPI(defaultSession, defaultRuntimeID),
+		factorysession.SessionSummaryToAPI(namedSession, namedSession.ID),
 	}
-	if !summaries[0].IsDefault || summaries[0].Id != factorysessions.CanonicalFactorySessionID(defaultSession) {
+	if !summaries[0].IsDefault || summaries[0].Id != defaultRuntimeID {
 		t.Fatalf("first summary = %#v, want canonical default session first", summaries[0])
 	}
 	if summaries[1].Project != "beta-project" || summaries[1].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
@@ -235,15 +219,17 @@ func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testin
 func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
 	t.Parallel()
 
-	withRuntime := &factorysessions.LiveSession{ID: "session-runtime", Project: "runtime-project"}
-	fallback := &factorysessions.LiveSession{ID: "session-fallback", Project: "fallback-project"}
+	withRuntime := &factorysessions.ScopedLiveSessionSummary{ID: "session-runtime", Project: "runtime-project"}
+	fallback := &factorysessions.ScopedLiveSessionSummary{ID: "session-fallback", Project: "fallback-project"}
 	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
 		{
-			Context:          factorysessions.ProjectionContext{Session: withRuntime},
+			Context: factorysessions.ProjectionContext{
+				Session: withRuntime, FactorySessionID: withRuntime.ID,
+			},
 			Runtime:          factorysessions.RuntimeProjection{Status: "IDLE"},
 			RuntimeAvailable: true,
 		},
-		{Context: factorysessions.ProjectionContext{Session: fallback}},
+		{Context: factorysessions.ProjectionContext{Session: fallback, FactorySessionID: fallback.ID}},
 	})
 
 	if len(response.Sessions) != 2 {
@@ -282,9 +268,9 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		t.Fatalf("LogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
 	}
 
-	session := &factorysessions.LiveSession{
-		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
-		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
+	session := &factorysessions.ScopedLiveSessionSummary{
+		FolderPath: t.TempDir(),
+		Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
 	}
 	target, err = factorysession.LogicalTargetFromSession(normalize, "scope-1", session)
 	if err != nil {
@@ -294,9 +280,9 @@ func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 		t.Fatalf("target = %#v", target)
 	}
 
-	invalidSession := &factorysessions.LiveSession{
-		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
-		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
+	invalidSession := &factorysessions.ScopedLiveSessionSummary{
+		FolderPath: t.TempDir(),
+		Target:     factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
 	}
 	if _, err := factorysession.LogicalTargetFromSession(normalize, "scope-1", invalidSession); err == nil {
 		t.Fatal("LogicalTargetFromSession(invalid named target) = nil, want validation error")

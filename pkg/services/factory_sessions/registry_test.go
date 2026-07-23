@@ -7,7 +7,9 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
 var registryResponseEventIdentity atomic.Uint64
@@ -21,8 +23,8 @@ func registrySessionID() string { return "550e8400-e29b-41d4-a716-446655440000" 
 func TestRegistry_UpsertSelectAndRemove(t *testing.T) {
 	registry := sessionregistry.New()
 
-	defaultSession := NewLiveSession(DefaultSessionID, "/factories/alpha", "/workspace", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha", platformclock.Real{}, registrySessionID, registryResponseEventID)
-	betaSession := NewLiveSession("session-beta", "/factories/beta", "/workspace", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta", platformclock.Real{}, registrySessionID, registryResponseEventID)
+	defaultSession := livesession.New(DefaultSessionID, "/factories/alpha", "/workspace", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha", platformclock.Real{}, registrySessionID, registryResponseEventID)
+	betaSession := livesession.New("session-beta", "/factories/beta", "/workspace", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta", platformclock.Real{}, registrySessionID, registryResponseEventID)
 
 	registry.Upsert(defaultSession, true)
 	if got := registry.Current(); got != defaultSession {
@@ -72,7 +74,7 @@ func TestRegistry_SelectUnknownReturnsFalse(t *testing.T) {
 }
 
 // The following compatibility-only cases prove retained selector acceptance.
-// Canonical live identity is covered by CanonicalFactorySessionID and UUID tests.
+// Canonical live identity is covered by the owner-private live-session tests.
 func TestCompatibilityOnlyIsDefaultSessionSelector(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -87,7 +89,7 @@ func TestCompatibilityOnlyIsDefaultSessionSelector(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if got := IsDefaultSessionSelector(tc.sessionID); got != tc.want {
+			if got := logicaltarget.IsLiveSessionDefaultSelector(tc.sessionID); got != tc.want {
 				t.Fatalf("IsDefaultSessionSelector(%q) = %t, want %t", tc.sessionID, got, tc.want)
 			}
 		})
@@ -98,7 +100,7 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 	registry := sessionregistry.New()
 	defaultID := "550e8400-e29b-41d4-a716-446655440001"
 	betaID := "550e8400-e29b-41d4-a716-446655440002"
-	registry.Upsert(NewLiveSession(
+	registry.Upsert(livesession.New(
 		defaultID,
 		"/factories/alpha",
 		"/workspace",
@@ -111,7 +113,7 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 		registrySessionID,
 		registryResponseEventID,
 	), true)
-	registry.Upsert(NewLiveSession(
+	registry.Upsert(livesession.New(
 		betaID,
 		"/factories/beta",
 		"/workspace",
@@ -148,22 +150,22 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 }
 
 func TestLogicalSessionKeyID_DefaultTargetUsesStableKey(t *testing.T) {
-	session := &LiveSession{
-		SessionState: SessionState{
+	session := &livesession.LiveSession{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{
 			Kind: TargetKindDefault,
 		},
 	}
-	if got := LogicalSessionKeyID(session); got != "/workspace/root::default::" {
+	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::default::" {
 		t.Fatalf("LogicalSessionKeyID(default) = %q, want /workspace/root::default::", got)
 	}
 }
 
 func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
-	session := &LiveSession{
-		SessionState: SessionState{
+	session := &livesession.LiveSession{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{
@@ -171,23 +173,23 @@ func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
 			Name: "beta",
 		},
 	}
-	if got := LogicalSessionKeyID(session); got != "/workspace/root::named::beta" {
+	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::named::beta" {
 		t.Fatalf("LogicalSessionKeyID(named) = %q, want /workspace/root::named::beta", got)
 	}
 }
 
 func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T) {
 	registry := sessionregistry.New()
-	defaultSession := &LiveSession{
+	defaultSession := &livesession.LiveSession{
 		ID: "session-default",
-		SessionState: SessionState{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{Kind: TargetKindDefault},
 	}
-	namedSession := &LiveSession{
+	namedSession := &livesession.LiveSession{
 		ID: "session-beta",
-		SessionState: SessionState{
+		SessionState: livesession.SessionState{
 			FolderPath: "/workspace/root",
 		},
 		Target: TargetRef{Kind: TargetKindNamed, Name: "beta"},
@@ -203,54 +205,5 @@ func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T)
 	}
 	if got := registry.FindByLogicalSessionKeyID("/workspace/other::default::"); got != nil {
 		t.Fatalf("FindByLogicalSessionKeyID(missing) = %#v, want nil", got)
-	}
-}
-
-func TestCanonicalFactorySessionID_PrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
-	session := &LiveSession{
-		ID:                      DefaultSessionID,
-		IsDefault:               true,
-		RuntimeFactorySessionID: "550e8400-e29b-41d4-a716-446655440000",
-	}
-
-	if got := CanonicalFactorySessionID(session); got != session.RuntimeFactorySessionID {
-		t.Fatalf("CanonicalFactorySessionID() = %q, want runtime id %q", got, session.RuntimeFactorySessionID)
-	}
-}
-
-func TestCanonicalFactorySessionID_FallsBackToRegistryID(t *testing.T) {
-	session := &LiveSession{ID: "session-beta"}
-
-	if got := CanonicalFactorySessionID(session); got != "session-beta" {
-		t.Fatalf("CanonicalFactorySessionID() = %q, want session-beta", got)
-	}
-}
-
-func TestEnsureRuntimeFactorySessionID_AssignsUUIDForDefaultAlias(t *testing.T) {
-	session := &LiveSession{ID: DefaultSessionID, IsDefault: true}
-
-	if err := EnsureRuntimeFactorySessionID(session, registrySessionID); err != nil {
-		t.Fatalf("EnsureRuntimeFactorySessionID: %v", err)
-	}
-	if session.RuntimeFactorySessionID == "" {
-		t.Fatal("RuntimeFactorySessionID = empty, want UUID")
-	}
-	if !IsUUIDFactorySessionID(session.RuntimeFactorySessionID) {
-		t.Fatalf("RuntimeFactorySessionID = %q, want UUID", session.RuntimeFactorySessionID)
-	}
-}
-
-func TestEnsureRuntimeFactorySessionID_IsIdempotent(t *testing.T) {
-	session := &LiveSession{
-		ID:                      DefaultSessionID,
-		IsDefault:               true,
-		RuntimeFactorySessionID: "550e8400-e29b-41d4-a716-446655440000",
-	}
-
-	if err := EnsureRuntimeFactorySessionID(session, registrySessionID); err != nil {
-		t.Fatalf("EnsureRuntimeFactorySessionID: %v", err)
-	}
-	if session.RuntimeFactorySessionID != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("RuntimeFactorySessionID = %q, want preserved UUID", session.RuntimeFactorySessionID)
 	}
 }

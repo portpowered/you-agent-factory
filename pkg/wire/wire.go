@@ -13,12 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening"
-	sessionexecutionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	invocationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/invocation"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -50,7 +45,8 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
-	factorysessions.NewRequestPreparation,
+	factorysessionwire.NewRequestPreparation,
+	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
 	provideOperatorSettingsFileSystem,
@@ -67,7 +63,7 @@ var servicesSet = wire.NewSet(
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
-	processlifecycle.NewLifecyclePlanOperation,
+	factorysessionwire.NewLifecyclePlanOperation,
 	provideFactoryVisualizationFactory,
 	provideResponsePresentation,
 	provideWorkContentStagingService,
@@ -91,6 +87,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionsWorkingDirectory,
 	provideFactorySessionExecutionOpeningFileSystem,
 	provideFactorySessionDirectoryInspection,
+	provideFactorySessionResolveLogicalTargetSymlinks,
 	provideFactorySessionContractFixtureReader,
 	provideFactorySessionInvocationInputReader,
 	provideFactorySessionReplayRecordingReader,
@@ -121,7 +118,7 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationFactory,
-	provideFactorySessionsFactory,
+	provideFactorySessionsService,
 	providePortableRecordingWriter,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
@@ -184,12 +181,13 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimeservice.NewRuntimeFactory,
 	factoryruntimeservice.NewAssembly,
-	wire.Bind(new(runtimeopening.FactoryRuntimeAssembler), new(*factoryruntimeservice.Assembly)),
+	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimeservice.Assembly)),
+	wire.Struct(new(factorysessionwire.RuntimeOpeningDependencies), "*"),
 	provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
-	runtimeopening.NewFactory,
+	factorysessionwire.NewRuntimeOpeningFactory,
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -288,24 +286,27 @@ var BundleSet = wire.NewSet(
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
 	provideRuntimeInputResolver,
-	applicationopening.New,
+	factorysessionwire.NewApplicationService,
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	invocationopening.NewOperation,
+	factorysessionwire.NewInvocationOperation,
 	initializerapplication.NewStdioRunnerBuilder,
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory,
-	wire.Bind(new(factorysessions.StdioExecutionOpening), new(*sessionexecutionopening.Factory)),
-	sessionexecutionopening.NewStdioOpeningService,
-	wire.Bind(new(factorysessions.StdioOpeningOperation), new(*sessionexecutionopening.StdioOpeningService)),
+	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
+	factorysessionwire.NewStdioOpeningService,
+	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
-	sessionexecutionopening.NewDirectJavaScriptRunOperation,
+	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
-	sessionexecutionopening.NewServiceBuilder,
+	factorysessionwire.NewExecutionServiceBuilder,
+	provideCLIExecutionServiceBuilder,
+	provideRunInvocationOperation,
+	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
 	initializerapplication.NewProcess,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),

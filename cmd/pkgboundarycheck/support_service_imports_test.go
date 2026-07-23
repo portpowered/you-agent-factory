@@ -16,7 +16,7 @@ func TestRunRejectsReusableSupportImplementationImportAndAllowsRootAndEdgeContra
 	makeDir(t, repoRoot, "pkg/root")
 	writeGoSourceFile(t, repoRoot, "internal/testutil/hidden_runtime.go", `package testutil
 
-import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 
 var OpenRuntime = execution.New
 `)
@@ -40,7 +40,7 @@ var ProviderEdge inference.Provider
 	}
 	got := stderr.String()
 	for _, want := range []string{
-		"prohibited reusable support service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution (internal/testutil/hidden_runtime.go)",
+		"prohibited reusable support service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution (internal/testutil/hidden_runtime.go)",
 		"repository-wide reusable test support is not an application composition root",
 		"use the owning service root contract, a typed edge fake, package-local owner coverage, or root.BuildProcess",
 	} {
@@ -60,7 +60,7 @@ func TestRunRejectsFunctionalReusableSupportImplementationImport(t *testing.T) {
 	makeDir(t, repoRoot, "pkg/root")
 	writeGoSourceFile(t, repoRoot, "tests/functional/internal/support/hidden_runtime.go", `package support
 
-import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 
 var OpenRuntime = execution.New
 `)
@@ -72,7 +72,7 @@ var OpenRuntime = execution.New
 	}
 	if got := stderr.String(); !strings.Contains(
 		got,
-		"prohibited reusable support service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution (tests/functional/internal/support/hidden_runtime.go)",
+		"prohibited reusable support service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution (tests/functional/internal/support/hidden_runtime.go)",
 	) {
 		t.Fatalf("run() stderr = %q, want functional reusable-support diagnostic", got)
 	}

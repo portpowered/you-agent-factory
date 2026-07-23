@@ -85,7 +85,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/sessions/execution/fixtures` | 5 | 3 | directive only |
 | `pkg/factory/contracts` | 3 | 2 | directive + coverage baseline |
 | `pkg/services/provider_sessions/cursor` | 10 | 5 | directive + coverage baseline |
-| `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
+| `pkg/services/factory_sessions/transports/mcp` | 9 | 4 | directive + coverage baseline |
 | `pkg/factory/replay` | 2 | 2 | directive + coverage baseline |
 | `pkg/factory/replay/configtests` | 3 | 3 | directive only |
 | `pkg/runtimehost` | 5 | 3 | directive + coverage baseline |
@@ -109,7 +109,7 @@ directive occurrence in the focused scan:
 - `pkg/transports/cli/default`
 - `pkg/transports/cli/models`
 - `pkg/transports/cli/session`
-- `pkg/transports/cli/sessionexecution`
+- `pkg/services/factory_sessions/transports/cli/sessionexecution`
 - `pkg/transports/cli/factoryrun`
 - `pkg/config/inboxgitkeep`
 - `pkg/services/workers/interface`
@@ -472,21 +472,21 @@ Owner: `pkg/services/provider_sessions/cursor` package maintainers. Status: **di
 | `pkg/services/provider_sessions/cursor/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
 | `pkg/services/provider_sessions/cursor/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
 
-### `pkg/transports/mcp/factorysession`
+### `pkg/services/factory_sessions/transports/mcp`
 
-Owner: `pkg/transports/mcp/factorysession` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/services/factory_sessions/transports/mcp` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/transports/mcp/factorysession/execution_test.go:45` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus` | T | T gate |
-| `pkg/transports/mcp/factorysession/execution_test.go:135` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult` | T | T gate |
-| `pkg/transports/mcp/factorysession/execution_test.go:279` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession` | T | T gate |
-| `pkg/transports/mcp/factorysession/execution_test.go:336` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult` | T | T gate |
-| `pkg/transports/mcp/factorysession/failure_paths_test.go:52` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails` | T | T gate |
-| `pkg/transports/mcp/factorysession/inspection.go:157` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `invokeLifecycleControl` | R | R gate |
-| `pkg/transports/mcp/factorysession/inspection_test.go:216` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries` | T | T gate |
-| `pkg/transports/mcp/factorysession/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
-| `pkg/transports/mcp/factorysession/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/execution_test.go:45` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/execution_test.go:135` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/execution_test.go:279` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/execution_test.go:336` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/failure_paths_test.go:52` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/inspection.go:157` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `invokeLifecycleControl` | R | R gate |
+| `pkg/services/factory_sessions/transports/mcp/inspection_test.go:216` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
+| `pkg/services/factory_sessions/transports/mcp/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
 
 ### `pkg/factory/replay`
 

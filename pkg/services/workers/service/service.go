@@ -29,7 +29,7 @@ import (
 
 // Service is the canonical Worker execution application service.
 type Service struct {
-	sessions                          factorysessions.CurrentRuntimeResolver
+	sessions                          CurrentRuntimeResolver
 	models                            models.Service
 	providerFactory                   *workerprovider.Factory
 	scriptFactory                     *workerexecutor.ScriptFactory
@@ -59,6 +59,10 @@ type Service struct {
 	executableLocator                 platformprocess.ExecutableLocator
 }
 
+type CurrentRuntimeResolver interface {
+	CurrentRuntime() *factorysessions.LiveRuntime
+}
+
 // ModelInvocationExecutor builds a direct executor for one model-bound Worker.
 type ModelInvocationExecutor func(
 	interfaces.RuntimeConfigLookup,
@@ -74,7 +78,7 @@ type workflowContextProvider interface {
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func New(
-	sessions factorysessions.CurrentRuntimeResolver,
+	sessions CurrentRuntimeResolver,
 	modelService models.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,

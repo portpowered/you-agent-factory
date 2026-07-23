@@ -33,15 +33,12 @@ import (
 	factorypackages "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening"
-	factorysessioncursorpersistence "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors/persistence"
-	factorysessionruntimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimehosting"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -50,7 +47,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
@@ -109,7 +105,7 @@ func provideFactorySessionsWorkingDirectory(
 
 func provideFactorySessionExecutionOpeningFileSystem(
 	edges serviceedges.Edges,
-) factorysessions.ExecutionOpeningFileSystem {
+) factorysessionwire.ExecutionOpeningFileSystem {
 	if edges.FactorySessionExecutionOpeningFileSystem != nil {
 		return edges.FactorySessionExecutionOpeningFileSystem
 	}
@@ -118,39 +114,39 @@ func provideFactorySessionExecutionOpeningFileSystem(
 
 func provideFactorySessionDirectoryInspection(
 	edges serviceedges.Edges,
-) factorysessions.DirectoryInspection {
+) factorysessionwire.DirectoryInspection {
 	if edges.FactorySessionDirectoryInspection != nil {
 		return edges.FactorySessionDirectoryInspection
 	}
 	return platformfilesystem.Local{}
 }
 
-func provideFactorySessionContractFixtureReader(edges serviceedges.Edges) fileeffects.ContractFixtureReader {
+func provideFactorySessionContractFixtureReader(edges serviceedges.Edges) factorysessionwire.ContractFixtureReader {
 	if edges.FactorySessionContractFixtureReader != nil {
 		return edges.FactorySessionContractFixtureReader
 	}
-	return fileeffects.ContractFixtureReader(platformfilesystem.Local{}.ReadFile)
+	return factorysessionwire.ContractFixtureReader(platformfilesystem.Local{}.ReadFile)
 }
 
-func provideFactorySessionInvocationInputReader(edges serviceedges.Edges) fileeffects.InvocationInputReader {
+func provideFactorySessionInvocationInputReader(edges serviceedges.Edges) factorysessionwire.InvocationInputReader {
 	if edges.FactorySessionInvocationInputReader != nil {
 		return edges.FactorySessionInvocationInputReader
 	}
-	return fileeffects.InvocationInputReader(platformfilesystem.Local{}.ReadFile)
+	return factorysessionwire.InvocationInputReader(platformfilesystem.Local{}.ReadFile)
 }
 
-func provideFactorySessionReplayRecordingReader(edges serviceedges.Edges) fileeffects.ReplayRecordingReader {
+func provideFactorySessionReplayRecordingReader(edges serviceedges.Edges) factorysessionwire.ReplayRecordingReader {
 	if edges.FactorySessionReplayRecordingReader != nil {
 		return edges.FactorySessionReplayRecordingReader
 	}
-	return fileeffects.ReplayRecordingReader(platformfilesystem.Local{}.ReadFile)
+	return factorysessionwire.ReplayRecordingReader(platformfilesystem.Local{}.ReadFile)
 }
 
-func provideFactorySessionInitialWorkReader(edges serviceedges.Edges) fileeffects.InitialWorkReader {
+func provideFactorySessionInitialWorkReader(edges serviceedges.Edges) factorysessionwire.InitialWorkReader {
 	if edges.FactorySessionInitialWorkReader != nil {
 		return edges.FactorySessionInitialWorkReader
 	}
-	return fileeffects.InitialWorkReader(platformfilesystem.Local{}.ReadFile)
+	return factorysessionwire.InitialWorkReader(platformfilesystem.Local{}.ReadFile)
 }
 
 func provideFactorySessionResolveHomeDirectory(
@@ -162,9 +158,18 @@ func provideFactorySessionResolveHomeDirectory(
 	return os.UserHomeDir
 }
 
+func provideFactorySessionResolveLogicalTargetSymlinks(
+	edges serviceedges.Edges,
+) factorysessions.LogicalTargetResolveSymlinks {
+	if edges.FactorySessionResolveLogicalTargetSymlinks != nil {
+		return edges.FactorySessionResolveLogicalTargetSymlinks
+	}
+	return filepath.EvalSymlinks
+}
+
 func provideFactorySessionCursorPersistenceFileSystem(
 	edges serviceedges.Edges,
-) factorysessions.CursorPersistenceFileSystem {
+) factorysessionwire.CursorPersistenceFileSystem {
 	if edges.FactorySessionCursorPersistenceFileSystem != nil {
 		return edges.FactorySessionCursorPersistenceFileSystem
 	}
@@ -173,27 +178,27 @@ func provideFactorySessionCursorPersistenceFileSystem(
 
 func provideFactorySessionCursorCreateTemporaryFile(
 	edges serviceedges.Edges,
-) factorysessions.CursorPersistenceCreateTemporaryFile {
+) factorysessionwire.CursorPersistenceCreateTemporaryFile {
 	if edges.FactorySessionCursorCreateTemporaryFile != nil {
 		return edges.FactorySessionCursorCreateTemporaryFile
 	}
-	return func(dir, pattern string) (factorysessions.CursorPersistenceTemporaryFile, error) {
+	return func(dir, pattern string) (factorysessionwire.CursorPersistenceTemporaryFile, error) {
 		return os.CreateTemp(dir, pattern)
 	}
 }
 
 func provideFactorySessionCursorStoreFactory(
-	files factorysessions.CursorPersistenceFileSystem,
-	createTemporaryFile factorysessions.CursorPersistenceCreateTemporaryFile,
-) factorysessions.CursorStoreFactory {
+	files factorysessionwire.CursorPersistenceFileSystem,
+	createTemporaryFile factorysessionwire.CursorPersistenceCreateTemporaryFile,
+) factorysessionwire.CursorStoreFactory {
 	return func(dir string) (factorysessions.CursorStore, error) {
-		return factorysessioncursorpersistence.NewFileStore(dir, files, createTemporaryFile)
+		return factorysessionwire.NewCursorFileStore(dir, files, createTemporaryFile)
 	}
 }
 
 func provideFactorySessionRuntimePersistenceFileSystem(
 	edges serviceedges.Edges,
-) factorysessions.RuntimePersistenceFileSystem {
+) factorysessionwire.RuntimePersistenceFileSystem {
 	if edges.FactorySessionRuntimePersistenceFileSystem != nil {
 		return edges.FactorySessionRuntimePersistenceFileSystem
 	}
@@ -201,10 +206,10 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 }
 
 func provideFactorySessionRuntimePersistenceStoreFactory(
-	files factorysessions.RuntimePersistenceFileSystem,
-) factorysessions.RuntimePersistenceStoreFactory {
-	return func(projectRoot string) (factorysessions.RuntimePersistenceStore, error) {
-		return factorysessionruntimepersist.NewProjectStore(projectRoot, files)
+	files factorysessionwire.RuntimePersistenceFileSystem,
+) factorysessionwire.RuntimePersistenceStoreFactory {
+	return func(projectRoot string) (factorysessionwire.RuntimePersistenceStore, error) {
+		return factorysessionwire.NewRuntimeProjectStore(projectRoot, files)
 	}
 }
 
@@ -282,8 +287,8 @@ func provideModelInvocationTimeout() factorysessions.ModelInvocationTimeout {
 }
 
 func provideModelInvocationOperation(
-	operation factorysessions.InvocationOperation,
-) factorysessions.ModelInvocationOperation {
+	operation factorysessionwire.InvocationOperation,
+) factorysessionwire.ModelInvocationOperation {
 	return operation
 }
 
@@ -307,21 +312,21 @@ func provideSystemInitializationService(
 	)
 }
 
-func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) runtimeopening.DurableExecutionFactory {
+func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,
 		session factorysessions.SessionRuntimeOpeningRequest,
-		root runtimeopening.RuntimeRoot,
+		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
 		provider workerprovider.Provider,
-		factory runtimeopening.FactorySessionExecutionFactory,
+		factory factorysessionwire.FactorySessionExecutionFactory,
 	) (factorysessions.ExecutionService, error) {
-		return runtimeopening.NewDurableExecution(loadOperatorConfig, definition, session, root, clock, provider, factory)
+		return factorysessionwire.NewDurableExecutionRuntime(loadOperatorConfig, definition, session, root, clock, provider, factory)
 	}
 }
 
-func provideWorkerExecutionFactory() runtimeopening.WorkerExecutionFactory {
-	return runtimeopening.NewWorkerExecution
+func provideWorkerExecutionFactory() factorysessionwire.WorkerExecutionFactory {
+	return factorysessionwire.NewWorkerExecutionRuntime
 }
 
 func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
@@ -346,19 +351,19 @@ func provideAPIServerStarter(edges serviceedges.Edges) (platformhttpserver.Start
 
 func provideRuntimeHostOperation(
 	starter platformhttpserver.Starter,
-) factorysessions.RuntimeHostOperation {
-	return runtimehosting.New(starter)
+) factorysessionwire.RuntimeHostOperation {
+	return factorysessionwire.NewRuntimeHostService(starter)
 }
 
 func provideProcessRuntimeFactory(
-	host factorysessions.RuntimeHostOperation,
-) (factorysessions.ProcessRuntimeFactory, error) {
-	return processlifecycle.NewFactory(host)
+	host factorysessionwire.RuntimeHostOperation,
+) (factorysessionwire.ProcessRuntimeFactory, error) {
+	return factorysessionwire.NewProcessLifecycleFactory(host)
 }
 
 func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
 	return func(
-		reader factorysessions.RuntimeReader,
+		reader factoryvisualization.RuntimeReader,
 		projections recordings.ProjectionService,
 		clock factoryvisualization.Clock,
 		sink factoryvisualization.Sink,
@@ -521,12 +526,12 @@ func provideApplicationRuntimeAdapter(
 	visualizationFactory factoryvisualization.RuntimeFactory,
 	httpHandler *httpapplication.Handler,
 	newRunner lifecycle.RunnerFactory,
-) (applicationopening.RuntimeAdapter, error) {
+) (factorysessionwire.RuntimeAdapter, error) {
 	if visualizationFactory == nil || httpHandler == nil || newRunner == nil {
 		return nil, errors.New("Factory visualization, HTTP handler, and lifecycle component operations are required")
 	}
 	return func(
-		opened factorysessions.OpenedApplicationRuntime,
+		opened factorysessionwire.OpenedApplicationRuntime,
 		edges serviceedges.Edges,
 		sink factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
@@ -569,15 +574,15 @@ func provideFixtureStdioApplicationBuilder(
 	build initializerapplication.StdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
-	prepare factorysessions.RequestPreparation,
+	prepare factorysessionwire.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-) factorysessions.FixtureStdioApplicationBuilder {
+) factorysessionwire.FixtureStdioApplicationBuilder {
 	return func(
 		ctx context.Context,
 		execution factorysessions.ExecutionService,
 		input io.Reader,
 		output io.Writer,
-	) (factorysessions.StdioApplication, error) {
+	) (factorysessionwire.StdioApplication, error) {
 		openSession := initializer.StdioSessionOpener(func(
 			sessionCtx context.Context,
 			sessionInput io.Reader,
@@ -603,14 +608,14 @@ func provideRuntimeStdioApplicationBuilder(
 	build initializerapplication.OpenedStdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
-	prepare factorysessions.RequestPreparation,
-) factorysessions.RuntimeStdioApplicationBuilder {
+	prepare factorysessionwire.RequestPreparation,
+) factorysessionwire.RuntimeStdioApplicationBuilder {
 	return func(
 		ctx context.Context,
-		opened factorysessions.OpenedExecutionRuntime,
+		opened factorysessionwire.OpenedExecutionRuntime,
 		input io.Reader,
 		output io.Writer,
-	) (factorysessions.StdioApplication, error) {
+	) (factorysessionwire.StdioApplication, error) {
 		neutral := initializer.OpenedStdioApplication{
 			OpenSession: func(
 				sessionCtx context.Context,
@@ -653,7 +658,7 @@ func stdioLifecycleOpening(
 }
 
 type stdioApplicationOpener struct {
-	open factorysessions.StdioOpeningOperation
+	open factorysessionwire.StdioOpeningOperation
 }
 
 func (adapter stdioApplicationOpener) OpenStdio(
@@ -671,7 +676,7 @@ func (adapter stdioApplicationOpener) OpenStdio(
 }
 
 func provideStdioApplicationOpener(
-	open factorysessions.StdioOpeningOperation,
+	open factorysessionwire.StdioOpeningOperation,
 ) (processcontract.StdioApplicationOpener, error) {
 	if open == nil {
 		return nil, errors.New("Factory Session stdio opening operation is required")
@@ -692,7 +697,7 @@ func provideRunOpener(
 		ctx context.Context,
 		cfg runcli.RunConfig,
 		buildRunner runcli.RuntimeRunnerBuilder,
-		invocation factorysessions.InvocationOperation,
+		invocation runcli.InvocationOperation,
 		presentation factoryvisualization.ResponsePresentation,
 	) (*runcli.Operation, error) {
 		return runcli.Open(
@@ -702,12 +707,24 @@ func provideRunOpener(
 	}
 }
 
+func provideRunInvocationOperation(
+	invocation factorysessionwire.InvocationOperation,
+) runcli.InvocationOperation {
+	return invocation
+}
+
+func provideModelsCLIInvocationOperation(
+	invocation factorysessionwire.InvocationOperation,
+) modelscli.InvocationOperation {
+	return invocation
+}
+
 func provideRunSelectionFactory(
 	open runcli.Opener,
 	buildRunner runcli.RuntimeRunnerBuilder,
-	invocation factorysessions.InvocationOperation,
+	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	directJavaScript factorysessions.DirectJavaScriptRunOperation,
+	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
 		open, buildRunner, invocation, presentation, directJavaScript,
@@ -716,14 +733,14 @@ func provideRunSelectionFactory(
 
 func provideRunRuntimeRunnerBuilder(
 	build initializer.RuntimeRunnerBuilder,
-	open *applicationopening.Service,
+	open *factorysessionwire.ApplicationService,
 ) (runcli.RuntimeRunnerBuilder, error) {
 	if build == nil || open == nil {
 		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
 	}
 	return func(
 		ctx context.Context,
-		request factorysessions.ApplicationOpeningRequest,
+		request factorysessionwire.ApplicationOpeningRequest,
 		logger *zap.Logger,
 		sink factoryvisualization.Sink,
 	) (initializer.LocalRuntimeRunner, error) {
@@ -740,25 +757,24 @@ func provideRunRuntimeRunnerBuilder(
 	}, nil
 }
 
+func provideFactorySessionHTTPRequestPreparation(
+	prepare factorysessionwire.RequestPreparation,
+) factorysessionshttp.RequestPreparation {
+	return prepare
+}
+
 func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
-	return func(request factorysessions.WorkStopSummaryRequest) *factorysessions.StopSummary {
-		return factorysessions.ProjectWorkStopSummary(
-			request.SessionID,
-			request.Snapshot,
-			request.Token,
-			request.SessionStopSummary,
-		)
-	}
+	return factorysessionwire.NewWorkStopSummaryProjector()
 }
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 	return factoryvisualization.NewResponsePresentation()
 }
 
-func provideRuntimeOpener(factory *runtimeopening.Factory) applicationopening.RuntimeOpener {
+func provideRuntimeOpener(factory *factorysessionwire.RuntimeOpeningFactory) factorysessionwire.RuntimeOpener {
 	return factory
 }
 
-func provideDirectJavaScriptSyncRunner() factorysessions.DirectJavaScriptSyncRunner {
+func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
 	return sessionexecutioncli.RunNormalizedSync
 }

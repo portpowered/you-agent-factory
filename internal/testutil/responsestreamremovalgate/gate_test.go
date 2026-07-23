@@ -82,7 +82,7 @@ func TestAssertLegacyCompatMapperDeleted_RejectsRevivedCompatImport(t *testing.T
 	}
 	badSource := `package example
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/compat"
+import "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/compat"
 `
 	if err := os.WriteFile(filepath.Join(pkgDir, "bad_import.go"), []byte(badSource), 0o644); err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestAssertPublicTransportLayersDoNotImportLegacyCompat_RejectsCompatImport(
 	repoRoot := t.TempDir()
 	badSource := `package run
 
-import _ "github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream/compat"
+import _ "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/compat"
 
 `
 	writeTempProductionSurface(t, repoRoot, "pkg/transports/cli/run/bad_import.go", badSource)

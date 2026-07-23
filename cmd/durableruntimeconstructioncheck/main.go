@@ -36,27 +36,27 @@ var applicationCompositionCalls = map[string]struct{}{
 }
 
 var approvedApplicationCompositionFiles = map[string]struct{}{
-	"pkg/initializer/application/entrypoints.go":                {},
-	"pkg/services/factory_sessions/executionopening/factory.go": {},
-	"pkg/services/factory_sessions/execution/service.go":        {},
-	"pkg/services/factory_sessions/service/execution.go":        {},
+	"pkg/initializer/application/entrypoints.go":                                                         {},
+	"pkg/services/factory_sessions/internal/executionopening/factory.go":                                 {},
+	"pkg/services/factory_sessions/internal/execution/service.go":                                        {},
+	"pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go": {},
 }
 
 var javascriptLiveChildRoots = []string{
-	"pkg/services/factory_sessions/execution/livechild/",
+	"pkg/services/factory_sessions/internal/execution/livechild/",
 	"pkg/orchestrators/javascript/",
 }
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
-	"pkg/services/factory_sessions/execution/service.go": {},
+	"pkg/services/factory_sessions/internal/execution/service.go": {},
 }
 
 var approvedPersistenceCompositionFiles = map[string]struct{}{
-	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":       {},
-	"pkg/transports/cli/session/smoke/resume_smoke_test.go":           {},
-	"pkg/services/factory_sessions/execution/service.go":              {},
-	"pkg/services/factory_sessions/execution/runtimepersist/store.go": {},
-	"pkg/transports/mcp/factorysession/execution_test.go":             {},
+	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":                       {},
+	"pkg/services/factory_sessions/transports/cli/session/smoke/resume_smoke_test.go": {},
+	"pkg/services/factory_sessions/internal/execution/service.go":                     {},
+	"pkg/services/factory_sessions/internal/execution/runtimepersist/store.go":        {},
+	"pkg/services/factory_sessions/transports/mcp/execution_test.go":                  {},
 }
 
 type config struct{ root string }
@@ -140,9 +140,9 @@ func scan(root string) ([]string, error) {
 						"construct application collaborators in pkg/wire and inject them into the transport")
 				}
 				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
-					!strings.HasPrefix(relative, "pkg/services/factory_sessions/execution/") {
+					!strings.HasPrefix(relative, "pkg/services/factory_sessions/internal/execution/") {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
-						"route canonical Factory Events through the pkg/services/factory_sessions/execution recorder and persistence owner")
+						"route canonical Factory Events through the pkg/services/factory_sessions/internal/execution recorder and persistence owner")
 				}
 				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,

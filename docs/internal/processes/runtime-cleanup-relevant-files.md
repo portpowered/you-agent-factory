@@ -25,6 +25,24 @@ delegation to the target owner or part of an active removal lane.
 | Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Canonical Factory snapshots carried by event-derived domain projections or hydrated replay artifacts use `pkg/factory/contracts.FactorySnapshot` so unknown JSON fields survive projection cloning and replay reconstruction; decode them into generated API values only in an explicit boundary adapter such as `factorysnapshot.ToAPI`. Factory replay captures runtime definitions and metadata directly into that snapshot, and reconstructs its embedded runtime lookup from the snapshot without exposing a generated Factory in the replay API. Replay artifact construction accepts that snapshot directly; composition maps it to a generated value only when a public transport response requires one. Replay metadata comparison likewise consumes snapshots on both sides. The Factory owner defines `FactoryEvent`, `FactoryEventContext`, `FactoryEventType`, and the canonical event schema version; in-memory history, reconnect selection, live and durable event streams, runtime recorders, and `ReplayArtifact.Events` carry that detached domain envelope. Event-history reads expose only detached canonical values through `CanonicalEvents`; generated union conversion belongs in transport adapters or compatibility-test helpers, not an `Events` method on the Factory owner. Clone the envelope before exposing it to recorders or stream consumers so payload and context slices cannot mutate canonical history. Factory Session completion bindings consume the canonical event type recorder, including history replay for late binding, rather than accepting generated HTTP events. Replay parsing, sequencing, validation, and reduction operate on the domain envelope. Reconnect selection consumes canonical history directly; generated event conversion occurs only after selection when a public response requires it. Typed reducers should decode their owner-defined payload directly with `FactoryEvent.DecodePayload`; Factory run request and response, dispatch request, work-state change, Work-owned work request, and worker-execution-owned inference and dispatch responses demonstrate this while preserving historical compatibility fields and context fallbacks. Run-request artifact encoding likewise starts from the Factory-owned payload and uses the worker diagnostics owner's public-wire encoder; generated union decoding belongs in compatibility tests, not the production artifact builder. Run-request reduction rebuilds the domain `FactoryConfig` and embedded runtime definitions from the Factory-owned snapshot; dispatch reconstruction and submission defaults consume that domain configuration rather than retaining a generated public `Factory` in reduced state. Replay canonicalization, legacy cron repair, and adjacent-config hydration rewrite detached domain snapshots and payloads directly, preserving unknown fields and public JSON compatibility without rebuilding a generated Factory-event union. OpenAPI parity code compares the authored transport contract against the domain vocabulary, and generated discriminator decoding remains transport/test-boundary support rather than a production Factory dependency. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
 | Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin. `pkg/root` injects the lazy bundle and lets the CLI select an explicit service entrypoint after parsing. Both public injectors use one canonical Wire set. The selected run/API or stdio initializer constructs only its service subtree and flattens it into `bundle.Bundle`; `pkg/initializer` executes startup and shutdown for the attached handles. Copy caller-owned config before normalization and retain cleanup ownership in the bundle. Fallible construction retains each closeable resource so Wire can unwind once in reverse order; initializer records only successfully started collaborators and closes the bundle through the same idempotent shutdown path. |
 
+For services whose behavior depends on one Factory Session runtime, construct an
+inert process-scoped root through the service-local `wire` package and pass
+runtime-specific values through an owner-defined binding such as `ForRuntime`.
+Keep that binding on the canonical root `Service` and return the same public
+`Service` contract, as Models and Factory Sessions do; do not introduce a
+Wire-owned binder or return a private runtime-assembly contract. Owner-private
+runtime opening may unwrap its own bound implementation internally, but
+cross-service consumers receive only the root contract. Do not inject a
+callback that lets the runtime-opening consumer select or construct the
+concrete service.
+
+Keep the product-facing service root to its canonical `Service` interface plus
+detached value contracts. Construction-only roles belong in the service-local
+`wire` package, implementation collaborators belong under `internal`, and
+cross-service consumers should own the narrow interface they actually call.
+List/read projections must carry detached summaries rather than mutable
+session registries, response stores, or live-session implementation pointers.
+
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout
 normalization and stamps the next durable version afterward. Generated Factory
@@ -340,10 +358,11 @@ When changing durable Factory Session execution construction, run
 `make durable-runtime-construction-check`. The guard permits direct
 `NewJavaScriptRuntimeService` calls only in the package-local execution-provider
 factory and approved deterministic test harness. Project-local persistence path
-resolution and directory-store construction belong at the fallible application
-composition boundary in `pkg/factory/sessions/execution/service.go`; production
-runtime code must receive either that injected store or an explicit disabled
-policy and must not use a persistence boolean.
+resolution and durable-engine selection belong at the fallible owner-private
+composition boundary in
+`pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go`;
+production runtime code must receive either that injected store or an explicit
+disabled policy and must not use a persistence boolean.
 
 Construct `pkg/service/runtimebuild.Service` with an explicit clock, logger, and
 runtime bundle builder, and propagate its constructor error before initializer
@@ -452,12 +471,46 @@ its detached checkpoint-backed partial projection. Convert those values through
 assembles generated public responses. Control-plane result reads return the
 detached result-owner values and must not import transport contracts.
 
-Normalized Factory Session logical-target identity is derived in
-`pkg/factory/sessions/logicaltarget` and represented by its canonical reference
-or the live runtime projection contract. Convert that reference to generated
+Normalized Factory Session logical-target identity, target discovery, selection,
+and restart remapping are owned by the injected subservice rooted at
+`pkg/services/factory_sessions/internal/services/identity`; its implementation receives
+home, directory-inspection, and symlink-resolution effects through service-local
+Wire. The outer Factory Sessions service delegates open, list/read projection,
+and reconnect behavior to that subservice without exposing it cross-service.
+Canonical reference and runtime projection value contracts remain at the
+Factory Sessions root. Convert those values to generated
 logical-target kinds and provider-boundary fields only in
 `pkg/transports/mapping/factorysession`; domain target normalization must not
 return generated HTTP values.
+
+Factory Session folder/discovery validation reasons remain plain value
+constants at the service root, while concrete error state, target construction,
+config-load aggregation, and reason inspection live under
+`pkg/services/factory_sessions/internal/sessionvalidation`. Owner-private open,
+logical-target, and session-service code may consume that implementation;
+cross-owner transport tests should exercise the public error-code/target
+protocol with boundary fakes instead of constructing a Factory Sessions
+implementation error.
+
+Factory Session response-event validation, retained-then-live subscription,
+cursor filtering and gap signaling, event-store lifecycle, and internal stream
+registry allocation are owned by the injected subservice rooted at
+`pkg/services/factory_sessions/internal/services/response_stream`. Construct the inert
+capability in Factory Sessions-local Wire, bind its stores and registries only
+after an explicit runtime clock is available, and delegate outer-service
+subscriptions through it. Keep transport consumers on the Factory Sessions root
+cursor contract; they must not construct stores or import this private
+capability.
+
+Live Factory Session opening, ordered registry reads, runtime snapshots,
+pause/resume decisions, lifecycle diagnostics, and stop coordination are owned
+by the runtime-bound subservice rooted at
+`pkg/services/factory_sessions/internal/services/live_runtime`. Construct it through
+Factory Sessions-local Wire from explicit runtime host callbacks; construction
+must not open, start, stop, or inspect a runtime. The outer Factory Sessions
+service delegates live operations through this capability, while discovery and
+target selection remain with the identity owner and durable lifecycle remains
+with the durable-execution owner.
 
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
@@ -500,11 +553,17 @@ Editable Factory-definition reads and writes use `FactorySnapshot`,
 assembles generated read/save responses; composition injects that adapter
 instead of making `pkg/factory/definition` import transport contracts.
 
-Live Factory Session summaries and discovered targets retain `LiveSession`,
-`Target`, and `TargetRef` as their owner-defined values. Convert those values,
-including canonical runtime session identity and optional target names, through
+Live Factory Session summaries and discovered targets retain
+`ScopedLiveSessionSummary`, `Target`, and `TargetRef` as their owner-defined
+detached values. Convert those values, including canonical runtime session
+identity and optional target names, through
 `pkg/transports/mapping/factorysession` when assembling open or list responses;
 do not export generated summary or target constructors from the session owner.
+Injected home resolution, absolute-path cleanup, folder inspection, and path
+equivalence policy belong to the owner-private
+`pkg/services/factory_sessions/internal/logicaltarget` capability. Keep only
+the plain filesystem effect contracts at the service root so runtime opening,
+identity, and discovery cannot reintroduce root behavioral helpers.
 
 Live Factory Session runtime and detail reads follow the same boundary. Derive
 `RuntimeProjection` in `pkg/factory/sessions`, then map status, lifecycle,
@@ -533,6 +592,100 @@ Service and runtime-host compatibility adapters convert generated
 before invoking domain normalization, validation, submission, waiting, or
 telemetry policy; generated request and Work-content models must not enter the
 Factory Session invocation owner.
+
+Construct the runtime-bound invocation owner through
+`factory_sessions/services/invocation/wire` from exact Factory-config,
+Work-submission, observation, interpolation, Work-Type, input-file, and
+telemetry ports. Runtime assembly and root Wire consume the capability contract
+and its service-local constructors; they must not select the concrete session
+owner or one-shot invocation implementation directly. Construction remains
+inert, while timeout and cancellation ownership stays inside the invocation
+capability.
+
+Durable Factory Session start, idempotency, lifecycle control, persistence,
+restart recovery, result/dispatch/artifact inspection, and canonical event
+reads are owned by `factory_sessions/services/durable_execution`. Construct the
+capability through its service-local Wire package, retain the concrete engine
+behind that private contract, and expose execution to HTTP, invocation, and MCP
+runtime views through the outer Factory Sessions `Service`. Runtime composition
+may retain an exact mutation-recording callback while assembling the Factory
+Runtime, but consumers must not receive the raw durable engine as a parallel
+service boundary.
+
+Canonical root Wire imports only the Factory Sessions root, its service-local
+`wire` package, and service-owned transport adapters. When Wire must compose a
+legacy implementation during structural migration, expose a real service-local
+wrapper function and an owner-defined dependency struct; function variables or
+type aliases alone are insufficient because generated Wire resolves them back
+to the underlying implementation package and recreates the forbidden import.
+
+Factory Sessions supporting implementations belong below
+`pkg/services/factory_sessions/internal`, including target discovery, cursor
+storage, response-stream storage, runtime binding/hosting, invocation adapters,
+session registries, and process-lifecycle policy. When moving one of these
+packages, relocate path-keyed quality entries and fixture-relative paths with
+the implementation, but delete its `service-root-unexpected-directory`
+baseline finding instead of replacing that finding with an internal path.
+Owner-local collaborators shared by multiple private capabilities, such as the
+live-session registry, should publish their narrow contract from the owning
+`internal` package. Migrate private consumers to that contract before the final
+atomic removal of the root's consolidated interface-count baseline; removing
+root interfaces one at a time replaces the exact deletion-only finding instead
+of reducing it.
+
+Retire leaf compatibility packages that only re-export Factory Sessions root
+value or function contracts. Same-owner implementations should consume the root
+contract when that does not create a cycle; implementation capabilities needed
+on both sides of an existing root-to-implementation dependency belong under
+`factory_sessions/internal/contracts`, with only the canonical customer-facing
+name published at the root.
+
+When retiring root policy helpers or aliases, keep boundary-check inventories
+and synthetic guard coverage that prohibit transport use of those names. The
+guard remains useful as resurrection protection even after production no
+longer declares the symbol; remove only allowlist entries that permitted the
+retired root construction shape.
+
+When a runtime-created gateway needs an owner-private capability, retain that
+capability on the runtime state and pass the same injected instance into the
+gateway. Do not preserve a duplicate root policy function as a fallback for a
+missing private service; an incomplete internal construction path should fail
+with the existing typed unavailable outcome instead of silently selecting a
+second implementation.
+
+Scoped Factory Session inventory source selection, merging, filtering, and
+ordering are owner-private policy. Keep detached list request/result values at
+the Factory Sessions root, place the policy under `internal`, and declare the
+live-reader role at each service-owned transport adapter that consumes it. The
+HTTP projection adapter belongs with the HTTP transport rather than the root;
+top-level HTTP composition supplies that adapter without publishing transport
+collaborator interfaces from the contract root.
+
+Factory Session checkpoint, runtime, result, artifact, and stop-summary
+projection policy is owner-private under
+`pkg/services/factory_sessions/internal/sessionprojection`. Keep only detached
+projection inputs and result values at the service root. When a peer owner
+needs one exact projection operation, publish a plain function contract at the
+root and construct its private implementation through
+`pkg/services/factory_sessions/wire`; root Wire must not import the private
+projection package or reimplement its policy.
+
+Live Factory Session record construction is owner-private under
+`pkg/services/factory_sessions/internal/livesession`. Runtime and session
+assembly code may use that constructor and mutable `LiveSession`/`SessionState`
+records after dependencies have been injected. Keep runtime handles,
+response-event stores, response streams, checkpoints, and registry mutation
+below the owner-private boundary; the service root exposes detached summaries,
+projection values, cursors, and narrow operations only. Keep the
+package-boundary synthetic denial for the retired root constructor so external
+consumers cannot reintroduce a parallel construction path.
+
+Canonical live Factory Session ID selection, default-alias UUID allocation,
+and UUID validation are owned by the same private `internal/livesession`
+capability. Owner-projected reads carry `ProjectionContext.FactorySessionID`,
+and open results carry a detached `ScopedLiveSessionSummary`, so transport
+mappers serialize the resolved identity without importing private policy or
+re-deriving it from mutable session records.
 
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in

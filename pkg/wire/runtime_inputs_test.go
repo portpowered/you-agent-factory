@@ -16,6 +16,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -24,13 +25,13 @@ import (
 
 type recordingStdioOpening struct {
 	request factorysessions.StdioOpeningRequest
-	result  factorysessions.StdioApplication
+	result  factorysessionwire.StdioApplication
 }
 
 func (opening *recordingStdioOpening) OpenStdio(
 	_ context.Context,
 	request factorysessions.StdioOpeningRequest,
-) (factorysessions.StdioApplication, error) {
+) (factorysessionwire.StdioApplication, error) {
 	opening.request = request
 	return opening.result, nil
 }
@@ -157,7 +158,7 @@ func TestFactorySessionCursorPersistenceUsesExplicitEdgesOrPlatformDefaults(t *t
 
 	overrideFiles := &cursorPersistenceTestFileSystem{}
 	createCalled := false
-	createTemporaryFile := factorysessions.CursorPersistenceCreateTemporaryFile(func(string, string) (factorysessions.CursorPersistenceTemporaryFile, error) {
+	createTemporaryFile := factorysessionwire.CursorPersistenceCreateTemporaryFile(func(string, string) (factorysessionwire.CursorPersistenceTemporaryFile, error) {
 		createCalled = true
 		return nil, os.ErrPermission
 	})
@@ -431,7 +432,7 @@ func TestRuntimeInputResolverMergesEdgesAndDetachesAggregate(t *testing.T) {
 	resolver := provideRuntimeInputResolver(
 		serviceedges.Edges{Clock: defaultClock, InvocationMetricsRecorder: defaultMetrics}, provideFactoryRuntimeClockResolver(),
 	)
-	resolved, err := resolver(t.Context(), request, factorysessions.ApplicationOpeningPorts{
+	resolved, err := resolver(t.Context(), request, factorysessionwire.ApplicationOpeningPorts{
 		InvocationMetricsRecorder: invocationMetrics,
 		RuntimeHostObserver:       invocationObserver,
 	}, zap.NewNop())
@@ -478,7 +479,7 @@ func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := provideRuntimeInputResolver(test.edges, func(clock factoryruntime.Clock) factoryruntime.Clock {
 				return clock
-			})(test.ctx, test.request, factorysessions.ApplicationOpeningPorts{}, test.logger)
+			})(test.ctx, test.request, factorysessionwire.ApplicationOpeningPorts{}, test.logger)
 			if err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}

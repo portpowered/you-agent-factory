@@ -22,7 +22,7 @@
         "summary": "Workflow-named MCP alias resolves to the canonical Factory Session validate_source tool.",
         "references": [
           "contracts/testdata/baseline/mcp-aliases.json",
-          "pkg/transports/mcp/factorysession/tool.go"
+          "pkg/services/factory_sessions/transports/mcp/tool.go"
         ]
       },
       "removalGates": [

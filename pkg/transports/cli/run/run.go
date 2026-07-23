@@ -86,7 +86,7 @@ type Opener func(
 	context.Context,
 	RunConfig,
 	RuntimeRunnerBuilder,
-	factorysessions.InvocationOperation,
+	InvocationOperation,
 	factoryvisualization.ResponsePresentation,
 ) (*Operation, error)
 
@@ -137,7 +137,7 @@ type Operation struct {
 	runner            RuntimeRunner
 	invocationRequest *factoryapi.InvocationRequest
 	invocationTarget  factorysessions.InvocationTarget
-	invocation        factorysessions.InvocationOperation
+	invocation        InvocationOperation
 	presentation      factoryvisualization.ResponsePresentation
 	prepareWorkTarget work.SingleWorkTargetPreparation
 	invocationMode    bool
@@ -150,7 +150,7 @@ func Open(
 	ctx context.Context,
 	cfg RunConfig,
 	buildRunner RuntimeRunnerBuilder,
-	invocation factorysessions.InvocationOperation,
+	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,

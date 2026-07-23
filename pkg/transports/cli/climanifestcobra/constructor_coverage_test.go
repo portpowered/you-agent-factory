@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )

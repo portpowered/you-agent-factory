@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 func TestMCPToolCatalogPublication_AuthoredCatalogPassesGuards(t *testing.T) {

@@ -39,7 +39,7 @@ func TestRunRejectsRetiredCursorImports(t *testing.T) {
 	for _, want := range []string{
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/sessionpersistence",
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/cursorstorage",
-		"canonical owner: pkg/services/factory_sessions/cursors/persistence",
+		"canonical owner: pkg/services/factory_sessions/internal/cursors/persistence",
 		"canonical owner: pkg/services/provider_sessions/cursor",
 	} {
 		if !strings.Contains(stderr.String(), want) {
@@ -54,7 +54,7 @@ func TestRunRejectsRecreatedCursorRoots(t *testing.T) {
 		retiredRoot string
 		owner       string
 	}{
-		{retiredRoot: "pkg/sessionpersistence", owner: "pkg/services/factory_sessions/cursors/persistence"},
+		{retiredRoot: "pkg/sessionpersistence", owner: "pkg/services/factory_sessions/internal/cursors/persistence"},
 		{retiredRoot: "pkg/internal/cursorstorage", owner: "pkg/services/provider_sessions/cursor"},
 	} {
 		tc := tc

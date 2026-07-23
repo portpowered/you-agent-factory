@@ -3,8 +3,8 @@ package contractvalidator
 import (
 	"strings"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
 // MCPToolCatalogInputSchemaDiagnostics applies authored-catalog input-schema parity

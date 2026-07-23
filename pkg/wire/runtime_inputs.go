@@ -13,7 +13,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -37,7 +37,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
 		observer factorysessions.RuntimeHostObserver,
-	) factorysessions.ApplicationOpeningRequest {
+	) factorysessionwire.ApplicationOpeningRequest {
 		logDirectory := cfg.RuntimeLogDir
 		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
 			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
@@ -97,9 +97,9 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			},
 			OperatorDefaults: cfg.OperatorDefaults,
 		}
-		return factorysessions.ApplicationOpeningRequest{
+		return factorysessionwire.ApplicationOpeningRequest{
 			Runtime: request,
-			Ports: factorysessions.ApplicationOpeningPorts{
+			Ports: factorysessionwire.ApplicationOpeningPorts{
 				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
 				RuntimeHostObserver:       observer,
 			},
@@ -112,13 +112,13 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 func provideRuntimeInputResolver(
 	defaultEdges serviceedges.Edges,
 	resolveClock factoryruntime.ClockResolver,
-) applicationopening.RuntimeInputResolver {
+) factorysessionwire.ApplicationRuntimeInputResolver {
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
-		ports factorysessions.ApplicationOpeningPorts,
+		ports factorysessionwire.ApplicationOpeningPorts,
 		logger *zap.Logger,
-	) (applicationopening.RuntimeInputs, error) {
+	) (factorysessionwire.ApplicationRuntimeInputs, error) {
 		edges := defaultEdges
 		if ports.InvocationMetricsRecorder != nil {
 			edges.InvocationMetricsRecorder = ports.InvocationMetricsRecorder
@@ -130,10 +130,10 @@ func provideRuntimeInputResolver(
 			edges.Clock = resolveClock(edges.Clock)
 		}
 		if err := validateResolvedRuntimeInputs(ctx, request, edges, logger); err != nil {
-			return applicationopening.RuntimeInputs{}, err
+			return factorysessionwire.ApplicationRuntimeInputs{}, err
 		}
 		configured := *request
-		return applicationopening.RuntimeInputs{
+		return factorysessionwire.ApplicationRuntimeInputs{
 			Request: &configured,
 			Edges:   edges,
 			Logger:  logger,

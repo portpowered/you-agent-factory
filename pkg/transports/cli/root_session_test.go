@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -60,7 +61,7 @@ func (fake strictModelsServiceFake) PullModel(ctx context.Context, name string) 
 
 func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
-	return NewServer(
+	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
 		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}), logger),
 		nil, httpFactoryValidator{}, nil,
@@ -75,7 +76,8 @@ func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content
 }
 
 func newEventStreamTestServer() *Server {
-	return &Server{logger: zap.NewNop()}
+	logger := zap.NewNop()
+	return &Server{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger), logger: logger}
 }
 
 func canonicalFactoryEventForHTTPTest(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {

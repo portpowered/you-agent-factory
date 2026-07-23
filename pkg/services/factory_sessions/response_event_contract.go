@@ -1,11 +1,9 @@
 package factorysessions
 
 import (
-	"context"
 	"errors"
-	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
 // Factory Session response-event contracts are published at the service root.
@@ -106,98 +104,3 @@ var (
 	// ErrInvalidResponseEventFilter reports an unsupported response-event kind.
 	ErrInvalidResponseEventFilter = errors.New("invalid factory response-event filter")
 )
-
-// SubscribeFactoryResponseEvents opens the exact session-owned response-event
-// cursor selected by request. It never falls back to the default session.
-func SubscribeFactoryResponseEvents(
-	ctx context.Context,
-	session *LiveSession,
-	request ResponseEventSubscriptionRequest,
-) (ResponseEventCursor, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if request.AfterSequence < 0 {
-		return nil, ErrInvalidResponseEventCursor
-	}
-	if session == nil {
-		return nil, ErrSessionNotFound
-	}
-	if session.ResponseEvents == nil {
-		return nil, ErrRuntimeNotAvailable
-	}
-	selected := make(map[ResponseEventKind]struct{}, len(request.Kinds))
-	for _, kind := range request.Kinds {
-		if !validResponseEventSubscriptionKind(kind) {
-			return nil, ErrInvalidResponseEventFilter
-		}
-		selected[kind] = struct{}{}
-	}
-	options := make([]ResponseEventSubscribeOption, 0, 1)
-	if dispatchID := strings.TrimSpace(request.DispatchID); dispatchID != "" {
-		options = append(options, WithResponseEventDispatchFilter(dispatchID))
-	}
-	subscription, err := session.ResponseEvents.Subscribe(request.AfterSequence, options...)
-	if err != nil {
-		return nil, err
-	}
-	if len(request.Kinds) == 0 {
-		return subscription, nil
-	}
-	return &filteredResponseEventCursor{cursor: subscription, selected: selected}, nil
-}
-
-func validResponseEventSubscriptionKind(kind ResponseEventKind) bool {
-	switch kind {
-	case ResponseEventKindSession, ResponseEventKindRun, ResponseEventKindTurn,
-		ResponseEventKindMessage, ResponseEventKindReasoning, ResponseEventKindTool,
-		ResponseEventKindFileChange, ResponseEventKindPlan, ResponseEventKindProgress,
-		ResponseEventKindUsage, ResponseEventKindError, ResponseEventKindStreamGap:
-		return true
-	default:
-		return false
-	}
-}
-
-type filteredResponseEventCursor struct {
-	cursor   ResponseEventCursor
-	selected map[ResponseEventKind]struct{}
-}
-
-func (c *filteredResponseEventCursor) Next(ctx context.Context) ([]FactoryResponseEvent, error) {
-	for {
-		events, err := c.cursor.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if filtered := c.filter(events); len(filtered) > 0 {
-			return filtered, nil
-		}
-	}
-}
-
-func (c *filteredResponseEventCursor) Drain() ([]FactoryResponseEvent, error) {
-	events, err := c.cursor.Drain()
-	if err != nil {
-		return nil, err
-	}
-	return c.filter(events), nil
-}
-
-func (c *filteredResponseEventCursor) Detach() {
-	c.cursor.Detach()
-}
-
-func (c *filteredResponseEventCursor) filter(events []FactoryResponseEvent) []FactoryResponseEvent {
-	filtered := make([]FactoryResponseEvent, 0, len(events))
-	for _, event := range events {
-		if event.Kind == ResponseEventKindStreamGap {
-			filtered = append(filtered, event)
-			continue
-		}
-		if _, ok := c.selected[event.Kind]; ok {
-			filtered = append(filtered, event)
-		}
-	}
-	return filtered
-}

@@ -1,17 +1,6 @@
 package factorysessions
 
-import (
-	"io/fs"
-
-	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
-)
-
-// ExecutionOpeningFileSystem is the exact host-filesystem capability used to
-// resolve omitted durable-execution project and fixture-catalog paths.
-type ExecutionOpeningFileSystem interface {
-	Getwd() (string, error)
-	Stat(string) (fs.FileInfo, error)
-}
+import execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 
 // Durable Factory Session execution contracts are exposed from the owning
 // service root. The concrete runtime implementation remains in execution.
@@ -141,21 +130,7 @@ var (
 	LifecycleControlLinksForSession        = execution.LifecycleControlLinksForSession
 	LiveLifecycleControlLogFields          = execution.LiveLifecycleControlLogFields
 	LiveLifecycleControlLinksForSession    = execution.LiveLifecycleControlLinksForSession
-	NormalizeApproveRequest                = execution.NormalizeApproveRequest
-	NormalizeControlRequest                = execution.NormalizeControlRequest
-	NormalizeEventReconnectRequest         = execution.NormalizeEventReconnectRequest
 	MaterializeEventReadStream             = execution.MaterializeEventReadStream
-	NormalizeInterruptDispatchRequest      = execution.NormalizeInterruptDispatchRequest
-	NormalizeListSessionsRequest           = execution.NormalizeListSessionsRequest
-	NormalizeResultRequest                 = execution.NormalizeResultRequest
-	NormalizeRetryDispatchRequest          = execution.NormalizeRetryDispatchRequest
-	NormalizeStartRequest                  = execution.NormalizeStartRequest
 )
 
 const LifecycleControlOutcomeClassNotFound = execution.LifecycleControlOutcomeClassNotFound
-
-// NewExecutionValidationError builds a durable-execution request validation
-// error without colliding with Factory Session discovery validation.
-func NewExecutionValidationError(field, message string) *ExecutionValidationError {
-	return execution.NewValidationError(field, message)
-}

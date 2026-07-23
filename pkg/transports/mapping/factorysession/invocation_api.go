@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -12,13 +13,18 @@ import (
 // InvocationAPI maps generated invocation requests onto the canonical Factory
 // Session invocation owner.
 type InvocationAPI struct {
-	owner factorysessions.SessionInvoker
+	owner SessionInvoker
+}
+
+// SessionInvoker is the exact consumer-owned invocation role.
+type SessionInvoker interface {
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
 }
 
 var _ apisurface.InvocationAPI = (*InvocationAPI)(nil)
 
 // NewInvocationAPI constructs the transport adapter without a runtime-host facade.
-func NewInvocationAPI(owner factorysessions.SessionInvoker) *InvocationAPI {
+func NewInvocationAPI(owner SessionInvoker) *InvocationAPI {
 	return &InvocationAPI{owner: owner}
 }
 
@@ -33,7 +39,7 @@ func (a *InvocationAPI) InvokeFactorySession(ctx context.Context, sessionID stri
 // constructing a stateful transport adapter.
 func InvokeFactorySession(
 	ctx context.Context,
-	owner factorysessions.SessionInvoker,
+	owner SessionInvoker,
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {

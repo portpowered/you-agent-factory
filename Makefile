@@ -212,6 +212,7 @@ mcp-contract-smoke:
 	$(MAKE) contracts-validate
 	$(MAKE) mcp-discovery-check
 	$(MAKE) mcp-contract-check
+	$(GO) test ./pkg/services/factory_sessions/transports/mcp/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/transports/mcp/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/transports/cli/mcp -count=1 -timeout $(GO_TEST_TIMEOUT)
 
@@ -263,7 +264,7 @@ test-maintenance:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/loading/runtimetests ./pkg/services/factory_definitions/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/loading/runtimetests ./pkg/services/factory_definitions/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/factory_runtime/ingest -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -391,7 +392,7 @@ config-contract-smoke:
 	$(GO) test ./contracts -run '^TestRuntimePackage' -count=1 -timeout $(CONFIG_CONTRACT_SMOKE_TIMEOUT)
 
 response-stream-stress-smoke:
-	$(GO) test ./pkg/services/factory_sessions/responseeventstore -run $(RESPONSE_STREAM_STRESS_SMOKE_TEST) -count=1 -timeout $(RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT)
+	$(GO) test ./pkg/services/factory_sessions/internal/responseeventstore -run $(RESPONSE_STREAM_STRESS_SMOKE_TEST) -count=1 -timeout $(RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT)
 
 artifact-contract-closeout:
 	$(GO) test ./internal/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)

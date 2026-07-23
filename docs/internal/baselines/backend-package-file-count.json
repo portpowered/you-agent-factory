@@ -10,9 +10,11 @@
     { "packagePath": "pkg/services/factory_runtime", "fileCount": 53, "owner": "factory-runtime-maintainers", "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages." },
     { "packagePath": "pkg/services/factory_runtime/runtime", "fileCount": 18, "owner": "factory-runtime-maintainers", "removalReason": "Split runtime coordination from lifecycle and projection behavior." },
     { "packagePath": "pkg/services/factory_runtime/subsystems", "fileCount": 19, "owner": "factory-runtime-maintainers", "removalReason": "Separate subsystem adapters by stable runtime boundary." },
-    { "packagePath": "pkg/services/factory_sessions", "fileCount": 37, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
-    { "packagePath": "pkg/services/factory_sessions/execution", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },
-    { "packagePath": "pkg/services/factory_sessions/service", "fileCount": 28, "owner": "factory-session-maintainers", "removalReason": "Partition session service behavior by lifecycle responsibility." },
+    { "packagePath": "pkg/services/factory_sessions", "fileCount": 24, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
+    { "packagePath": "pkg/services/factory_sessions/internal/execution", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },
+    { "packagePath": "pkg/services/factory_sessions/internal/sessionservice", "fileCount": 28, "owner": "factory-session-maintainers", "removalReason": "Partition session service behavior by lifecycle responsibility." },
+    { "packagePath": "pkg/services/factory_sessions/transports/cli/session", "fileCount": 17, "owner": "factory-session-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
+    { "packagePath": "pkg/services/factory_sessions/transports/mcp", "fileCount": 16, "owner": "factory-session-maintainers", "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility." },
     { "packagePath": "pkg/services/models/internal/local", "fileCount": 17, "owner": "model-runtime-maintainers", "removalReason": "Split local model lifecycle and invocation responsibilities." },
     { "packagePath": "pkg/services/operator_settings", "fileCount": 17, "owner": "operator-settings-maintainers", "removalReason": "Separate settings persistence from effective configuration behavior." },
     { "packagePath": "pkg/services/provider_sessions/cursor", "fileCount": 16, "owner": "provider-session-maintainers", "removalReason": "Consolidate cursor cases or extract durable cursor responsibilities." },
@@ -28,12 +30,9 @@
     { "packagePath": "pkg/transports/cli/commandregistry", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Separate registry contracts from command construction." },
     { "packagePath": "pkg/transports/cli/factory", "fileCount": 21, "owner": "cli-maintainers", "removalReason": "Split factory commands by lifecycle responsibility." },
     { "packagePath": "pkg/transports/cli/run", "fileCount": 22, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
-    { "packagePath": "pkg/transports/cli/session", "fileCount": 17, "owner": "cli-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
     { "packagePath": "pkg/transports/cli/submit", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate submit command cases or extract stable input behavior." },
-    { "packagePath": "pkg/transports/http", "fileCount": 17, "owner": "http-transport-maintainers", "removalReason": "Separate HTTP composition from endpoint behavior." },
     { "packagePath": "pkg/transports/http/servertests", "fileCount": 16, "owner": "http-transport-maintainers", "removalReason": "Consolidate server fixtures and move focused scenarios beside handlers." },
     { "packagePath": "pkg/transports/mapping/factorysession", "fileCount": 19, "owner": "transport-mapping-maintainers", "removalReason": "Partition Factory Session mapping by contract direction." },
-    { "packagePath": "pkg/transports/mcp/factorysession", "fileCount": 16, "owner": "mcp-transport-maintainers", "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility." },
     { "packagePath": "pkg/wire", "fileCount": 20, "owner": "composition-maintainers", "removalReason": "Split composition tests and providers by durable process graph boundary." }
   ]
 }

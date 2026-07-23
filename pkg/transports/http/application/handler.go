@@ -8,6 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -23,7 +24,7 @@ type Handler struct {
 	validation         factorydefinitions.SubmittedDefinitionValidationOperation
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
-	sessionRequests    factorysessions.RequestPreparation
+	sessionRequests    factorysessionshttp.RequestPreparation
 }
 
 func NewHandler(
@@ -32,7 +33,7 @@ func NewHandler(
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
-	sessionRequests factorysessions.RequestPreparation,
+	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
 	if mappings == nil || modelsContent == nil || validation == nil ||
 		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {
@@ -61,29 +62,18 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	if err != nil {
 		return nil, err
 	}
-	server := transporthttp.NewServer(
-		mapped.Runtime,
-		mapped.FactoryStatus,
-		mapped.Sessions,
-		mapped.Work,
-		mapped.WorkRead,
-		mapped.Invocation,
-		modelsHandler,
-		mapped.FactoryDefinitions,
-		handler.validation,
-		opened.WorkflowPreview,
-		mapped.Durable,
-		mapped.Durable,
-		mapped.Durable,
-		mapped.Durable,
-		opened.SessionExecution,
-		factorysessions.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		opened.ProviderSessions,
-		opened.WorkerPrompts,
-		handler.contentStaging,
-		handler.requestPreparation,
-		handler.sessionRequests,
-		opened.Logger,
-	)
+	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
+		Sessions: mapped.Sessions, Work: mapped.Work, WorkRead: mapped.WorkRead,
+		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
+		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
+		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
+		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
+		DurableLister:     opened.SessionExecution,
+		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		WorkerPrompts:     opened.WorkerPrompts, ContentStaging: handler.contentStaging,
+		RequestPreparation: handler.requestPreparation, SessionRequests: handler.sessionRequests,
+	}, opened.Logger)
+	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
 }

@@ -240,7 +240,7 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (f testRunnerOpeners) Invocation() factorysessions.InvocationOperation {
+func (f testRunnerOpeners) Invocation() InvocationOperation {
 	return testInvocationOperation{open: f.invocation}
 }
 

@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	"github.com/spf13/cobra"
 )
 

@@ -276,7 +276,7 @@ func readIntegrationResponseEvent(t *testing.T, reader *bufio.Reader) factoryses
 
 func newFactorySessionTestServer(live apisurface.LiveSessionAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	return api.NewServer(
+	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)

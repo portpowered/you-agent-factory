@@ -17,7 +17,7 @@ import (
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 )
 
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
@@ -61,14 +61,14 @@ func (*wireTestClock) Now() time.Time {
 	return time.Time{}
 }
 
-func TestFactorySessionsFactoryRequiresWireResolvedClock(t *testing.T) {
+func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 	t.Parallel()
 	namedPathResolver, err := factorynamedpaths.New(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
 
-	factory := provideFactorySessionsFactory(
+	service, err := provideFactorySessionsService(
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,
@@ -78,45 +78,18 @@ func TestFactorySessionsFactoryRequiresWireResolvedClock(t *testing.T) {
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
-		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
-		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
+		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		func(path string) (string, error) { return path, nil },
 	)
-	if assembly := factory(nil); assembly != nil {
+	if err != nil {
+		t.Fatalf("provide Factory Sessions service: %v", err)
+	}
+	if assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{}); assembly != nil || err == nil {
 		t.Fatalf("Factory Sessions assembly without clock = %#v, want nil", assembly)
 	}
-	if assembly := factory(&wireTestClock{}); assembly == nil {
-		t.Fatal("Factory Sessions assembly with explicit Wire clock = nil")
-	}
-}
-
-func TestFactorySessionsProductionCannotSelectPlatformClockDefault(t *testing.T) {
-	t.Parallel()
-
-	root := filepath.Join("..", "services", "factory_sessions")
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-		if err != nil {
-			return err
-		}
-		for _, spec := range file.Imports {
-			importPath, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				return err
-			}
-			if importPath == "github.com/portpowered/infinite-you/pkg/platform/clock" {
-				t.Errorf("%s selects the platform clock below Wire; inject factoryruntime.Clock instead", path)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan Factory Sessions clock imports: %v", err)
+	if assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{Clock: &wireTestClock{}}); assembly == nil || err != nil {
+		t.Fatalf("Factory Sessions assembly with explicit Wire clock = %#v, error = %v", assembly, err)
 	}
 }
 

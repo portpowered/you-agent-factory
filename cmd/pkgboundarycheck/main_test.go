@@ -653,7 +653,7 @@ func TestRunAllowsAnyImportableRepositoryPackageFromWire(t *testing.T) {
 	t.Parallel()
 
 	importPaths := []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/service",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
 		"github.com/portpowered/infinite-you/pkg/services/example/new_internal_adapter",
 		"github.com/portpowered/infinite-you/pkg/transports/http/generated",
 		"github.com/portpowered/infinite-you/pkg/platform/metrics",
@@ -692,15 +692,15 @@ func TestRunRejectsExternalImportsOfConvergedServiceSubpackages(t *testing.T) {
 	t.Parallel()
 
 	importPaths := []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution/fixtures",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/logicaltarget",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseeventstore",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation",

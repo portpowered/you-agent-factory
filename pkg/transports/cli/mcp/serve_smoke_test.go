@@ -18,9 +18,9 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -118,7 +118,7 @@ func executeGeneratedMCPServe(
 	return root.ExecuteContext(ctx)
 }
 
-func installSmokeRequestPreparation() factorysessions.RequestPreparation {
+func installSmokeRequestPreparation() mcpfactorysession.RequestPreparation {
 	return installSmokeRequestPreparationCallbacks{
 		start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
 			return request, nil

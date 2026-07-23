@@ -32,8 +32,9 @@ func TestScanRejectsImplicitPersistenceConstruction(t *testing.T) {
 
 func TestScanAcceptsApplicationCompositionAndTransportTest(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/execution/service.go": "testdata/approved_composition.go.txt",
-		"pkg/transports/http/transport_test.go":              "testdata/approved_transport_test.go.txt",
+		"pkg/services/factory_sessions/internal/execution/service.go":                                        "testdata/approved_composition.go.txt",
+		"pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go": "testdata/approved_private_durable_composition.go.txt",
+		"pkg/transports/http/transport_test.go":                                                              "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -68,7 +69,7 @@ func TestScanRejectsTransportApplicationComposition(t *testing.T) {
 
 func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/execution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/services/factory_sessions/internal/execution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -85,8 +86,8 @@ func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 
 func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
-		"pkg/services/factory_sessions/execution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/services/factory_sessions/internal/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
+		"pkg/services/factory_sessions/internal/execution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)
