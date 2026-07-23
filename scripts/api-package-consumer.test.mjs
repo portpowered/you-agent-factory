@@ -38,7 +38,6 @@ const protectedFiles = [
 	"packages/api/generated/schemas/factory-recording.schema.json",
 	"packages/api/generated/schemas/mock-workers.schema.json",
 	"packages/api/generated/javascript/runtime-api.json",
-	"pkg/services/operator_settings/globalconfiginventory/testdata/baseline/global-config-topology.json",
 	"pkg/services/workers/interface/testdata/baseline/mock-workers-topology.json",
 	"pkg/services/factory_runtime/tooling/javascript/javascript-runtime-symbols.json",
 	"pkg/transports/http/generated/server.gen.go",

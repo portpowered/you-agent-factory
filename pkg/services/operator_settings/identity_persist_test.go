@@ -27,7 +27,7 @@ func runPersistScopeCase(t *testing.T, scopeID string, wantErrorParts []string) 
 	t.Helper()
 
 	configPath := DefaultConfigPath(t.TempDir())
-	err := persistBackendScopeID(testFiles, testCreateTemp, configPath, scopeID)
+	err := persistBackendScopeID(testFiles, testCreateTemp, encodeTestConfig, configPath, Config{BackendScopeID: scopeID})
 	if len(wantErrorParts) == 0 {
 		if err != nil {
 			t.Fatalf("persistBackendScopeID() error = %v, want accept", err)

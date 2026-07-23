@@ -66,7 +66,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	directoryCreator := provideRunDirectoryCreator()
 	opener := provideBrowserOpener()
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
-	defaultsResolver := provideOperatorDefaultsResolver(fileSystem)
+	configDecoder := provideOperatorConfigDecoder()
+	defaultsResolver := provideOperatorDefaultsResolver(fileSystem, configDecoder)
 	providersessionsService, err := provideProviderSessions(edges2)
 	if err != nil {
 		return nil, err
@@ -102,7 +103,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	loader := provideFactoryDefinitionLoader(v4, v5, v6, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v7, portableBundledFileInspection, v8)
 	validationService := provideFactoryDefinitionValidationService(javaScriptWorkflows, loader)
 	v9 := provideFactoryDefinitionValidator(validationService)
-	configLoader := provideOperatorConfigLoader(fileSystem)
+	configLoader := provideOperatorConfigLoader(fileSystem, configDecoder)
 	durableExecutionFactory := provideDurableExecutionFactory(configLoader)
 	workerExecutionFactory := provideWorkerExecutionFactory()
 	modelsService, err := provideModelsService(edges2)
@@ -238,7 +239,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	createTemporaryFile := provideOperatorSettingsCreateTemporaryFile(edges2)
 	operatorsettingsIDGenerator := provideOperatorSettingsIDGenerator(edges2)
-	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator)
+	configEncoder := provideOperatorConfigEncoder()
+	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator, configDecoder, configEncoder)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
 	replayRecordingReader := provideFactorySessionReplayRecordingReader(edges2)
 	runtimeopeningFactory, err := runtimeopening.NewFactory(providersessionsService, javaScriptWorkflowDefinitions, workflowPreviewOperation, v9, namedPathResolver, durableExecutionFactory, workerExecutionFactory, modelsService, v10, v11, v14, v15, v16, v17, v18, runtimeRecorderFactory, v20, replayExecutionFactory, v23, workersRuntimeExecutorsFactory, workersMockCommandRunnerFactory, v24, v25, v30, factoryScaffoldInitializer, editableFactoryValidator, initialFactorySnapshotFactory, assembly, contentMaterializer, v33, v34, replayRuntimeConfigDecoder, replayArtifactLoader, v19, clockResolver, sessionLoggerFactory, workerCommandRunnerAdapter, processRuntimeFactory, backendScopeEnsurer, runtimeInstanceIDGenerator, homeDirectoryResolver, replayRecordingReader)
@@ -459,6 +461,8 @@ var apiSet = wire.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apis
 var servicesSet = wire.NewSet(factorysessions.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
+	provideOperatorConfigDecoder,
+	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
 	provideOperatorConfigLoader,

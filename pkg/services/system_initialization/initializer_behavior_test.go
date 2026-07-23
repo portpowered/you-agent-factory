@@ -29,9 +29,9 @@ func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
 	return os.Rename(oldPath, newPath)
 }
 
-func (fake *fakeOperatorSettings) LoadFileConfig(path string) (operatorsettings.FileConfig, error) {
+func (fake *fakeOperatorSettings) LoadFileConfig(path string) (operatorsettings.Config, error) {
 	fake.loadCalls = append(fake.loadCalls, path)
-	return operatorsettings.FileConfig{}, fake.loadErr
+	return operatorsettings.Config{}, fake.loadErr
 }
 
 func (fake *fakeOperatorSettings) EnsureLocalBackendScope(path string) (operatorsettings.ResolvedBackendScope, error) {

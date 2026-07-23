@@ -2,7 +2,6 @@ package operatorsettings
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -127,7 +126,7 @@ func TestConfigDocumentServicePersist_RejectsBeforeFilesystemSideEffects(t *test
 	t.Parallel()
 	files := &faultFileSystem{FileSystem: testFiles}
 	service := persistedConfigService(files, testCreateTemp)
-	invalid := ConfigDocument{fields: map[string]json.RawMessage{"unexpected": []byte("true")}}
+	invalid := ConfigDocument{config: Config{WorkerPresets: []WorkerPreset{{ID: "invalid", ModelProvider: "DEFAULT"}}}}
 	if err := service.Persist(context.Background(), "config.json", invalid); err == nil {
 		t.Fatal("Persist() error = nil, want invalid candidate")
 	}
@@ -527,6 +526,8 @@ func persistedConfigService(files FileSystem, create CreateTemporaryFile) Config
 		Files:           files,
 		CreateTemp:      create,
 		Providers:       controlledProviderCatalog,
+		Decoder:         decodeTestConfig,
+		Encoder:         encodeTestConfig,
 		PersistenceLock: &sync.Mutex{},
 	}
 }

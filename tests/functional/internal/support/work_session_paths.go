@@ -12,9 +12,6 @@ const DefaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.Defau
 // DefaultSessionEventsAPIPath is the canonical event stream for the default live factory session.
 const DefaultSessionEventsAPIPath = DefaultSessionWorkAPIPrefix + "/events"
 
-// DefaultSessionResponseEventsAPIPath is the canonical response-event SSE stream for the default session.
-const DefaultSessionResponseEventsAPIPath = DefaultSessionWorkAPIPrefix + "/response-events"
-
 // DefaultSessionWorkPath scopes legacy work-relative paths to the default factory session.
 func DefaultSessionWorkPath(path string) string {
 	switch {
@@ -37,9 +34,4 @@ func DefaultSessionWorkURL(baseURL, path string) string {
 // DefaultSessionEventsURL joins baseURL with the canonical default-session event stream.
 func DefaultSessionEventsURL(baseURL string) string {
 	return strings.TrimSuffix(baseURL, "/") + DefaultSessionEventsAPIPath
-}
-
-// DefaultSessionResponseEventsURL joins baseURL with the canonical default-session response-event SSE stream.
-func DefaultSessionResponseEventsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + DefaultSessionResponseEventsAPIPath
 }
