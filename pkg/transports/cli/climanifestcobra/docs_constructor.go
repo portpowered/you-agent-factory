@@ -1,6 +1,7 @@
 package climanifestcobra
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -21,11 +22,19 @@ var lifecycleVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)[.](0|[1-9][0-
 // completion callbacks.
 type CompletionRegistry map[string]cobra.CompletionFunc
 
+// GenericHandler receives one invocation's normalized inputs keyed by stable
+// manifest input ID. It remains independent of Cobra and public command names.
+type GenericHandler func(context.Context, map[string]any) error
+
+// HandlerRegistry maps stable manifest handler IDs to transport-edge behavior.
+type HandlerRegistry map[string]GenericHandler
+
 // GenericBindings supplies executable transport bindings used while projecting
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.
 type GenericBindings struct {
 	Completions CompletionRegistry
+	Handlers    HandlerRegistry
 }
 
 func resolveGenericBindings(bindingSets []GenericBindings) (GenericBindings, error) {
@@ -36,6 +45,57 @@ func resolveGenericBindings(bindingSets []GenericBindings) (GenericBindings, err
 		return GenericBindings{}, nil
 	}
 	return bindingSets[0], nil
+}
+
+func validateGenericHandlers(plan []plannedCommand, bindings GenericBindings) error {
+	owners := make(map[string]string)
+	for _, item := range plan {
+		handler := item.record.Handler
+		if !item.record.Runnable {
+			if handler != nil {
+				return fmt.Errorf(
+					"command %q is non-runnable but declares handler ID %q",
+					item.record.ID,
+					handler.ID,
+				)
+			}
+			continue
+		}
+		if handler == nil || strings.TrimSpace(handler.ID) == "" {
+			return fmt.Errorf("command %q runnable handler ID is required", item.record.ID)
+		}
+		if owner, exists := owners[handler.ID]; exists {
+			return fmt.Errorf(
+				"command %q handler ID %q duplicates runnable command %q",
+				item.record.ID,
+				handler.ID,
+				owner,
+			)
+		}
+		owners[handler.ID] = item.record.ID
+		if bindings.Handlers == nil || bindings.Handlers[handler.ID] == nil {
+			return fmt.Errorf(
+				"command %q handler ID %q has no registered executable binding",
+				item.record.ID,
+				handler.ID,
+			)
+		}
+	}
+	return nil
+}
+
+func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindings GenericBindings) {
+	if !record.Runnable {
+		return
+	}
+	handler := bindings.Handlers[record.Handler.ID]
+	cmd.RunE = func(command *cobra.Command, _ []string) error {
+		values, err := InputValues(command)
+		if err != nil {
+			return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+		}
+		return handler(command.Context(), values)
+	}
 }
 
 func validateGenericPresentation(plan []plannedCommand, bindings GenericBindings) error {

@@ -187,7 +187,7 @@ func noopRunE(cmd *cobra.Command, args []string) error {
 func TestNewCommandTreeBuildsSyntheticHierarchyDeterministically(t *testing.T) {
 	manifest := syntheticTreeManifest()
 
-	root, err := climanifestcobra.NewCommandTree(manifest)
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -228,9 +228,6 @@ func assertSyntheticAlpha(t *testing.T, alpha *cobra.Command) {
 	}
 	if !alpha.Runnable() {
 		t.Fatal("schema-runnable alpha command is not runnable")
-	}
-	if err := alpha.RunE(alpha, nil); err == nil || !strings.Contains(err.Error(), `command "stable.alpha"`) {
-		t.Fatalf("unbound runnable error = %v", err)
 	}
 	leaf := alpha.Commands()
 	if len(leaf) != 1 || leaf[0].Name() != "leaf" || !leaf[0].Hidden {
@@ -327,7 +324,7 @@ func TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree(t *testing.T) {
 
 func TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID(t *testing.T) {
 	manifest := syntheticFlagManifest()
-	root, err := climanifestcobra.NewCommandTree(manifest)
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -342,8 +339,8 @@ func TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID(t *testing.T
 		"--mode",
 	})
 	err = root.Execute()
-	if err == nil || !strings.Contains(err.Error(), `command "stable.alpha" has no executable handler attached`) {
-		t.Fatalf("Execute() error = %v, want only the expected unbound-handler error", err)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
 	}
 
 	alpha := root.Commands()[0]
@@ -373,20 +370,21 @@ func TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
 	}
-	if _, err := climanifestcobra.NewCommandTree(manifest); err != nil {
+	if _, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest)); err != nil {
 		t.Fatalf("NewCommandTree(RepresentativeFamilyManifest()) error = %v", err)
 	}
 }
 
 func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testing.T) {
 	t.Run("typed defaults", func(t *testing.T) {
-		root, err := climanifestcobra.NewCommandTree(syntheticFlagManifest())
+		manifest := syntheticFlagManifest()
+		root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 		if err != nil {
 			t.Fatalf("NewCommandTree() error = %v", err)
 		}
 		root.SetArgs([]string{"alpha", "--label", "present"})
-		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "no executable handler") {
-			t.Fatalf("Execute() error = %v, want unbound-handler error", err)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
 		}
 		values, err := climanifestcobra.InputValues(root.Commands()[0])
 		if err != nil {
@@ -410,7 +408,8 @@ func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testi
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root, err := climanifestcobra.NewCommandTree(syntheticFlagManifest())
+			manifest := syntheticFlagManifest()
+			root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 			if err != nil {
 				t.Fatalf("NewCommandTree() error = %v", err)
 			}
@@ -645,7 +644,7 @@ func syntheticTreeManifest() climanifest.Manifest {
 
 func syntheticCommand(id, name, path string, runnable bool) climanifest.Command {
 	titleName := strings.ToUpper(name[:1]) + name[1:]
-	return climanifest.Command{
+	record := climanifest.Command{
 		ID:         id,
 		Name:       name,
 		Path:       path,
@@ -660,6 +659,10 @@ func syntheticCommand(id, name, path string, runnable bool) climanifest.Command 
 			},
 		},
 	}
+	if runnable {
+		record.Handler = &climanifest.Handler{ID: id + ".handler"}
+	}
+	return record
 }
 
 func commandNames(commands []*cobra.Command) []string {
@@ -672,7 +675,7 @@ func commandNames(commands []*cobra.Command) []string {
 
 func TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID(t *testing.T) {
 	manifest := syntheticArgumentManifest()
-	root, err := climanifestcobra.NewCommandTree(manifest)
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -711,7 +714,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 	command.Arguments[ids.ID] = ids
 	manifest.Commands[command.ID] = command
 
-	root, err := climanifestcobra.NewCommandTree(manifest)
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -798,7 +801,8 @@ func assertRelationshipInvocation(
 	wantInputs string,
 ) {
 	t.Helper()
-	root, err := climanifestcobra.NewCommandTree(syntheticRelationshipManifest(relationship))
+	manifest := syntheticRelationshipManifest(relationship)
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}

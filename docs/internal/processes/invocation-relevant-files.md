@@ -396,6 +396,11 @@ response-stream output.
   declared enum choices; dynamic completion callbacks are supplied through
   `GenericBindings.Completions` keyed by stable input ID, never by a public flag
   name or command path.
+  Generic runnable dispatch follows the same boundary: validate every
+  `Command.Handler.ID` and `GenericBindings.Handlers` entry before Cobra
+  projection, reject duplicate handler ownership, and invoke the selected
+  stable-ID handler with a detached normalized `InputValues` snapshot. Public
+  command paths and aliases must not participate in executable lookup.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable

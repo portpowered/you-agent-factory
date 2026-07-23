@@ -20,24 +20,23 @@ import (
 func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	manifest := syntheticPresentationManifest()
 	dynamicCalls := 0
-	bindings := climanifestcobra.GenericBindings{
-		Completions: climanifestcobra.CompletionRegistry{
-			"stable.alpha.flag.cluster": func(
-				*cobra.Command,
-				[]string,
-				string,
-			) ([]cobra.Completion, cobra.ShellCompDirective) {
-				dynamicCalls++
-				return []string{"cluster-b", "cluster-a"}, cobra.ShellCompDirectiveNoFileComp
-			},
-			"stable.alpha.arg.worker": func(
-				*cobra.Command,
-				[]string,
-				string,
-			) ([]cobra.Completion, cobra.ShellCompDirective) {
-				dynamicCalls++
-				return []string{"worker-2", "worker-1"}, cobra.ShellCompDirectiveNoFileComp
-			},
+	bindings := genericBindingsForManifest(manifest)
+	bindings.Completions = climanifestcobra.CompletionRegistry{
+		"stable.alpha.flag.cluster": func(
+			*cobra.Command,
+			[]string,
+			string,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			dynamicCalls++
+			return []string{"cluster-b", "cluster-a"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		"stable.alpha.arg.worker": func(
+			*cobra.Command,
+			[]string,
+			string,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			dynamicCalls++
+			return []string{"worker-2", "worker-1"}, cobra.ShellCompDirectiveNoFileComp
 		},
 	}
 	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
@@ -51,6 +50,143 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	assertProjectedHelpAndLifecycle(t, alpha)
 	assertProjectedFlagCompletion(t, alpha, &dynamicCalls)
 	assertProjectedArgumentCompletion(t, alpha, &dynamicCalls)
+}
+
+func TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs(t *testing.T) {
+	manifest := syntheticFlagManifest()
+	alpha := manifest.Commands["stable.alpha"]
+	alpha.Name = "nova"
+	alpha.Path = "forge nova"
+	alpha.Usage.Line = "nova"
+	alpha.Aliases = []string{"alpha"}
+	manifest.Commands[alpha.ID] = alpha
+
+	var received map[string]any
+	bindings := genericBindingsForManifest(manifest)
+	bindings.Handlers[alpha.Handler.ID] = func(_ context.Context, values map[string]any) error {
+		received = values
+		return nil
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{"nova", "--nebula-label", "  normalized  "})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if received["stable.alpha.flag.label"] != "normalized" {
+		t.Fatalf("handler inputs = %#v, want normalized stable-ID value", received)
+	}
+
+	root, err = climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() after rename error = %v", err)
+	}
+	root.SetArgs([]string{"alpha", "--nebula-label", "alias"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(alias) error = %v", err)
+	}
+	if received["stable.alpha.flag.label"] != "alias" {
+		t.Fatalf("alias handler inputs = %#v, want same stable handler dispatch", received)
+	}
+}
+
+func TestNewCommandTreeKeepsNonRunnableCommandsOnCobraHelpPath(t *testing.T) {
+	manifest := syntheticTreeManifest()
+	calls := 0
+	bindings := genericBindingsForManifest(manifest)
+	for handlerID := range bindings.Handlers {
+		bindings.Handlers[handlerID] = func(context.Context, map[string]any) error {
+			calls++
+			return nil
+		}
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	output := new(bytes.Buffer)
+	root.SetOut(output)
+	root.SetErr(output)
+	root.SetArgs([]string{"zeta"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(non-runnable) error = %v", err)
+	}
+	zeta, _, err := root.Find([]string{"zeta"})
+	if err != nil {
+		t.Fatalf("Find(zeta) error = %v", err)
+	}
+	if zeta.RunE != nil || calls != 0 {
+		t.Fatalf("non-runnable command has RunE = %t, handler calls = %d", zeta.RunE != nil, calls)
+	}
+	if !strings.Contains(output.String(), "Zeta description") {
+		t.Fatalf("non-runnable output = %q, want Cobra help", output.String())
+	}
+}
+
+func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*climanifest.Manifest, *climanifestcobra.GenericBindings)
+		wantErr string
+	}{
+		{
+			name: "missing handler record",
+			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+				command := manifest.Commands["stable.alpha"]
+				command.Handler = nil
+				manifest.Commands[command.ID] = command
+			},
+			wantErr: `command "stable.alpha" runnable handler ID is required`,
+		},
+		{
+			name: "empty handler ID",
+			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+				command := manifest.Commands["stable.alpha"]
+				command.Handler.ID = ""
+				manifest.Commands[command.ID] = command
+			},
+			wantErr: `command "stable.alpha" runnable handler ID is required`,
+		},
+		{
+			name: "unknown handler ID",
+			mutate: func(manifest *climanifest.Manifest, bindings *climanifestcobra.GenericBindings) {
+				delete(bindings.Handlers, manifest.Commands["stable.alpha"].Handler.ID)
+			},
+			wantErr: `command "stable.alpha" handler ID "stable.alpha.handler" has no registered executable binding`,
+		},
+		{
+			name: "duplicate handler ID",
+			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+				command := manifest.Commands["stable.leaf"]
+				command.Handler.ID = "stable.alpha.handler"
+				manifest.Commands[command.ID] = command
+			},
+			wantErr: `handler ID "stable.alpha.handler" duplicates runnable command`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticTreeManifest()
+			bindings := genericBindingsForManifest(manifest)
+			calls := 0
+			for handlerID := range bindings.Handlers {
+				bindings.Handlers[handlerID] = func(context.Context, map[string]any) error {
+					calls++
+					return nil
+				}
+			}
+			test.mutate(&manifest, &bindings)
+			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			if root != nil || err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("NewCommandTree() = (%v, %v), want nil and error containing %q", root, err, test.wantErr)
+			}
+			if calls != 0 {
+				t.Fatalf("construction failure invoked %d handlers, want zero", calls)
+			}
+		})
+	}
 }
 
 func assertProjectedHelpAndLifecycle(t *testing.T, alpha *cobra.Command) {
@@ -199,7 +335,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			manifest := syntheticPresentationManifest()
-			bindings := presentationBindings()
+			bindings := presentationBindings(manifest)
 			test.mutate(&manifest, &bindings)
 			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), test.wantErr) {
@@ -279,16 +415,26 @@ func presentationArguments() map[string]climanifest.Argument {
 	}
 }
 
-func presentationBindings() climanifestcobra.GenericBindings {
+func presentationBindings(manifest climanifest.Manifest) climanifestcobra.GenericBindings {
 	callback := func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return climanifestcobra.GenericBindings{
-		Completions: climanifestcobra.CompletionRegistry{
-			"stable.alpha.flag.cluster": callback,
-			"stable.alpha.arg.worker":   callback,
-		},
+	bindings := genericBindingsForManifest(manifest)
+	bindings.Completions = climanifestcobra.CompletionRegistry{
+		"stable.alpha.flag.cluster": callback,
+		"stable.alpha.arg.worker":   callback,
 	}
+	return bindings
+}
+
+func genericBindingsForManifest(manifest climanifest.Manifest) climanifestcobra.GenericBindings {
+	handlers := make(climanifestcobra.HandlerRegistry)
+	for _, command := range manifest.Commands {
+		if command.Handler != nil && command.Handler.ID != "" {
+			handlers[command.Handler.ID] = func(context.Context, map[string]any) error { return nil }
+		}
+	}
+	return climanifestcobra.GenericBindings{Handlers: handlers}
 }
 
 func deprecatedLifecycle(id, target, guidance string) climanifest.Lifecycle {

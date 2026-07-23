@@ -474,6 +474,7 @@ func NewCommandTree(manifest climanifest.Manifest, bindingSets ...GenericBinding
 		if err := projectGenericPresentation(built[item.record.Path], item, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
+		projectGenericHandler(built[item.record.Path], item.record, bindings)
 	}
 	for _, item := range plan {
 		if item.parentPath == "" {
@@ -504,6 +505,9 @@ func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([
 		return nil, err
 	}
 	if err := validateGenericPresentation(plan, bindings); err != nil {
+		return nil, err
+	}
+	if err := validateGenericHandlers(plan, bindings); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -686,7 +690,7 @@ func commandParentPath(path string) string {
 }
 
 func projectCommand(record climanifest.Command) *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:     record.Usage.Line,
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
 		Long:    commandLong(record),
@@ -694,13 +698,6 @@ func projectCommand(record climanifest.Command) *cobra.Command {
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
 	}
-	if record.Runnable {
-		commandID := record.ID
-		cmd.RunE = func(*cobra.Command, []string) error {
-			return fmt.Errorf("command %q has no executable handler attached", commandID)
-		}
-	}
-	return cmd
 }
 
 func planCommandFlags(plan []plannedCommand) error {
