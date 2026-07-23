@@ -51,6 +51,28 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 	}
 	assertFactoryConfigSmokeGeneratedBoundary(t, generatedBoundary)
 
+	placeholderJSON := []byte(strings.Replace(
+		factoryConfigSmokeCanonicalJSON(),
+		`"type":"MODEL_WORKER",
+    "executorProvider":"SCRIPT_WRAP",
+    "modelProvider":"CLAUDE",`,
+		`"type":"MODEL_WORKER",
+    "executorProvider":"SCRIPT_WRAP",
+    "modelProvider":"${modelProvider}",`,
+		1,
+	))
+	assertFactorySchemaAcceptsJSON(t, factorySchema, placeholderJSON)
+	placeholderBoundary, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(placeholderJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(provider placeholder): %v", err)
+	}
+	if placeholderBoundary.Workers == nil ||
+		len(*placeholderBoundary.Workers) == 0 ||
+		(*placeholderBoundary.Workers)[0].ModelProvider == nil ||
+		string(*(*placeholderBoundary.Workers)[0].ModelProvider) != "${modelProvider}" {
+		t.Fatalf("generated boundary did not preserve provider placeholder: %#v", placeholderBoundary.Workers)
+	}
+
 	canonicalDir := writeFactoryConfigSmokeDir(t, factoryConfigSmokeCanonicalJSON())
 	canonicalLoaded := loadRuntimeConfigForSmoke(t, canonicalDir)
 	assertLoadedFactoryRuntimeForSmoke(t, canonicalLoaded)
@@ -558,7 +580,14 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	assertSchemaPropertyRef(t, schemas, "Resource", "type", "#/components/schemas/ResourceType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
-	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaPropertyOneOfRefAndPattern(
+		t,
+		schemas,
+		"Worker",
+		"modelProvider",
+		"#/components/schemas/WorkerModelProvider",
+		`^\$\{[A-Za-z0-9_.-]+\}$`,
+	)
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
 	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")

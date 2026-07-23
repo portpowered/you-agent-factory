@@ -1,0 +1,64 @@
+id: builtin-goal
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: goal
+name: goal
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: goal
+      states:
+        - name: init
+          type: INITIAL
+        - name: execute
+          type: PROCESSING
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - body: |
+        You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.
+
+        Work the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.
+
+        When the goal is complete, end your response with `<COMPLETE>` on its own line.
+        When you made ordinary partial progress and need another pass without rejection, include `<CONTINUE>` in your response.
+        Otherwise explain what must change before the goal can complete.
+
+        Return a concise final response the customer can use when you finish.
+      name: goal-executor
+      stopToken: <COMPLETE>
+      type: AGENT_WORKER
+workstations:
+    - behavior: REPEATER
+      body: |
+        You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.
+
+        Work the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.
+
+        When the goal is complete, end your response with `<COMPLETE>` on its own line.
+        When you made ordinary partial progress and need another pass without rejection, include `<CONTINUE>` in your response.
+        Otherwise explain what must change before the goal can complete.
+
+        Return a concise final response the customer can use when you finish.
+      inputs:
+        - state: init
+          workType: goal
+      name: execute-goal
+      onContinue:
+        - state: init
+          workType: goal
+      onFailure:
+        - state: failed
+          workType: goal
+      onRejection:
+        - state: init
+          workType: goal
+      outputs:
+        - state: complete
+          workType: goal
+      promptFile: prompts/executor.md
+      type: AGENT_RUN
+      worker: goal-executor

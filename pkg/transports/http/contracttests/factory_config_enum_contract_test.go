@@ -140,7 +140,14 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaArrayItemRef(t, schemas, "Factory", "guards", "#/components/schemas/FactoryGuard")
 	assertSchemaPropertyRef(t, schemas, "WorkState", "type", "#/components/schemas/WorkStateType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
-	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaPropertyOneOfRefAndPattern(
+		t,
+		schemas,
+		"Worker",
+		"modelProvider",
+		"#/components/schemas/WorkerModelProvider",
+		`^\$\{[A-Za-z0-9_.-]+\}$`,
+	)
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
 	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
@@ -317,6 +324,38 @@ func assertSchemaPropertyRef(t *testing.T, schemas map[string]any, schemaName st
 	t.Helper()
 
 	assertPropertyRef(t, schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName), propertyName, wantRef)
+}
+
+func assertSchemaPropertyOneOfRefAndPattern(
+	t *testing.T,
+	schemas map[string]any,
+	schemaName string,
+	propertyName string,
+	wantRef string,
+	wantPattern string,
+) {
+	t.Helper()
+
+	property, ok := schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName)[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("%s.properties.%s is missing", schemaName, propertyName)
+	}
+	oneOf, ok := property["oneOf"].([]any)
+	if !ok || len(oneOf) != 2 {
+		t.Fatalf("%s.properties.%s.oneOf = %#v, want two alternatives", schemaName, propertyName, property["oneOf"])
+	}
+	ref, _ := oneOf[0].(map[string]any)["$ref"].(string)
+	pattern, _ := oneOf[1].(map[string]any)["pattern"].(string)
+	if ref != wantRef || pattern != wantPattern {
+		t.Fatalf(
+			"%s.properties.%s.oneOf = %#v, want ref %q and pattern %q",
+			schemaName,
+			propertyName,
+			oneOf,
+			wantRef,
+			wantPattern,
+		)
+	}
 }
 
 func assertSchemaArrayItemRef(t *testing.T, schemas map[string]any, schemaName string, propertyName string, wantRef string) {

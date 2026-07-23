@@ -30,7 +30,7 @@ func TestRunAcceptsYAMLRootDocument(t *testing.T) {
 	if err := os.Remove(filepath.Join(goalDir, "factory.json")); err != nil {
 		t.Fatalf("remove JSON root: %v", err)
 	}
-	writeFixture(t, root, authoredBoundary+"/goal/factory.yaml", "name: '@you/goal'\n")
+	writeFixture(t, root, authoredBoundary+"/goal/factory.yaml", validYAMLFactory("@you/goal", "builtin-goal"))
 
 	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("run() error = %v", err)
@@ -43,8 +43,9 @@ func TestRunRejectsAmbiguousRootDocumentsWithActionablePaths(t *testing.T) {
 
 	err := run(config{root: root}, &bytes.Buffer{})
 	assertErrorContains(t, err,
-		authoredBoundary+"/goal contains 2 root Factory documents (factory.json, factory.yaml)",
-		"keep exactly one of factory.json, factory.yaml, or factory.yml",
+		authoredBoundary+"/goal has 2 root Factory documents",
+		authoredBoundary+"/goal/factory.json",
+		authoredBoundary+"/goal/factory.yaml",
 	)
 }
 
@@ -81,27 +82,34 @@ func TestRunIgnoresGeneratedGoFactoryLiteral(t *testing.T) {
 	}
 }
 
-func TestRunRejectsMissingRequiredDirectoryAndMismatchedIdentity(t *testing.T) {
+func TestRunDiscoversNewFactoryWithoutRequiredNameRegistry(t *testing.T) {
 	root := fixtureRepository(t)
-	if err := os.RemoveAll(filepath.Join(root, filepath.FromSlash(authoredBoundary), "tts")); err != nil {
-		t.Fatalf("remove required directory: %v", err)
-	}
-	writeFixture(t, root, authoredBoundary+"/review/factory.json", `{"name":"@you/wrong"}`)
+	writeFixture(t, root, authoredBoundary+"/new/factory.json", validJSONFactory("@you/new", "builtin-new"))
 
-	err := run(config{root: root}, &bytes.Buffer{})
-	assertErrorContains(t, err,
-		"missing shipped Factory directory "+authoredBoundary+"/tts",
-		`declares name "@you/wrong"; want "@you/review"`,
-	)
+	var stdout bytes.Buffer
+	if err := run(config{root: root}, &stdout); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "source boundary holds for 8 shipped Factories") {
+		t.Fatalf("stdout = %q, want dynamically discovered Factory count", stdout.String())
+	}
 }
 
 func fixtureRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, name := range requiredFactories {
-		writeFixture(t, root, authoredBoundary+"/"+name+"/factory.json", `{"name":"@you/`+name+`"}`)
+	for _, name := range []string{"deep-research", "fusion", "goal", "quorum", "review", "subagent", "tts"} {
+		writeFixture(t, root, authoredBoundary+"/"+name+"/factory.json", validJSONFactory("@you/"+name, "builtin-"+name))
 	}
 	return root
+}
+
+func validJSONFactory(name, id string) string {
+	return `{"name":"` + name + `","id":"` + id + `","workTypes":[],"resources":[],"workers":[],"workstations":[]}`
+}
+
+func validYAMLFactory(name, id string) string {
+	return "name: '" + name + "'\nid: " + id + "\nworkTypes: []\nresources: []\nworkers: []\nworkstations: []\n"
 }
 
 func writeFixture(t *testing.T, root, relative, content string) {

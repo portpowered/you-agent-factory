@@ -1,0 +1,63 @@
+examples:
+    - args:
+        input: Summarize this release
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Summarize a release request.
+      name: positional-input
+    - args:
+        input: Summarize this release
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Summarize the same request using structured input.
+      name: stdin-input
+id: builtin-subagent
+invocationSignature:
+    parameters:
+        - bindings:
+            - kind: POSITIONAL
+              position: 1
+            - kind: STDIN
+          description: Text request for the one-pass subagent.
+          name: input
+          required: true
+name: subagent
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: task
+      states:
+        - name: init
+          type: INITIAL
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - agentTools:
+        policy: READ_ONLY
+      body: |
+        You are the one-pass subagent worker for @you/subagent.
+
+        Respond directly to the submitted request in a single bounded pass. Do not plan multi-stage work or defer follow-up actions.
+      name: subagent-worker
+      type: AGENT_WORKER
+workstations:
+    - body: |
+        Respond to the submitted request in one pass for work {{ (index .Inputs 0).WorkID }}.
+
+        Request:
+        ${input}
+      inputs:
+        - state: init
+          workType: task
+      name: run-subagent
+      onFailure:
+        - state: failed
+          workType: task
+      outputs:
+        - state: complete
+          workType: task
+      promptFile: prompts/run-subagent.md
+      type: AGENT_RUN
+      worker: subagent-worker

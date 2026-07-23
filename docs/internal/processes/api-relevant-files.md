@@ -115,6 +115,24 @@ Use this map when changing the public REST contract.
   `make contracts-generate` and verify through `make contracts-check`;
   `make contracts-smoke` proves repeated byte stability and is the packaged
   contract gate run by the development-package CI workflow.
+- Flattened packaged Factory artifact generation lives in
+  `internal/packagedfactorycatalog`. Keep the authored `@you/*` identity as
+  catalog metadata and use the directory slug for the schema-valid portable
+  Factory `name`. Validate JSON and YAML from the same canonical Factory value.
+  Plan the manifest, generated notice, and every artifact pair in memory twice
+  before writing; normalized output collisions or byte/set differences between
+  passes fail generation. `make packaged-factory-catalog-generate` stages the
+  complete plan and replaces `packages/packaged-factories/generated` as one
+  directory so failed planning or staging cannot leave mixed generations.
+  `make packaged-factory-catalog-check` uses the same complete projection to
+  compare exact checked-in paths and bytes without writing; this one comparison
+  protects authored-inventory coverage, paired Factory equivalence, schema
+  validation, and manifest locator/hash integrity.
+  Exact `${parameter}` placeholders on `workers[].modelProvider` are part of
+  the accepted Factory contract alongside concrete provider enum values. Keep
+  the OpenAPI one-of placeholder grammar aligned with canonical mapping, and
+  validate emitted catalog JSON and decoded YAML directly without substituting
+  a validation-only provider.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, standalone JSON Schema projections from
   canonical bundled OpenAPI component graphs, and the package contract

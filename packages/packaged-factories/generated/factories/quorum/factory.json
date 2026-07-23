@@ -1,0 +1,334 @@
+{
+  "examples": [
+    {
+      "args": {
+        "input": "Compare the two proposed release plans."
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Compare release plans with the default quorum."
+      },
+      "name": "default-quorum"
+    },
+    {
+      "args": {
+        "branchModel": "gpt-5",
+        "branchProvider": "CODEX",
+        "input": "Compare the two proposed release plans.",
+        "mergeModel": "claude-sonnet-4-20250514",
+        "mergeProvider": "CLAUDE"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Compare release plans with role-specific providers and models."
+      },
+      "name": "role-specific-models"
+    }
+  ],
+  "id": "builtin-quorum",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "quorum-merge"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          }
+        ],
+        "description": "Text request evaluated by the quorum workers.",
+        "name": "input",
+        "required": true
+      },
+      {
+        "aliases": [
+          "bp"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "CLAUDE",
+          "CODEX"
+        ],
+        "defaultValue": "CODEX",
+        "description": "Provider for both independent quorum branch workers. Defaults to CODEX.",
+        "externalName": "branch-provider",
+        "name": "branchProvider"
+      },
+      {
+        "aliases": [
+          "bm"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValue": "gpt-5",
+        "description": "Model for both independent quorum branch workers. Defaults to gpt-5.",
+        "externalName": "branch-model",
+        "name": "branchModel"
+      },
+      {
+        "aliases": [
+          "mp"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "CLAUDE",
+          "CODEX"
+        ],
+        "defaultValue": "CODEX",
+        "description": "Provider for the final quorum merge worker. Defaults to CODEX.",
+        "externalName": "merge-provider",
+        "name": "mergeProvider"
+      },
+      {
+        "aliases": [
+          "mm"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValue": "gpt-5",
+        "description": "Model for the final quorum merge worker. Defaults to gpt-5.",
+        "externalName": "merge-model",
+        "name": "mergeModel"
+      }
+    ]
+  },
+  "name": "quorum",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "quorum-context",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "quorum-branch-a",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "quorum-branch-b",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "quorum-merge",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "First independent quorum branch for @you/quorum.",
+      "model": "${branchModel}",
+      "modelProvider": "${branchProvider}",
+      "name": "quorum-branch-a",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Second independent quorum branch for @you/quorum.",
+      "model": "${branchModel}",
+      "modelProvider": "${branchProvider}",
+      "name": "quorum-branch-b",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Final merge worker for @you/quorum.",
+      "model": "${mergeModel}",
+      "modelProvider": "${mergeProvider}",
+      "name": "quorum-merge",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Preserve the original request and create two independent quorum branch Work items.",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "split-quorum",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "quorum-context",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "quorum-branch-a"
+        },
+        {
+          "state": "init",
+          "workType": "quorum-branch-b"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": ""
+    },
+    {
+      "body": "Produce branch A's independent assessment of the request.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "quorum-branch-a"
+        }
+      ],
+      "name": "run-quorum-branch-a",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "quorum-branch-a"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "quorum-branch-a"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "quorum-branch-a"
+    },
+    {
+      "body": "Produce branch B's independent assessment of the request.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "quorum-branch-b"
+        }
+      ],
+      "name": "run-quorum-branch-b",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "quorum-branch-b"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "quorum-branch-b"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "quorum-branch-b"
+    },
+    {
+      "body": "Synthesize the two quorum assessments into one final response. The inputs are ordered as original request, branch A, then branch B.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}\n\nBranch A output:\n{{ (index .Inputs 1).Payload }}\n\nBranch B output:\n{{ (index .Inputs 2).Payload }}",
+      "inputs": [
+        {
+          "state": "quorum-context",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "quorum-branch-a"
+        },
+        {
+          "state": "complete",
+          "workType": "quorum-branch-b"
+        }
+      ],
+      "name": "merge-quorum",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "quorum-merge"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "quorum-merge"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "quorum-merge"
+    }
+  ]
+}

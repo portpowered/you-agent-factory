@@ -1399,9 +1399,11 @@ $defs:
                     - $ref: '#/$defs/WorkerModelLocality'
                 description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
             modelProvider:
-                allOf:
+                description: Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+                oneOf:
                     - $ref: '#/$defs/WorkerModelProvider'
-                description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+                    - pattern: ^\$\{[A-Za-z0-9_.-]+\}$
+                      type: string
             name:
                 description: Worker name referenced by Workstation.worker.
                 type: string
