@@ -3,6 +3,41 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+	RECONCILIATION_FAILURES,
+	RegistryReconciliationError,
+} from "./package-registry.mjs";
+
+const REGISTRY_INSTALL_TIMEOUT_MS = 120_000;
+
+function classifyRegistryInstallFailure(stderr, cause) {
+	if (/\bEINTEGRITY\b/.test(stderr)) {
+		return new RegistryReconciliationError(
+			RECONCILIATION_FAILURES.REGISTRY_INTEGRITY_FAILED,
+			"registry consumer integrity verification failed",
+			{ cause },
+		);
+	}
+	if (/\b(?:E401|ENEEDAUTH)\b|\b401\b/.test(stderr)) {
+		return new RegistryReconciliationError(
+			RECONCILIATION_FAILURES.REGISTRY_AUTHENTICATION_FAILED,
+			"registry consumer authentication failed",
+			{ cause },
+		);
+	}
+	if (/\bE403\b|\b403\b/.test(stderr)) {
+		return new RegistryReconciliationError(
+			RECONCILIATION_FAILURES.REGISTRY_PERMISSION_FAILED,
+			"registry consumer permission denied",
+			{ cause },
+		);
+	}
+	return new RegistryReconciliationError(
+		RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED,
+		"registry consumer install failed",
+		{ cause },
+	);
+}
 
 function normalizedPath(path) {
 	return path.replaceAll("\\", "/").replace(/^\.\//, "");
@@ -353,7 +388,7 @@ function requireFactoryEventSchema(document, specifier) {
 function runNpmInstall(
 	consumerDirectory,
 	packageTarget,
-	{ offline = false } = {},
+	{ offline = false, timeoutMs = REGISTRY_INSTALL_TIMEOUT_MS } = {},
 ) {
 	const arguments_ = [
 		"install",
@@ -375,17 +410,44 @@ function runNpmInstall(
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		let stderr = "";
+		let timedOut = false;
+		const timeout = setTimeout(() => {
+			timedOut = true;
+			child.kill();
+		}, timeoutMs);
 		child.stderr.setEncoding("utf8");
 		child.stderr.on("data", (chunk) => {
 			stderr += chunk;
 		});
-		child.on("error", rejectPromise);
+		child.on("error", (error) => {
+			clearTimeout(timeout);
+			rejectPromise(
+				offline ? error : classifyRegistryInstallFailure(stderr, error),
+			);
+		});
 		child.on("close", (status) => {
+			clearTimeout(timeout);
+			if (timedOut) {
+				rejectPromise(
+					offline
+						? new Error("[api-package-consumer] npm install timed out")
+						: new RegistryReconciliationError(
+								RECONCILIATION_FAILURES.REGISTRY_TIMEOUT,
+								"registry consumer install timed out",
+							),
+				);
+				return;
+			}
 			if (status !== 0) {
 				rejectPromise(
-					new Error(
-						`[api-package-consumer] npm install failed with status ${status}\n${stderr.trim()}`,
-					),
+					offline
+						? new Error(
+								`[api-package-consumer] npm install failed with status ${status}\n${stderr.trim()}`,
+							)
+						: classifyRegistryInstallFailure(
+								stderr,
+								new Error(`npm install exited with status ${status}`),
+							),
 				);
 				return;
 			}

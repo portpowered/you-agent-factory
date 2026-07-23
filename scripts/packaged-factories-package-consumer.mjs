@@ -13,7 +13,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-
+import {
+  RECONCILIATION_FAILURES,
+  RegistryReconciliationError,
+} from "./package-registry.mjs";
 import { PACKAGED_FACTORIES_PACKAGE_NAME } from "./packaged-factories-package-candidate.mjs";
 import {
   copyableInvocation,
@@ -32,6 +35,39 @@ const VERIFIER_DEPENDENCIES = Object.freeze([
   "yaml@2.9.0",
 ]);
 const REGISTRY_INSTALL_TIMEOUT_MS = 120_000;
+
+function registryInstallFailure(code, message, cause) {
+  return new RegistryReconciliationError(code, message, { cause });
+}
+
+function classifyRegistryInstallFailure(stderr, cause) {
+  if (/\bEINTEGRITY\b/.test(stderr)) {
+    return registryInstallFailure(
+      RECONCILIATION_FAILURES.REGISTRY_INTEGRITY_FAILED,
+      "registry consumer integrity verification failed",
+      cause,
+    );
+  }
+  if (/\b(?:E401|ENEEDAUTH)\b|\b401\b/.test(stderr)) {
+    return registryInstallFailure(
+      RECONCILIATION_FAILURES.REGISTRY_AUTHENTICATION_FAILED,
+      "registry consumer authentication failed",
+      cause,
+    );
+  }
+  if (/\bE403\b|\b403\b/.test(stderr)) {
+    return registryInstallFailure(
+      RECONCILIATION_FAILURES.REGISTRY_PERMISSION_FAILED,
+      "registry consumer permission denied",
+      cause,
+    );
+  }
+  return registryInstallFailure(
+    RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED,
+    "registry consumer install failed",
+    cause,
+  );
+}
 
 export function npmInstallArguments(packageTarget, { registry = false } = {}) {
   return [
@@ -99,20 +135,24 @@ export function runNpmRegistryInstall(
     });
     child.on("error", (error) => {
       clearTimeout(timeout);
-      rejectPromise(error);
+      rejectPromise(classifyRegistryInstallFailure(stderr, error));
     });
     child.on("close", (status) => {
       clearTimeout(timeout);
       if (timedOut) {
         rejectPromise(
-          new Error(`${DIAGNOSTIC_PREFIX} npm registry install timed out`),
+          registryInstallFailure(
+            RECONCILIATION_FAILURES.REGISTRY_TIMEOUT,
+            "registry consumer install timed out",
+          ),
         );
         return;
       }
       if (status !== 0) {
         rejectPromise(
-          new Error(
-            `${DIAGNOSTIC_PREFIX} npm registry install failed with status ${status}\n${stderr.trim()}`,
+          classifyRegistryInstallFailure(
+            stderr,
+            new Error(`npm install exited with status ${status}`),
           ),
         );
         return;

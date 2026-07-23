@@ -7,7 +7,11 @@ import {
 	PUBLICATION_OUTCOMES,
 	publishAndVerifyCandidate,
 } from "./packaged-factories-package-publish.mjs";
-import { RECONCILIATION_OUTCOMES } from "./packaged-factories-package-registry.mjs";
+import {
+	RECONCILIATION_FAILURES,
+	RECONCILIATION_OUTCOMES,
+	RegistryReconciliationError,
+} from "./packaged-factories-package-registry.mjs";
 
 const evidence = {
 	packageName: "@you-agent-factory/packaged-factories",
@@ -44,13 +48,21 @@ function fixture(outcomes) {
 			},
 			async reconcileCandidate() {
 				calls.reconcile += 1;
-				return { outcome: outcomes.shift() };
+				const outcome = outcomes.shift();
+				if (outcome instanceof Error) {
+					throw outcome;
+				}
+				return { outcome };
 			},
 			async sleep() {
 				calls.sleep += 1;
 			},
 		},
 	};
+}
+
+function registryFailure(code) {
+	return new RegistryReconciliationError(code, "controlled registry failure");
 }
 
 test("an identical Packaged Factories registry version is consumed without republish", async () => {
@@ -65,6 +77,128 @@ test("an identical Packaged Factories registry version is consumed without repub
 		publish: 0,
 		reconcile: 1,
 		sleep: 0,
+	});
+});
+
+test("transient initial registry lookup failure recovers within the bounded window", async () => {
+	const subject = fixture([
+		registryFailure(RECONCILIATION_FAILURES.REGISTRY_LOOKUP_FAILED),
+		RECONCILIATION_OUTCOMES.VERIFIED_EXISTING,
+	]);
+	const result = await publishAndVerifyCandidate(
+		subject.input,
+		subject.dependencies,
+	);
+	assert.equal(result.outcome, PUBLICATION_OUTCOMES.VERIFIED_EXISTING);
+	assert.deepEqual(subject.calls, {
+		install: 1,
+		publish: 0,
+		reconcile: 2,
+		sleep: 1,
+	});
+});
+
+test("transient post-publish registry download failure recovers without republishing", async () => {
+	const subject = fixture([
+		RECONCILIATION_OUTCOMES.PUBLISH_REQUIRED,
+		registryFailure(RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED),
+		RECONCILIATION_OUTCOMES.VERIFIED_EXISTING,
+	]);
+	const result = await publishAndVerifyCandidate(
+		subject.input,
+		subject.dependencies,
+	);
+	assert.equal(result.outcome, PUBLICATION_OUTCOMES.PUBLISHED_AND_VERIFIED);
+	assert.deepEqual(subject.calls, {
+		install: 1,
+		publish: 1,
+		reconcile: 3,
+		sleep: 1,
+	});
+});
+
+test("transient registry consumer install failure recovers within the bounded window", async () => {
+	const subject = fixture([RECONCILIATION_OUTCOMES.VERIFIED_EXISTING]);
+	subject.dependencies.installAndVerifyRegistryPackage = async () => {
+		subject.calls.install += 1;
+		if (subject.calls.install === 1) {
+			throw registryFailure(RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED);
+		}
+	};
+	const result = await publishAndVerifyCandidate(
+		subject.input,
+		subject.dependencies,
+	);
+	assert.equal(result.outcome, PUBLICATION_OUTCOMES.VERIFIED_EXISTING);
+	assert.deepEqual(subject.calls, {
+		install: 2,
+		publish: 0,
+		reconcile: 1,
+		sleep: 1,
+	});
+});
+
+test("transient initial lookup exhaustion preserves the classified diagnostic", async () => {
+	const subject = fixture([
+		registryFailure(RECONCILIATION_FAILURES.REGISTRY_TIMEOUT),
+		registryFailure(RECONCILIATION_FAILURES.REGISTRY_TIMEOUT),
+	]);
+	subject.input.verificationAttempts = 2;
+	await assert.rejects(
+		publishAndVerifyCandidate(subject.input, subject.dependencies),
+		(error) => error.code === RECONCILIATION_FAILURES.REGISTRY_TIMEOUT,
+	);
+	assert.deepEqual(subject.calls, {
+		install: 0,
+		publish: 0,
+		reconcile: 2,
+		sleep: 1,
+	});
+});
+
+test("identity, digest, conflict, authentication, and permission failures do not retry", async () => {
+	for (const code of [
+		RECONCILIATION_FAILURES.CANDIDATE_INVALID,
+		RECONCILIATION_FAILURES.CANDIDATE_DIGEST_VERIFICATION_FAILED,
+		RECONCILIATION_FAILURES.IMMUTABLE_VERSION_CONFLICT,
+		RECONCILIATION_FAILURES.REGISTRY_INTEGRITY_FAILED,
+		RECONCILIATION_FAILURES.REGISTRY_AUTHENTICATION_FAILED,
+		RECONCILIATION_FAILURES.REGISTRY_PERMISSION_FAILED,
+	]) {
+		const subject = fixture([registryFailure(code)]);
+		subject.input.verificationAttempts = 3;
+		await assert.rejects(
+			publishAndVerifyCandidate(subject.input, subject.dependencies),
+			(error) => error.code === code,
+		);
+		assert.deepEqual(subject.calls, {
+			install: 0,
+			publish: 0,
+			reconcile: 1,
+			sleep: 0,
+		});
+	}
+});
+
+test("registry consumer exhaustion reports bounded verification and its cause", async () => {
+	const subject = fixture([RECONCILIATION_OUTCOMES.VERIFIED_EXISTING]);
+	subject.input.verificationAttempts = 2;
+	subject.dependencies.installAndVerifyRegistryPackage = async () => {
+		subject.calls.install += 1;
+		throw registryFailure(RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED);
+	};
+	await assert.rejects(
+		publishAndVerifyCandidate(subject.input, subject.dependencies),
+		(error) =>
+			error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED &&
+			error.cause?.code === RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED &&
+			/within 2 attempts/.test(error.message),
+	);
+	assert.deepEqual(subject.calls, {
+		install: 2,
+		publish: 0,
+		reconcile: 1,
+		sleep: 1,
 	});
 });
 
@@ -96,7 +230,10 @@ test("Packaged Factories publication bounds visibility retries and never republi
 	subject.input.verificationAttempts = 2;
 	await assert.rejects(
 		publishAndVerifyCandidate(subject.input, subject.dependencies),
-		(error) => error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
+		(error) =>
+			error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED &&
+			error.cause?.code === RECONCILIATION_FAILURES.REGISTRY_LOOKUP_FAILED &&
+			/within 2 attempts/.test(error.message),
 	);
 	assert.deepEqual(subject.calls, {
 		install: 0,

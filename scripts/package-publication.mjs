@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { RECONCILIATION_OUTCOMES } from "./package-registry.mjs";
+import {
+	RECONCILIATION_FAILURES,
+	RECONCILIATION_OUTCOMES,
+	RegistryReconciliationError,
+} from "./package-registry.mjs";
 
 export const PUBLICATION_OUTCOMES = Object.freeze({
 	PUBLISHED_AND_VERIFIED: "PUBLISHED_AND_VERIFIED",
@@ -20,6 +24,11 @@ export const PUBLICATION_FAILURES = Object.freeze({
 const DEFAULT_VERIFICATION_ATTEMPTS = 6;
 const DEFAULT_VERIFICATION_DELAY_MS = 5_000;
 const DEFAULT_PUBLISH_TIMEOUT_MS = 120_000;
+const RETRYABLE_REGISTRY_FAILURES = new Set([
+	RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED,
+	RECONCILIATION_FAILURES.REGISTRY_LOOKUP_FAILED,
+	RECONCILIATION_FAILURES.REGISTRY_TIMEOUT,
+]);
 
 export class PackagePublicationError extends Error {
 	constructor(code, message, options = {}) {
@@ -135,6 +144,34 @@ function wait(delayMs) {
 	return new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
 }
 
+function isRetryableRegistryFailure(error) {
+	return RETRYABLE_REGISTRY_FAILURES.has(error?.code);
+}
+
+async function retryRegistryOperation({
+	attempts,
+	delayMs,
+	exhaustedFailure,
+	operation,
+	sleep,
+}) {
+	let lastError;
+	for (let attempt = 1; attempt <= attempts; attempt += 1) {
+		try {
+			return await operation();
+		} catch (error) {
+			if (!isRetryableRegistryFailure(error)) {
+				throw error;
+			}
+			lastError = error;
+			if (attempt < attempts) {
+				await sleep(delayMs);
+			}
+		}
+	}
+	throw exhaustedFailure(lastError);
+}
+
 async function verifyPublishedRegistryState({
 	evidence,
 	tarballPath,
@@ -144,19 +181,74 @@ async function verifyPublishedRegistryState({
 	verificationDelayMs,
 	sleep,
 }) {
-	for (let attempt = 1; attempt <= verificationAttempts; attempt += 1) {
-		const result = await reconcile({ evidence, tarballPath, registryClient });
-		if (result.outcome === RECONCILIATION_OUTCOMES.VERIFIED_EXISTING) {
-			return;
-		}
-		if (attempt < verificationAttempts) {
-			await sleep(verificationDelayMs);
-		}
-	}
-	throw publicationFailure(
-		PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
-		"published version did not become digest-verifiable within the bounded verification window",
-	);
+	return retryRegistryOperation({
+		attempts: verificationAttempts,
+		delayMs: verificationDelayMs,
+		sleep,
+		async operation() {
+			const result = await reconcile({
+				evidence,
+				tarballPath,
+				registryClient,
+			});
+			if (result.outcome === RECONCILIATION_OUTCOMES.VERIFIED_EXISTING) {
+				return;
+			}
+			throw new RegistryReconciliationError(
+				RECONCILIATION_FAILURES.REGISTRY_LOOKUP_FAILED,
+				"published version is not visible yet",
+			);
+		},
+		exhaustedFailure(lastError) {
+			return publicationFailure(
+				PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
+				`published version did not become digest-verifiable within ${verificationAttempts} attempts (last failure: ${lastError?.code ?? "not visible"})`,
+				lastError,
+			);
+		},
+	});
+}
+
+async function reconcileInitialRegistryState({
+	evidence,
+	tarballPath,
+	registryClient,
+	reconcile,
+	verificationAttempts,
+	verificationDelayMs,
+	sleep,
+}) {
+	return retryRegistryOperation({
+		attempts: verificationAttempts,
+		delayMs: verificationDelayMs,
+		sleep,
+		operation: () => reconcile({ evidence, tarballPath, registryClient }),
+		exhaustedFailure(lastError) {
+			return lastError;
+		},
+	});
+}
+
+async function verifyRegistryConsumer({
+	install,
+	installInput,
+	verificationAttempts,
+	verificationDelayMs,
+	sleep,
+}) {
+	return retryRegistryOperation({
+		attempts: verificationAttempts,
+		delayMs: verificationDelayMs,
+		sleep,
+		operation: () => install(installInput),
+		exhaustedFailure(lastError) {
+			return publicationFailure(
+				PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
+				`registry consumer verification did not complete within ${verificationAttempts} attempts (last failure: ${lastError?.code ?? "unknown"})`,
+				lastError,
+			);
+		},
+	});
 }
 
 export async function publishAndVerifyCandidate(
@@ -176,7 +268,15 @@ export async function publishAndVerifyCandidate(
 		dependencies.publishCandidateTarball ?? publishCandidateTarball;
 	const install = dependencies.installAndVerifyRegistryPackage;
 	const sleep = dependencies.sleep ?? wait;
-	const initial = await reconcile({ evidence, tarballPath, registryClient });
+	const initial = await reconcileInitialRegistryState({
+		evidence,
+		tarballPath,
+		registryClient,
+		reconcile,
+		verificationAttempts,
+		verificationDelayMs,
+		sleep,
+	});
 	let outcome = PUBLICATION_OUTCOMES.VERIFIED_EXISTING;
 
 	if (initial.outcome === RECONCILIATION_OUTCOMES.PUBLISH_REQUIRED) {
@@ -214,13 +314,19 @@ export async function publishAndVerifyCandidate(
 		}
 	}
 
-	await install({
-		candidateVersion: evidence.candidateVersion,
-		consumerDirectory,
-		expectedSourceCommit: evidence.sourceCommit,
-		packageName: evidence.packageName,
-		packedFiles: evidence.inventory,
-		workspaceDirectory,
+	await verifyRegistryConsumer({
+		install,
+		installInput: {
+			candidateVersion: evidence.candidateVersion,
+			consumerDirectory,
+			expectedSourceCommit: evidence.sourceCommit,
+			packageName: evidence.packageName,
+			packedFiles: evidence.inventory,
+			workspaceDirectory,
+		},
+		verificationAttempts,
+		verificationDelayMs,
+		sleep,
 	});
 	return approvedDiagnostic(evidence, outcome);
 }

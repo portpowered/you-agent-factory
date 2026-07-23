@@ -146,8 +146,10 @@
   `scripts/package-publication.mjs` mechanics. Package wrappers own exact npm
   identity and installed-consumer semantics; shared orchestration owns local
   digest verification, immutable-version reconciliation, publish-at-most-once
-  behavior, bounded visibility retries, and timeout/authentication/permission
-  diagnostics.
+  behavior, and bounded retries for transient lookup, download, visibility, and
+  registry-consumer install failures. Candidate identity/digest, immutable
+  conflict, registry integrity, authentication, permission, and installed-data
+  contract failures remain fail-fast and retain classified diagnostics.
   The tagged Release workflow prepares API and Packaged Factories candidates
   together from the successful release-candidate workflow's exact head commit,
   uploads them under separate artifact names, and publishes only those
