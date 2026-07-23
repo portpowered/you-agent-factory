@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
@@ -430,4 +431,243 @@ func positionalArgsFromManifest(record climanifest.Command) cobra.PositionalArgs
 		return cobra.MinimumNArgs(totalMin)
 	}
 	return nil
+}
+
+const supportedManifestFormatVersion = "1.0.0"
+
+type plannedCommand struct {
+	record     climanifest.Command
+	parentPath string
+}
+
+// NewCommandTree constructs a detached Cobra tree from one resolved CLI
+// manifest snapshot. It validates the complete command topology before
+// allocating any Cobra commands, so callers never receive a partial tree.
+func NewCommandTree(manifest climanifest.Manifest) (*cobra.Command, error) {
+	plan, err := planCommandTree(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("build generic command tree: %w", err)
+	}
+
+	built := make(map[string]*cobra.Command, len(plan))
+	for _, item := range plan {
+		built[item.record.Path] = projectCommand(item.record)
+	}
+	for _, item := range plan {
+		if item.parentPath == "" {
+			continue
+		}
+		built[item.parentPath].AddCommand(built[item.record.Path])
+	}
+	return built[manifest.RootPath], nil
+}
+
+func planCommandTree(manifest climanifest.Manifest) ([]plannedCommand, error) {
+	if err := validateManifestHeader(manifest); err != nil {
+		return nil, err
+	}
+	byPath, err := indexCommandRecords(manifest.Commands)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := planCommandTopology(manifest.RootPath, byPath)
+	if err != nil {
+		return nil, err
+	}
+	sortCommandPlan(plan)
+	return plan, nil
+}
+
+func validateManifestHeader(manifest climanifest.Manifest) error {
+	if manifest.FormatVersion == "" {
+		return fmt.Errorf("manifest formatVersion is required")
+	}
+	if manifest.FormatVersion != supportedManifestFormatVersion {
+		return fmt.Errorf("unsupported manifest formatVersion %q", manifest.FormatVersion)
+	}
+	if err := validateCommandPath(manifest.RootPath, "manifest rootPath"); err != nil {
+		return err
+	}
+	if len(manifest.Commands) == 0 {
+		return fmt.Errorf("manifest commands are required")
+	}
+	return nil
+}
+
+func indexCommandRecords(commands map[string]climanifest.Command) (map[string]climanifest.Command, error) {
+	byPath := make(map[string]climanifest.Command, len(commands))
+	for mapID, record := range commands {
+		if err := validateCommandRecord(mapID, record); err != nil {
+			return nil, err
+		}
+		if previous, exists := byPath[record.Path]; exists {
+			return nil, fmt.Errorf(
+				"commands %q and %q declare duplicate path %q",
+				previous.ID,
+				record.ID,
+				record.Path,
+			)
+		}
+		byPath[record.Path] = record
+	}
+	return byPath, nil
+}
+
+func planCommandTopology(rootPath string, byPath map[string]climanifest.Command) ([]plannedCommand, error) {
+	root, ok := byPath[rootPath]
+	if !ok {
+		return nil, fmt.Errorf("manifest rootPath %q has no command record", rootPath)
+	}
+
+	plan := make([]plannedCommand, 0, len(byPath))
+	for _, record := range byPath {
+		parentPath := commandParentPath(record.Path)
+		if record.Path == rootPath {
+			parentPath = ""
+		} else {
+			if !strings.HasPrefix(record.Path, rootPath+" ") {
+				return nil, fmt.Errorf(
+					"command %q path %q is outside rootPath %q",
+					record.ID,
+					record.Path,
+					rootPath,
+				)
+			}
+			if _, exists := byPath[parentPath]; !exists {
+				return nil, fmt.Errorf(
+					"command %q path %q has missing parent %q",
+					record.ID,
+					record.Path,
+					parentPath,
+				)
+			}
+		}
+		plan = append(plan, plannedCommand{record: record, parentPath: parentPath})
+	}
+	if commandParentPath(root.Path) != "" {
+		return nil, fmt.Errorf("root command %q path %q must not have a parent", root.ID, root.Path)
+	}
+	return plan, nil
+}
+
+func sortCommandPlan(plan []plannedCommand) {
+	sort.Slice(plan, func(i, j int) bool {
+		leftDepth := strings.Count(plan[i].record.Path, " ")
+		rightDepth := strings.Count(plan[j].record.Path, " ")
+		if leftDepth != rightDepth {
+			return leftDepth < rightDepth
+		}
+		if plan[i].record.Path != plan[j].record.Path {
+			return plan[i].record.Path < plan[j].record.Path
+		}
+		return plan[i].record.ID < plan[j].record.ID
+	})
+}
+
+func validateCommandRecord(mapID string, record climanifest.Command) error {
+	if strings.TrimSpace(record.ID) == "" {
+		return fmt.Errorf("command map entry %q is missing id", mapID)
+	}
+	if mapID != record.ID {
+		return fmt.Errorf("command map key %q does not match record id %q", mapID, record.ID)
+	}
+	if strings.TrimSpace(record.Name) == "" {
+		return fmt.Errorf("command %q is missing name", record.ID)
+	}
+	if strings.ContainsAny(record.Name, " \t\r\n") {
+		return fmt.Errorf("command %q name %q must be one path segment", record.ID, record.Name)
+	}
+	if err := validateCommandPath(record.Path, fmt.Sprintf("command %q path", record.ID)); err != nil {
+		return err
+	}
+	pathParts := strings.Split(record.Path, " ")
+	if pathParts[len(pathParts)-1] != record.Name {
+		return fmt.Errorf(
+			"command %q name %q does not match path %q",
+			record.ID,
+			record.Name,
+			record.Path,
+		)
+	}
+	if strings.TrimSpace(record.Usage.Line) == "" {
+		return fmt.Errorf("command %q is missing usage line", record.ID)
+	}
+	if strings.Fields(record.Usage.Line)[0] != record.Name {
+		return fmt.Errorf(
+			"command %q usage line %q must start with name %q",
+			record.ID,
+			record.Usage.Line,
+			record.Name,
+		)
+	}
+	if strings.TrimSpace(record.Documentation.Documentation.Title.CanonicalEnglish) == "" {
+		return fmt.Errorf("command %q is missing documentation title", record.ID)
+	}
+	if strings.TrimSpace(record.Documentation.Documentation.Description.CanonicalEnglish) == "" {
+		return fmt.Errorf("command %q is missing documentation description", record.ID)
+	}
+	switch record.Visibility {
+	case "visible", "hidden":
+	default:
+		return fmt.Errorf("command %q has unsupported visibility %q", record.ID, record.Visibility)
+	}
+	switch record.Completeness {
+	case "", "authoritative":
+	default:
+		return fmt.Errorf("command %q has unsupported completeness mode %q", record.ID, record.Completeness)
+	}
+	return validateCommandAliases(record)
+}
+
+func validateCommandPath(path, field string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if strings.Join(strings.Fields(path), " ") != path {
+		return fmt.Errorf("%s %q must use single spaces between segments", field, path)
+	}
+	return nil
+}
+
+func validateCommandAliases(record climanifest.Command) error {
+	seen := map[string]struct{}{record.Name: {}}
+	for _, alias := range record.Aliases {
+		if strings.TrimSpace(alias) == "" {
+			return fmt.Errorf("command %q has an empty alias", record.ID)
+		}
+		if strings.ContainsAny(alias, " \t\r\n") {
+			return fmt.Errorf("command %q alias %q must be one path segment", record.ID, alias)
+		}
+		if _, exists := seen[alias]; exists {
+			return fmt.Errorf("command %q has duplicate name or alias %q", record.ID, alias)
+		}
+		seen[alias] = struct{}{}
+	}
+	return nil
+}
+
+func commandParentPath(path string) string {
+	index := strings.LastIndex(path, " ")
+	if index < 0 {
+		return ""
+	}
+	return path[:index]
+}
+
+func projectCommand(record climanifest.Command) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     record.Usage.Line,
+		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
+		Long:    record.Documentation.Documentation.Description.CanonicalEnglish,
+		Example: record.Usage.Example,
+		Aliases: append([]string(nil), record.Aliases...),
+		Hidden:  record.Visibility == "hidden",
+	}
+	if record.Runnable {
+		commandID := record.ID
+		cmd.RunE = func(*cobra.Command, []string) error {
+			return fmt.Errorf("command %q has no executable handler attached", commandID)
+		}
+	}
+	return cmd
 }

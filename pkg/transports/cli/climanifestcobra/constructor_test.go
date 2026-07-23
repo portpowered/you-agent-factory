@@ -1,8 +1,10 @@
 package climanifestcobra_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -179,4 +181,196 @@ func commandPathForID(commandID string) string {
 
 func noopRunE(cmd *cobra.Command, args []string) error {
 	return nil
+}
+
+func TestNewCommandTreeBuildsSyntheticHierarchyDeterministically(t *testing.T) {
+	manifest := syntheticTreeManifest()
+
+	root, err := climanifestcobra.NewCommandTree(manifest)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+
+	assertSyntheticRoot(t, root)
+	assertSyntheticChildren(t, root)
+}
+
+func assertSyntheticRoot(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	if root.Name() != "forge" || root.Use != "forge [flags]" {
+		t.Fatalf("root identity = (%q, %q), want (forge, forge [flags])", root.Name(), root.Use)
+	}
+	if root.Runnable() {
+		t.Fatal("schema non-runnable root received an execution handler")
+	}
+}
+
+func assertSyntheticChildren(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	children := root.Commands()
+	if len(children) != 2 || children[0].Name() != "alpha" || children[1].Name() != "zeta" {
+		t.Fatalf("root children = %v, want [alpha zeta]", commandNames(children))
+	}
+	assertSyntheticAlpha(t, children[0])
+	if children[1].Runnable() {
+		t.Fatal("schema non-runnable zeta command received an execution handler")
+	}
+}
+
+func assertSyntheticAlpha(t *testing.T, alpha *cobra.Command) {
+	t.Helper()
+	if alpha.Short != "Alpha title" || alpha.Long != "Alpha description" {
+		t.Fatalf("alpha documentation = (%q, %q)", alpha.Short, alpha.Long)
+	}
+	if len(alpha.Aliases) != 1 || alpha.Aliases[0] != "a" {
+		t.Fatalf("alpha aliases = %v, want [a]", alpha.Aliases)
+	}
+	if !alpha.Runnable() {
+		t.Fatal("schema-runnable alpha command is not runnable")
+	}
+	if err := alpha.RunE(alpha, nil); err == nil || !strings.Contains(err.Error(), `command "stable.alpha"`) {
+		t.Fatalf("unbound runnable error = %v", err)
+	}
+	leaf := alpha.Commands()
+	if len(leaf) != 1 || leaf[0].Name() != "leaf" || !leaf[0].Hidden {
+		t.Fatalf("alpha leaf = names %v hidden %t, want [leaf] hidden", commandNames(leaf), len(leaf) == 1 && leaf[0].Hidden)
+	}
+}
+
+func TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*climanifest.Manifest)
+		wantErr string
+	}{
+		{
+			name: "missing parent",
+			mutate: func(manifest *climanifest.Manifest) {
+				delete(manifest.Commands, "stable.alpha")
+			},
+			wantErr: `command "stable.leaf" path "forge alpha leaf" has missing parent "forge alpha"`,
+		},
+		{
+			name: "inconsistent map identity",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.alpha"]
+				record.ID = "different.id"
+				manifest.Commands["stable.alpha"] = record
+			},
+			wantErr: `command map key "stable.alpha" does not match record id "different.id"`,
+		},
+		{
+			name: "duplicate path",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.zeta"]
+				record.Name = "alpha"
+				record.Path = "forge alpha"
+				record.Usage.Line = "alpha"
+				manifest.Commands["stable.zeta"] = record
+			},
+			wantErr: `declare duplicate path "forge alpha"`,
+		},
+		{
+			name: "inconsistent public identity",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.alpha"]
+				record.Name = "renamed"
+				manifest.Commands["stable.alpha"] = record
+			},
+			wantErr: `name "renamed" does not match path "forge alpha"`,
+		},
+		{
+			name: "missing metadata",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.alpha"]
+				record.Documentation.Documentation.Description.CanonicalEnglish = ""
+				manifest.Commands["stable.alpha"] = record
+			},
+			wantErr: `command "stable.alpha" is missing documentation description`,
+		},
+		{
+			name: "unsupported visibility",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.alpha"]
+				record.Visibility = "internal"
+				manifest.Commands["stable.alpha"] = record
+			},
+			wantErr: `command "stable.alpha" has unsupported visibility "internal"`,
+		},
+		{
+			name: "unsupported completeness mode",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["stable.alpha"]
+				record.Completeness = "partial"
+				manifest.Commands["stable.alpha"] = record
+			},
+			wantErr: `command "stable.alpha" has unsupported completeness mode "partial"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := syntheticTreeManifest()
+			test.mutate(&manifest)
+
+			root, err := climanifestcobra.NewCommandTree(manifest)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("NewCommandTree() = (%v, %v), want nil error containing %q", root, err, test.wantErr)
+			}
+			if root != nil {
+				t.Fatalf("NewCommandTree() root = %v after validation failure, want nil", root)
+			}
+		})
+	}
+}
+
+func syntheticTreeManifest() climanifest.Manifest {
+	return climanifest.Manifest{
+		FormatVersion: "1.0.0",
+		RootPath:      "forge",
+		Commands: map[string]climanifest.Command{
+			"stable.zeta": syntheticCommand("stable.zeta", "zeta", "forge zeta", false),
+			"stable.leaf": func() climanifest.Command {
+				record := syntheticCommand("stable.leaf", "leaf", "forge alpha leaf", true)
+				record.Visibility = "hidden"
+				return record
+			}(),
+			"stable.root": func() climanifest.Command {
+				record := syntheticCommand("stable.root", "forge", "forge", false)
+				record.Usage.Line = "forge [flags]"
+				return record
+			}(),
+			"stable.alpha": func() climanifest.Command {
+				record := syntheticCommand("stable.alpha", "alpha", "forge alpha", true)
+				record.Aliases = []string{"a"}
+				return record
+			}(),
+		},
+	}
+}
+
+func syntheticCommand(id, name, path string, runnable bool) climanifest.Command {
+	titleName := strings.ToUpper(name[:1]) + name[1:]
+	return climanifest.Command{
+		ID:         id,
+		Name:       name,
+		Path:       path,
+		Visibility: "visible",
+		Runnable:   runnable,
+		Usage:      climanifest.Usage{Line: name},
+		Documentation: climanifest.Documentation{
+			Documentation: climanifest.DocumentationCopy{
+				Title:       climanifest.DocumentationField{CanonicalEnglish: titleName + " title"},
+				Description: climanifest.DocumentationField{CanonicalEnglish: titleName + " description"},
+			},
+		},
+	}
+}
+
+func commandNames(commands []*cobra.Command) []string {
+	names := make([]string, len(commands))
+	for index, command := range commands {
+		names[index] = command.Name()
+	}
+	return names
 }
