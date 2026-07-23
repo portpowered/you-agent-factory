@@ -4372,7 +4372,7 @@
           "pattern": "",
           "position": 0,
           "required": false,
-          "valueType": "string",
+          "valueType": "stringArray",
           "variadic": true
         }
       },
@@ -5465,7 +5465,7 @@
           "pattern": "",
           "position": 0,
           "required": false,
-          "valueType": "string",
+          "valueType": "stringArray",
           "variadic": true
         }
       },

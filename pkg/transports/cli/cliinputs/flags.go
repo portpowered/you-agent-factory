@@ -126,6 +126,9 @@ func flagRequired(flag *pflag.Flag) bool {
 	if flag.Annotations == nil {
 		return false
 	}
+	if values, ok := flag.Annotations["infinite-you/required"]; ok && len(values) > 0 && values[0] == "true" {
+		return true
+	}
 	_, ok := flag.Annotations[cobra.BashCompOneRequiredFlag]
 	return ok
 }

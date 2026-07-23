@@ -134,10 +134,20 @@ type DocumentationField struct {
 
 // Lifecycle carries the stable lifecycle metadata shared by commands and inputs.
 type Lifecycle struct {
-	FormatVersion string `json:"formatVersion"`
-	ItemID        string `json:"itemId"`
-	State         string `json:"state"`
-	Since         string `json:"since"`
+	FormatVersion string              `json:"formatVersion"`
+	ItemID        string              `json:"itemId"`
+	State         string              `json:"state"`
+	Since         string              `json:"since"`
+	Deprecated    string              `json:"deprecated,omitempty"`
+	Removed       string              `json:"removed,omitempty"`
+	Successor     *LifecycleSuccessor `json:"successor,omitempty"`
+}
+
+// LifecycleSuccessor carries canonical migration guidance for a deprecated or
+// removed manifest item.
+type LifecycleSuccessor struct {
+	TargetItemID     string `json:"targetItemId"`
+	CanonicalEnglish string `json:"canonicalEnglish"`
 }
 
 // Usage carries invocation-line and example metadata.

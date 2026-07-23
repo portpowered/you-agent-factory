@@ -12,6 +12,28 @@ primary-result behavior.
 - Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
   as production code. Keep topology fixtures readable by delegating independent
   identity, routing, and validation assertions to named test helpers.
+- Focused `climanifestcobra` implementation scenarios belong beside the owning
+  package. Production-integration evidence must enter through
+  `root.BuildProcess`; use the injected `CLIObserver` edge when the
+  customer-visible contract is the detached command/input projection rather
+  than a service side effect. The generic constructor's exported black-box
+  conformance suite also runs in the functional lane because arbitrary
+  manifests are its public input boundary; keep those cases limited to
+  observable Cobra construction, parsing, help, completion, and dispatch
+  behavior. Do not use source inspection or inventory scans to raise coverage.
+- Generic relationship presence must inspect every registered flag spelling.
+  Cobra marks the canonical flag when a shorthand is used, but aliases are
+  separate `pflag.Flag` records even when they share typed storage.
+- An inherited generic flag reuses its ancestor's persistent Cobra record, so
+  its projected metadata must match the declaration after normalizing only the
+  stable input ID, scope, inheritance reference, and lifecycle item ID.
+  Reject presentation or lifecycle differences during construction rather
+  than accepting child metadata that cannot be projected independently.
+- Adding an embedded packaged-factory definition also adds two measured backend
+  packages to the unit and functional coverage manifests: record the definition
+  package's observed numeric floor and the wrapper package's documented
+  measurement exception when it has no executable statements. Verify both with
+  `make test-unit-coverage` and `make test-functional-coverage`.
 - Generated packaged Factory definitions have no per-Factory Go wrapper or
   handwritten registration package. Add authored sources under
   `packages/packaged-factories/factories/`, regenerate the publication, and let
@@ -400,6 +422,70 @@ response-stream output.
   Runtime handler bindings for an inherited flag must read the persistent
   ancestor's live storage; do not leave execution dependent on retired
   command-local storage after canonicalizing an input as inherited.
+  Generic Cobra projection lives in
+  `pkg/transports/cli/climanifestcobra/constructor.go`, while its invocation-local
+  typed flag values and stable-ID `InputValues` access live with the package's
+  other binding state in `pkg/transports/cli/climanifestcobra/options.go`.
+  Validate the complete input and inheritance plan before registering any pflag
+  values, and register inherited records against their persistent ancestor's
+  canonical storage rather than allocating command-local copies.
+  The same constructor plans positional inputs in position order, rejects gaps
+  and non-terminal variadics before Cobra mutation, and records parsed typed
+  values on the invocation-local command for stable-ID handler access.
+  Relationship evaluation uses stable flag or argument references and explicit
+  CLI presence, runs in Cobra's pre-handler phase, and reports public input
+  spellings without exposing input values. Deduplicate relationship participants
+  by effective semantic identity so an inherited record and its persistent
+  ancestor cannot count as separate inputs. Attach the complete Cobra hierarchy
+  before projecting flag-group annotations so inherited persistent flags are
+  resolvable without a construction panic. Only project Cobra group annotations
+  when every participant is a flag locally owned by the relationship command;
+  persistent, inherited, and ancestor flags share `pflag.Flag` objects, so
+  command-owned relationships involving them must rely on the generic
+  pre-handler enforcement without mutating shared annotations.
+  Generic help, lifecycle, and completion projection lives beside the docs
+  transport boundary in
+  `pkg/transports/cli/climanifestcobra/docs_constructor.go`. Validate command
+  and flag lifecycle records, positional lifecycle records when authored, and
+  every completion mode before Cobra mutation. Static completion consumes
+  declared enum choices; dynamic completion callbacks are supplied through
+  `GenericBindings.Completions` keyed by stable input ID, never by a public flag
+  name or command path. Use the same cardinality-allocation helper for parsing
+  and positional completion so later required inputs reserve their tokens in
+  both paths. Derive positional usage labels from ordered argument records,
+  render declared aliases in canonical flag help, and reject sibling
+  command-name/alias collisions before creating Cobra commands; Cobra otherwise
+  resolves the first matching sibling and can silently dispatch the wrong stable
+  handler.
+  Treat argument `doubleDash: terminates-flags` as the Cobra-compatible mode and
+  fail construction for missing, unknown, or currently unrepresentable modes
+  instead of accepting changed parsing semantics. Hidden positional inputs
+  remain part of cardinality allocation and parsing but are omitted from
+  generated usage/help. Before projection, require each input to be one complete
+  compatibility or canonical record, validate its source vocabulary and stable
+  handler binding, and require `defaultValue` presence to exactly match the
+  canonical `manifest-default` source. For canonical inputs, also reconcile
+  every input-owned binding ID with the command's `handlerBindings`, require
+  explicit `sourceBindings` for accepted external sources, and validate the
+  complete canonical precedence policy before allocating Cobra state. Repeated,
+  fixed-multiple, and unbounded cardinality use `stringArray`; reject repeated
+  scalar types and typed defaults outside the declared range. Apply
+  `lowercase`, `trim`, and `lowercase-trim` to explicit string and string-array
+  values, while requiring authored defaults and enum choices to already be in
+  their declared normalized form. Validate relationship records both
+  individually and as one command-owned set so equivalent duplicates,
+  contradictions, and directed dependency cycles fail during planning rather
+  than reaching pre-handler evaluation.
+  Generic runnable dispatch follows the same boundary: validate every
+  `Command.Handler.ID` and `GenericBindings.Handlers` entry before Cobra
+  projection, reject duplicate handler ownership, and invoke the selected
+  stable-ID handler with a detached normalized `InputValues` snapshot. Public
+  command paths and aliases must not participate in executable lookup.
+  `GenericConstructor.Construct` is the strict stateless transport role for
+  functional projection evidence; keep `NewCommandTree` as the convenience
+  constructor while later family migrations remain outside this foundation
+  work. Functional tests may call the role, but must not assemble customer
+  behavior through transport constructors in place of `root.BuildProcess`.
   Declare canonical environment, operator-config, and stdin routing in command
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
