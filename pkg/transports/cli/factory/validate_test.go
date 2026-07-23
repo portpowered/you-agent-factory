@@ -12,6 +12,66 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
+func TestValidateAcceptsDecodedExplicitJSONYAMLAndYMLSources(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"factory.json", "factory.yaml", "factory.yml"} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			var output strings.Builder
+			err := ValidateWithServices(
+				ValidateConfig{Context: context.Background(), Path: path, Output: &output},
+				testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+				func(string) ([]byte, error) {
+					return []byte(`{"name":"supported"}`), nil
+				},
+			)
+			if err != nil {
+				t.Fatalf("ValidateWithServices(%s): %v", path, err)
+			}
+			if !strings.Contains(output.String(), "Factory validation passed.") {
+				t.Fatalf("output = %q", output.String())
+			}
+		})
+	}
+}
+
+func TestValidateFailureReportsSourcePathAndFormat(t *testing.T) {
+	t.Parallel()
+
+	for path, format := range map[string]string{
+		"customer/factory.json": "JSON",
+		"customer/factory.yaml": "YAML",
+		"customer/factory.yml":  "YAML",
+	} {
+		path := path
+		format := format
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateWithServices(
+				ValidateConfig{Context: context.Background(), Path: path, Output: &strings.Builder{}},
+				testTopologyFactoryDefinitionValidator(testFactoryDefinitionValidationFailure(
+					factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+					"incompatible taxonomy",
+					"worker",
+				)),
+				func(string) ([]byte, error) {
+					return []byte(`{"name":"invalid"}`), nil
+				},
+			)
+			if err == nil {
+				t.Fatal("expected blocking validation error")
+			}
+			for _, want := range []string{path, format, "validation"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want substring %q", err, want)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateUsesInjectedAuthoredSourceLoader(t *testing.T) {
 	wantErr := errors.New("injected source failure")
 	calls := 0

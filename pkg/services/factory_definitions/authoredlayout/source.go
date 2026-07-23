@@ -32,9 +32,13 @@ func loadFactorySource(
 	if info.IsDir() {
 		sourcePath = filepath.Join(path, factorydefinitions.FactoryConfigFile)
 	}
+	format, err := factorydefinitions.AuthoredFactoryFormatForPath(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("select Factory Definition source %s: %w", sourcePath, err)
+	}
 	data, err := fileSystem.ReadFile(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("read factory config %s: %w", sourcePath, err)
 	}
-	return data, nil
+	return decodeAuthoredFactory(sourcePath, format, data)
 }
