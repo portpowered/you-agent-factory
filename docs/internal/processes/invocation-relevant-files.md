@@ -416,6 +416,14 @@ response-stream output.
   command-name/alias collisions before creating Cobra commands; Cobra otherwise
   resolves the first matching sibling and can silently dispatch the wrong stable
   handler.
+  Treat argument `doubleDash: terminates-flags` as the Cobra-compatible mode and
+  fail construction for missing, unknown, or currently unrepresentable modes
+  instead of accepting changed parsing semantics. Hidden positional inputs
+  remain part of cardinality allocation and parsing but are omitted from
+  generated usage/help. Before projection, require each input to be one complete
+  compatibility or canonical record, validate its source vocabulary and stable
+  handler binding, and require `defaultValue` presence to exactly match the
+  canonical `manifest-default` source.
   Generic runnable dispatch follows the same boundary: validate every
   `Command.Handler.ID` and `GenericBindings.Handlers` entry before Cobra
   projection, reject duplicate handler ownership, and invoke the selected

@@ -107,6 +107,7 @@ func TestGenericHelpDerivesCardinalityAndExposesFlagAliases(t *testing.T) {
 			ValueType: "stringArray", MaxCardinality: -1, Variadic: true, Completion: "none",
 		},
 	}
+	completeFeedbackArguments(alpha.Arguments)
 	alpha.Flags = map[string]climanifest.Flag{
 		"feedback.alpha.flag.cluster": {
 			ID: "feedback.alpha.flag.cluster", Long: "cluster", Aliases: []string{"compute-cluster"},
@@ -138,8 +139,165 @@ func TestGenericHelpDerivesCardinalityAndExposesFlagAliases(t *testing.T) {
 	}
 }
 
+func TestGenericArgumentsSupportCobraDoubleDashTermination(t *testing.T) {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Arguments = map[string]climanifest.Argument{
+		"feedback.alpha.arg.value": compatibilityFeedbackArgument(
+			"feedback.alpha.arg.value",
+			"value",
+			0,
+		),
+	}
+	manifest.Commands[alpha.ID] = alpha
+	var received map[string]any
+	root, err := NewCommandTree(manifest, feedbackBindings(
+		manifest,
+		func(_ context.Context, values map[string]any) error {
+			received = values
+			return nil
+		},
+	))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	root.SetArgs([]string{"alpha", "--", "--literal"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if received["feedback.alpha.arg.value"] != "--literal" {
+		t.Fatalf("handler values = %#v, want bare -- to terminate flags", received)
+	}
+}
+
+func TestGenericArgumentsRejectInvalidDoubleDashModesBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+	}{
+		{name: "missing"},
+		{name: "known but unsupported", mode: "none"},
+		{name: "unknown", mode: "passthrough"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := feedbackManifestWithArgument(
+				compatibilityFeedbackArgument("feedback.alpha.arg.value", "value", 0),
+			)
+			updateFeedbackArgument(&manifest, func(argument *climanifest.Argument) {
+				argument.DoubleDash = test.mode
+			})
+			assertFeedbackConstructionFailure(t, manifest, "doubleDash")
+		})
+	}
+}
+
+func TestGenericHiddenArgumentParsesWithoutAppearingInHelp(t *testing.T) {
+	visible := canonicalFeedbackArgument("feedback.alpha.arg.visible", "visible", 0, "visible")
+	hidden := canonicalFeedbackArgument("feedback.alpha.arg.secret", "secret", 1, "hidden")
+	hidden.Required = true
+	hidden.MinCardinality = 1
+	manifest := feedbackManifestWithArguments(visible, hidden)
+	var received map[string]any
+	root, err := NewCommandTree(manifest, feedbackBindings(
+		manifest,
+		func(_ context.Context, values map[string]any) error {
+			received = values
+			return nil
+		},
+	))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	alpha := root.Commands()[0]
+	if alpha.Use != "alpha [visible]" {
+		t.Fatalf("command use = %q, want hidden argument omitted", alpha.Use)
+	}
+	var output bytes.Buffer
+	alpha.SetOut(&output)
+	if err := alpha.Help(); err != nil {
+		t.Fatalf("Help() error = %v", err)
+	}
+	if strings.Contains(output.String(), "secret") {
+		t.Fatalf("help exposes hidden positional input:\n%s", output.String())
+	}
+	root.SetArgs([]string{"alpha", "classified"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if received["feedback.alpha.arg.secret"] != "classified" {
+		t.Fatalf("handler values = %#v, want hidden argument parsed", received)
+	}
+}
+
+func TestGenericArgumentsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*climanifest.Argument)
+	}{
+		{name: "incomplete shape", mutate: func(argument *climanifest.Argument) {
+			argument.Channels = nil
+		}},
+		{name: "invalid visibility", mutate: func(argument *climanifest.Argument) {
+			*argument = canonicalFeedbackArgument(argument.ID, argument.Name, argument.Position, "internal")
+		}},
+		{name: "default without source", mutate: func(argument *climanifest.Argument) {
+			*argument = canonicalFeedbackArgument(argument.ID, argument.Name, argument.Position, "visible")
+			value := "fallback"
+			argument.DefaultValue = &climanifest.InputValue{String: &value}
+		}},
+		{name: "source without default", mutate: func(argument *climanifest.Argument) {
+			*argument = canonicalFeedbackArgument(argument.ID, argument.Name, argument.Position, "visible")
+			argument.AcceptedSources = append(argument.AcceptedSources, "manifest-default")
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := feedbackManifestWithArgument(
+				compatibilityFeedbackArgument("feedback.alpha.arg.value", "value", 0),
+			)
+			updateFeedbackArgument(&manifest, test.mutate)
+			assertFeedbackConstructionFailure(t, manifest, "argument")
+		})
+	}
+}
+
+func TestGenericFlagsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*climanifest.Flag)
+	}{
+		{name: "unsupported kind", mutate: func(flag *climanifest.Flag) {
+			flag.Kind = "unsupported"
+		}},
+		{name: "missing handler binding", mutate: func(flag *climanifest.Flag) {
+			flag.HandlerBindingID = ""
+		}},
+		{name: "default without source", mutate: func(flag *climanifest.Flag) {
+			value := "fallback"
+			flag.DefaultValue = &climanifest.InputValue{String: &value}
+		}},
+		{name: "source without default", mutate: func(flag *climanifest.Flag) {
+			flag.AcceptedSources = append(flag.AcceptedSources, "manifest-default")
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := feedbackManifest()
+			delete(manifest.Commands, "feedback.zeta")
+			alpha := manifest.Commands["feedback.alpha"]
+			flag := canonicalFeedbackFlag()
+			test.mutate(&flag)
+			alpha.Flags = map[string]climanifest.Flag{flag.ID: flag}
+			manifest.Commands[alpha.ID] = alpha
+			assertFeedbackConstructionFailure(t, manifest, "input")
+		})
+	}
+}
+
 func mixedCompletionArguments(optionalMode, requiredMode string) map[string]climanifest.Argument {
-	return map[string]climanifest.Argument{
+	arguments := map[string]climanifest.Argument{
 		"feedback.alpha.arg.optional": {
 			ID: "feedback.alpha.arg.optional", Name: "optional", Position: 0, Kind: "positional",
 			ValueType: "string", MaxCardinality: 1, Enum: []string{"optional-static"}, Completion: optionalMode,
@@ -149,6 +307,88 @@ func mixedCompletionArguments(optionalMode, requiredMode string) map[string]clim
 			ValueType: "string", Required: true, MinCardinality: 1, MaxCardinality: 1,
 			Enum: []string{"required-static"}, Completion: requiredMode,
 		},
+	}
+	completeFeedbackArguments(arguments)
+	return arguments
+}
+
+func compatibilityFeedbackArgument(id, name string, position int) climanifest.Argument {
+	return climanifest.Argument{
+		ID: id, Name: name, Position: position, Kind: "positional",
+		ValueType: "string", MaxCardinality: 1, Completion: "none",
+		DoubleDash: "terminates-flags", Channels: []string{"cli"},
+	}
+}
+
+func canonicalFeedbackArgument(id, name string, position int, visibility string) climanifest.Argument {
+	argument := compatibilityFeedbackArgument(id, name, position)
+	argument.Channels = nil
+	argument.Scope = "local"
+	argument.AcceptedSources = []string{"cli"}
+	argument.HandlerBindingID = id + ".binding"
+	argument.Visibility = visibility
+	argument.Lifecycle = feedbackLifecycle(id)
+	return argument
+}
+
+func canonicalFeedbackFlag() climanifest.Flag {
+	const id = "feedback.alpha.flag.value"
+	return climanifest.Flag{
+		ID: id, Kind: "named", Long: "value", Scope: "local", ValueType: "string",
+		MaxCardinality: 1, Completion: "none", AcceptedSources: []string{"cli"},
+		HandlerBindingID: id + ".binding", Visibility: "visible", Lifecycle: feedbackLifecycle(id),
+	}
+}
+
+func feedbackManifestWithArgument(argument climanifest.Argument) climanifest.Manifest {
+	return feedbackManifestWithArguments(argument)
+}
+
+func feedbackManifestWithArguments(arguments ...climanifest.Argument) climanifest.Manifest {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Arguments = make(map[string]climanifest.Argument, len(arguments))
+	for _, argument := range arguments {
+		alpha.Arguments[argument.ID] = argument
+	}
+	manifest.Commands[alpha.ID] = alpha
+	return manifest
+}
+
+func updateFeedbackArgument(manifest *climanifest.Manifest, update func(*climanifest.Argument)) {
+	alpha := manifest.Commands["feedback.alpha"]
+	for id, argument := range alpha.Arguments {
+		update(&argument)
+		alpha.Arguments[id] = argument
+		break
+	}
+	manifest.Commands[alpha.ID] = alpha
+}
+
+func assertFeedbackConstructionFailure(t *testing.T, manifest climanifest.Manifest, want string) {
+	t.Helper()
+	calls := 0
+	root, err := NewCommandTree(manifest, feedbackBindings(
+		manifest,
+		func(context.Context, map[string]any) error {
+			calls++
+			return nil
+		},
+	))
+	if root != nil || err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("NewCommandTree() = (%v, %v), want nil error containing %q", root, err, want)
+	}
+	if calls != 0 {
+		t.Fatalf("handler calls = %d, want 0", calls)
+	}
+}
+
+func completeFeedbackArguments(arguments map[string]climanifest.Argument) {
+	for id, argument := range arguments {
+		argument.DoubleDash = "terminates-flags"
+		argument.Channels = []string{"cli"}
+		arguments[id] = argument
 	}
 }
 

@@ -853,41 +853,6 @@ func validateGenericFlagNames(
 	return nil
 }
 
-func validateGenericFlagShape(commandID string, flag climanifest.Flag) error {
-	switch flag.ValueType {
-	case "bool", "string", "int", "int64", "stringArray":
-	default:
-		return genericFlagError(commandID, flag.ID, "unsupported value type %q", flag.ValueType)
-	}
-	if flag.Repeatable != (flag.ValueType == "stringArray") {
-		return genericFlagError(
-			commandID,
-			flag.ID,
-			"repeatable=%t is incompatible with value type %q",
-			flag.Repeatable,
-			flag.ValueType,
-		)
-	}
-	switch flag.Normalization {
-	case "":
-	case "trim":
-		if flag.ValueType != "string" && flag.ValueType != "stringArray" {
-			return genericFlagError(commandID, flag.ID, "normalization %q is incompatible with value type %q", flag.Normalization, flag.ValueType)
-		}
-	default:
-		return genericFlagError(commandID, flag.ID, "unsupported normalization %q", flag.Normalization)
-	}
-	switch flag.Visibility {
-	case "", "visible", "hidden":
-	default:
-		return genericFlagError(commandID, flag.ID, "unsupported visibility %q", flag.Visibility)
-	}
-	if len(flag.Enum) > 0 && flag.ValueType != "string" && flag.ValueType != "stringArray" {
-		return genericFlagError(commandID, flag.ID, "enumerated choices are incompatible with value type %q", flag.ValueType)
-	}
-	return nil
-}
-
 func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error {
 	defaultValue, err := genericFlagDefault(flag)
 	if err != nil {

@@ -267,6 +267,7 @@ func TestNewCommandTreeDispatchesEveryVariadicArgumentValueType(t *testing.T) {
 					Completion: "none",
 				},
 			}
+			withNoneArgumentCompletion(command.Arguments)
 			manifest.Commands[command.ID] = command
 			var received map[string]any
 			bindings := genericBindingsForManifest(manifest)
@@ -310,6 +311,7 @@ func TestNewCommandTreeDispatchesScalarBooleanAndInt64Arguments(t *testing.T) {
 					Completion: "none",
 				},
 			}
+			withNoneArgumentCompletion(command.Arguments)
 			manifest.Commands[command.ID] = command
 			var received map[string]any
 			bindings := genericBindingsForManifest(manifest)
@@ -562,7 +564,7 @@ func presentationFlags() map[string]climanifest.Flag {
 }
 
 func presentationArguments() map[string]climanifest.Argument {
-	return map[string]climanifest.Argument{
+	arguments := map[string]climanifest.Argument{
 		"stable.alpha.arg.target": {
 			ID: "stable.alpha.arg.target", Name: "target", Position: 0, Kind: "positional",
 			ValueType: "string", Required: true, MinCardinality: 1, MaxCardinality: 1,
@@ -577,6 +579,15 @@ func presentationArguments() map[string]climanifest.Argument {
 			ValueType: "string", MinCardinality: 0, MaxCardinality: 1, Completion: "none",
 		},
 	}
+	withNoneArgumentCompletion(arguments)
+	arguments["stable.alpha.arg.target"] = withArgumentCompletion(arguments["stable.alpha.arg.target"], "static")
+	arguments["stable.alpha.arg.worker"] = withArgumentCompletion(arguments["stable.alpha.arg.worker"], "dynamic")
+	return arguments
+}
+
+func withArgumentCompletion(argument climanifest.Argument, completion string) climanifest.Argument {
+	argument.Completion = completion
+	return argument
 }
 
 func presentationBindings(manifest climanifest.Manifest) climanifestcobra.GenericBindings {

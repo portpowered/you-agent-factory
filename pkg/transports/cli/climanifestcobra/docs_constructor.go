@@ -177,6 +177,226 @@ func validateInputCompletion(
 	}
 }
 
+func validateArgumentRecordShape(commandID string, argument climanifest.Argument) error {
+	compatibility := len(argument.Channels) > 0
+	canonical := argument.Scope != "" || len(argument.AcceptedSources) > 0 ||
+		argument.HandlerBindingID != "" || argument.Visibility != "" ||
+		argument.Lifecycle != (climanifest.Lifecycle{})
+	if compatibility == canonical {
+		return genericArgumentError(
+			commandID,
+			argument.ID,
+			"must declare exactly one complete compatibility channels record or canonical metadata record",
+		)
+	}
+	if compatibility {
+		if argument.DefaultValue != nil {
+			return genericArgumentError(commandID, argument.ID, "compatibility record cannot declare canonical defaultValue")
+		}
+		return validateInputSources(commandID, argument.ID, argument.Channels, isCompatibilityArgumentSource)
+	}
+	if argument.Scope != "local" {
+		return genericArgumentError(commandID, argument.ID, "canonical record requires local scope")
+	}
+	if strings.TrimSpace(argument.HandlerBindingID) == "" {
+		return genericArgumentError(commandID, argument.ID, "canonical record requires handlerBindingId")
+	}
+	switch argument.Visibility {
+	case "visible", "hidden":
+	default:
+		return genericArgumentError(commandID, argument.ID, "unsupported visibility %q", argument.Visibility)
+	}
+	if err := validateInputSources(commandID, argument.ID, argument.AcceptedSources, isCanonicalInputSource); err != nil {
+		return err
+	}
+	return validateManifestDefaultSource(commandID, argument.ID, argument.DefaultValue != nil, argument.AcceptedSources)
+}
+
+func validateGenericFlagRecordShape(commandID string, flag climanifest.Flag) error {
+	if !isCanonicalFlagRecord(flag) {
+		return nil
+	}
+	if flag.Kind != "named" {
+		return genericFlagError(commandID, flag.ID, "canonical record requires kind %q", "named")
+	}
+	if err := validateCanonicalFlagCardinality(commandID, flag); err != nil {
+		return err
+	}
+	if strings.TrimSpace(flag.HandlerBindingID) == "" {
+		return genericFlagError(commandID, flag.ID, "canonical record requires handlerBindingId")
+	}
+	if flag.Default != "" || flag.ChangedDefault || flag.NoOptionDefault != "" || flag.Binding != "" {
+		return genericFlagError(commandID, flag.ID, "canonical record cannot mix compatibility default or binding fields")
+	}
+	if err := validateCanonicalFlagSources(commandID, flag); err != nil {
+		return err
+	}
+	return validateCanonicalFlagDefaultSource(commandID, flag)
+}
+
+func isCanonicalFlagRecord(flag climanifest.Flag) bool {
+	return flag.Kind != "" || flag.MinCardinality != 0 || flag.MaxCardinality != 0 ||
+		flag.DefaultValue != nil || flag.NoOptionValue != nil || len(flag.AcceptedSources) > 0 ||
+		flag.HandlerBindingID != ""
+}
+
+func validateCanonicalFlagCardinality(commandID string, flag climanifest.Flag) error {
+	if flag.Required != (flag.MinCardinality > 0) {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"required=%t is inconsistent with minimum cardinality %d",
+			flag.Required,
+			flag.MinCardinality,
+		)
+	}
+	wantMaximum := 1
+	if flag.Repeatable {
+		wantMaximum = -1
+	}
+	if flag.MaxCardinality != wantMaximum {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"maximum cardinality %d is incompatible with repeatable=%t",
+			flag.MaxCardinality,
+			flag.Repeatable,
+		)
+	}
+	return nil
+}
+
+func validateGenericFlagShape(commandID string, flag climanifest.Flag) error {
+	if err := validateGenericFlagRecordShape(commandID, flag); err != nil {
+		return err
+	}
+	switch flag.ValueType {
+	case "bool", "string", "int", "int64", "stringArray":
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported value type %q", flag.ValueType)
+	}
+	if flag.Repeatable != (flag.ValueType == "stringArray") {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"repeatable=%t is incompatible with value type %q",
+			flag.Repeatable,
+			flag.ValueType,
+		)
+	}
+	switch flag.Normalization {
+	case "":
+	case "trim":
+		if flag.ValueType != "string" && flag.ValueType != "stringArray" {
+			return genericFlagError(commandID, flag.ID, "normalization %q is incompatible with value type %q", flag.Normalization, flag.ValueType)
+		}
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported normalization %q", flag.Normalization)
+	}
+	switch flag.Visibility {
+	case "", "visible", "hidden":
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported visibility %q", flag.Visibility)
+	}
+	if len(flag.Enum) > 0 && flag.ValueType != "string" && flag.ValueType != "stringArray" {
+		return genericFlagError(commandID, flag.ID, "enumerated choices are incompatible with value type %q", flag.ValueType)
+	}
+	return nil
+}
+
+func validateCanonicalFlagSources(commandID string, flag climanifest.Flag) error {
+	if len(flag.AcceptedSources) == 0 {
+		return genericFlagError(commandID, flag.ID, "canonical record requires acceptedSources")
+	}
+	seen := make(map[string]bool, len(flag.AcceptedSources))
+	for _, source := range flag.AcceptedSources {
+		if !isCanonicalInputSource(source) {
+			return genericFlagError(commandID, flag.ID, "unsupported input source %q", source)
+		}
+		if seen[source] {
+			return genericFlagError(commandID, flag.ID, "duplicate input source %q", source)
+		}
+		seen[source] = true
+	}
+	return nil
+}
+
+func validateCanonicalFlagDefaultSource(commandID string, flag climanifest.Flag) error {
+	hasSource := false
+	for _, source := range flag.AcceptedSources {
+		hasSource = hasSource || source == "manifest-default"
+	}
+	if (flag.DefaultValue != nil) != hasSource {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"defaultValue presence must exactly match accepted source %q",
+			"manifest-default",
+		)
+	}
+	return nil
+}
+
+func validateInputSources(
+	commandID, inputID string,
+	sources []string,
+	supported func(string) bool,
+) error {
+	if len(sources) == 0 {
+		return genericArgumentError(commandID, inputID, "input sources are required")
+	}
+	seen := make(map[string]bool, len(sources))
+	for _, source := range sources {
+		if !supported(source) {
+			return genericArgumentError(commandID, inputID, "unsupported input source %q", source)
+		}
+		if seen[source] {
+			return genericArgumentError(commandID, inputID, "duplicate input source %q", source)
+		}
+		seen[source] = true
+	}
+	return nil
+}
+
+func isCompatibilityArgumentSource(source string) bool {
+	switch source {
+	case "cli", "env", "config", "stdin":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanonicalInputSource(source string) bool {
+	switch source {
+	case "cli", "stdin", "environment", "operator-config",
+		"manifest-default", "factory-signature-default":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateManifestDefaultSource(
+	commandID, inputID string,
+	hasDefault bool,
+	sources []string,
+) error {
+	hasSource := false
+	for _, source := range sources {
+		hasSource = hasSource || source == "manifest-default"
+	}
+	if hasDefault != hasSource {
+		return genericArgumentError(
+			commandID,
+			inputID,
+			"defaultValue presence must exactly match accepted source %q",
+			"manifest-default",
+		)
+	}
+	return nil
+}
+
 func validateInheritedPresentation(plan []plannedCommand, flags map[string]climanifest.Flag) error {
 	for _, item := range plan {
 		for _, flag := range item.flags {
@@ -335,6 +555,9 @@ func projectedCommandUsage(record climanifest.Command, arguments []climanifest.A
 	}
 	fields := []string{record.Name}
 	for _, argument := range arguments {
+		if argument.Visibility == "hidden" {
+			continue
+		}
 		fields = append(fields, argumentUsageToken(argument))
 	}
 	return strings.Join(fields, " ")

@@ -462,7 +462,7 @@ func TestNewCommandTreeRejectsInvalidFlagRecordsBeforeReturningTree(t *testing.T
 					flag.Repeatable = true
 				})
 			},
-			wantErr: `command "stable.alpha" input "stable.alpha.flag.attempts": repeatable=true is incompatible`,
+			wantErr: `command "stable.alpha" input "stable.alpha.flag.attempts": maximum cardinality 1 is incompatible with repeatable=true`,
 		},
 		{
 			name: "incompatible inherited metadata",
@@ -705,6 +705,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 	label := command.Arguments["stable.shape.arg.label"]
 	defaultLabel := "fallback"
 	label.DefaultValue = &climanifest.InputValue{String: &defaultLabel}
+	label = canonicalTestArgument(label)
 	command.Arguments[label.ID] = label
 	ids := command.Arguments["stable.shape.arg.ids"]
 	ids.MinCardinality = 2
@@ -848,6 +849,7 @@ func TestNewCommandTreeRejectsInvalidArgumentAndRelationshipRecords(t *testing.T
 				updateSyntheticArgument(manifest, "arg.target", func(argument *climanifest.Argument) {
 					value := 9
 					argument.DefaultValue = &climanifest.InputValue{Int: &value}
+					*argument = canonicalTestArgument(*argument)
 				})
 			},
 			wantErr: `argument "arg.target": invalid typed default`,
@@ -946,23 +948,6 @@ func activeLifecycle(id string) climanifest.Lifecycle {
 		ItemID:        id,
 		State:         "active",
 		Since:         "1.0.0",
-	}
-}
-
-func withActiveFlagLifecycle(flags map[string]climanifest.Flag) {
-	for id, flag := range flags {
-		flag.Lifecycle = activeLifecycle(id)
-		if flag.Completion == "" {
-			flag.Completion = "none"
-		}
-		flags[id] = flag
-	}
-}
-
-func withNoneArgumentCompletion(arguments map[string]climanifest.Argument) {
-	for id, argument := range arguments {
-		argument.Completion = "none"
-		arguments[id] = argument
 	}
 }
 

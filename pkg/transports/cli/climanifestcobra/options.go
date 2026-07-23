@@ -488,6 +488,19 @@ func validateArgumentShape(commandID string, argument climanifest.Argument) erro
 	default:
 		return genericArgumentError(commandID, argument.ID, "unsupported value type %q", argument.ValueType)
 	}
+	if err := validateArgumentCardinality(commandID, argument); err != nil {
+		return err
+	}
+	if err := validateArgumentRecordShape(commandID, argument); err != nil {
+		return err
+	}
+	if err := validateArgumentDoubleDash(commandID, argument); err != nil {
+		return err
+	}
+	return validateArgumentValueContract(commandID, argument)
+}
+
+func validateArgumentCardinality(commandID string, argument climanifest.Argument) error {
 	if argument.MinCardinality < 0 || argument.MaxCardinality < -1 ||
 		(argument.MaxCardinality >= 0 && argument.MinCardinality > argument.MaxCardinality) {
 		return genericArgumentError(commandID, argument.ID, "invalid cardinality %d..%d", argument.MinCardinality, argument.MaxCardinality)
@@ -501,7 +514,20 @@ func validateArgumentShape(commandID string, argument climanifest.Argument) erro
 	if argument.MaxCardinality == 0 {
 		return genericArgumentError(commandID, argument.ID, "maximum cardinality must accept at least one value")
 	}
-	return validateArgumentValueContract(commandID, argument)
+	return nil
+}
+
+func validateArgumentDoubleDash(commandID string, argument climanifest.Argument) error {
+	switch argument.DoubleDash {
+	case "terminates-flags":
+		return nil
+	case "":
+		return genericArgumentError(commandID, argument.ID, "doubleDash mode is required")
+	case "none":
+		return genericArgumentError(commandID, argument.ID, "doubleDash mode %q is not supported by Cobra projection", argument.DoubleDash)
+	default:
+		return genericArgumentError(commandID, argument.ID, "unsupported doubleDash mode %q", argument.DoubleDash)
+	}
 }
 
 func validateArgumentValueContract(commandID string, argument climanifest.Argument) error {
