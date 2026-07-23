@@ -7,18 +7,6 @@
       "@you-agent-factory/components": ["packages/components/src/index.ts"],
       "@you-agent-factory/components/*": ["packages/components/src/*"],
       "@you-agent-factory/client": ["packages/client/src/index.ts"],
-      "@you-agent-factory/packaged-factories/manifest": [
-        "../packages/packaged-factories/generated/manifest.json"
-      ],
-      "@you-agent-factory/packaged-factories/schemas/factory.json": [
-        "../packages/packaged-factories/schemas/factory.schema.json"
-      ],
-      "@you-agent-factory/packaged-factories/factories/*.json": [
-        "../packages/packaged-factories/generated/factories/*/factory.json"
-      ],
-      "@you-agent-factory/packaged-factories/factories/*.yaml?raw": [
-        "../packages/packaged-factories/generated/factories/*/factory.yaml"
-      ],
       "@you-agent-factory/factory-emulator": [
         "packages/factory-emulator/src/index.ts"
       ],

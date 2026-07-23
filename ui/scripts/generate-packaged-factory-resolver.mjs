@@ -1,41 +1,24 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
-const packagedFactoriesPackageRoot = path.resolve(
-  scriptDirectory,
-  "../../packages/packaged-factories",
-);
 const outputPath = path.resolve(
   scriptDirectory,
   "../src/features/packaged-factories/lib/generated/public-package-data.ts",
 );
 const packagePrefix = "@you-agent-factory/packaged-factories";
-const requiredPublicExports = [
-  "./manifest",
-  "./schemas/factory.json",
-  "./factories/*.json",
-  "./factories/*.yaml",
-];
 
-function resolvePublicExport(packageRoot, packageDefinition, specifier) {
-  const exportTarget = packageDefinition?.exports?.[specifier];
-  if (typeof exportTarget !== "string" || !exportTarget.startsWith("./")) {
+function resolvePublicSpecifier(specifier) {
+  const resolved = import.meta.resolve(specifier);
+  const resolvedURL = new URL(resolved);
+  if (resolvedURL.protocol !== "file:") {
     throw new Error(
-      `[packaged-factory-resolver] package must expose ${specifier} as a local file`,
+      `[packaged-factory-resolver] public export did not resolve to installed package data: ${specifier}`,
     );
   }
-
-  const resolvedTarget = path.resolve(packageRoot, exportTarget);
-  const relativeTarget = path.relative(packageRoot, resolvedTarget);
-  if (relativeTarget.startsWith("..") || path.isAbsolute(relativeTarget)) {
-    throw new Error(
-      `[packaged-factory-resolver] public export ${specifier} leaves the package root`,
-    );
-  }
-  return resolvedTarget;
+  return resolvedURL;
 }
 
 function assertManifestIdentity(input) {
@@ -109,27 +92,18 @@ function generateResolver(input) {
   ].join("\n");
 }
 
-const packageDefinition = JSON.parse(
-  await readFile(
-    path.join(packagedFactoriesPackageRoot, "package.json"),
-    "utf8",
-  ),
-);
-for (const publicExport of requiredPublicExports) {
-  resolvePublicExport(
-    packagedFactoriesPackageRoot,
-    packageDefinition,
-    publicExport,
-  );
-}
 const manifest = JSON.parse(
-  await readFile(
-    resolvePublicExport(
-      packagedFactoriesPackageRoot,
-      packageDefinition,
-      "./manifest",
+  await readFile(resolvePublicSpecifier(`${packagePrefix}/manifest`), "utf8"),
+);
+assertManifestIdentity(manifest);
+await access(resolvePublicSpecifier(`${packagePrefix}/schemas/factory.json`));
+await Promise.all(
+  manifest.factories.flatMap(({ slug }) =>
+    ["json", "yaml"].map((format) =>
+      access(
+        resolvePublicSpecifier(`${packagePrefix}/factories/${slug}.${format}`),
+      ),
     ),
-    "utf8",
   ),
 );
 const expected = generateResolver(manifest);

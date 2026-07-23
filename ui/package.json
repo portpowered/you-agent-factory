@@ -27,6 +27,13 @@
     "link:public-package-dependencies": "node scripts/link-public-package-dependencies.mjs",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
     "profile:recording-browser": "node scripts/profile-recording-browser.mjs",
+    "prepare:packaged-factories": "node scripts/install-packaged-factories-candidate.mjs",
+    "prebuild": "bun run prepare:packaged-factories",
+    "precheck": "bun run prepare:packaged-factories",
+    "pregenerate:packaged-factory-resolver": "bun run prepare:packaged-factories",
+    "prelint": "bun run prepare:packaged-factories",
+    "pretest": "bun run prepare:packaged-factories",
+    "pretypecheck": "bun run prepare:packaged-factories",
     "publish:public-packages": "node scripts/public-package-publish.mjs --action publish",
     "publish:public-packages:prepare": "node scripts/public-package-publish.mjs --action prepare",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
@@ -67,6 +74,7 @@
     "tsc": "tsc -b --noEmit --pretty false",
     "typecheck": "tsc -b --noEmit --pretty false",
     "verify:fresh-npm-install": "node scripts/verify-fresh-npm-install.mjs",
+    "verify:packaged-factories-installed-consumer": "node scripts/verify-packaged-factories-installed-consumer.mjs",
     "verify:public-packages": "node scripts/verify-public-package-release.mjs"
   },
   "dependencies": {
@@ -92,6 +100,7 @@
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "@you-agent-factory/components": "file:./packages/components",
+    "@you-agent-factory/packaged-factories": "file:../packages/packaged-factories",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
