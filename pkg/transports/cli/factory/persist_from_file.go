@@ -44,7 +44,7 @@ func persistFromFile(
 	if loadSource == nil {
 		return persistFromFileResult{}, fmt.Errorf("Factory Definitions authored source loader is required")
 	}
-	payload, err := loadSource(from)
+	source, err := loadSource(from)
 	if err != nil {
 		return persistFromFileResult{}, fmt.Errorf("read factory config %s: %w", from, err)
 	}
@@ -64,7 +64,7 @@ func persistFromFile(
 			Mode:       mode,
 			RootDir:    cfg.Dir,
 			Name:       cfg.Name,
-			Payload:    payload,
+			Payload:    source.Data,
 			SetCurrent: cfg.SetCurrent,
 		},
 	)

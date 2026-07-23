@@ -52,7 +52,7 @@ func TestCreateFromFileInvokesOneInjectedFactoryDefinitionsOperation(t *testing.
 				FactoryDir: "factory-root/alpha",
 			}, nil
 		},
-		factorydefinitions.AuthoredFactorySourceLoader(os.ReadFile),
+		readAuthoredTestSource,
 	)
 	if err != nil {
 		t.Fatalf("CreateFromFileWithServices: %v", err)
@@ -95,7 +95,7 @@ func TestUpdateFromFileInvokesReplaceOperationAndRendersJSON(t *testing.T) {
 				FactoryDir: "factory-root/@you/goal",
 			}, nil
 		},
-		factorydefinitions.AuthoredFactorySourceLoader(os.ReadFile),
+		readAuthoredTestSource,
 	)
 	if err != nil {
 		t.Fatalf("UpdateFromFileWithServices: %v", err)
@@ -141,7 +141,7 @@ func TestPersistFromFileRequiresExplicitEdges(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			if err := CreateFromFileWithServices(test.config, test.persist, factorydefinitions.AuthoredFactorySourceLoader(os.ReadFile)); err == nil {
+			if err := CreateFromFileWithServices(test.config, test.persist, readAuthoredTestSource); err == nil {
 				t.Fatal("error = nil, want missing-edge failure")
 			}
 		})

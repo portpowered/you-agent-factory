@@ -59,11 +59,11 @@ examples:
 	if err != nil {
 		t.Fatalf("load YAML: %v", err)
 	}
-	jsonFactory, err := factoryconfig.DecodeAuthoredFactoryAPI(jsonBytes)
+	jsonFactory, err := factoryconfig.DecodeAuthoredFactoryAPI(jsonBytes.Data)
 	if err != nil {
 		t.Fatalf("map JSON: %v", err)
 	}
-	yamlFactory, err := factoryconfig.DecodeAuthoredFactoryAPI(yamlBytes)
+	yamlFactory, err := factoryconfig.DecodeAuthoredFactoryAPI(yamlBytes.Data)
 	if err != nil {
 		t.Fatalf("map YAML: %v", err)
 	}

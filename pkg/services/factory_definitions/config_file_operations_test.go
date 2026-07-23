@@ -27,11 +27,15 @@ func TestFactoryConfigRootResolverValidatesSelectedFile(t *testing.T) {
 func TestFactoryConfigFileLoaderPreservesReadAndParseContext(t *testing.T) {
 	want := &FactoryConfig{Name: "alpha"}
 	load := NewFactoryConfigFileLoader(
-		func(path string) ([]byte, error) {
+		func(path string) (AuthoredFactorySource, error) {
 			if path == "missing.json" {
-				return nil, fs.ErrNotExist
+				return AuthoredFactorySource{}, fs.ErrNotExist
 			}
-			return []byte("payload"), nil
+			return AuthoredFactorySource{
+				Path:   path,
+				Format: AuthoredFactoryFormatJSON,
+				Data:   []byte("payload"),
+			}, nil
 		},
 		func(payload []byte) (*FactoryConfig, error) {
 			if string(payload) != "payload" {
@@ -48,7 +52,16 @@ func TestFactoryConfigFileLoaderPreservesReadAndParseContext(t *testing.T) {
 		t.Fatalf("missing error = %v", err)
 	}
 	parseErr := errors.New("invalid")
-	load = NewFactoryConfigFileLoader(func(string) ([]byte, error) { return []byte("bad"), nil }, func([]byte) (*FactoryConfig, error) { return nil, parseErr })
+	load = NewFactoryConfigFileLoader(
+		func(path string) (AuthoredFactorySource, error) {
+			return AuthoredFactorySource{
+				Path:   path,
+				Format: AuthoredFactoryFormatJSON,
+				Data:   []byte("bad"),
+			}, nil
+		},
+		func([]byte) (*FactoryConfig, error) { return nil, parseErr },
+	)
 	if _, err := load("factory.json"); !errors.Is(err, parseErr) {
 		t.Fatalf("parse error = %v", err)
 	}

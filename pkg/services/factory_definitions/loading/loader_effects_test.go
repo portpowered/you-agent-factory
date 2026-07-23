@@ -6,24 +6,36 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 	t.Parallel()
 
 	var statPath string
-	var readPath string
+	var loadedPath string
 	fileSystem := loadingFileSystemStub{
 		stat: func(path string) (fs.FileInfo, error) {
 			statPath = path
 			return loadingFileInfo{directory: true}, nil
 		},
-		readFile: func(path string) ([]byte, error) {
-			readPath = path
-			return []byte(`{"name":"injected"}`), nil
+		readFile: func(string) ([]byte, error) { return nil, fs.ErrInvalid },
+	}
+	wantSource := filepath.Join("factory-dir", "factory.yaml")
+	loader := &Loader{
+		fileSystem: fileSystem,
+		loadAuthoredSource: func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+			if path != "factory-dir" {
+				t.Fatalf("loaded path = %q, want factory-dir", path)
+			}
+			loadedPath = wantSource
+			return factorydefinitions.AuthoredFactorySource{
+				Path: wantSource,
+				Data: []byte(`{"name":"injected"}`),
+			}, nil
 		},
 	}
-	loader := &Loader{fileSystem: fileSystem}
 
 	data, sourcePath, factoryDir, split, err := loader.readFactoryConfigSource("factory-dir")
 	if err != nil {
@@ -32,9 +44,8 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 	if statPath != "factory-dir" {
 		t.Fatalf("stat path = %q, want factory-dir", statPath)
 	}
-	wantSource := filepath.Join("factory-dir", "factory.json")
-	if readPath != wantSource || sourcePath != wantSource {
-		t.Fatalf("read/source paths = %q/%q, want %q", readPath, sourcePath, wantSource)
+	if loadedPath != wantSource || sourcePath != wantSource {
+		t.Fatalf("loaded/source paths = %q/%q, want %q", loadedPath, sourcePath, wantSource)
 	}
 	if factoryDir != "factory-dir" || !split || string(data) != `{"name":"injected"}` {
 		t.Fatalf("source result = (%q, %q, %v), want injected directory source", data, factoryDir, split)

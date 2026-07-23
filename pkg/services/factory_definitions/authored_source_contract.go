@@ -1,11 +1,5 @@
 package factorydefinitions
 
-import (
-	"fmt"
-	"path/filepath"
-	"strings"
-)
-
 type AuthoredFactoryFormat string
 
 const (
@@ -14,26 +8,16 @@ const (
 )
 
 const SupportedAuthoredFactoryExtensions = ".json, .yaml, and .yml"
+const SupportedAuthoredFactoryRootFiles = "factory.json, factory.yaml, and factory.yml"
 
-// AuthoredFactoryFormatForPath selects the authored representation solely from
-// an explicit source filename. Directory root selection is handled separately.
-func AuthoredFactoryFormatForPath(path string) (AuthoredFactoryFormat, error) {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".json":
-		return AuthoredFactoryFormatJSON, nil
-	case ".yaml", ".yml":
-		return AuthoredFactoryFormatYAML, nil
-	default:
-		return "", fmt.Errorf(
-			"unsupported Factory Definition extension %q; supported extensions are %s",
-			filepath.Ext(path),
-			SupportedAuthoredFactoryExtensions,
-		)
-	}
+// AuthoredFactorySource retains the selected source identity while carrying
+// JSON-compatible bytes into representation mapping and validation.
+type AuthoredFactorySource struct {
+	Path   string
+	Format AuthoredFactoryFormat
+	Data   []byte
 }
 
 // AuthoredFactorySourceLoader resolves an authored Factory Definition path and
-// returns JSON-compatible representation bytes. The Factory Definitions
-// service owns path, filesystem, and authored-format policy; consumers map the
-// bytes through the canonical representation boundary.
-type AuthoredFactorySourceLoader func(path string) ([]byte, error)
+// returns its selected source identity and JSON-compatible representation.
+type AuthoredFactorySourceLoader func(path string) (AuthoredFactorySource, error)

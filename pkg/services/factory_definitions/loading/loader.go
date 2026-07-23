@@ -20,6 +20,7 @@ import (
 // parsing remains an adapter selected by Wire.
 type Loader struct {
 	fileSystem               factorydefinitions.LoadingFileSystem
+	loadAuthoredSource       factorydefinitions.AuthoredFactorySourceLoader
 	resolveCurrentDir        factorydefinitions.CurrentFactoryDirectoryResolver
 	newSource                factorydefinitions.LoadedFactorySourceFactory
 	decodeFactory            func([]byte) (*factorydefinitions.FactoryConfig, error)
@@ -46,6 +47,7 @@ type Loader struct {
 // filesystem capabilities.
 func New(
 	fileSystem factorydefinitions.LoadingFileSystem,
+	loadAuthoredSource factorydefinitions.AuthoredFactorySourceLoader,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	newSource factorydefinitions.LoadedFactorySourceFactory,
 	decodeFactory func([]byte) (*factorydefinitions.FactoryConfig, error),
@@ -69,6 +71,7 @@ func New(
 ) *Loader {
 	return &Loader{
 		fileSystem:               fileSystem,
+		loadAuthoredSource:       loadAuthoredSource,
 		resolveCurrentDir:        resolveCurrentDir,
 		newSource:                newSource,
 		decodeFactory:            decodeFactory,
@@ -266,13 +269,13 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err := l.validate(); err != nil {
 		return nil, err
 	}
-	data, err := l.fileSystem.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
+	data, sourcePath, _, _, err := l.readFactoryConfigSource(factoryDir)
 	if err != nil {
 		return nil, err
 	}
 	factoryConfig, err := l.decodeFactory(data)
 	if err != nil {
-		return nil, err
+		return nil, sourceContextError(sourcePath, "parse factory config", err)
 	}
 	if err := l.blockingLoadError(factoryConfig); err != nil {
 		return nil, err
@@ -353,15 +356,13 @@ func (l *Loader) ValidateFactoryDirReadOnly(
 	if err := l.validate(); err != nil {
 		return err
 	}
-	data, err := l.fileSystem.ReadFile(
-		filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile),
-	)
+	data, sourcePath, _, _, err := l.readFactoryConfigSource(factoryDir)
 	if err != nil {
 		return err
 	}
 	factoryConfig, err := l.decodeFactory(data)
 	if err != nil {
-		return err
+		return sourceContextError(sourcePath, "parse factory config", err)
 	}
 	if err := l.blockingLoadError(factoryConfig); err != nil {
 		return err
@@ -391,6 +392,8 @@ func (l *Loader) validate() error {
 		return fmt.Errorf("Factory Definitions loader is required")
 	case l.fileSystem == nil:
 		return fmt.Errorf("Factory Definitions loading filesystem is required")
+	case l.loadAuthoredSource == nil:
+		return fmt.Errorf("Factory Definitions authored source loader is required")
 	case l.resolveCurrentDir == nil:
 		return fmt.Errorf("current Factory directory resolver is required")
 	case l.newSource == nil:
@@ -468,23 +471,30 @@ func (l *Loader) readFactoryConfigSource(
 			err,
 		)
 	}
-	sourcePath := path
 	factoryDir := filepath.Dir(path)
 	requireSplitDefinitions := false
 	if info.IsDir() {
-		sourcePath = filepath.Join(path, factorydefinitions.FactoryConfigFile)
 		factoryDir = path
 		requireSplitDefinitions = true
 	}
-	data, err := l.fileSystem.ReadFile(sourcePath)
+	source, err := l.loadAuthoredSource(path)
 	if err != nil {
-		return nil, "", "", false, fmt.Errorf(
-			"read factory config %s: %w",
-			sourcePath,
-			err,
-		)
+		return nil, "", "", false, err
 	}
-	return data, sourcePath, factoryDir, requireSplitDefinitions, nil
+	return source.Data, source.Path, factoryDir, requireSplitDefinitions, nil
+}
+
+func sourceContextError(sourcePath, operation string, err error) error {
+	var format factorydefinitions.AuthoredFactoryFormat
+	switch strings.ToLower(filepath.Ext(sourcePath)) {
+	case ".json":
+		format = factorydefinitions.AuthoredFactoryFormatJSON
+	case ".yaml", ".yml":
+		format = factorydefinitions.AuthoredFactoryFormatYAML
+	default:
+		return fmt.Errorf("%s %s: %w", operation, sourcePath, err)
+	}
+	return fmt.Errorf("%s %s (%s): %w", operation, sourcePath, format, err)
 }
 
 func formatCanonicalFactoryJSON(data []byte, sourcePath string) ([]byte, error) {

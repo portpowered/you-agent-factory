@@ -46,9 +46,9 @@ func ValidateWithServices(
 	if err != nil {
 		return err
 	}
-	factory, err := factoryconfig.DecodeAuthoredFactoryAPI(source)
+	factory, err := factoryconfig.DecodeAuthoredFactoryAPI(source.Data)
 	if err != nil {
-		return authoredSourceError(cfg.Path, err)
+		return authoredSourceError(source, err)
 	}
 
 	result, err := validationentry.ValidateFactoryAPI(
@@ -58,7 +58,7 @@ func ValidateWithServices(
 	)
 	if err != nil {
 		return authoredSourceError(
-			cfg.Path,
+			source,
 			fmt.Errorf("validate factory config: %w", err),
 		)
 	}
@@ -79,7 +79,7 @@ func ValidateWithServices(
 		}
 		if !payload.Valid {
 			return authoredSourceError(
-				cfg.Path,
+				source,
 				fmt.Errorf("factory validation found blocking issues"),
 			)
 		}
@@ -87,15 +87,19 @@ func ValidateWithServices(
 	}
 
 	if err := apisurface.RenderFactoryValidationHuman(factory, apiResult, cfg.Output); err != nil {
-		return authoredSourceError(cfg.Path, err)
+		return authoredSourceError(source, err)
 	}
 	return nil
 }
 
-func authoredSourceError(path string, err error) error {
-	format, formatErr := factorydefinitions.AuthoredFactoryFormatForPath(path)
-	if formatErr != nil {
-		return fmt.Errorf("Factory Definition source %s: %w", path, err)
-	}
-	return fmt.Errorf("Factory Definition source %s (%s): %w", path, format, err)
+func authoredSourceError(
+	source factorydefinitions.AuthoredFactorySource,
+	err error,
+) error {
+	return fmt.Errorf(
+		"Factory Definition source %s (%s): %w",
+		source.Path,
+		source.Format,
+		err,
+	)
 }
