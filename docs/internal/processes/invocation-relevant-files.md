@@ -1229,6 +1229,13 @@ response-stream output.
   package-owned base value, and represent missing descriptions and examples as
   explicit presentation states rather than copying fallback catalog metadata
   into the website.
+- Keep manifest-driven website loading and ephemeral selection in
+  `ui/src/features/packaged-factories/hooks/use-packaged-factory-inventory.ts`.
+  Scope asynchronous results to the current data-source and locale identities,
+  clear selected detail before each artifact request, and preserve a valid
+  inventory when one selected artifact fails so another selection can recover.
+  Render the state through the feature public boundary rather than duplicating
+  package-owned inventory or presentation metadata in an app shell.
 - Invocation-interpolated worker `modelProvider` and `model` fields are resolved
   at dispatch time. A packaged factory that must be runnable without role flags
   should declare parameter `defaultValue`s in its invocation signature; operator
