@@ -14,6 +14,8 @@ export interface CliManifestMessages {
   argumentPosition: (expected: number) => string;
   finalArgumentVariadic: () => string;
   argumentCardinality: (id: string) => string;
+  flagCardinality: (id: string) => string;
+  inputDefaultType: (id: string, valueType: string) => string;
   relationshipParticipant: (id: string, type: string) => string;
   duplicateCommandPath: (path: string) => string;
   commandPathName: (path: string, name: string) => string;
@@ -43,6 +45,10 @@ const cliManifestMessagesByLocale = {
       "Only the final positional argument may be variadic.",
     argumentCardinality: (id) =>
       `Argument ${id} has contradictory required, minimum, maximum, or variadic cardinality.`,
+    flagCardinality: (id) =>
+      `Flag ${id} has contradictory required, minimum, or maximum cardinality.`,
+    inputDefaultType: (id, valueType) =>
+      `Input ${id} has a typed default that does not match value type ${valueType}.`,
     relationshipParticipant: (id, type) =>
       `Relationship participant ${id} does not resolve to a ${type} on this command.`,
     duplicateCommandPath: (path) => `Command path ${path} is duplicated.`,
@@ -87,6 +93,9 @@ const cliManifestMessagesByLocale = {
     finalArgumentVariadic: () => `只有最后一个位置参数可以是可变参数。`,
     argumentCardinality: (id) =>
       `参数 ${id} 的必填、最小值、最大值或可变参数基数相互矛盾。`,
+    flagCardinality: (id) => `标志 ${id} 的必填、最小值或最大值基数相互矛盾。`,
+    inputDefaultType: (id, valueType) =>
+      `输入 ${id} 的类型化默认值与值类型 ${valueType} 不匹配。`,
     relationshipParticipant: (id, type) =>
       `关系参与者 ${id} 无法解析为此命令的 ${type} 输入。`,
     duplicateCommandPath: (path) => `命令路径 ${path} 重复。`,

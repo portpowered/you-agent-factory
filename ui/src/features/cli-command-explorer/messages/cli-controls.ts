@@ -35,6 +35,8 @@ const cliControlMessagesByLocale = {
           return `Choose at least one of ${labels}.`;
         case "conditional":
           return `This value requires ${labels}.`;
+        case "dependency":
+          return `This value is required when ${labels} is provided.`;
         case "required-together":
           return `This value must be provided together with ${labels}.`;
         case "conflict":
@@ -60,6 +62,8 @@ const cliControlMessagesByLocale = {
           return `请至少选择 ${labels} 中的一项。`;
         case "conditional":
           return `此值需要同时提供 ${labels}。`;
+        case "dependency":
+          return `提供 ${labels} 时必须填写此值。`;
         case "required-together":
           return `此值必须与 ${labels} 一起提供。`;
         case "conflict":

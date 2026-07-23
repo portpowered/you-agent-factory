@@ -3,7 +3,12 @@ import type {
   CliCommandProjection,
   CliRelationshipProjection,
 } from "./cli-command-projection";
-import type { CliArgument, CliFlag } from "./cli-manifest-types";
+import type {
+  CliArgument,
+  CliFlag,
+  CliInputValue,
+  CliInputValueType,
+} from "./cli-manifest-types";
 
 export type CliControlValue = boolean | string | readonly string[];
 export type CliControlValues = Readonly<Record<string, CliControlValue>>;
@@ -31,7 +36,12 @@ export type CliStaticControl = CliControlBase &
         readonly kind: "number" | "text";
         readonly defaultValue: string;
       }
-    | { readonly kind: "repeated"; readonly defaultValue: readonly string[] }
+    | {
+        readonly kind: "repeated";
+        readonly defaultValue: readonly string[];
+        readonly valueKind: "choice" | "number" | "text";
+        readonly choices?: readonly string[];
+      }
   );
 
 export type CliControlModel = {
@@ -76,11 +86,56 @@ function relationshipIds(
     .map((relationship) => relationship.id);
 }
 
+function typedDefault(
+  value: CliInputValue,
+): boolean | string | readonly string[] {
+  if ("boolean" in value) return value.boolean;
+  if ("int" in value) return String(value.int);
+  if ("int64" in value) return String(value.int64);
+  if ("stringArray" in value) return value.stringArray;
+  return value.string;
+}
+
+function inputDefault(input: CliArgument | CliFlag): CliControlValue {
+  if (input.defaultValue) return typedDefault(input.defaultValue);
+  if ("default" in input) {
+    if (input.valueType === "bool") return input.default === "true";
+    if (input.valueType === "stringArray") {
+      return input.default ? [input.default] : [];
+    }
+    return input.default ?? "";
+  }
+  if (input.valueType === "bool") return false;
+  if (input.valueType === "stringArray") return [];
+  return "";
+}
+
+function repeatedDefault(value: CliControlValue): readonly string[] {
+  if (typeof value === "boolean") return value ? ["true"] : [];
+  if (typeof value === "string") return value ? [value] : [];
+  return value;
+}
+
+function repeatedValueKind(
+  valueType: CliInputValueType,
+  choices: readonly string[] | undefined,
+): "choice" | "number" | "text" {
+  if (choices && choices.length > 0) return "choice";
+  return valueType === "int" || valueType === "int64" ? "number" : "text";
+}
+
+function choiceDefault(value: CliControlValue): string {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return value;
+  return value[0] ?? "";
+}
+
 function projectControl(
   input: CliCommandInputProjection,
   relationships: readonly CliRelationshipProjection[],
 ): CliStaticControl | CliControlProjectionResult {
   const manifestInput = input.manifestInput;
+  const defaultValue = inputDefault(manifestInput);
   const base = {
     id: `cli-control-${input.id.replaceAll(".", "-")}`,
     inputId: input.id,
@@ -91,40 +146,64 @@ function projectControl(
     relationshipIds: relationshipIds(input.id, relationships),
   } as const;
 
+  const repeated =
+    manifestInput.valueType === "stringArray" ||
+    input.cardinality.maximum === null ||
+    input.cardinality.maximum > 1;
+  if (
+    !["bool", "int", "int64", "string", "stringArray"].includes(
+      manifestInput.valueType,
+    )
+  ) {
+    return {
+      status: "unsupported-input",
+      inputId: input.id,
+      valueType: manifestInput.valueType,
+    };
+  }
+  if (repeated) {
+    const choices =
+      manifestInput.enum ??
+      (manifestInput.valueType === "bool" ? ["true", "false"] : undefined);
+    return {
+      ...base,
+      kind: "repeated",
+      valueKind: repeatedValueKind(manifestInput.valueType, choices),
+      ...(choices ? { choices } : {}),
+      defaultValue: repeatedDefault(defaultValue),
+    };
+  }
   if (manifestInput.enum && manifestInput.enum.length > 0) {
     return {
       ...base,
       kind: "choice",
       choices: manifestInput.enum,
-      defaultValue: "default" in manifestInput ? manifestInput.default : "",
+      defaultValue: choiceDefault(defaultValue),
     };
   }
-  if (input.kind === "argument") {
-    const argument = manifestInput as CliArgument;
-    return argument.variadic
-      ? { ...base, kind: "repeated", defaultValue: [] }
-      : { ...base, kind: "text", defaultValue: "" };
-  }
-  const flag = manifestInput as CliFlag;
-  const valueType: string = flag.valueType;
+  const valueType: string = manifestInput.valueType;
   switch (valueType) {
     case "bool":
       return {
         ...base,
         kind: "boolean",
-        defaultValue: flag.default === "true",
+        defaultValue: defaultValue === true,
       };
     case "int":
     case "int64":
-      return { ...base, kind: "number", defaultValue: flag.default };
-    case "string":
-      return { ...base, kind: "text", defaultValue: flag.default };
-    case "stringArray":
       return {
         ...base,
-        kind: "repeated",
-        defaultValue: flag.default ? [flag.default] : [],
+        kind: "number",
+        defaultValue: typeof defaultValue === "string" ? defaultValue : "",
       };
+    case "string":
+      return {
+        ...base,
+        kind: "text",
+        defaultValue: typeof defaultValue === "string" ? defaultValue : "",
+      };
+    case "stringArray":
+      throw new Error("String-array inputs must project as repeated controls.");
     default:
       return {
         status: "unsupported-input",
@@ -139,8 +218,8 @@ export function projectCliCommandControls(
 ): CliControlProjectionResult {
   const visibleInputs = command.effectiveInputs.filter(
     (input) =>
-      input.kind !== "flag" ||
-      (input.manifestInput as CliFlag).visibility !== "hidden",
+      !("visibility" in input.manifestInput) ||
+      input.manifestInput.visibility !== "hidden",
   );
   const visibleInputIds = new Set(visibleInputs.map(({ id }) => id));
   const visibleRelationships = command.relationships.filter(
@@ -189,6 +268,7 @@ function violatesRelationship(
     case "required-together":
       return activeCount > 0 && activeCount < participantIds.length;
     case "conditional":
+    case "dependency":
       return (
         Boolean(relationship.when && active.has(relationship.when.inputId)) &&
         activeCount < participantIds.length
@@ -226,12 +306,19 @@ export function validateCliControlValues(
       ({ inputId }) => inputId,
     );
     for (const inputId of participantIds) {
+      const relatedInputIds = participantIds.filter((id) => id !== inputId);
+      if (
+        relationship.when &&
+        !relatedInputIds.includes(relationship.when.inputId)
+      ) {
+        relatedInputIds.push(relationship.when.inputId);
+      }
       violations.push({
         code: "relationship",
         inputId,
         relationshipId: relationship.id,
         relationshipKind: relationship.kind,
-        relatedInputIds: participantIds.filter((id) => id !== inputId),
+        relatedInputIds,
       });
     }
   }

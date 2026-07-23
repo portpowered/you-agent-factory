@@ -13,6 +13,7 @@ import {
   type CliManifestMessages,
   getCliManifestMessages,
 } from "../messages/cli-manifest";
+import { validateCliInputSemantics } from "./cli-input-semantics";
 import {
   type CliCommand,
   type CliFlag,
@@ -211,6 +212,7 @@ function validateArgumentCardinality(
       (argument.maxCardinality !== -1 &&
         argument.maxCardinality < argument.minCardinality) ||
       (argument.required && argument.minCardinality < 1) ||
+      (!argument.required && argument.minCardinality > 0) ||
       (argument.variadic && argument.maxCardinality !== -1) ||
       (!argument.variadic && argument.maxCardinality === -1);
     if (impossible) {
@@ -266,18 +268,24 @@ function validateRelationships(
 
 function flagSignature(flag: CliFlag): string {
   return JSON.stringify({
+    acceptedSources: flag.acceptedSources,
     aliases: flag.aliases,
     binding: flag.binding,
     changedDefault: flag.changedDefault,
     completion: flag.completion,
     default: flag.default,
+    defaultValue: flag.defaultValue,
     enum: flag.enum,
     long: flag.long,
+    maxCardinality: flag.maxCardinality,
+    minCardinality: flag.minCardinality,
     noOptionDefault: flag.noOptionDefault,
+    noOptionDefaultValue: flag.noOptionDefaultValue,
     normalization: flag.normalization,
     repeatable: flag.repeatable,
     required: flag.required,
     shorthand: flag.shorthand,
+    handlerBindingId: flag.handlerBindingId,
     valueType: flag.valueType,
     visibility: flag.visibility,
   });
@@ -373,6 +381,7 @@ function validateHierarchyAndInheritance(
       }
     }
     validateArgumentCardinality(command, diagnostics, messages);
+    diagnostics.push(...validateCliInputSemantics(command, messages));
     validateRelationships(command, diagnostics, messages);
   }
 }

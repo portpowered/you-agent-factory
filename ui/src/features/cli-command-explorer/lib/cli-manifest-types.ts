@@ -35,12 +35,34 @@ export type CliInputReference = {
   readonly id: string;
 };
 
-export type CliArgument = {
+export type CliInputValue =
+  | Readonly<{ boolean: boolean }>
+  | Readonly<{ int: number }>
+  | Readonly<{ int64: number }>
+  | Readonly<{ string: string }>
+  | Readonly<{ stringArray: readonly string[] }>;
+
+export type CliInputValueType =
+  | "bool"
+  | "int"
+  | "int64"
+  | "string"
+  | "stringArray";
+
+export type CliAcceptedSource =
+  | "cli"
+  | "environment"
+  | "factory-signature-default"
+  | "manifest-default"
+  | "operator-config"
+  | "stdin";
+
+type CliArgumentBase = {
   readonly id: string;
   readonly name: string;
   readonly position: number;
   readonly kind: "positional";
-  readonly valueType: "string";
+  readonly valueType: CliInputValueType;
   readonly required: boolean;
   readonly minCardinality: number;
   readonly maxCardinality: number;
@@ -48,29 +70,77 @@ export type CliArgument = {
   readonly enum: readonly string[];
   readonly pattern: string;
   readonly completion: "none" | "static" | "dynamic";
-  readonly channels: readonly ("cli" | "config" | "env" | "stdin")[];
   readonly doubleDash: "none" | "terminates-flags";
+  readonly defaultValue?: CliInputValue;
 };
 
-export type CliFlag = {
+type CliLegacyArgument = {
+  readonly channels: readonly ("cli" | "config" | "env" | "stdin")[];
+  readonly scope?: never;
+  readonly acceptedSources?: never;
+  readonly handlerBindingId?: never;
+  readonly visibility?: never;
+  readonly lifecycle?: never;
+};
+
+type CliRichArgument = {
+  readonly scope: "local";
+  readonly acceptedSources: readonly CliAcceptedSource[];
+  readonly handlerBindingId: string;
+  readonly visibility: "hidden" | "visible";
+  readonly lifecycle: CliLifecycle;
+  readonly channels?: never;
+};
+
+export type CliArgument = CliArgumentBase &
+  (CliLegacyArgument | CliRichArgument);
+
+type CliFlagBase = {
   readonly id: string;
   readonly long: string;
   readonly shorthand: string;
   readonly aliases: readonly string[];
   readonly scope: "inherited" | "local" | "persistent";
-  readonly valueType: "bool" | "int" | "int64" | "string" | "stringArray";
+  readonly valueType: CliInputValueType;
   readonly enum?: readonly string[];
   readonly required: boolean;
-  readonly default: string;
-  readonly changedDefault: boolean;
-  readonly noOptionDefault: string;
   readonly repeatable: boolean;
   readonly normalization: "" | "lowercase" | "lowercase-trim" | "trim";
   readonly completion: "none" | "static" | "dynamic";
-  readonly binding: string;
   readonly visibility: "hidden" | "visible";
   readonly lifecycle: CliLifecycle;
+  readonly inheritedFromInputId?: string;
 };
+
+type CliLegacyFlag = {
+  readonly default: string;
+  readonly changedDefault: boolean;
+  readonly noOptionDefault: string;
+  readonly binding: string;
+  readonly kind?: never;
+  readonly minCardinality?: never;
+  readonly maxCardinality?: never;
+  readonly defaultValue?: never;
+  readonly noOptionDefaultValue?: never;
+  readonly acceptedSources?: never;
+  readonly handlerBindingId?: never;
+};
+
+type CliRichFlag = {
+  readonly kind: "named";
+  readonly minCardinality: number;
+  readonly maxCardinality: number;
+  readonly defaultValue?: CliInputValue;
+  readonly noOptionDefaultValue?: CliInputValue;
+  readonly acceptedSources: readonly CliAcceptedSource[];
+  readonly handlerBindingId: string;
+  readonly default?: never;
+  readonly changedDefault?: never;
+  readonly noOptionDefault?: never;
+  readonly binding?: never;
+};
+
+export type CliFlag = CliFlagBase & (CliLegacyFlag | CliRichFlag);
 
 export type CliRelationship = {
   readonly id: string;
@@ -78,6 +148,7 @@ export type CliRelationship = {
     | "at-least-one"
     | "conditional"
     | "conflict"
+    | "dependency"
     | "mutually-exclusive"
     | "required-together";
   readonly participants: readonly CliInputReference[];

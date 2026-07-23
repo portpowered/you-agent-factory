@@ -152,3 +152,57 @@ describe("static CLI controls", () => {
     );
   });
 });
+
+describe("static CLI dependency controls", () => {
+  afterEach(cleanup);
+
+  it("renders localized dependency guidance and errors", async () => {
+    const user = userEvent.setup();
+    const dependencyModel = {
+      commandId: "you.example",
+      controls: [
+        {
+          id: "cli-control-trigger",
+          inputId: "you.example.flag.trigger",
+          label: "--trigger",
+          required: false,
+          inherited: false,
+          defaultValue: false,
+          cardinality: { minimum: 0, maximum: 1 },
+          relationshipIds: ["you.example.rel.dependency"],
+          kind: "boolean",
+        },
+        {
+          id: "cli-control-target",
+          inputId: "you.example.flag.target",
+          label: "--target",
+          required: false,
+          inherited: false,
+          defaultValue: "",
+          cardinality: { minimum: 0, maximum: 1 },
+          relationshipIds: ["you.example.rel.dependency"],
+          kind: "text",
+        },
+      ],
+      relationships: [
+        {
+          id: "you.example.rel.dependency",
+          kind: "dependency",
+          participants: [{ inputId: "you.example.flag.target" }],
+          when: { inputId: "you.example.flag.trigger" },
+        },
+      ],
+    } as unknown as CliControlModel;
+    render(<StaticCliControls locale="zh-CN" model={dependencyModel} />);
+
+    const trigger = screen.getByRole("checkbox", { name: "--trigger" });
+    const target = screen.getByRole("textbox", { name: "--target" });
+    expect(target).toHaveAccessibleDescription(
+      expect.stringContaining("相关输入：--trigger。"),
+    );
+    await user.click(trigger);
+    expect(target).toHaveAccessibleErrorMessage(
+      "提供 --trigger 时必须填写此值。",
+    );
+  });
+});

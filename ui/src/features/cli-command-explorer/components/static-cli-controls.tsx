@@ -74,10 +74,14 @@ export function StaticCliControls({ locale, model }: StaticCliControlsProps) {
             control.relationshipIds.includes(relationship.id),
           )
           .flatMap((relationship) =>
-            relationship.participants
+            [
+              ...relationship.participants,
+              ...(relationship.when ? [relationship.when] : []),
+            ]
               .filter(({ inputId }) => inputId !== control.inputId)
               .map(({ inputId }) => labels.get(inputId) ?? inputId),
           )
+          .filter((label, index, all) => all.indexOf(label) === index)
           .join(", ");
         const description = [
           control.required ? messages.required : undefined,
@@ -189,18 +193,39 @@ function ControlInput({
         {entries.map((entry, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: controlled CLI values have no durable item identity.
           <div className="flex gap-2" key={`${control.id}-${index}`}>
-            <Input
-              aria-describedby={describedBy}
-              aria-errormessage={errorMessageId}
-              aria-invalid={invalid || undefined}
-              aria-label={messages.valuePosition(control.label, index + 1)}
-              onChange={(event) => {
-                const next = [...entries];
-                next[index] = event.currentTarget.value;
-                onChange(next);
-              }}
-              value={entry}
-            />
+            {control.valueKind === "choice" && control.choices ? (
+              <OptionalEnumSelect
+                aria-describedby={describedBy}
+                aria-invalid={invalid || undefined}
+                aria-label={messages.valuePosition(control.label, index + 1)}
+                emptyOptionLabel={messages.optionalChoice}
+                id={`${control.id}-${index}`}
+                onValueChange={(nextValue) => {
+                  const next = [...entries];
+                  next[index] = nextValue ?? "";
+                  onChange(next);
+                }}
+                options={control.choices.map((choice) => ({
+                  label: choice,
+                  value: choice,
+                }))}
+                value={entry || null}
+              />
+            ) : (
+              <Input
+                aria-describedby={describedBy}
+                aria-errormessage={errorMessageId}
+                aria-invalid={invalid || undefined}
+                aria-label={messages.valuePosition(control.label, index + 1)}
+                onChange={(event) => {
+                  const next = [...entries];
+                  next[index] = event.currentTarget.value;
+                  onChange(next);
+                }}
+                type={control.valueKind === "number" ? "number" : "text"}
+                value={entry}
+              />
+            )}
             {entries.length > 1 ? (
               <Button
                 aria-label={messages.removeValue(control.label, index + 1)}

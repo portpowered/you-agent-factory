@@ -90,6 +90,150 @@ describe("static CLI control projection", () => {
   });
 });
 
+describe("schema-valid static CLI control variants", () => {
+  it("projects schema-valid positional types, rich flags, and dependencies", () => {
+    const manifest = structuredClone(canonicalCliManifest) as unknown as {
+      commands: Record<
+        string,
+        {
+          arguments: Record<string, Record<string, unknown>>;
+          flags: Record<string, Record<string, unknown>>;
+          relationships: Record<string, Record<string, unknown>>;
+        }
+      >;
+    };
+    const create = manifest.commands["you.factory.create"];
+    const argument = { ...create.arguments["you.factory.create.arg.0"] };
+    delete argument.channels;
+    create.arguments["you.factory.create.arg.0"] = {
+      ...argument,
+      valueType: "int",
+      defaultValue: { int: 7 },
+      scope: "local",
+      acceptedSources: ["cli", "manifest-default"],
+      handlerBindingId: "you.factory.create.arg.0.handler",
+      visibility: "visible",
+      lifecycle: {
+        ...create.flags["you.factory.create.flag.dir"].lifecycle,
+        itemId: "you.factory.create.arg.0",
+      },
+    };
+    const localFlag = create.flags["you.factory.create.flag.dir"];
+    create.flags["you.factory.create.flag.dir"] = {
+      id: localFlag.id,
+      kind: "named",
+      long: localFlag.long,
+      shorthand: localFlag.shorthand,
+      aliases: localFlag.aliases,
+      scope: localFlag.scope,
+      valueType: "stringArray",
+      required: true,
+      minCardinality: 2,
+      maxCardinality: 3,
+      defaultValue: { stringArray: ["one", "two"] },
+      repeatable: true,
+      normalization: localFlag.normalization,
+      completion: localFlag.completion,
+      acceptedSources: ["cli", "manifest-default"],
+      handlerBindingId: "you.factory.create.flag.dir.handler",
+      visibility: localFlag.visibility,
+      lifecycle: localFlag.lifecycle,
+    };
+    create.relationships = {
+      ...(create.relationships ?? {}),
+      "you.factory.create.rel.name-dependency": {
+        id: "you.factory.create.rel.name-dependency",
+        kind: "dependency",
+        participants: [{ type: "argument", id: "you.factory.create.arg.0" }],
+        when: { type: "flag", id: "you.factory.create.flag.set-current" },
+      },
+    };
+
+    const loaded = loadCliManifest(manifest);
+    expect(loaded.status).toBe("ready");
+    if (loaded.status !== "ready") return;
+    const command = projectCliManifest(loaded).commands["you.factory.create"];
+    const projected = projectCliCommandControls(command);
+    expect(projected.status).toBe("ready");
+    if (projected.status !== "ready") return;
+
+    expect(
+      projected.model.controls.find(
+        ({ inputId }) => inputId === "you.factory.create.arg.0",
+      ),
+    ).toMatchObject({ kind: "number", defaultValue: "7" });
+    expect(
+      projected.model.controls.find(
+        ({ inputId }) => inputId === "you.factory.create.flag.dir",
+      ),
+    ).toMatchObject({
+      kind: "repeated",
+      cardinality: { minimum: 2, maximum: 3 },
+      defaultValue: ["one", "two"],
+    });
+    expect(
+      validateCliControlValues(
+        projected.model,
+        {
+          "you.factory.create.arg.0": "",
+          "you.factory.create.flag.dir": ["one", "two"],
+          "you.factory.create.flag.set-current": true,
+        },
+        new Set(["you.factory.create.flag.set-current"]),
+      ),
+    ).toContainEqual({
+      code: "relationship",
+      inputId: "you.factory.create.arg.0",
+      relationshipId: "you.factory.create.rel.name-dependency",
+      relationshipKind: "dependency",
+      relatedInputIds: ["you.factory.create.flag.set-current"],
+    });
+  });
+});
+
+describe("schema-valid positional value types", () => {
+  it.each([
+    ["bool", { boolean: true }, "boolean", true],
+    ["int64", { int64: 9 }, "number", "9"],
+    ["stringArray", { stringArray: ["one"] }, "repeated", ["one"]],
+  ] as const)(
+    "projects %s positional values without a text fallback",
+    (valueType, defaultValue, expectedKind, expectedDefault) => {
+      const command = {
+        id: "you.example",
+        effectiveInputs: [
+          {
+            id: "you.example.arg.0",
+            kind: "argument",
+            inherited: false,
+            source: {
+              commandId: "you.example",
+              inputId: "you.example.arg.0",
+              scope: "local",
+            },
+            cardinality: { minimum: 0, maximum: 1 },
+            manifestInput: {
+              id: "you.example.arg.0",
+              name: "value",
+              valueType,
+              required: false,
+              defaultValue,
+            },
+          },
+        ],
+        relationships: [],
+      } as unknown as Parameters<typeof projectCliCommandControls>[0];
+      const projected = projectCliCommandControls(command);
+      expect(projected.status).toBe("ready");
+      if (projected.status !== "ready") return;
+      expect(projected.model.controls[0]).toMatchObject({
+        kind: expectedKind,
+        defaultValue: expectedDefault,
+      });
+    },
+  );
+});
+
 describe("static CLI control validation", () => {
   it("reports deterministic cardinality and relationship violations on affected inputs", () => {
     const create = commandControls("you.factory.create");

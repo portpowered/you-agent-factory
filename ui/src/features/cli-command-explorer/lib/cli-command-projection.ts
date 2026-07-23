@@ -147,8 +147,16 @@ function projectInputs(
       inherited: flag.scope === "inherited",
       source: flagSource(command, flag, commandsByPath),
       cardinality: {
-        minimum: flag.required ? 1 : 0,
-        maximum: flag.repeatable ? null : 1,
+        minimum:
+          flag.kind === "named" ? flag.minCardinality : flag.required ? 1 : 0,
+        maximum:
+          flag.kind === "named"
+            ? flag.maxCardinality === -1
+              ? null
+              : flag.maxCardinality
+            : flag.repeatable
+              ? null
+              : 1,
       },
       manifestInput: flag,
     }),

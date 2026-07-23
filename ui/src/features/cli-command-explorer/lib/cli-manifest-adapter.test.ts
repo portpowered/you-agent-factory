@@ -347,7 +347,51 @@ describe("CLI manifest adapter", () => {
       expect.arrayContaining(["invalid_cardinality", "invalid_cardinality"]),
     );
   });
+});
 
+describe("CLI manifest adapter rich inputs", () => {
+  it("validates rich flag cardinality and typed defaults", () => {
+    const cardinality = validManifest();
+    const flags = cardinality.commands["you.run"].flags as Record<
+      string,
+      unknown
+    >;
+    flags["you.run.flag.work"] = {
+      id: "you.run.flag.work",
+      kind: "named",
+      long: "work",
+      shorthand: "w",
+      aliases: [],
+      scope: "local",
+      valueType: "stringArray",
+      required: true,
+      minCardinality: 2,
+      maxCardinality: 1,
+      defaultValue: { stringArray: ["one"] },
+      repeatable: true,
+      normalization: "",
+      completion: "none",
+      acceptedSources: ["cli"],
+      handlerBindingId: "you.run.flag.work.handler",
+      visibility: "visible",
+      lifecycle: lifecycle("you.run.flag.work"),
+    };
+
+    expect(diagnosticCodes(cardinality)).toContain("invalid_cardinality");
+    expect(diagnosticMessages(cardinality, "zh-CN")).toContain(
+      "标志 you.run.flag.work 的必填、最小值或最大值基数相互矛盾。",
+    );
+
+    const typedDefault = validManifest();
+    const argument = typedDefault.commands["you.run"].arguments[
+      "you.run.arg.prompt"
+    ] as Record<string, unknown>;
+    argument.defaultValue = { int: 7 };
+    expect(diagnosticCodes(typedDefault)).toContain("invalid_value");
+  });
+});
+
+describe("CLI manifest adapter relationship validation", () => {
   it("rejects relationships with missing or invalid participants", () => {
     const manifest = validManifest();
     manifest.commands["you.run"].relationships[
