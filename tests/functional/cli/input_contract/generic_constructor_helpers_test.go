@@ -1,4 +1,4 @@
-package climanifestcobra_test
+package inputcontract
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func TestNewCommandTreeRejectsInvalidCanonicalFlagValuesBeforeDispatch(t *testin
 					return nil
 				}
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := (climanifestcobra.GenericConstructor{}).Construct(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), test.want) || calls != 0 {
 				t.Fatalf("NewCommandTree() = (%v, %v), calls=%d; want nil, %q, zero", root, err, calls, test.want)
 			}

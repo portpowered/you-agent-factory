@@ -23,10 +23,10 @@ you models list	list	you models
 you models pull	pull <model-name>	you models
 you run	run	you
 you session	session	you
-you session create	create	you session
+you session create	create [arg0...]	you session
 you session delete	delete <session-id>	you session
-you session dispatches	dispatches [session-id]	you session
-you session list	list	you session
+you session dispatches	dispatches <session-id>	you session
+you session list	list [arg0...]	you session
 you session pause	pause [session-id]	you session
 you session resume	resume [session-id]	you session
 you session show	show [session-id]	you session
