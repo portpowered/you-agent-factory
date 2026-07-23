@@ -1,6 +1,8 @@
 package climanifestcobra
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -10,6 +12,192 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+func TestGenericConstructorRejectsSiblingAliasCollisionBeforeDispatch(t *testing.T) {
+	manifest := feedbackManifest()
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Aliases = []string{"zeta"}
+	manifest.Commands[alpha.ID] = alpha
+	calls := 0
+	bindings := feedbackBindings(manifest, func(context.Context, map[string]any) error {
+		calls++
+		return nil
+	})
+
+	root, err := NewCommandTree(manifest, bindings)
+	if root != nil || err == nil || !strings.Contains(err.Error(), `name or alias "zeta" conflicts with sibling`) {
+		t.Fatalf("NewCommandTree() = (%v, %v), want nil sibling collision error", root, err)
+	}
+	if calls != 0 {
+		t.Fatalf("handler calls = %d, want 0", calls)
+	}
+}
+
+func TestGenericCompletionReservesLaterRequiredArgumentLikeParser(t *testing.T) {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Arguments = mixedCompletionArguments("static", "dynamic")
+	manifest.Commands[alpha.ID] = alpha
+	var received map[string]any
+	dynamicCalls := 0
+	bindings := feedbackBindings(manifest, func(_ context.Context, values map[string]any) error {
+		received = values
+		return nil
+	})
+	bindings.Completions = CompletionRegistry{
+		"feedback.alpha.arg.required": func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			dynamicCalls++
+			return []cobra.Completion{"required-dynamic"}, cobra.ShellCompDirectiveNoFileComp
+		},
+	}
+	root, err := NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	alphaCommand := root.Commands()[0]
+	values, _ := alphaCommand.ValidArgsFunction(alphaCommand, nil, "")
+	if len(values) != 1 || values[0] != "required-dynamic" || dynamicCalls != 1 {
+		t.Fatalf("first completion = %v calls=%d, want required dynamic input", values, dynamicCalls)
+	}
+	root.SetArgs([]string{"alpha", "required-static"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if received["feedback.alpha.arg.optional"] != nil ||
+		received["feedback.alpha.arg.required"] != "required-static" {
+		t.Fatalf("parsed values = %#v, want one token assigned to required input", received)
+	}
+
+	alpha.Arguments = mixedCompletionArguments("dynamic", "static")
+	manifest.Commands[alpha.ID] = alpha
+	bindings = feedbackBindings(manifest, func(context.Context, map[string]any) error { return nil })
+	bindings.Completions = CompletionRegistry{
+		"feedback.alpha.arg.optional": func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			return []cobra.Completion{"optional-dynamic"}, cobra.ShellCompDirectiveNoFileComp
+		},
+	}
+	root, err = NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree(static required) error = %v", err)
+	}
+	alphaCommand = root.Commands()[0]
+	values, _ = alphaCommand.ValidArgsFunction(alphaCommand, nil, "")
+	if len(values) != 1 || values[0] != "required-static" {
+		t.Fatalf("first completion = %v, want required static input", values)
+	}
+}
+
+func TestGenericHelpDerivesCardinalityAndExposesFlagAliases(t *testing.T) {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Usage.Line = "alpha"
+	alpha.Arguments = map[string]climanifest.Argument{
+		"feedback.alpha.arg.target": {
+			ID: "feedback.alpha.arg.target", Name: "target", Position: 0, Kind: "positional",
+			ValueType: "string", Required: true, MinCardinality: 1, MaxCardinality: 1, Completion: "none",
+		},
+		"feedback.alpha.arg.pair": {
+			ID: "feedback.alpha.arg.pair", Name: "pair", Position: 1, Kind: "positional",
+			ValueType: "stringArray", Required: true, MinCardinality: 2, MaxCardinality: 2, Completion: "none",
+		},
+		"feedback.alpha.arg.extra": {
+			ID: "feedback.alpha.arg.extra", Name: "extra", Position: 2, Kind: "positional",
+			ValueType: "stringArray", MaxCardinality: -1, Variadic: true, Completion: "none",
+		},
+	}
+	alpha.Flags = map[string]climanifest.Flag{
+		"feedback.alpha.flag.cluster": {
+			ID: "feedback.alpha.flag.cluster", Long: "cluster", Aliases: []string{"compute-cluster"},
+			Scope: "local", ValueType: "string", Completion: "none", Visibility: "visible",
+			Lifecycle: feedbackLifecycle("feedback.alpha.flag.cluster"),
+		},
+	}
+	manifest.Commands[alpha.ID] = alpha
+	root, err := NewCommandTree(manifest, feedbackBindings(
+		manifest,
+		func(context.Context, map[string]any) error { return nil },
+	))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	alphaCommand := root.Commands()[0]
+	const wantUse = "alpha <target> <pair>{2} [extra...]"
+	if alphaCommand.Use != wantUse {
+		t.Fatalf("command use = %q, want %q", alphaCommand.Use, wantUse)
+	}
+	var output bytes.Buffer
+	alphaCommand.SetOut(&output)
+	if err := alphaCommand.Help(); err != nil {
+		t.Fatalf("Help() error = %v", err)
+	}
+	help := output.String()
+	if !strings.Contains(help, wantUse) || !strings.Contains(help, "aliases: --compute-cluster") {
+		t.Fatalf("help does not project cardinality and flag alias:\n%s", help)
+	}
+}
+
+func mixedCompletionArguments(optionalMode, requiredMode string) map[string]climanifest.Argument {
+	return map[string]climanifest.Argument{
+		"feedback.alpha.arg.optional": {
+			ID: "feedback.alpha.arg.optional", Name: "optional", Position: 0, Kind: "positional",
+			ValueType: "string", MaxCardinality: 1, Enum: []string{"optional-static"}, Completion: optionalMode,
+		},
+		"feedback.alpha.arg.required": {
+			ID: "feedback.alpha.arg.required", Name: "required", Position: 1, Kind: "positional",
+			ValueType: "string", Required: true, MinCardinality: 1, MaxCardinality: 1,
+			Enum: []string{"required-static"}, Completion: requiredMode,
+		},
+	}
+}
+
+func feedbackManifest() climanifest.Manifest {
+	return climanifest.Manifest{
+		FormatVersion: "1.0.0",
+		RootPath:      "feedback",
+		Commands: map[string]climanifest.Command{
+			"feedback.root":  feedbackCommand("feedback.root", "feedback", "feedback", false),
+			"feedback.alpha": feedbackCommand("feedback.alpha", "alpha", "feedback alpha", true),
+			"feedback.zeta":  feedbackCommand("feedback.zeta", "zeta", "feedback zeta", true),
+		},
+	}
+}
+
+func feedbackCommand(id, name, path string, runnable bool) climanifest.Command {
+	command := climanifest.Command{
+		ID: id, Name: name, Path: path, Visibility: "visible", Runnable: runnable,
+		Usage: climanifest.Usage{Line: name},
+		Documentation: climanifest.Documentation{Documentation: climanifest.DocumentationCopy{
+			Title:       climanifest.DocumentationField{CanonicalEnglish: name + " title"},
+			Description: climanifest.DocumentationField{CanonicalEnglish: name + " description"},
+		}},
+		Lifecycle: feedbackLifecycle(id),
+	}
+	if runnable {
+		command.Handler = &climanifest.Handler{ID: id + ".handler"}
+	}
+	return command
+}
+
+func feedbackLifecycle(id string) climanifest.Lifecycle {
+	return climanifest.Lifecycle{
+		FormatVersion: "1.0.0",
+		ItemID:        id,
+		State:         "active",
+		Since:         "1.0.0",
+	}
+}
+
+func feedbackBindings(manifest climanifest.Manifest, handler GenericHandler) GenericBindings {
+	bindings := GenericBindings{Handlers: HandlerRegistry{}}
+	for _, command := range manifest.Commands {
+		if command.Handler != nil {
+			bindings.Handlers[command.Handler.ID] = handler
+		}
+	}
+	return bindings
+}
 
 func TestLocalBindingTargetParsesIntDefaults(t *testing.T) {
 	target, err := localBindingTarget(climanifest.Flag{

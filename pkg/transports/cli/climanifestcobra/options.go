@@ -678,12 +678,9 @@ func assignArgumentValues(cmd *cobra.Command, plan plannedCommand, raw []string)
 		return fmt.Errorf("accepts at most %d arg(s), received %d", maximum, len(raw))
 	}
 	offset := 0
+	counts := argumentValueCounts(plan.arguments, len(raw))
 	for index, argument := range plan.arguments {
-		remainingMinimum := minimumCardinality(plan.arguments[index+1:])
-		count := len(raw) - offset - remainingMinimum
-		if argument.MaxCardinality >= 0 && count > argument.MaxCardinality {
-			count = argument.MaxCardinality
-		}
+		count := counts[index]
 		values := append([]string(nil), raw[offset:offset+count]...)
 		offset += count
 		value, err := parseArgumentValues(argument, values)
@@ -695,6 +692,23 @@ func assignArgumentValues(cmd *cobra.Command, plan plannedCommand, raw []string)
 		}
 	}
 	return nil
+}
+
+func argumentValueCounts(arguments []climanifest.Argument, supplied int) []int {
+	counts := make([]int, len(arguments))
+	offset := 0
+	for index, argument := range arguments {
+		count := supplied - offset - minimumCardinality(arguments[index+1:])
+		if count < 0 {
+			count = 0
+		}
+		if argument.MaxCardinality >= 0 && count > argument.MaxCardinality {
+			count = argument.MaxCardinality
+		}
+		counts[index] = count
+		offset += count
+	}
+	return counts
 }
 
 func argumentCardinality(arguments []climanifest.Argument) (int, int) {

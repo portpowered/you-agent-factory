@@ -474,7 +474,7 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 	built := make(map[string]*cobra.Command, len(plan))
 	targets := make(map[string]*genericFlagValue)
 	for _, item := range plan {
-		built[item.record.Path] = projectCommand(item.record)
+		built[item.record.Path] = projectCommand(item.record, item.arguments)
 	}
 	for _, item := range plan {
 		if err := projectFlags(built[item.record.Path], item, targets); err != nil {
@@ -699,9 +699,9 @@ func commandParentPath(path string) string {
 	return path[:index]
 }
 
-func projectCommand(record climanifest.Command) *cobra.Command {
+func projectCommand(record climanifest.Command, arguments []climanifest.Argument) *cobra.Command {
 	return &cobra.Command{
-		Use:     record.Usage.Line,
+		Use:     projectedCommandUsage(record, arguments),
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
 		Long:    commandLong(record),
 		Example: commandExamples(record),
@@ -959,7 +959,7 @@ func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*g
 }
 
 func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value *genericFlagValue) error {
-	flagSet.VarP(value, record.Long, record.Shorthand, "")
+	flagSet.VarP(value, record.Long, record.Shorthand, projectedFlagUsage(record))
 	registered := flagSet.Lookup(record.Long)
 	registered.Hidden = record.Visibility == "hidden"
 	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}

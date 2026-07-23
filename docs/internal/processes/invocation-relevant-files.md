@@ -409,7 +409,13 @@ response-stream output.
   every completion mode before Cobra mutation. Static completion consumes
   declared enum choices; dynamic completion callbacks are supplied through
   `GenericBindings.Completions` keyed by stable input ID, never by a public flag
-  name or command path.
+  name or command path. Use the same cardinality-allocation helper for parsing
+  and positional completion so later required inputs reserve their tokens in
+  both paths. Derive positional usage labels from ordered argument records,
+  render declared aliases in canonical flag help, and reject sibling
+  command-name/alias collisions before creating Cobra commands; Cobra otherwise
+  resolves the first matching sibling and can silently dispatch the wrong stable
+  handler.
   Generic runnable dispatch follows the same boundary: validate every
   `Command.Handler.ID` and `GenericBindings.Handlers` entry before Cobra
   projection, reject duplicate handler ownership, and invoke the selected

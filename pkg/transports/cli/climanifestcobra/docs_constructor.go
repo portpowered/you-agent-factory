@@ -99,6 +99,9 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 }
 
 func validateGenericPresentation(plan []plannedCommand, bindings GenericBindings) error {
+	if err := validateSiblingCommandIdentities(plan); err != nil {
+		return err
+	}
 	flags := make(map[string]climanifest.Flag)
 	for _, item := range plan {
 		if err := validateLifecycle(item.record.ID, item.record.Lifecycle, false); err != nil {
@@ -123,6 +126,30 @@ func validateGenericPresentation(plan []plannedCommand, bindings GenericBindings
 		}
 	}
 	return validateInheritedPresentation(plan, flags)
+}
+
+func validateSiblingCommandIdentities(plan []plannedCommand) error {
+	namesByParent := make(map[string]map[string]string)
+	for _, item := range plan {
+		names := namesByParent[item.parentPath]
+		if names == nil {
+			names = make(map[string]string)
+			namesByParent[item.parentPath] = names
+		}
+		for _, name := range append([]string{item.record.Name}, item.record.Aliases...) {
+			if owner, exists := names[name]; exists {
+				return fmt.Errorf(
+					"command %q name or alias %q conflicts with sibling command %q under %q",
+					item.record.ID,
+					name,
+					owner,
+					item.parentPath,
+				)
+			}
+			names[name] = item.record.ID
+		}
+	}
+	return nil
 }
 
 func validateInputCompletion(
@@ -291,14 +318,58 @@ func projectArgumentCompletion(cmd *cobra.Command, arguments []climanifest.Argum
 }
 
 func completionArgument(arguments []climanifest.Argument, supplied int) *climanifest.Argument {
-	for index := range arguments {
-		maximum := arguments[index].MaxCardinality
-		if maximum < 0 || supplied < maximum {
+	counts := argumentValueCounts(arguments, supplied+1)
+	offset := 0
+	for index, count := range counts {
+		if supplied < offset+count {
 			return &arguments[index]
 		}
-		supplied -= maximum
+		offset += count
 	}
 	return nil
+}
+
+func projectedCommandUsage(record climanifest.Command, arguments []climanifest.Argument) string {
+	if len(arguments) == 0 {
+		return record.Usage.Line
+	}
+	fields := []string{record.Name}
+	for _, argument := range arguments {
+		fields = append(fields, argumentUsageToken(argument))
+	}
+	return strings.Join(fields, " ")
+}
+
+func argumentUsageToken(argument climanifest.Argument) string {
+	if argument.MaxCardinality < 0 {
+		if argument.MinCardinality > 0 {
+			return "<" + argument.Name + "...>"
+		}
+		return "[" + argument.Name + "...]"
+	}
+	token := "[" + argument.Name + "]"
+	if argument.MinCardinality > 0 {
+		token = "<" + argument.Name + ">"
+	}
+	switch {
+	case argument.MaxCardinality > 1 && argument.MinCardinality == argument.MaxCardinality:
+		return fmt.Sprintf("%s{%d}", token, argument.MaxCardinality)
+	case argument.MaxCardinality > 1:
+		return fmt.Sprintf("%s{%d,%d}", token, argument.MinCardinality, argument.MaxCardinality)
+	default:
+		return token
+	}
+}
+
+func projectedFlagUsage(flag climanifest.Flag) string {
+	if len(flag.Aliases) == 0 {
+		return ""
+	}
+	aliases := make([]string, len(flag.Aliases))
+	for index, alias := range flag.Aliases {
+		aliases[index] = "--" + alias
+	}
+	return "aliases: " + strings.Join(aliases, ", ")
 }
 
 func completionForInput(
