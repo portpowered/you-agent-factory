@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -106,6 +107,91 @@ func TestUpdateFromFileInvokesReplaceOperationAndRendersJSON(t *testing.T) {
 	}
 	if result.Name != "@you/goal" || result.FactoryDir != "factory-root/@you/goal" {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestPersistFromFileFailureRetainsSourceAndTargetContext(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(t.TempDir(), "factory.yaml")
+	persistenceErr := errors.New("staging write failed")
+	err := UpdateFromFileWithServices(
+		UpdateFromFileConfig{
+			Context: t.Context(),
+			Name:    "alpha",
+			From:    sourcePath,
+			Dir:     "factory-root",
+			Output:  &bytes.Buffer{},
+		},
+		func(
+			context.Context,
+			factorydefinitions.NamedFactoryPersistenceRequest,
+		) (factorydefinitions.NamedFactoryPersistenceResult, error) {
+			return factorydefinitions.NamedFactoryPersistenceResult{
+				Name:       "alpha",
+				FactoryDir: filepath.Join("factory-root", "alpha"),
+			}, persistenceErr
+		},
+		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+			return factorydefinitions.AuthoredFactorySource{
+				Path:   path,
+				Format: factorydefinitions.AuthoredFactoryFormatYAML,
+				Data:   []byte(`{"name":"alpha"}`),
+			}, nil
+		},
+	)
+	if !errors.Is(err, persistenceErr) {
+		t.Fatalf("error = %v, want wrapped persistence error", err)
+	}
+	for _, want := range []string{
+		`persist factory "alpha"`,
+		sourcePath,
+		"(YAML)",
+		filepath.Join("factory-root", "alpha"),
+		"staging write failed",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+}
+
+func TestPersistFromFileLoaderFailureDoesNotPersist(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(t.TempDir(), "factory.yaml")
+	decodeErr := errors.New("duplicate YAML mapping key")
+	persistenceCalls := 0
+	err := CreateFromFileWithServices(
+		CreateFromFileConfig{
+			Context: t.Context(),
+			Name:    "broken",
+			From:    sourcePath,
+			Dir:     "factory-root",
+			Output:  &bytes.Buffer{},
+		},
+		func(
+			context.Context,
+			factorydefinitions.NamedFactoryPersistenceRequest,
+		) (factorydefinitions.NamedFactoryPersistenceResult, error) {
+			persistenceCalls++
+			return factorydefinitions.NamedFactoryPersistenceResult{}, nil
+		},
+		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+			if path != sourcePath {
+				t.Fatalf("source path = %q, want %q", path, sourcePath)
+			}
+			return factorydefinitions.AuthoredFactorySource{}, decodeErr
+		},
+	)
+	if !errors.Is(err, decodeErr) {
+		t.Fatalf("error = %v, want wrapped decode error", err)
+	}
+	if persistenceCalls != 0 {
+		t.Fatalf("persistence calls = %d, want 0", persistenceCalls)
+	}
+	if !strings.Contains(err.Error(), sourcePath) {
+		t.Fatalf("error = %q, want source path %q", err, sourcePath)
 	}
 }
 
