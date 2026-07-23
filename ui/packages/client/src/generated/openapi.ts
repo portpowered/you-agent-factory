@@ -2826,6 +2826,24 @@ export interface components {
     };
     /** @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier. */
     FactoryName: string;
+    /** @description A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling. */
+    NameValue: {
+      /**
+       * @description Discriminator for localized customer-facing metadata.
+       * @enum {string}
+       */
+      type: NameValueType;
+      /** @description Required base value returned when no exact locale override exists. */
+      value: string;
+      /** @description Canonical BCP 47 locales for which the base value was authored. */
+      locales?: string[];
+      /** @description Exact canonical BCP 47 locale tags mapped to localized overrides. */
+      values?: {
+        [key: string]: string;
+      };
+      /** @description Optional stable metadata identifier; consumers must not render it as display copy. */
+      id?: string;
+    };
     /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
     FactoryWorldWorkstationRequestProjectionSlice: {
       workstationRequestsByDispatchId?: {
@@ -3993,6 +4011,8 @@ export interface components {
     /** @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field. */
     Factory: {
       name: components["schemas"]["FactoryName"];
+      /** @description Optional localized customer-facing explanation of this Factory. */
+      description?: components["schemas"]["NameValue"];
       /** @description Factory identifier used as the factory-level template context fallback. */
       id?: string;
       /** @description Default runner selection for the factory when a workstation does not declare its own runner override. */
@@ -4013,6 +4033,8 @@ export interface components {
       invocationReturn?: components["schemas"]["InvocationReturn"];
       /** @description Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior. */
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
+      /** @description Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper. */
+      examples?: components["schemas"]["FactoryInvocationExample"][];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -4090,8 +4112,6 @@ export interface components {
       unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
       /** @description Optional customer-facing hint for the factory's primary output shape. */
       outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
-      /** @description Example invocations rendered in docs, help, and inspection surfaces. */
-      examples?: components["schemas"]["FactoryInvocationExample"][];
     };
     /** @description One canonical invocation parameter declared on a factory. */
     FactoryInvocationParameter: {
@@ -4169,12 +4189,14 @@ export interface components {
     FactoryInvocationExample: {
       /** @description Stable example name. */
       name: string;
-      /** @description Customer-facing explanation of what the example does. */
-      description?: string;
-      /** @description CLI-style argument vector rendered after factory selection. */
-      argv?: string[];
-      /** @description Example stdin payload when the signature routes stdin into one parameter. */
-      stdin?: string;
+      /** @description Localized customer-facing explanation of what the example does. */
+      description: components["schemas"]["NameValue"];
+      /** @description Structured invocation arguments; values are never parsed or executed while loading the Factory. */
+      args: components["schemas"]["FactoryInvocationArguments"];
+    };
+    /** @description Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings. */
+    FactoryInvocationArguments: {
+      [key: string]: string | string[];
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {
@@ -4261,6 +4283,8 @@ export interface components {
       id?: string;
       /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this work type. */
+      description?: components["schemas"]["NameValue"];
       /** @description Lifecycle states available for work items of this type. */
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
@@ -4310,6 +4334,8 @@ export interface components {
       id?: string;
       /** @description Worker name referenced by Workstation.worker. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this worker. */
+      description?: components["schemas"]["NameValue"];
       /** @description Worker implementation family to instantiate for this definition. */
       type?: components["schemas"]["WorkerType"];
       /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
@@ -4415,6 +4441,8 @@ export interface components {
       id?: string;
       /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this workstation. */
+      description?: components["schemas"]["NameValue"];
       /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
       behavior?: components["schemas"]["WorkstationKind"];
       /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
@@ -7316,6 +7344,10 @@ export const ProviderSessionTranscriptEntryType = {
 } as const;
 export type ProviderSessionTranscriptEntryType =
   (typeof ProviderSessionTranscriptEntryType)[keyof typeof ProviderSessionTranscriptEntryType];
+export const NameValueType = {
+  LOCALIZABLE_ASSET: "LOCALIZABLE_ASSET",
+} as const;
+export type NameValueType = (typeof NameValueType)[keyof typeof NameValueType];
 export const FactoryWorldWorkItemRefPayloadStatus = {
   RESOLVED: "RESOLVED",
   UNAVAILABLE: "UNAVAILABLE",

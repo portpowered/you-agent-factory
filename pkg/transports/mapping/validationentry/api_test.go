@@ -257,7 +257,10 @@ func TestValidateFactoryAPI_ProfileTopology_RejectsInvalidInvocationSignature(t 
 			Body:           "Use ${items}",
 		}},
 	}
-	factory := factorymapping.FactoryConfigToOpenAPI(cfg)
+	factory, err := factorymapping.FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 
 	findings := validationResult(
 		codeInvocationSignatureUnknownOutputPathParameter,

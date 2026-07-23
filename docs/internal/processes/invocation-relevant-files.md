@@ -378,6 +378,18 @@ response-stream output.
   lower tiers, scalar observations from one binding
   use the last value, repeated observations append in order, and multiple
   same-tier bindings for one input are rejected.
+  Resolved runtime CLI values belong in
+  `pkg/transports/cli/resolvedinput`: its collection-based resolver and accessors
+  use stable schema input IDs and canonical typed values, with no Cobra, public
+  spelling, position, environment, filesystem, or process-global dependency.
+  Definitions supply typed source precedence explicitly; the resolved snapshot
+  retains the winning provenance and derives changed/default state from that
+  source instead of asking handlers to infer it. Typed, wrap-safe access
+  diagnostics identify missing IDs and value-kind mismatches so handler adapters
+  can translate failures without string parsing. Definitions also carry schema
+  sensitivity into the detached snapshot: diagnostic and observation boundaries
+  expose provenance and changed/default state while replacing sensitive scalar
+  or collection values with `resolvedinput.RedactedValue`.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure

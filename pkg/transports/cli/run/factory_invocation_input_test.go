@@ -1,8 +1,10 @@
 package run
 
 import (
+	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -21,6 +23,76 @@ func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
 	data, err := loadFactoryInvocationHelpData("you", RunConfig{FactoryConfigPath: "workflow.mjs"})
 	if err != nil || data != nil {
 		t.Fatalf("loadFactoryInvocationHelpData(JavaScript) = (%#v, %v)", data, err)
+	}
+}
+
+func TestFormatFactoryInvocationHelp_RendersTopLevelStructuredExamples(t *testing.T) {
+	data := factoryInvocationHelpData{
+		factoryName:   "example-factory",
+		selectionText: "named factory example-factory",
+		commandPrefix: "you run --named example-factory",
+		signature: &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+			{Name: "input", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+			{Name: "tag", ExternalName: "tag", ValueMode: "REPEATED", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+		}},
+		examples: []interfaces.InvocationExampleConfig{{
+			Name: "tagged",
+			Description: interfaces.NameValueConfig{
+				Type: interfaces.NameValueTypeLocalizableAsset, Value: "Run with two tags.",
+			},
+			Args: interfaces.InvocationExampleArguments{"input": "hello world", "tag": []string{"alpha", "beta"}},
+		}},
+	}
+
+	output := formatFactoryInvocationHelp(data)
+	for _, want := range []string{
+		"# Run with two tags.",
+		"you run --named example-factory 'hello world' --tag alpha --tag beta",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("help output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestFormatInvocationExampleRendersStructuredStdin(t *testing.T) {
+	t.Parallel()
+
+	signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{Name: "body", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "STDIN"}}},
+	}}
+	example := interfaces.InvocationExampleConfig{
+		Name: "stdin",
+		Args: interfaces.InvocationExampleArguments{"body": "first line\nsecond line"},
+	}
+	output := formatInvocationExample("you run --factory factory.json", signature, example)
+	if !strings.Contains(output, "printf '%s\\n' 'first line\nsecond line' | you run --factory factory.json") {
+		t.Fatalf("stdin example output = %q", output)
+	}
+}
+
+func TestFormatInvocationExampleResolvesAliasAndExternalNameBindings(t *testing.T) {
+	t.Parallel()
+
+	signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{Name: "input", ExternalName: "prompt", Aliases: []string{"p"}, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+		{Name: "body", ExternalName: "content", Aliases: []string{"c"}, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "STDIN"}}},
+	}}
+	tests := []struct {
+		name string
+		args interfaces.InvocationExampleArguments
+		want string
+	}{
+		{name: "alias follows positional binding", args: interfaces.InvocationExampleArguments{"p": "hello"}, want: "you run --factory factory.json hello\n"},
+		{name: "external name follows stdin binding", args: interfaces.InvocationExampleArguments{"content": "from stdin"}, want: "printf '%s\\n' 'from stdin' | you run --factory factory.json\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			example := interfaces.InvocationExampleConfig{Name: test.name, Args: test.args}
+			if got := formatInvocationExample("you run --factory factory.json", signature, example); got != "  "+test.want {
+				t.Fatalf("formatInvocationExample() = %q, want %q", got, "  "+test.want)
+			}
+		})
 	}
 }
 

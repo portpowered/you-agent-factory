@@ -9,6 +9,22 @@ Use this map when changing the public REST contract.
   ownership without importing generated HTTP contracts; global-config identity
   persistence follows this pattern in
   `pkg/transports/mapping/globalconfig` and `pkg/services/operator_settings`.
+- `make api-smoke` regenerates twice and checks generated files against the Git
+  index. During an intentional contract change, stage the regenerated
+  `api/openapi.yaml`, Go server/client, and TypeScript outputs before running the
+  smoke target so the drift check detects nondeterminism rather than the
+  intended authored change.
+- Factory output key normalization in
+  `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve keys
+  inside opaque maps. Add new map-valued contract fields such as localized
+  `NameValue.values` or structured invocation-example `args` to
+  `preservesObjectKeys`; otherwise canonicalization can rewrite
+  customer-authored locale tags or argument names.
+- OpenAPI maps whose `additionalProperties` use `oneOf` generate typed Go union
+  wrappers. Convert those wrappers explicitly at transport mapping boundaries;
+  keep the internal representation limited to the allowed variants so JSON and
+  YAML round trips do not silently widen or mutate values.
+
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in
   `internal/contractopenapiconverter` must translate those pairs to numeric
@@ -494,6 +510,10 @@ do not conflate reconnect parameters, retention, or error codes between them.
 - `pkg/transports/http/client/client.gen.go`
 - `ui/src/api/generated/openapi.ts`
 
+Factory contract changes must also run `bun run generate` from
+`ui/packages/client` so its package-local `src/generated/openapi.ts` and
+standalone Factory schema copies stay aligned with these canonical outputs.
+
 **Runtime, handler, and mapping ownership**
 
 - HTTP SSE transport:
@@ -530,7 +550,9 @@ do not conflate reconnect parameters, retention, or error codes between them.
 
 **Maintainer verification commands**
 
-- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible
+- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible;
+  for Factory contract changes, also run `cd ui/packages/client && bun run
+  generate` and verify with `make ui-public-package-release`
 - Packaged session guidance edits: `make docs-reference-smoke`
 - Focused HTTP lane:
   `go test ./pkg/transports/http/... -run 'FactoryResponseEvents' -count=1`
@@ -794,7 +816,7 @@ dashboard state, and event connections. This agrees with
 - Worker taxonomy changes start in `api/components/schemas/data-models/WorkerType.yaml`; keep domain normalization in `pkg/workers/taxonomy` and generated enum conversion in transport mapping, then wire load/save projection through `pkg/config/factory_config_mapping_internal.go`. Preserve legacy runtime identifiers internally while accepting the public worker vocabulary at the boundary.
 - Workstation taxonomy changes start in `api/components/schemas/data-models/WorkstationType.yaml`; keep domain normalization in `pkg/workers/taxonomy`, worker/workstation policy in `pkg/workers/compatibility`, and generated conversion in transport mapping. Wire load/save projection through `pkg/config/factory_config_mapping_internal.go` and `pkg/config/factory_config_mapping.go`, preserving supported legacy runtime aliases at the API boundary.
 - Workstation outcome parsing modes such as `outcomeFormat: decision-envelope` start in `api/components/schemas/data-models/WorkstationOutcomeFormat.yaml` (referenced from `Workstation.yaml`); keep closed-vocabulary canonicalization in `pkg/services/factory_definitions/contracts/public_factory_enums.go` (`StrictPublicFactoryWorkstationOutcomeFormat`) and boundary normalization in `pkg/transports/mapping/factoryconfig/openapi_factory.go` (`normalizeFactoryWorkstationEntries`); wire through `pkg/services/factory_definitions/contracts/factory_config.go` (`FactoryWorkstationConfig.OutcomeFormat`) and `pkg/transports/mapping/factoryconfig/factory_config_mapping{,_internal}.go` (`workstationAPIFromInternal`, `workstationInternalFromAPI`) so checked-in `factory.json` passes the generated-schema boundary. Prove unsupported values fail at the boundary through `pkg/transports/mapping/factoryconfig/openapitests/openapi_factory_boundary_enum_test.go`.
-- Factory/OpenAPI/projected-schema config parity evidence belongs in `pkg/transports/mapping/factoryconfig/openapitests` (`ProjectParityInventory`, `MarshalParityInventoryJSON`, committed `testdata/baseline/factory-openapi-parity-index.json`, `parity_inventory_test.go`). `TestIndexedParityCases_MatchProjectedFactorySchema` exercises representative accept/reject fixtures against `contracts/config/factory.schema.json` in addition to `GeneratedFactoryFromOpenAPIJSON` and `FactoryConfigFromOpenAPIJSON`. Regenerate the baseline with `WRITE_OPENAPI_PARITY_BASELINE=1 go test ./pkg/transports/mapping/factoryconfig/openapitests/... -run TestWriteFactoryOpenAPIParityIndexBaseline`. Keep this lane inventory-only: `parity_inventory_test.go` hashes Factory schema fragments, mapping sources, and generated clients so parity work cannot drift boundary behavior; do not start mock-worker or JS-call inventories here.
+- Factory/OpenAPI/projected-schema config parity evidence belongs in `pkg/transports/mapping/factoryconfig/openapitests`. Keep it behavioral: table-driven cases should submit committed payload fixtures directly to `GeneratedFactoryFromOpenAPIJSON`, `FactoryConfigFromOpenAPIJSON`, and `contracts/config/factory.schema.json`, then assert accepted values or field-specific rejection diagnostics. Do not use source hashes, committed inventory baselines, fixture filename scans, or inventory-membership tests as contract evidence.
 - Dashboard taxonomy UI: centralize worker/workstation alias handling and editor defaults in `ui/src/features/current-factory-definition/lib/worker-workstation-taxonomy.ts`; extend `ui/src/api/factory-definition/api.ts` enum sets (`WORKER_TYPE_VALUES`, `WORKSTATION_TYPE_VALUES`) whenever OpenAPI adds public taxonomy names so current-factory save round trips accept new and legacy values.
 - Worker/workstation compatibility policy lives in `pkg/workers/compatibility`; structural and API validation targets under `pkg/factory/validation` translate Factory-owned definitions into its narrow workstation input. Usage-aware legacy projection remains in that worker owner and post-load normalization in `pkg/config/openapi_factory.go`; preserve the mixed-use legacy alias when one worker serves both agent and inference workstations. Keep replay merge paths and topology projection aligned, and treat all provider-boundary worker aliases equivalently in service metrics.
 - Agent-run execution wiring lives in `pkg/workers/executor/agentrun/` with taxonomy routing in `pkg/workers/executor/workstation_behavior_router.go` and runtime assembly in `pkg/service/factory_build.go`. Keep `INFERENCE_RUN` on the existing provider executor path and route `AGENT_RUN` through the harness adapter. Author explicit tool policy in the OpenAPI worker schemas, map it into `pkg/workers/config.AgentToolsConfig`, and validate it at the Factory config boundary. Local inference and agent workers use `pkg/workers/taxonomy.UsesModelhostLease` to select modelhost leasing. Replay-safe inspection converts worker-internal diagnostics through `pkg/workers/diagnostics` before Factory event and dashboard projection; never expose raw prompt, environment, command, or provider-secret values.

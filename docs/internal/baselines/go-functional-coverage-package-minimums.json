@@ -70,7 +70,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
-      "minimum": 72.00
+	  "minimum": 72.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
@@ -137,6 +137,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
       "minimum": 62.01
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue",
+      "minimum": 25.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
@@ -1141,6 +1145,16 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
       "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",

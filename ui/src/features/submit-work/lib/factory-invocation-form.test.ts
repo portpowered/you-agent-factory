@@ -6,12 +6,6 @@ import {
 } from "./factory-invocation-form";
 
 const signature = {
-  examples: [
-    {
-      argv: ["fusion", "hello"],
-      name: "basic",
-    },
-  ],
   outputContract: {
     contentType: "text/plain",
     description: "Writes a summary file.",
@@ -59,7 +53,11 @@ const signature = {
 
 describe("factory invocation form projection", () => {
   it("projects signature-backed dashboard controls from canonical parameter data", () => {
-    const projection = projectInvocationForm(signature);
+    const projection = projectInvocationForm(signature, [{
+      args: { input: "hello" },
+      description: { type: "LOCALIZABLE_ASSET", value: "Basic invocation" },
+      name: "basic",
+    }]);
 
     expect(projection.examples).toHaveLength(1);
     expect(projection.outputContract?.mode).toBe("FILE");

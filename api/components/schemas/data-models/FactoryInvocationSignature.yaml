@@ -19,8 +19,3 @@ properties:
     allOf:
       - $ref: './FactoryInvocationOutputContract.yaml'
     description: Optional customer-facing hint for the factory's primary output shape.
-  examples:
-    type: array
-    description: Example invocations rendered in docs, help, and inspection surfaces.
-    items:
-      $ref: './FactoryInvocationExample.yaml'

@@ -53,15 +53,20 @@ describe("FactoryInvocationWidget", () => {
     const user = userEvent.setup();
     useCurrentFactoryDefinition.mockReturnValue({
       data: {
-        invocationSignature: {
-          examples: [
-            {
-              argv: ["you", "run", "--named", "@you/fusion", "hello world"],
-              description: "Invoke fusion with positional input.",
-              name: "Positional input",
-              stdin: "Draft a release summary",
+        examples: [
+          {
+            args: {
+              input: "Draft a release summary",
+              tags: ["release", "summary"],
             },
-          ],
+            description: {
+              type: "LOCALIZABLE_ASSET",
+              value: "Invoke fusion with structured input.",
+            },
+            name: "Positional input",
+          },
+        ],
+        invocationSignature: {
           outputContract: {
             contentType: "text/markdown",
             description: "Writes the fused result to a markdown file.",
@@ -146,13 +151,12 @@ describe("FactoryInvocationWidget", () => {
     expect(screen.getByText("Examples")).toBeVisible();
     expect(screen.getByText("Positional input")).toBeVisible();
     expect(
-      screen.getByText("Invoke fusion with positional input."),
+      screen.getByText("Invoke fusion with structured input."),
     ).toBeVisible();
     expect(
-      screen.getByText("you run --named @you/fusion hello world"),
-    ).toBeVisible();
-    expect(
-      screen.getByText("stdin: Draft a release summary"),
+      screen.getByText(
+        '{"input":"Draft a release summary","tags":["release","summary"]}',
+      ),
     ).toBeVisible();
     expect(screen.getByText("Accepts stdin input.")).toBeVisible();
     expect(screen.getByText("Factory invocation started. Trace ID: trace-1.")).toBeVisible();

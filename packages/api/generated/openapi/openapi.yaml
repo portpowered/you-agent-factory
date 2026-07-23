@@ -5719,6 +5719,38 @@ components:
       minLength: 1
       pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
       description: Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+    NameValue:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - value
+      description: A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.
+      properties:
+        type:
+          type: string
+          enum:
+            - LOCALIZABLE_ASSET
+          description: Discriminator for localized customer-facing metadata.
+        value:
+          type: string
+          minLength: 1
+          description: Required base value returned when no exact locale override exists.
+        locales:
+          type: array
+          uniqueItems: true
+          description: Canonical BCP 47 locales for which the base value was authored.
+          items:
+            type: string
+            minLength: 2
+        values:
+          type: object
+          description: Exact canonical BCP 47 locale tags mapped to localized overrides.
+          additionalProperties:
+            type: string
+        id:
+          type: string
+          description: Optional stable metadata identifier; consumers must not render it as display copy.
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object
       additionalProperties: false
@@ -8113,6 +8145,10 @@ components:
       properties:
         name:
           $ref: '#/components/schemas/FactoryName'
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this Factory.
         id:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
@@ -8151,6 +8187,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/FactoryInvocationSignature'
           description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+        examples:
+          type: array
+          description: Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationExample'
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -8283,11 +8324,6 @@ components:
           allOf:
             - $ref: '#/components/schemas/FactoryInvocationOutputContract'
           description: Optional customer-facing hint for the factory's primary output shape.
-        examples:
-          type: array
-          description: Example invocations rendered in docs, help, and inspection surfaces.
-          items:
-            $ref: '#/components/schemas/FactoryInvocationExample'
     FactoryInvocationParameter:
       type: object
       additionalProperties: false
@@ -8422,22 +8458,31 @@ components:
       additionalProperties: false
       required:
         - name
+        - description
+        - args
       description: One example invocation for docs, help, and packaged-factory inspection.
       properties:
         name:
           type: string
+          minLength: 1
           description: Stable example name.
         description:
-          type: string
-          description: Customer-facing explanation of what the example does.
-        argv:
-          type: array
-          description: CLI-style argument vector rendered after factory selection.
-          items:
-            type: string
-        stdin:
-          type: string
-          description: Example stdin payload when the signature routes stdin into one parameter.
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localized customer-facing explanation of what the example does.
+        args:
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationArguments'
+          description: Structured invocation arguments; values are never parsed or executed while loading the Factory.
+    FactoryInvocationArguments:
+      type: object
+      description: Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings.
+      additionalProperties:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
     InvocationReturn:
       type: object
       additionalProperties: false
@@ -8597,6 +8642,10 @@ components:
         name:
           type: string
           description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this work type.
         states:
           type: array
           description: Lifecycle states available for work items of this type.
@@ -8687,6 +8736,10 @@ components:
         name:
           type: string
           description: Worker name referenced by Workstation.worker.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this worker.
         type:
           allOf:
             - $ref: '#/components/schemas/WorkerType'
@@ -8892,6 +8945,10 @@ components:
         name:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this workstation.
         behavior:
           allOf:
             - $ref: '#/components/schemas/WorkstationKind'

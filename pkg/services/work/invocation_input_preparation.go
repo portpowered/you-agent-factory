@@ -39,6 +39,35 @@ func NewInvocationInputPreparation() InvocationInputPreparation {
 	return invocationInputPreparation{}
 }
 
+// InvocationExampleNormalizer owns pure compatibility normalization for
+// retired Factory invocation examples.
+type InvocationExampleNormalizer struct{}
+
+// NormalizeLegacyInvocationExample converts the retired argv/stdin example
+// carrier through Work's canonical argument policy without starting a runtime
+// service or performing IO. It exists only for Factory definition read
+// compatibility; canonical examples already contain structured arguments.
+func (InvocationExampleNormalizer) NormalizeLegacyInvocationExample(
+	arguments []string,
+	signature *InvocationSignatureConfig,
+	stdinText *string,
+) (*NormalizedArguments, error) {
+	positional, named, _, err := parseInvocationArguments(arguments, signature)
+	if err != nil {
+		return nil, err
+	}
+	result, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature: signature, PositionalArgs: positional, NamedArgs: named, StdinText: stdinText,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result.CompatibilityInput != nil {
+		return nil, errors.New("legacy example does not resolve to structured invocation arguments")
+	}
+	return cloneNormalizedArguments(&result), nil
+}
+
 func (invocationInputPreparation) PrepareInvocationInput(
 	ctx context.Context,
 	request InvocationInputPreparationRequest,

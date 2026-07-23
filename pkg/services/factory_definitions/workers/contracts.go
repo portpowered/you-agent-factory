@@ -5,12 +5,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 )
 
 type Config struct {
 	ID               string                    `json:"id,omitempty" yaml:"id,omitempty"`
 	Name             string                    `json:"name" yaml:"name,omitempty"`
+	Description      *namevalue.Config         `json:"description,omitempty" yaml:"description,omitempty"`
 	Type             string                    `json:"type" yaml:"type"`
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`
 	Model            string                    `json:"model,omitempty" yaml:"model,omitempty"`

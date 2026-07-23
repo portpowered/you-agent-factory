@@ -12,19 +12,20 @@
           {"kind": "STDIN"}
         ]
       }
-    ],
-    "examples": [
-      {
-        "name": "positional-input",
-        "argv": ["Summarize this release"]
-      },
-      {
-        "name": "stdin-input",
-        "argv": [],
-        "stdin": "Summarize this release"
-      }
     ]
   },
+  "examples": [
+    {
+      "name": "positional-input",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Summarize a release request."},
+      "args": {"input": "Summarize this release"}
+    },
+    {
+      "name": "stdin-input",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Summarize the same request using structured input."},
+      "args": {"input": "Summarize this release"}
+    }
+  ],
   "workTypes": [
     {
       "name": "task",

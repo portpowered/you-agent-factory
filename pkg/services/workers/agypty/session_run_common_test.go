@@ -47,6 +47,49 @@ type sessionProcess struct {
 	exitCode int
 }
 
+type controlledSessionProcess struct {
+	done      chan struct{}
+	terminate sync.Once
+}
+
+func newControlledSessionProcess() *controlledSessionProcess {
+	return &controlledSessionProcess{done: make(chan struct{})}
+}
+
+func (p *controlledSessionProcess) Wait() error {
+	<-p.done
+	return nil
+}
+
+func (p *controlledSessionProcess) Terminate() error {
+	p.terminate.Do(func() { close(p.done) })
+	return nil
+}
+
+func (*controlledSessionProcess) Close()        {}
+func (*controlledSessionProcess) PID() int      { return 0 }
+func (*controlledSessionProcess) ExitCode() int { return 0 }
+
+type advancingSessionClock struct {
+	mu    sync.Mutex
+	base  time.Time
+	calls int
+}
+
+func (c *advancingSessionClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	switch c.calls {
+	case 4:
+		return c.base.Add(50 * time.Millisecond)
+	case 5:
+		return c.base.Add(time.Second)
+	default:
+		return c.base
+	}
+}
+
 func (p *sessionProcess) Wait() error {
 	if p == nil || p.cmd == nil || p.cmd.Process == nil {
 		return errors.New("process is not started")
@@ -297,6 +340,24 @@ func TestExecuteSessionRun_HardTimeoutMarksTimedOut(t *testing.T) {
 	}
 	if sessionProcessRunning(proc.PID()) {
 		t.Fatalf("process %d still running after hard timeout", proc.PID())
+	}
+}
+
+func TestExecuteSessionRun_ResetsTimerBeforeInjectedDeadline(t *testing.T) {
+	t.Parallel()
+
+	clock := &advancingSessionClock{base: time.Date(2026, time.July, 22, 12, 0, 0, 0, time.UTC)}
+	proc := newControlledSessionProcess()
+	result, err := executeSessionRun(context.Background(), SessionConfig{
+		MaxCaptureBytes: DefaultMaxCaptureBytes,
+		IdleTimeout:     time.Hour,
+		HardTimeout:     time.Second,
+	}, io.NopCloser(strings.NewReader("")), proc, clock)
+	if err != nil {
+		t.Fatalf("executeSessionRun() error = %v", err)
+	}
+	if !result.TimedOut {
+		t.Fatal("TimedOut = false, want injected deadline after timer reset")
 	}
 }
 
