@@ -18,6 +18,10 @@ import (
 const (
 	scriptAssetRoot  = "scripts"
 	scriptTargetRoot = "factory/scripts"
+	docAssetRoot     = "docs"
+	docTargetRoot    = "factory/docs"
+	inputAssetRoot   = "inputs"
+	inputTargetRoot  = "factory/inputs"
 )
 
 // Definition describes an authored packaged factory and the assets available
@@ -33,7 +37,7 @@ func Assemble(definition Definition) ([]byte, error) {
 		return nil, err
 	}
 
-	scripts, err := discoverScripts(definition)
+	assets, err := discoverSupportedAssets(definition)
 	if err != nil {
 		return nil, err
 	}
@@ -42,16 +46,16 @@ func Assemble(definition Definition) ([]byte, error) {
 	if err := json.Unmarshal(assembled, &root); err != nil {
 		return nil, fmt.Errorf("assemble package %q scripts: decode assembled definition: %w", definition.Package, err)
 	}
-	if err := mergeScripts(definition.Package, root, scripts); err != nil {
+	if err := mergeAssets(definition.Package, root, assets); err != nil {
 		return nil, err
 	}
-	if len(scripts) == 0 {
+	if len(assets) == 0 {
 		return assembled, nil
 	}
 
 	payload, err := json.Marshal(root)
 	if err != nil {
-		return nil, fmt.Errorf("assemble package %q scripts: encode assembled definition: %w", definition.Package, err)
+		return nil, fmt.Errorf("assemble package %q assets: encode assembled definition: %w", definition.Package, err)
 	}
 	return payload, nil
 }
@@ -59,17 +63,47 @@ func Assemble(definition Definition) ([]byte, error) {
 type scriptAsset struct {
 	targetPath string
 	content    string
+	fileType   string
 }
 
-func discoverScripts(definition Definition) ([]scriptAsset, error) {
+func discoverSupportedAssets(definition Definition) ([]scriptAsset, error) {
 	if err := validateScriptAssetRoot(definition.AssetRoot); err != nil {
-		return nil, fmt.Errorf("assemble package %q script assets: %w", definition.Package, err)
+		return nil, fmt.Errorf("assemble package %q assets: %w", definition.Package, err)
 	}
-	root := path.Join(definition.AssetRoot, scriptAssetRoot)
 	if definition.Assets == nil {
-		return nil, fmt.Errorf("assemble package %q script assets under %q: asset filesystem is required", definition.Package, root)
+		return nil, fmt.Errorf("assemble package %q assets under %s: asset filesystem is required", definition.Package, scriptAssetRoot)
 	}
-	var scripts []scriptAsset
+
+	var assets []scriptAsset
+	for _, directory := range []struct {
+		sourceRoot string
+		targetRoot string
+		fileType   string
+	}{
+		{scriptAssetRoot, scriptTargetRoot, interfaces.BundledFileTypeScript},
+		{docAssetRoot, docTargetRoot, interfaces.BundledFileTypeDoc},
+		{inputAssetRoot, inputTargetRoot, interfaces.BundledFileTypeInput},
+	} {
+		discovered, err := discoverAssetDirectory(definition, directory.sourceRoot, directory.targetRoot, directory.fileType)
+		if err != nil {
+			return nil, err
+		}
+		assets = append(assets, discovered...)
+	}
+	sort.Slice(assets, func(i, j int) bool {
+		return assets[i].targetPath < assets[j].targetPath
+	})
+	return assets, nil
+}
+
+func discoverAssetDirectory(
+	definition Definition,
+	sourceRoot string,
+	targetRoot string,
+	fileType string,
+) ([]scriptAsset, error) {
+	root := path.Join(definition.AssetRoot, sourceRoot)
+	var assets []scriptAsset
 	err := fs.WalkDir(definition.Assets, root, func(assetPath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("inspect asset %q: %w", assetPath, walkErr)
@@ -96,9 +130,10 @@ func discoverScripts(definition Definition) ([]scriptAsset, error) {
 			return fmt.Errorf("asset %q content is not valid UTF-8", assetPath)
 		}
 		relativePath := strings.TrimPrefix(assetPath, root+"/")
-		scripts = append(scripts, scriptAsset{
-			targetPath: path.Join(scriptTargetRoot, relativePath),
+		assets = append(assets, scriptAsset{
+			targetPath: path.Join(targetRoot, relativePath),
 			content:    string(content),
+			fileType:   fileType,
 		})
 		return nil
 	})
@@ -106,13 +141,9 @@ func discoverScripts(definition Definition) ([]scriptAsset, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("assemble package %q script assets under %q: %w", definition.Package, root, err)
+		return nil, fmt.Errorf("assemble package %q %s assets under %q: %w", definition.Package, strings.ToLower(fileType), root, err)
 	}
-
-	sort.Slice(scripts, func(i, j int) bool {
-		return scripts[i].targetPath < scripts[j].targetPath
-	})
-	return scripts, nil
+	return assets, nil
 }
 
 func validateScriptAssetRoot(assetRoot string) error {
@@ -125,8 +156,8 @@ func validateScriptAssetRoot(assetRoot string) error {
 	return nil
 }
 
-func mergeScripts(packageName string, root map[string]any, scripts []scriptAsset) error {
-	manifest, entries, err := bundledManifest(packageName, root, len(scripts) > 0)
+func mergeAssets(packageName string, root map[string]any, assets []scriptAsset) error {
+	manifest, entries, err := bundledManifest(packageName, root, len(assets) > 0)
 	if err != nil || manifest == nil {
 		return err
 	}
@@ -134,12 +165,12 @@ func mergeScripts(packageName string, root map[string]any, scripts []scriptAsset
 	if err != nil {
 		return err
 	}
-	for _, script := range scripts {
-		if _, duplicate := targets[script.targetPath]; duplicate {
-			return fmt.Errorf("assemble package %q bundled target %q: duplicate canonical target", packageName, script.targetPath)
+	for _, asset := range assets {
+		if _, duplicate := targets[asset.targetPath]; duplicate {
+			return fmt.Errorf("assemble package %q bundled target %q: duplicate canonical target", packageName, asset.targetPath)
 		}
-		targets[script.targetPath] = struct{}{}
-		entries = append(entries, scriptBundledEntry(script))
+		targets[asset.targetPath] = struct{}{}
+		entries = append(entries, assetBundledEntry(asset))
 	}
 	manifest["bundledFiles"] = entries
 	return nil
@@ -185,8 +216,9 @@ func existingBundledTargets(packageName string, entries []any) (map[string]struc
 			return nil, fmt.Errorf("assemble package %q bundled target %q: %w", packageName, target, err)
 		}
 		fileType, _ := file["type"].(string)
-		if fileType == interfaces.BundledFileTypeScript && !strings.HasPrefix(target, scriptTargetRoot+"/") {
-			return nil, fmt.Errorf("assemble package %q bundled target %q: SCRIPT target must be below %s/", packageName, target, scriptTargetRoot)
+		targetRoot := supportedTargetRoot(fileType)
+		if targetRoot != "" && !strings.HasPrefix(target, targetRoot+"/") {
+			return nil, fmt.Errorf("assemble package %q bundled target %q: %s target must be below %s/", packageName, target, fileType, targetRoot)
 		}
 		if _, duplicate := targets[target]; duplicate {
 			return nil, fmt.Errorf("assemble package %q bundled target %q: duplicate canonical target", packageName, target)
@@ -196,16 +228,28 @@ func existingBundledTargets(packageName string, entries []any) (map[string]struc
 	return targets, nil
 }
 
-func scriptBundledEntry(script scriptAsset) map[string]any {
+func assetBundledEntry(asset scriptAsset) map[string]any {
+	fileType := asset.fileType
+	if fileType == "" {
+		fileType = interfaces.BundledFileTypeScript
+	}
 	return map[string]any{
-		"id":         script.targetPath,
-		"type":       interfaces.BundledFileTypeScript,
-		"targetPath": script.targetPath,
+		"id":         asset.targetPath,
+		"type":       fileType,
+		"targetPath": asset.targetPath,
 		"content": map[string]any{
 			"encoding": interfaces.BundledFileEncodingUTF8,
-			"inline":   script.content,
+			"inline":   asset.content,
 		},
 	}
+}
+
+func supportedTargetRoot(fileType string) string {
+	return map[string]string{
+		interfaces.BundledFileTypeScript: scriptTargetRoot,
+		interfaces.BundledFileTypeDoc:    docTargetRoot,
+		interfaces.BundledFileTypeInput:  inputTargetRoot,
+	}[fileType]
 }
 
 func validateBundledTarget(target string) error {

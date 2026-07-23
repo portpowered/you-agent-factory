@@ -76,6 +76,69 @@ func TestRunReportsCombinedDriftDeterministicallyWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T) {
+	const (
+		jsonPath = "packages/packaged-factories/schemas/factory.schema.json"
+		yamlPath = "packages/packaged-factories/schemas/factory.schema.yaml"
+	)
+	tests := []struct {
+		name     string
+		path     string
+		category string
+	}{
+		{name: "missing JSON", path: jsonPath, category: "missing"},
+		{name: "stale JSON", path: jsonPath, category: "stale"},
+		{name: "missing YAML", path: yamlPath, category: "missing"},
+		{name: "stale YAML", path: yamlPath, category: "stale"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := commandFixture(t)
+			target := filepath.Join(root, filepath.FromSlash(test.path))
+			mutatePackagedSchema(t, target, test.category)
+			before := commandTree(t, root)
+			stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+
+			if status := run(root, stdout, stderr); status != 1 {
+				t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("run() stdout = %q, want empty", stdout)
+			}
+			for _, fragment := range []string{
+				"[agent-factory:contracts-check] " + test.category + ":",
+				"  " + test.path,
+				"run `make contracts-generate`",
+			} {
+				if !strings.Contains(stderr.String(), fragment) {
+					t.Fatalf("run() stderr = %q, want fragment %q", stderr, fragment)
+				}
+			}
+			if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
+				t.Fatal("run() changed repository bytes on failure")
+			}
+		})
+	}
+}
+
+func mutatePackagedSchema(t *testing.T, path, category string) {
+	t.Helper()
+	if category == "missing" {
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("remove schema: %v", err)
+		}
+		return
+	}
+	payload := []byte(`{"type":"string"}`)
+	if filepath.Ext(path) == ".yaml" {
+		payload = []byte("type: string\n")
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("write semantically divergent schema: %v", err)
+	}
+}
+
 func commandFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

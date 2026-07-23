@@ -22,6 +22,8 @@ func TestAllowedArtifactsAreTheReviewedJoinedContracts(t *testing.T) {
 		"packages/api/generated/schemas/factory.schema.json",
 		"packages/api/generated/schemas/mock-workers.schema.json",
 		"packages/api/generated/schemas/you-config.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.yaml",
 	}
 	if got := contractstaging.AllowedArtifacts(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("AllowedArtifacts() = %q, want %q", got, want)

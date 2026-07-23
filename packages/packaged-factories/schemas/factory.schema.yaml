@@ -1,0 +1,1848 @@
+$defs:
+    AgentWorkerToolPolicy:
+        description: Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+        enum:
+            - DISABLED
+            - READ_ONLY
+            - ENABLED
+        type: string
+    AgentWorkerToolsConfig:
+        additionalProperties: false
+        description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+        properties:
+            policy:
+                allOf:
+                    - $ref: '#/$defs/AgentWorkerToolPolicy'
+                description: Required executor policy for agent-loop tool use on this worker.
+        required:
+            - policy
+        type: object
+    BundledFile:
+        additionalProperties: false
+        description: One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
+        properties:
+            content:
+                $ref: '#/$defs/BundledFileContent'
+            id:
+                description: Durable bundled-file identifier used by portable layout and graph editor references. When omitted on input, the canonical targetPath is materialized as the stable identifier.
+                type: string
+            targetPath:
+                description: Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
+                type: string
+            type:
+                description: Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
+                enum:
+                    - SCRIPT
+                    - DOC
+                    - INPUT
+                    - ROOT_HELPER
+                type: string
+        required:
+            - type
+            - targetPath
+            - content
+        type: object
+    BundledFileContent:
+        additionalProperties: false
+        description: Inline content payload for a portable bundled file.
+        properties:
+            encoding:
+                description: Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
+                enum:
+                    - utf-8
+                type: string
+            inline:
+                description: Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.
+                type: string
+        required:
+            - encoding
+            - inline
+        type: object
+    ClassificationRoute:
+        additionalProperties: false
+        properties:
+            label:
+                description: Case-sensitive classifier label that must match the trimmed classifier output exactly.
+                type: string
+            outputs:
+                description: One or more authored destinations emitted when this classifier label is selected.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+        required:
+            - label
+            - outputs
+        type: object
+    FactoryGuard:
+        additionalProperties: false
+        description: Factory-level guard attached at the root factory definition.
+        properties:
+            model:
+                description: Optional model name to scope throttling more narrowly than the provider-level window.
+                type: string
+            modelProvider:
+                allOf:
+                    - $ref: '#/$defs/WorkerModelProvider'
+                description: Provider whose inference-throttle history controls this factory-level guard.
+            refreshWindow:
+                description: Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/FactoryGuardType'
+                description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
+        required:
+            - type
+            - modelProvider
+            - refreshWindow
+        type: object
+    FactoryGuardType:
+        description: Factory-level guard condition attached at the root factory definition.
+        enum:
+            - INFERENCE_THROTTLE_GUARD
+        type: string
+    FactoryInvocationArguments:
+        additionalProperties:
+            oneOf:
+                - type: string
+                - items:
+                    type: string
+                  type: array
+        description: Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings.
+        type: object
+    FactoryInvocationExample:
+        additionalProperties: false
+        description: One example invocation for docs, help, and packaged-factory inspection.
+        properties:
+            args:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationArguments'
+                description: Structured invocation arguments; values are never parsed or executed while loading the Factory.
+            description:
+                allOf:
+                    - $ref: '#/$defs/NameValue'
+                description: Localized customer-facing explanation of what the example does.
+            name:
+                description: Stable example name.
+                minLength: 1
+                type: string
+        required:
+            - name
+            - description
+            - args
+        type: object
+    FactoryInvocationOutputContract:
+        additionalProperties: false
+        description: Customer-facing output hint for a factory invocation signature.
+        properties:
+            contentType:
+                description: Output media type hint for docs, API consumers, and dashboard affordances.
+                type: string
+            description:
+                description: Human-readable summary of the primary output contract.
+                type: string
+            fileExtension:
+                description: Suggested file extension when the output mode writes a file.
+                type: string
+            mode:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationOutputContractMode'
+                description: High-level output contract mode exposed to callers.
+            pathParameter:
+                description: Parameter name that controls the destination path when the factory writes output to disk.
+                type: string
+        type: object
+    FactoryInvocationOutputContractMode:
+        description: High-level output shape hint exposed by a factory invocation signature.
+        enum:
+            - INLINE
+            - FILE
+            - JSON
+        type: string
+    FactoryInvocationParameter:
+        additionalProperties: false
+        description: One canonical invocation parameter declared on a factory.
+        properties:
+            aliases:
+                description: Additional accepted named-argument keys that normalize to this parameter.
+                items:
+                    type: string
+                type: array
+            bindings:
+                description: Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+                items:
+                    $ref: '#/$defs/FactoryInvocationParameterBinding'
+                type: array
+            choices:
+                description: Optional allowed string values for this parameter.
+                items:
+                    type: string
+                type: array
+            defaultValue:
+                description: Default string value used when an omitted parameter resolves to one effective value.
+                type: string
+            defaultValues:
+                description: Default string values used when an omitted parameter resolves to multiple effective values.
+                items:
+                    type: string
+                type: array
+            description:
+                description: Customer-facing description rendered in help, docs, and form controls.
+                type: string
+            externalName:
+                description: Preferred named-argument key shown to callers, such as `output`.
+                type: string
+            name:
+                description: Internal canonical parameter name used for normalized argument maps and interpolation.
+                type: string
+            required:
+                description: When true, invocation normalization must reject requests that omit this parameter.
+                type: boolean
+            sensitive:
+                description: When true, diagnostics must preserve names and source metadata but redact concrete values.
+                type: boolean
+            typeHint:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationParameterTypeHint'
+                description: String-first hint that guides parsing, docs, and dashboard form selection.
+            valueMode:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationParameterValueMode'
+                description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
+        required:
+            - name
+        type: object
+    FactoryInvocationParameterBinding:
+        additionalProperties: false
+        description: One public binding that exposes a parameter to callers.
+        properties:
+            kind:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationParameterBindingKind'
+                description: Binding kind used to route invocation input into the parameter.
+            position:
+                description: 1-based positional slot used when kind is POSITIONAL.
+                minimum: 1
+                type: integer
+        required:
+            - kind
+        type: object
+    FactoryInvocationParameterBindingKind:
+        description: Public invocation binding kinds supported by factory signatures.
+        enum:
+            - POSITIONAL
+            - NAMED
+            - STDIN
+            - NAMED_REST
+        type: string
+    FactoryInvocationParameterTypeHint:
+        description: String-first parsing and UI hint for one factory invocation parameter.
+        enum:
+            - STRING
+            - PATH
+            - FILE_PATH
+            - DIRECTORY_PATH
+            - NUMBER_STRING
+            - BOOLEAN_STRING
+        type: string
+    FactoryInvocationParameterValueMode:
+        description: Declares how one invocation parameter consumes one or more string values.
+        enum:
+            - EXACT
+            - REPEATED
+            - VARIADIC
+            - FILE_CONTENTS
+        type: string
+    FactoryInvocationSignature:
+        additionalProperties: false
+        description: Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+        properties:
+            outputContract:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationOutputContract'
+                description: Optional customer-facing hint for the factory's primary output shape.
+            parameters:
+                description: Declared invocation parameters keyed by canonical parameter name.
+                items:
+                    $ref: '#/$defs/FactoryInvocationParameter'
+                type: array
+            unknownNamedArgumentPolicy:
+                allOf:
+                    - $ref: '#/$defs/FactoryInvocationUnknownNamedArgumentPolicy'
+                description: Policy for named inputs that do not match any declared parameter binding.
+        type: object
+    FactoryInvocationUnknownNamedArgumentPolicy:
+        description: Policy for named inputs that do not match any declared parameter binding.
+        enum:
+            - REJECT
+            - ALLOW
+            - COLLECT
+        type: string
+    FactoryLayout:
+        additionalProperties: false
+        description: Non-executable portable graph editor layout metadata keyed by canonical graph ids.
+        properties:
+            annotations:
+                description: Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+                items:
+                    $ref: '#/$defs/FactoryLayoutAnnotation'
+                type: array
+            edges:
+                description: Optional authored graph edge geometry keyed by canonical graph edge id.
+                items:
+                    $ref: '#/$defs/FactoryLayoutEdge'
+                type: array
+            groups:
+                description: Optional flat background groups keyed independently from topology.
+                items:
+                    $ref: '#/$defs/FactoryLayoutGroup'
+                type: array
+            nodes:
+                description: Optional authored graph node geometry keyed by canonical graph node id.
+                items:
+                    $ref: '#/$defs/FactoryLayoutNode'
+                type: array
+            preferences:
+                $ref: '#/$defs/FactoryLayoutPreferences'
+            schemaVersion:
+                description: Portable layout contract schema version. Version 1 is the initial public layout contract.
+                format: int32
+                minimum: 1
+                type: integer
+            viewport:
+                $ref: '#/$defs/FactoryLayoutViewport'
+        required:
+            - schemaVersion
+        type: object
+    FactoryLayoutAnnotation:
+        additionalProperties: false
+        description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
+        oneOf:
+            - additionalProperties: false
+              properties:
+                id:
+                    type: string
+                kind:
+                    enum:
+                        - NOTE
+                    type: string
+                note:
+                    $ref: '#/$defs/FactoryLayoutNote'
+                position:
+                    $ref: '#/$defs/FactoryLayoutAnnotationPosition'
+                size:
+                    $ref: '#/$defs/FactoryLayoutAnnotationSize'
+              required:
+                - id
+                - kind
+                - position
+                - note
+              type: object
+            - additionalProperties: false
+              properties:
+                id:
+                    type: string
+                image:
+                    $ref: '#/$defs/FactoryLayoutImage'
+                kind:
+                    enum:
+                        - IMAGE
+                    type: string
+                position:
+                    $ref: '#/$defs/FactoryLayoutAnnotationPosition'
+                size:
+                    $ref: '#/$defs/FactoryLayoutAnnotationSize'
+              required:
+                - id
+                - kind
+                - position
+                - size
+                - image
+              type: object
+        properties:
+            id:
+                description: Stable annotation identifier unique within this layout.
+                minLength: 1
+                pattern: \S
+                type: string
+            image:
+                $ref: '#/$defs/FactoryLayoutImage'
+            kind:
+                $ref: '#/$defs/FactoryLayoutAnnotationKind'
+            note:
+                $ref: '#/$defs/FactoryLayoutNote'
+            position:
+                $ref: '#/$defs/FactoryLayoutAnnotationPosition'
+            size:
+                $ref: '#/$defs/FactoryLayoutAnnotationSize'
+        required:
+            - id
+            - kind
+            - position
+        type: object
+    FactoryLayoutAnnotationKind:
+        description: The inert annotation content variant.
+        enum:
+            - NOTE
+            - IMAGE
+        type: string
+    FactoryLayoutAnnotationPosition:
+        additionalProperties: false
+        description: Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+        properties:
+            x:
+                description: Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+                maximum: 100000
+                minimum: -100000
+                type: number
+            "y":
+                description: Vertical canvas coordinate between -100,000 and 100,000 inclusive.
+                maximum: 100000
+                minimum: -100000
+                type: number
+        required:
+            - x
+            - "y"
+        type: object
+    FactoryLayoutAnnotationSize:
+        additionalProperties: false
+        description: Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+        properties:
+            height:
+                description: Positive authored height no greater than 10,000 canvas units.
+                exclusiveMinimum: 0
+                maximum: 10000
+                type: number
+            width:
+                description: Positive authored width no greater than 10,000 canvas units.
+                exclusiveMinimum: 0
+                maximum: 10000
+                type: number
+        required:
+            - width
+            - height
+        type: object
+    FactoryLayoutBounds:
+        additionalProperties: false
+        description: Authored rectangular bounds in graph canvas units.
+        properties:
+            height:
+                description: Authored group height.
+                type: number
+            width:
+                description: Authored group width.
+                type: number
+            x:
+                description: Left graph layout coordinate.
+                type: number
+            "y":
+                description: Top graph layout coordinate.
+                type: number
+        required:
+            - x
+            - "y"
+            - width
+            - height
+        type: object
+    FactoryLayoutEdge:
+        additionalProperties: false
+        description: Portable graph edge layout keyed by canonical graph edge id.
+        properties:
+            id:
+                description: Canonical graph edge id such as workstation-output:workstation:review->work-state:task:done.
+                type: string
+            labelPosition:
+                $ref: '#/$defs/FactoryLayoutPoint'
+            waypoints:
+                description: Optional authored intermediate edge points in graph canvas space.
+                items:
+                    $ref: '#/$defs/FactoryLayoutPoint'
+                type: array
+        required:
+            - id
+        type: object
+    FactoryLayoutEmptyState:
+        additionalProperties: false
+        description: Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+        oneOf:
+            - additionalProperties: false
+              properties:
+                text:
+                    description: Literal empty-state text. It is not rendered as HTML or Markdown.
+                    maxLength: 500
+                    minLength: 1
+                    pattern: \S
+                    type: string
+              required:
+                - text
+              type: object
+            - additionalProperties: false
+              properties:
+                image:
+                    $ref: '#/$defs/FactoryLayoutImage'
+              required:
+                - image
+              type: object
+        properties:
+            image:
+                $ref: '#/$defs/FactoryLayoutImage'
+            text:
+                description: Literal empty-state text. It is not rendered as HTML or Markdown.
+                maxLength: 500
+                minLength: 1
+                pattern: \S
+                type: string
+        type: object
+    FactoryLayoutGroup:
+        additionalProperties: false
+        description: Portable background grouping metadata for graph canvas presentation.
+        properties:
+            bounds:
+                $ref: '#/$defs/FactoryLayoutBounds'
+            color:
+                description: Optional authored group accent or fill color.
+                type: string
+            id:
+                description: Stable authored group id for future layout editing.
+                type: string
+            label:
+                description: Optional visible group label.
+                type: string
+            locked:
+                description: Optional authored group lock flag for future editor affordances.
+                type: boolean
+            nodeIds:
+                description: Canonical graph node ids visually contained by this group.
+                items:
+                    type: string
+                type: array
+            parentGroupId:
+                description: Reserved for future nested groups. Omit or set null for flat groups.
+                type:
+                    - string
+                    - "null"
+        required:
+            - id
+            - bounds
+            - nodeIds
+        type: object
+    FactoryLayoutImage:
+        additionalProperties: false
+        description: Inert embedded-raster image content with required alternative text.
+        properties:
+            alternativeText:
+                description: Literal alternative text for the embedded image.
+                maxLength: 500
+                minLength: 1
+                pattern: \S
+                type: string
+            source:
+                $ref: '#/$defs/FactoryLayoutImageSource'
+        required:
+            - source
+            - alternativeText
+        type: object
+    FactoryLayoutImageSource:
+        additionalProperties: false
+        description: Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+        properties:
+            data:
+                description: Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
+                format: byte
+                maxLength: 2.796204e+06
+                minLength: 4
+                type: string
+            kind:
+                description: Source variant discriminator. EMBEDDED carries portable base64 raster data.
+                enum:
+                    - EMBEDDED
+                type: string
+            mediaType:
+                description: Declared media type for the embedded raster.
+                enum:
+                    - image/png
+                    - image/jpeg
+                    - image/webp
+                type: string
+        required:
+            - kind
+            - mediaType
+            - data
+        type: object
+    FactoryLayoutNode:
+        additionalProperties: false
+        description: Portable graph node layout keyed by canonical graph node id.
+        properties:
+            emptyState:
+                $ref: '#/$defs/FactoryLayoutEmptyState'
+            id:
+                description: Canonical graph node id such as workstation:<workstationId>.
+                minLength: 1
+                pattern: \S
+                type: string
+            locked:
+                description: Optional authored node lock flag for future editor affordances.
+                type: boolean
+            position:
+                $ref: '#/$defs/FactoryLayoutPoint'
+            size:
+                $ref: '#/$defs/FactoryLayoutSize'
+        required:
+            - id
+            - position
+        type: object
+    FactoryLayoutNote:
+        additionalProperties: false
+        description: Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+        properties:
+            body:
+                description: Required literal plain-text note body.
+                maxLength: 4000
+                minLength: 1
+                pattern: \S
+                type: string
+            title:
+                description: Optional literal plain-text note title.
+                maxLength: 160
+                type: string
+            tone:
+                $ref: '#/$defs/FactoryLayoutNoteTone'
+        required:
+            - body
+            - tone
+        type: object
+    FactoryLayoutNoteTone:
+        description: Presentation-only tone for a note annotation.
+        enum:
+            - NEUTRAL
+            - ACCENT
+            - INFO
+            - SUCCESS
+            - WARNING
+            - DANGER
+        type: string
+    FactoryLayoutPoint:
+        additionalProperties: false
+        description: Two-dimensional authored graph layout coordinate.
+        properties:
+            x:
+                description: Horizontal graph layout coordinate in authored canvas space.
+                type: number
+            "y":
+                description: Vertical graph layout coordinate in authored canvas space.
+                type: number
+        required:
+            - x
+            - "y"
+        type: object
+    FactoryLayoutPreferences:
+        additionalProperties: false
+        description: Portable graph display defaults that do not alter factory topology.
+        properties:
+            direction:
+                description: Preferred authored graph direction for portable layout rendering.
+                enum:
+                    - UP
+                    - DOWN
+                    - LEFT
+                    - RIGHT
+                type: string
+        type: object
+    FactoryLayoutSize:
+        additionalProperties: false
+        description: Authored node size in graph canvas units.
+        properties:
+            height:
+                description: Authored node height.
+                type: number
+            width:
+                description: Authored node width.
+                type: number
+        required:
+            - width
+            - height
+        type: object
+    FactoryLayoutViewport:
+        additionalProperties: false
+        description: Shared authored graph camera position.
+        properties:
+            x:
+                description: Authored viewport horizontal offset.
+                type: number
+            "y":
+                description: Authored viewport vertical offset.
+                type: number
+            zoom:
+                description: Authored viewport zoom factor.
+                type: number
+        required:
+            - x
+            - "y"
+            - zoom
+        type: object
+    FactoryName:
+        description: Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+        minLength: 1
+        pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
+        type: string
+    FactoryOrchestrator:
+        additionalProperties: false
+        description: Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+        properties:
+            javascript:
+                allOf:
+                    - $ref: '#/$defs/FactoryOrchestratorJavaScriptConfig'
+                description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.
+            kind:
+                $ref: '#/$defs/FactoryOrchestratorKind'
+            petri:
+                allOf:
+                    - $ref: '#/$defs/FactoryOrchestratorPetriConfig'
+                description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
+        required:
+            - kind
+        type: object
+    FactoryOrchestratorJavaScriptAgent:
+        additionalProperties: false
+        description: Default worker selection for one named JavaScript child-agent role.
+        properties:
+            preset:
+                description: Operator worker preset inherited by child calls using this agent id.
+                minLength: 1
+                type: string
+        required:
+            - preset
+        type: object
+    FactoryOrchestratorJavaScriptConfig:
+        additionalProperties: false
+        description: JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+        properties:
+            agents:
+                additionalProperties:
+                    $ref: '#/$defs/FactoryOrchestratorJavaScriptAgent'
+                description: Named child-agent roles and their operator worker preset defaults.
+                type: object
+            argsSchema:
+                additionalProperties: true
+                description: JSON Schema object describing workflow invocation arguments.
+                type: object
+            defaultPolicy:
+                additionalProperties: true
+                description: Default JavaScript workflow policy object applied when no runtime override exists.
+                type: object
+            dialect:
+                description: Optional JavaScript dialect label for the authored workflow source.
+                type: string
+            entrypoint:
+                description: Optional exported entrypoint or phase name used to start the workflow.
+                type: string
+            inlineSource:
+                allOf:
+                    - $ref: '#/$defs/FactoryOrchestratorJavaScriptInlineSource'
+                description: Inline workflow source when the factory carries source text directly.
+            metadata:
+                allOf:
+                    - $ref: '#/$defs/StringMap'
+                description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
+            sourceHash:
+                description: Optional content hash for the resolved workflow source.
+                type: string
+            sourceRef:
+                description: Factory-relative or authored reference to the workflow source file.
+                type: string
+        type: object
+    FactoryOrchestratorJavaScriptInlineSource:
+        additionalProperties: false
+        description: Inline JavaScript workflow source carried directly in the factory definition.
+        properties:
+            encoding:
+                description: Declared content encoding for the inline workflow source.
+                enum:
+                    - utf-8
+                type: string
+            inline:
+                description: Inline JavaScript workflow source text.
+                type: string
+        required:
+            - encoding
+            - inline
+        type: object
+    FactoryOrchestratorKind:
+        description: Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+        enum:
+            - PETRI
+            - JAVASCRIPT
+        type: string
+    FactoryOrchestratorPetriConfig:
+        additionalProperties: false
+        description: Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+        type: object
+    GuardMatchConfig:
+        additionalProperties: false
+        properties:
+            inputKey:
+                description: Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
+                minLength: 1
+                type: string
+        required:
+            - inputKey
+        type: object
+    HostedLinearWorkerClaim:
+        additionalProperties: false
+        description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+        properties:
+            assigneeField:
+                description: Linear issue field name to use when deriving optional assignee claim metadata.
+                type: string
+        type: object
+    HostedLinearWorkerConfig:
+        additionalProperties: false
+        description: Provider-specific poller configuration for the built-in hosted Linear worker.
+        properties:
+            claim:
+                allOf:
+                    - $ref: '#/$defs/HostedLinearWorkerClaim'
+                description: Optional claim-related configuration that v1 hosted Linear polling allows.
+            mapping:
+                allOf:
+                    - $ref: '#/$defs/HostedLinearWorkerMapping'
+                description: Deterministic mapping fields for canonical work submission generation.
+            pollInterval:
+                description: Optional Go duration that controls how often the hosted Linear worker polls for updates.
+                type: string
+            stateIds:
+                description: Optional Linear issue-state identifiers that bound the poll source.
+                items:
+                    type: string
+                type: array
+            teamIds:
+                description: Optional Linear team identifiers that bound the poll source.
+                items:
+                    type: string
+                type: array
+        type: object
+    HostedLinearWorkerMapping:
+        additionalProperties: false
+        description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+        properties:
+            state:
+                description: Canonical submitted work state emitted for matched Linear issues.
+                type: string
+            workType:
+                description: Canonical submitted work type emitted for matched Linear issues.
+                type: string
+        type: object
+    HostedWorkerAuth:
+        additionalProperties: false
+        description: Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+        properties:
+            secretRef:
+                description: Referenced secret name that resolves the hosted provider API key at runtime.
+                type: string
+        type: object
+    HostedWorkerProvider:
+        description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+        enum:
+            - LINEAR
+        type: string
+    HybridLogicalTimestamp:
+        additionalProperties: false
+        properties:
+            logical:
+                description: Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
+                format: int64
+                pattern: ^[0-9]+$
+                type: string
+            physical:
+                description: UTC physical timestamp component for the persisted factory definition version.
+                format: date-time
+                type: string
+        required:
+            - logical
+            - physical
+        type: object
+    InputGuard:
+        additionalProperties: false
+        description: Guard attached to one specific workstation input.
+        properties:
+            matchConfig:
+                allOf:
+                    - $ref: '#/$defs/GuardMatchConfig'
+                description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+            matchInput:
+                description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+                type: string
+            maxVisits:
+                description: For `VISIT_COUNT` guards, the visit threshold.
+                minimum: 1
+                type: integer
+            parentInput:
+                description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+                type: string
+            spawnedBy:
+                description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/InputGuardType'
+                description: Guard condition to evaluate for this input-level attachment.
+            workstation:
+                description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
+                type: string
+        required:
+            - type
+        type: object
+    InputGuardType:
+        description: Guard condition attached to one specific workstation input.
+        enum:
+            - VISIT_COUNT
+            - ALL_CHILDREN_COMPLETE
+            - ANY_CHILD_FAILED
+            - SAME_NAME
+            - SAME_TRACE_ID
+        type: string
+    InputKind:
+        description: Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
+        enum:
+            - DEFAULT
+        type: string
+    InputType:
+        additionalProperties: false
+        description: Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure.
+        properties:
+            name:
+                description: Input type name. The reserved name "default" is implicit.
+                type: string
+            type:
+                $ref: '#/$defs/InputKind'
+        required:
+            - name
+            - type
+        type: object
+    InvocationReturn:
+        additionalProperties: false
+        description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+        properties:
+            policy:
+                allOf:
+                    - $ref: '#/$defs/InvocationReturnPolicy'
+                description: Return selection policy for this factory.
+            terminalState:
+                description: Authored terminal state name used by EXPLICIT policy selection.
+                type: string
+            workName:
+                description: Optional authored work name filter used by EXPLICIT policy selection.
+                type: string
+            workTypeName:
+                description: Work type name used by EXPLICIT policy selection.
+                type: string
+        required:
+            - policy
+        type: object
+    InvocationReturnPolicy:
+        description: Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+        enum:
+            - SUBMITTED_WORK_TERMINAL
+            - EXPLICIT
+        type: string
+    ModelOperation:
+        additionalProperties: false
+        description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
+        properties:
+            inputs:
+                description: Named operation input slots this worker can consume.
+                items:
+                    $ref: '#/$defs/ModelOperationSlot'
+                type: array
+            name:
+                $ref: '#/$defs/ModelOperationName'
+            outputs:
+                description: Named operation output slots this worker can produce.
+                items:
+                    $ref: '#/$defs/ModelOperationSlot'
+                type: array
+        required:
+            - name
+        type: object
+    ModelOperationContentType:
+        description: Uppercase content-part categories supported by worker model-operation capability slots.
+        enum:
+            - TEXT
+            - IMAGE
+            - AUDIO
+            - JSON
+            - BINARY
+        type: string
+    ModelOperationName:
+        description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+        pattern: ^[A-Z][A-Z0-9_]*$
+        type: string
+    ModelOperationSlot:
+        additionalProperties: false
+        description: One named capability slot declared by a model operation.
+        properties:
+            contentTypes:
+                description: Uppercase content types accepted or produced by this slot.
+                items:
+                    $ref: '#/$defs/ModelOperationContentType'
+                minItems: 1
+                type: array
+            name:
+                description: Stable slot name used by workstation-side bindings and diagnostics.
+                type: string
+            required:
+                description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+                type: boolean
+        required:
+            - name
+            - contentTypes
+        type: object
+    NameValue:
+        additionalProperties: false
+        description: A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.
+        properties:
+            id:
+                description: Optional stable metadata identifier; consumers must not render it as display copy.
+                type: string
+            locales:
+                description: Canonical BCP 47 locales for which the base value was authored.
+                items:
+                    minLength: 2
+                    type: string
+                type: array
+                uniqueItems: true
+            type:
+                description: Discriminator for localized customer-facing metadata.
+                enum:
+                    - LOCALIZABLE_ASSET
+                type: string
+            value:
+                description: Required base value returned when no exact locale override exists.
+                minLength: 1
+                type: string
+            values:
+                additionalProperties:
+                    type: string
+                description: Exact canonical BCP 47 locale tags mapped to localized overrides.
+                type: object
+        required:
+            - type
+            - value
+        type: object
+    RequiredTool:
+        additionalProperties: false
+        description: One declarative external tool dependency for a portable factory.
+        properties:
+            command:
+                description: Executable lookup token that must resolve on PATH.
+                type: string
+            name:
+                description: Human-readable tool name used in manifests and validation output.
+                type: string
+            purpose:
+                description: Optional explanation of why the portable factory requires this tool.
+                type: string
+            versionArgs:
+                description: Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token.
+                items:
+                    type: string
+                type: array
+        required:
+            - name
+            - command
+        type: object
+    Resource:
+        additionalProperties: false
+        description: Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
+        properties:
+            backend:
+                description: Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config.
+                type: string
+            capacity:
+                description: Total units of this resource available to the factory at one time.
+                minimum: 1
+                type: integer
+            id:
+                description: Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.
+                type: string
+            loadPolicy:
+                description: Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.
+                type: string
+            model:
+                description: Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values.
+                type: string
+            name:
+                description: Resource name referenced from worker requirements and workstation resourceUsage entries.
+                type: string
+            provider:
+                description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/ResourceType'
+                description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
+        required:
+            - name
+            - capacity
+        type: object
+    ResourceManifest:
+        additionalProperties: false
+        description: Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
+        properties:
+            bundledFiles:
+                description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
+                items:
+                    $ref: '#/$defs/BundledFile'
+                type: array
+            requiredTools:
+                description: Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
+                items:
+                    $ref: '#/$defs/RequiredTool'
+                type: array
+        type: object
+    ResourceRequirement:
+        additionalProperties: false
+        properties:
+            capacity:
+                minimum: 1
+                type: integer
+            name:
+                type: string
+        required:
+            - name
+            - capacity
+        type: object
+    ResourceType:
+        description: Uppercase resource families supported by the public factory-config contract.
+        enum:
+            - MODEL
+            - PROVIDER_QUOTA
+            - INVOCATION_SLOT
+        type: string
+    RunnerID:
+        description: Stable built-in runner identifiers supported by factory and workstation runner selection.
+        enum:
+            - codex
+            - gemini
+            - kiro
+            - cursor-cli
+            - opencode
+            - pi
+        type: string
+    StringMap:
+        additionalProperties:
+            type: string
+        type: object
+    WorkAudioContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                file:
+                    $ref: '#/$defs/WorkContentDeprecatedFileProperty'
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - AUDIO
+                url:
+                    $ref: '#/$defs/WorkContentURLProperty'
+              required:
+                - type
+                - url
+              type: object
+        description: Ordered audio content for one work item.
+    WorkBinaryContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                file:
+                    $ref: '#/$defs/WorkContentDeprecatedFileProperty'
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - BINARY
+                url:
+                    $ref: '#/$defs/WorkContentURLProperty'
+              required:
+                - type
+                - url
+              type: object
+        description: Ordered binary content for one work item.
+    WorkContent:
+        description: Ordered canonical content parts for one work item.
+        items:
+            $ref: '#/$defs/WorkContentPart'
+        type: array
+    WorkContentCommonFields:
+        properties:
+            artifactId:
+                description: Optional artifact identifier for externally materialized content.
+                type: string
+            contentType:
+                description: Optional MIME content type for file-backed or structured parts.
+                type: string
+            label:
+                description: Optional caller-defined label for slot binding or diagnostics.
+                type: string
+            metadata:
+                $ref: '#/$defs/WorkContentMetadata'
+            role:
+                description: Optional semantic role for model-operation authoring.
+                type: string
+            slot:
+                description: Optional slot name used by model-operation binding selectors and diagnostics.
+                type: string
+        type: object
+    WorkContentDeprecatedFileProperty:
+        description: Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+        type: string
+    WorkContentMetadata:
+        additionalProperties: true
+        description: Optional metadata attached to one work content part.
+        type: object
+    WorkContentPart:
+        description: One ordered canonical content part on a work item.
+        oneOf:
+            - $ref: '#/$defs/WorkTextContentPart'
+            - $ref: '#/$defs/WorkImageContentPart'
+            - $ref: '#/$defs/WorkAudioContentPart'
+            - $ref: '#/$defs/WorkJsonContentPart'
+            - $ref: '#/$defs/WorkBinaryContentPart'
+    WorkContentPartType:
+        description: Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
+        enum:
+            - text
+            - image
+            - TEXT
+            - IMAGE
+            - AUDIO
+            - JSON
+            - BINARY
+        type: string
+    WorkContentURLProperty:
+        description: Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
+        minLength: 1
+        type: string
+    WorkImageContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                file:
+                    $ref: '#/$defs/WorkContentDeprecatedFileProperty'
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - image
+                        - IMAGE
+                url:
+                    $ref: '#/$defs/WorkContentURLProperty'
+              required:
+                - type
+                - url
+              type: object
+        description: Ordered image content for one work item.
+    WorkJsonContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                json:
+                    description: Arbitrary JSON value preserved in canonical part order.
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - JSON
+              required:
+                - type
+                - json
+              type: object
+        description: Ordered JSON content for one work item.
+    WorkPropagation:
+        additionalProperties: false
+        description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+        properties:
+            mode:
+                allOf:
+                    - $ref: '#/$defs/WorkPropagationMode'
+                description: Propagation mode for downstream work payload selection after this workstation succeeds.
+        required:
+            - mode
+        type: object
+    WorkPropagationMode:
+        description: Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+        enum:
+            - OUTPUT_AS_PAYLOAD
+            - PRESERVE_INPUT
+        type: string
+    WorkState:
+        additionalProperties: false
+        description: A lifecycle state that a work item can occupy inside one work type.
+        properties:
+            id:
+                description: Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name.
+                type: string
+            name:
+                description: Customer-authored state name referenced by workstation inputs and outputs.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/WorkStateType'
+                description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
+        required:
+            - name
+            - type
+        type: object
+    WorkStateType:
+        description: 'Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.'
+        enum:
+            - INITIAL
+            - PROCESSING
+            - TERMINAL
+            - FAILED
+        type: string
+    WorkTextContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                text:
+                    description: Inline text content preserved in canonical part order.
+                    type: string
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - text
+                        - TEXT
+              required:
+                - type
+                - text
+              type: object
+        description: Ordered inline text content for one work item.
+    WorkType:
+        additionalProperties: false
+        description: A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
+        properties:
+            description:
+                allOf:
+                    - $ref: '#/$defs/NameValue'
+                description: Optional localized customer-facing explanation of this work type.
+            handlingBehavior:
+                description: Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
+                items:
+                    $ref: '#/$defs/WorkTypeHandlingBehavior'
+                type: array
+            id:
+                description: Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name.
+                type: string
+            name:
+                description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
+                type: string
+            states:
+                description: Lifecycle states available for work items of this type.
+                items:
+                    $ref: '#/$defs/WorkState'
+                type: array
+        required:
+            - name
+            - states
+        type: object
+    WorkTypeHandlingBehavior:
+        description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+        enum:
+            - DEFAULT
+        type: string
+    Worker:
+        additionalProperties: false
+        description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
+        properties:
+            agentTools:
+                allOf:
+                    - $ref: '#/$defs/AgentWorkerToolsConfig'
+                description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
+            args:
+                description: Additional command arguments passed to the configured command.
+                items:
+                    type: string
+                type: array
+            auth:
+                allOf:
+                    - $ref: '#/$defs/HostedWorkerAuth'
+                description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
+            body:
+                description: Inline worker instructions or script body when the worker is authored directly in factory config.
+                type: string
+            command:
+                description: Command to execute when this worker runs through a command or script provider.
+                type: string
+            description:
+                allOf:
+                    - $ref: '#/$defs/NameValue'
+                description: Optional localized customer-facing explanation of this worker.
+            executorProvider:
+                allOf:
+                    - $ref: '#/$defs/WorkerProvider'
+                description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+            id:
+                description: Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
+                type: string
+            linear:
+                allOf:
+                    - $ref: '#/$defs/HostedLinearWorkerConfig'
+                description: Provider-specific configuration for the built-in hosted LINEAR worker.
+            model:
+                description: Model identifier to request from the configured model provider when this worker uses model execution.
+                type: string
+            modelLocality:
+                allOf:
+                    - $ref: '#/$defs/WorkerModelLocality'
+                description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
+            modelProvider:
+                description: Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+                oneOf:
+                    - $ref: '#/$defs/WorkerModelProvider'
+                    - pattern: ^\$\{[A-Za-z0-9_.-]+\}$
+                      type: string
+            name:
+                description: Worker name referenced by Workstation.worker.
+                type: string
+            openCodeAgent:
+                description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
+                type: string
+            operations:
+                description: Provider-agnostic model operations that this worker can execute, including named input and output slots.
+                items:
+                    $ref: '#/$defs/ModelOperation'
+                type: array
+            provider:
+                allOf:
+                    - $ref: '#/$defs/HostedWorkerProvider'
+                description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
+            resources:
+                description: Resource capacity this worker requires before it can be dispatched.
+                items:
+                    $ref: '#/$defs/ResourceRequirement'
+                type: array
+            skipPermissions:
+                description: When true, bypasses permission checks for providers that support permission gating.
+                type: boolean
+            stopToken:
+                description: Marker that tells model-oriented workers where to stop generated output when the provider supports it.
+                type: string
+            timeout:
+                description: Optional Go duration that caps one worker execution attempt.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/WorkerType'
+                description: Worker implementation family to instantiate for this definition.
+        required:
+            - name
+        type: object
+    WorkerModelLocality:
+        description: Provider locality for a model worker capability declaration.
+        enum:
+            - LOCAL
+            - CLOUD
+        type: string
+    WorkerModelProvider:
+        description: Canonical model-provider identifiers supported by model workers in factory config.
+        enum:
+            - CLAUDE
+            - CODEX
+            - CURSOR
+            - GEMINI
+            - KIRO
+            - OPENCODE
+            - PI
+            - AGY
+        type: string
+    WorkerProvider:
+        description: Concrete worker-provider wrappers supported by the public factory-config contract.
+        enum:
+            - SCRIPT_WRAP
+        type: string
+    WorkerType:
+        description: Worker implementation families supported by the public factory-config contract.
+        enum:
+            - INFERENCE_WORKER
+            - AGENT_WORKER
+            - SCRIPT_WORKER
+            - POLLER_WORKER
+            - MODEL_WORKER
+            - HOSTED_WORKER
+        type: string
+    Workstation:
+        additionalProperties: false
+        description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
+        properties:
+            behavior:
+                allOf:
+                    - $ref: '#/$defs/WorkstationKind'
+                description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
+            body:
+                description: Inline workstation instructions or script body when authored directly in factory config.
+                type: string
+            classificationRoutes:
+                description: Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.
+                items:
+                    $ref: '#/$defs/ClassificationRoute'
+                type: array
+            copyReferencedScripts:
+                description: Copy supported referenced script files into the expanded workstation layout when config expand runs.
+                type: boolean
+            cron:
+                allOf:
+                    - $ref: '#/$defs/WorkstationCron'
+                description: Cron trigger configuration for workstations whose behavior is CRON.
+            description:
+                allOf:
+                    - $ref: '#/$defs/NameValue'
+                description: Optional localized customer-facing explanation of this workstation.
+            env:
+                allOf:
+                    - $ref: '#/$defs/StringMap'
+                description: Environment variables added to the workstation execution context.
+            guards:
+                description: Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+                items:
+                    $ref: '#/$defs/WorkstationGuard'
+                type: array
+            id:
+                description: Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
+                type: string
+            inputs:
+                description: Work states this workstation can consume before it dispatches.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+            limits:
+                allOf:
+                    - $ref: '#/$defs/WorkstationLimits'
+                description: Retry and execution ceilings applied to this workstation.
+            name:
+                description: Customer-authored workstation name used by guards, diagnostics, and authored references.
+                type: string
+            onContinue:
+                description: Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+            onFailure:
+                description: Optional destination emitted when the workstation fails permanently.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+            onRejection:
+                description: Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+            openCodeAgent:
+                description: Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
+                type: string
+            operation:
+                allOf:
+                    - $ref: '#/$defs/ModelOperationName'
+                description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
+            operationBindings:
+                description: Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+                items:
+                    $ref: '#/$defs/WorkstationOperationBinding'
+                type: array
+            outcomeFormat:
+                allOf:
+                    - $ref: '#/$defs/WorkstationOutcomeFormat'
+                description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+            outputSchema:
+                description: JSON schema string used to validate or parse structured model output when configured.
+                type: string
+            outputs:
+                description: Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.
+                items:
+                    $ref: '#/$defs/WorkstationIO'
+                type: array
+            promptFile:
+                description: Path to a prompt template file loaded for model-oriented workstation execution.
+                type: string
+            resources:
+                description: Resource capacity this workstation consumes while one dispatch is in flight.
+                items:
+                    $ref: '#/$defs/ResourceRequirement'
+                type: array
+            runner:
+                allOf:
+                    - $ref: '#/$defs/RunnerID'
+                description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
+            stopWords:
+                description: Stop words authored on the topology entry for model-oriented dispatches.
+                items:
+                    type: string
+                type: array
+            type:
+                allOf:
+                    - $ref: '#/$defs/WorkstationType'
+                description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
+            workPropagation:
+                allOf:
+                    - $ref: '#/$defs/WorkPropagation'
+                description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
+            worker:
+                description: Name of a worker declared in the workers list.
+                type: string
+            workingDirectory:
+                description: Go template resolved from token tags at dispatch time.
+                type: string
+            worktree:
+                description: Go template resolved and passed as the worktree path to CLI dispatchers.
+                type: string
+        required:
+            - name
+            - worker
+            - inputs
+        type: object
+    WorkstationCron:
+        additionalProperties: false
+        description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+        properties:
+            expiryWindow:
+                description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
+                type: string
+            jitter:
+                description: Non-negative Go duration used as the maximum deterministic delay added to scheduled time tokens. Defaults to "0s".
+                type: string
+            schedule:
+                description: Standard five-field cron expression used to produce internal time work while the factory service is running.
+                type: string
+            triggerAtStart:
+                default: false
+                description: When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
+                type: boolean
+        required:
+            - schedule
+        type: object
+    WorkstationGuard:
+        additionalProperties: false
+        description: Guard attached to a workstation as a whole.
+        properties:
+            matchConfig:
+                allOf:
+                    - $ref: '#/$defs/GuardMatchConfig'
+                description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+            matchInput:
+                description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+                type: string
+            maxVisits:
+                description: For `VISIT_COUNT` guards, the visit threshold.
+                minimum: 1
+                type: integer
+            parentInput:
+                description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+                type: string
+            spawnedBy:
+                description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/WorkstationGuardType'
+                description: Guard condition to evaluate for this workstation-level attachment.
+            workstation:
+                description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
+                type: string
+        required:
+            - type
+        type: object
+    WorkstationGuardType:
+        description: Guard condition attached to a workstation as a whole.
+        enum:
+            - VISIT_COUNT
+            - MATCHES_FIELDS
+        type: string
+    WorkstationIO:
+        additionalProperties: false
+        description: One authored work-state reference consumed or emitted by a workstation.
+        properties:
+            guards:
+                description: Per-input guards that must pass before this specific input can be used.
+                items:
+                    $ref: '#/$defs/InputGuard'
+                type: array
+            state:
+                description: Name of the work state consumed or emitted for the referenced work type.
+                type: string
+            workType:
+                description: Name of the work type consumed or emitted at this edge of the workstation.
+                type: string
+        required:
+            - workType
+            - state
+        type: object
+    WorkstationKind:
+        default: STANDARD
+        description: Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
+        enum:
+            - STANDARD
+            - REPEATER
+            - CRON
+            - POLLER
+        type: string
+    WorkstationLimits:
+        additionalProperties: false
+        description: Retry and execution ceilings applied to one workstation definition.
+        properties:
+            maxExecutionTime:
+                description: Go duration limit for one dispatch attempt before it times out.
+                type: string
+            maxRetries:
+                description: Maximum number of retry attempts after a failed dispatch before the workstation gives up.
+                type: integer
+        type: object
+    WorkstationOperationBinding:
+        additionalProperties: false
+        description: One workstation-authored binding for a provider-agnostic model-operation input slot.
+        properties:
+            config:
+                allOf:
+                    - $ref: '#/$defs/WorkContent'
+                description: Static authored content bound directly or used as the first fallback when runtime input does not match.
+            defaultContent:
+                allOf:
+                    - $ref: '#/$defs/WorkContent'
+                description: Optional final fallback content when neither runtime input nor config content resolves the slot.
+            selector:
+                allOf:
+                    - $ref: '#/$defs/WorkstationOperationBindingSelector'
+                description: Ordered runtime-input selector used before falling back to config or default content.
+            slot:
+                description: Stable input slot name declared by the worker operation.
+                type: string
+        required:
+            - slot
+        type: object
+    WorkstationOperationBindingSelector:
+        additionalProperties: false
+        description: Selector fields used to resolve one content part from ordered runtime input.
+        properties:
+            label:
+                description: Match a content part by its label field.
+                type: string
+            role:
+                description: Match a content part by its role field.
+                type: string
+            slot:
+                description: Match a content part by its authored slot field.
+                type: string
+            type:
+                allOf:
+                    - $ref: '#/$defs/ModelOperationContentType'
+                description: Match a content part by its uppercase public type.
+        type: object
+    WorkstationOutcomeFormat:
+        description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+        enum:
+            - decision-envelope
+        type: string
+    WorkstationType:
+        description: Runtime workstation implementation types supported by the public factory-config contract.
+        enum:
+            - INFERENCE_RUN
+            - AGENT_RUN
+            - SCRIPT_RUN
+            - POLLER_RUN
+            - MODEL_WORKSTATION
+            - MODEL_INVOKE
+            - LOGICAL_MOVE
+            - CLASSIFIER_WORKSTATION
+        type: string
+$id: https://schemas.portpowered.com/you/config/factory.schema.json
+$schema: https://json-schema.org/draft/2020-12/schema
+additionalProperties: false
+description: Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+properties:
+    description:
+        allOf:
+            - $ref: '#/$defs/NameValue'
+        description: Optional localized customer-facing explanation of this Factory.
+    examples:
+        description: Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.
+        items:
+            $ref: '#/$defs/FactoryInvocationExample'
+        type: array
+    factoryDirectory:
+        description: Directory that contained the factory.json used for this serialized runtime config.
+        type: string
+    guards:
+        description: Root-level guards that apply across the factory instead of one specific workstation or input.
+        items:
+            $ref: '#/$defs/FactoryGuard'
+        type: array
+    id:
+        description: Factory identifier used as the factory-level template context fallback.
+        type: string
+    inputTypes:
+        description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
+        items:
+            $ref: '#/$defs/InputType'
+        type: array
+    invocationReturn:
+        allOf:
+            - $ref: '#/$defs/InvocationReturn'
+        description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
+    invocationSignature:
+        allOf:
+            - $ref: '#/$defs/FactoryInvocationSignature'
+        description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+    layout:
+        allOf:
+            - $ref: '#/$defs/FactoryLayout'
+        description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
+    metadata:
+        allOf:
+            - $ref: '#/$defs/StringMap'
+        description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+    name:
+        $ref: '#/$defs/FactoryName'
+    orchestrator:
+        allOf:
+            - $ref: '#/$defs/FactoryOrchestrator'
+        description: Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+    resources:
+        description: Shared capacity pools that workers or workstations can consume while work is executing.
+        items:
+            $ref: '#/$defs/Resource'
+        type: array
+    runner:
+        allOf:
+            - $ref: '#/$defs/RunnerID'
+        description: Default runner selection for the factory when a workstation does not declare its own runner override.
+    sourceDirectory:
+        description: Original source directory for record/replay and drift diagnostics.
+        type: string
+    supportingFiles:
+        allOf:
+            - $ref: '#/$defs/ResourceManifest'
+        description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
+    version:
+        allOf:
+            - $ref: '#/$defs/HybridLogicalTimestamp'
+        description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
+    workTypes:
+        description: Customer-authored work item categories and the lifecycle states each one can occupy.
+        items:
+            $ref: '#/$defs/WorkType'
+        type: array
+    workers:
+        description: Reusable worker definitions that workstations reference by name when dispatching work.
+        items:
+            $ref: '#/$defs/Worker'
+        type: array
+    workstations:
+        description: Processing steps that consume work, invoke workers, and emit the next work states.
+        items:
+            $ref: '#/$defs/Workstation'
+        type: array
+required:
+    - name
+title: You Factory configuration
+type: object

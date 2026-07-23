@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
@@ -167,10 +168,115 @@ func TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
 	for _, path := range []string{
 		contractstaging.FactorySchemaAuthoredPath,
 		"packages/api/generated/schemas/factory.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.yaml",
 	} {
 		if !bytes.Equal(first[path], second[path]) {
 			t.Fatalf("repeated Artifacts() changed factory schema bytes at %s", path)
 		}
+	}
+}
+
+func TestPackagedFactorySchemasAreEquivalentCanonicalProjections(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
+	apiJSON := artifacts["packages/api/generated/schemas/factory.schema.json"]
+	packagedJSON := artifacts["packages/packaged-factories/schemas/factory.schema.json"]
+	packagedYAML := artifacts["packages/packaged-factories/schemas/factory.schema.yaml"]
+
+	if !bytes.Equal(packagedJSON, apiJSON) {
+		t.Fatal("packaged JSON Factory schema differs from the generated API Factory schema")
+	}
+
+	var jsonSchema any
+	if err := json.Unmarshal(packagedJSON, &jsonSchema); err != nil {
+		t.Fatalf("decode packaged JSON Factory schema: %v", err)
+	}
+	var yamlSchema any
+	if err := yaml.Unmarshal(packagedYAML, &yamlSchema); err != nil {
+		t.Fatalf("decode packaged YAML Factory schema: %v", err)
+	}
+	normalizedYAML, err := json.Marshal(yamlSchema)
+	if err != nil {
+		t.Fatalf("normalize packaged YAML Factory schema: %v", err)
+	}
+	var normalizedYAMLSchema any
+	if err := json.Unmarshal(normalizedYAML, &normalizedYAMLSchema); err != nil {
+		t.Fatalf("decode normalized packaged YAML Factory schema: %v", err)
+	}
+	if !reflect.DeepEqual(jsonSchema, normalizedYAMLSchema) {
+		t.Fatal("packaged JSON and YAML Factory schemas parse to different values")
+	}
+
+	document := jsonSchema.(map[string]any)
+	if document["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
+		t.Fatalf("$schema = %#v, want Draft 2020-12", document["$schema"])
+	}
+	if document["$id"] != "https://schemas.portpowered.com/you/config/factory.schema.json" {
+		t.Fatalf("$id = %#v, want stable Factory schema identifier", document["$id"])
+	}
+	properties := document["properties"].(map[string]any)
+	for _, property := range []string{"metadata", "examples"} {
+		if _, ok := properties[property]; !ok {
+			t.Fatalf("Factory schema does not accept top-level %s", property)
+		}
+	}
+	definitions := document["$defs"].(map[string]any)
+	if _, ok := definitions["FactoryInvocationExample"]; !ok {
+		t.Fatal("Factory schema does not include the reachable invocation-example contract")
+	}
+}
+
+func TestFactorySchemaAcceptsExactProviderPlaceholdersAndRejectsOtherStrings(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	payload := testArtifactsForRepository(t, repositoryRoot)[contractstaging.FactorySchemaAuthoredPath]
+	var schemaDocument any
+	if err := json.Unmarshal(payload, &schemaDocument); err != nil {
+		t.Fatalf("decode Factory schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(contractstaging.FactorySchemaAuthoredPath, schemaDocument); err != nil {
+		t.Fatalf("register Factory schema: %v", err)
+	}
+	schema, err := compiler.Compile(contractstaging.FactorySchemaAuthoredPath)
+	if err != nil {
+		t.Fatalf("compile Factory schema: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		modelProvider string
+		wantValid     bool
+	}{
+		{name: "concrete provider", modelProvider: "CODEX", wantValid: true},
+		{name: "exact placeholder", modelProvider: "${modelProvider}", wantValid: true},
+		{name: "arbitrary provider", modelProvider: "MYSTERY", wantValid: false},
+		{name: "mixed placeholder", modelProvider: "prefix-${modelProvider}", wantValid: false},
+		{name: "spaced placeholder", modelProvider: "${model provider}", wantValid: false},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			document := map[string]any{
+				"name": "provider-contract",
+				"workers": []any{
+					map[string]any{"name": "worker", "modelProvider": test.modelProvider},
+				},
+			}
+			err := schema.Validate(document)
+			if test.wantValid && err != nil {
+				t.Fatalf("schema rejected modelProvider %q: %v", test.modelProvider, err)
+			}
+			if !test.wantValid && err == nil {
+				t.Fatalf("schema accepted invalid modelProvider %q", test.modelProvider)
+			}
+		})
 	}
 }
 
@@ -182,6 +288,8 @@ func TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun(
 	factoryPaths := []string{
 		contractstaging.FactorySchemaAuthoredPath,
 		"packages/api/generated/schemas/factory.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.json",
+		"packages/packaged-factories/schemas/factory.schema.yaml",
 	}
 	before := factorySchemaDigests(t, repositoryRoot, factoryPaths)
 
@@ -252,6 +360,30 @@ func TestFactorySchemaGenerationFailsClosedOnUndocumentedDiagnostics(t *testing.
 	}
 	if !strings.Contains(err.Error(), "openapi.convert.unsupported_keyword") {
 		t.Fatalf("error = %v, want unsupported_keyword diagnostic payload", err)
+	}
+	if !strings.Contains(err.Error(), "/deprecated") {
+		t.Fatalf("error = %v, want reachable unsupported keyword path", err)
+	}
+}
+
+func TestFactorySchemaGenerationIgnoresUnsupportedUnreachableComponents(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	factory, components := loadFactoryGraph(t, repositoryRoot)
+	factoryCopy := contractstaging.DeepCopyValueForTest(factory).(map[string]any)
+	componentsCopy := contractstaging.DeepCopyValueForTest(components).(map[string]any)
+	componentsCopy["UnsupportedButUnreachable"] = map[string]any{
+		"type":       "string",
+		"deprecated": true,
+	}
+
+	if _, err := contractstaging.GenerateFactorySchemaFromGraphForTest(
+		repositoryRoot,
+		factoryCopy,
+		componentsCopy,
+	); err != nil {
+		t.Fatalf("unreachable unsupported component altered Factory generation: %v", err)
 	}
 }
 

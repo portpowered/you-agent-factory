@@ -1,0 +1,139 @@
+{
+  "examples": [
+    {
+      "args": {
+        "input": "Draft the release notes"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Review draft release notes."
+      },
+      "name": "positional-input"
+    }
+  ],
+  "id": "builtin-review",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "approved",
+    "workTypeName": "reviewable-work"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          }
+        ],
+        "description": "Work request that must be independently reviewed before it is returned.",
+        "name": "input",
+        "required": true
+      }
+    ]
+  },
+  "name": "review",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "reviewable-work",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "approved",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "Complete the requested work carefully.\n\nRequest:\n{{ (index .Inputs 0).Payload }}\n\n{{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}\nPrevious rejected work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReviewer feedback:\n{{ (index .Inputs 0).RejectionFeedback }}\n\n{{ end -}}\nReturn the completed work as your final response. Do not claim it is reviewed.\n",
+      "name": "review-work-executor",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Independently review the candidate work against the original request.\n\nOriginal request:\n{{ (index .Inputs 0).Payload }}\n\nCandidate work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReturn only a JSON object. If the candidate is acceptable, return\n{\"decision\":\"ACCEPTED\",\"output\":\"the complete approved candidate work\"}.\nIf it needs revision, return {\"decision\":\"REJECTED\",\"feedback\":\"specific actionable feedback\"}.\nDo not approve without including the approved candidate in `output`.\n",
+      "name": "review-work-reviewer",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Complete the requested work carefully.\n\nRequest:\n{{ (index .Inputs 0).Payload }}\n\n{{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}\nPrevious rejected work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReviewer feedback:\n{{ (index .Inputs 0).RejectionFeedback }}\n\n{{ end -}}\nReturn the completed work as your final response. Do not claim it is reviewed.\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "reviewable-work"
+        }
+      ],
+      "name": "execute-review-work",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "reviewable-work"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "reviewable-work"
+        }
+      ],
+      "promptFile": "prompts/executor.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": "review-work-executor"
+    },
+    {
+      "body": "Independently review the candidate work against the original request.\n\nOriginal request:\n{{ (index .Inputs 0).Payload }}\n\nCandidate work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReturn only a JSON object. If the candidate is acceptable, return\n{\"decision\":\"ACCEPTED\",\"output\":\"the complete approved candidate work\"}.\nIf it needs revision, return {\"decision\":\"REJECTED\",\"feedback\":\"specific actionable feedback\"}.\nDo not approve without including the approved candidate in `output`.\n",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "reviewable-work"
+        }
+      ],
+      "name": "review-review-work",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "reviewable-work"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "reviewable-work"
+        }
+      ],
+      "outcomeFormat": "decision-envelope",
+      "outputs": [
+        {
+          "state": "approved",
+          "workType": "reviewable-work"
+        }
+      ],
+      "promptFile": "prompts/reviewer.md",
+      "type": "AGENT_RUN",
+      "worker": "review-work-reviewer"
+    }
+  ]
+}

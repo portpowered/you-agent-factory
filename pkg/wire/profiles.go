@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
@@ -30,7 +31,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
-	factorypackages "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
@@ -295,6 +295,7 @@ func provideModelInvocationOperation(
 func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
+	packagedDefinitions []factorydefinitions.PackagedDefinition,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitialization.InspectPath,
@@ -306,10 +307,18 @@ func provideSystemInitializationService(
 			Ensure: ensureOperatorBackendScope,
 		},
 		packagedinstallation.New(persistence, packagedInstallationFileSystem),
-		factorypackages.All(),
+		packagedDefinitions,
 		inspectPath,
 		migrationFiles,
 	)
+}
+
+func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return catalog.All(), nil
 }
 
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {

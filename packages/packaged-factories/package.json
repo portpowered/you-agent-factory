@@ -2,13 +2,15 @@
   "name": "@you-agent-factory/packaged-factories",
   "version": "0.0.0",
   "private": true,
-  "description": "Human-readable source files for the first-party Factories shipped with You Agent Factory.",
+  "description": "Human-readable sources, portable catalog artifacts, and validation schemas for the first-party Factories shipped with You Agent Factory.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/portpowered/infinite-you.git"
   },
   "files": [
-    "factories"
+    "factories",
+    "generated",
+    "schemas"
   ]
 }

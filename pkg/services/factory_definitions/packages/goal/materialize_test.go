@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -85,7 +86,15 @@ func TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization(t *tes
 
 func materializePackagedGoalFactory(t *testing.T, globalRoot string) string {
 	t.Helper()
-	factoryDir, err := factorydefinitioncomposition.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON, factoryvalidation.New(nil))
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
+	}
+	definition, ok := catalog.Lookup(PackagedFactoryName)
+	if !ok {
+		t.Fatalf("generated packaged Factory catalog is missing %s", PackagedFactoryName)
+	}
+	factoryDir, err := factorydefinitioncomposition.PersistNamedFactory(globalRoot, PackagedFactoryName, definition.JSON, factoryvalidation.New(nil))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

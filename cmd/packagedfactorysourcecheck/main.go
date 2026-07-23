@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,16 +25,6 @@ const (
 	authoredBoundary = "packages/packaged-factories/factories"
 	diagnosticPrefix = "[agent-factory:packaged-factory-source]"
 )
-
-var requiredFactories = []string{
-	"deep-research",
-	"fusion",
-	"goal",
-	"quorum",
-	"review",
-	"subagent",
-	"tts",
-}
 
 var rootDocumentNames = map[string]struct{}{
 	"factory.json": {},
@@ -76,8 +68,7 @@ func run(cfg config, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("%s resolve repository root: %w", diagnosticPrefix, err)
 	}
-	var violations []string
-	violations = append(violations, inspectAuthoredBoundary(repoRoot)...)
+	inventoryCount, violations := inspectAuthoredBoundary(repoRoot)
 	outside, err := inspectOutsideBoundary(repoRoot)
 	if err != nil {
 		return err
@@ -87,76 +78,20 @@ func run(cfg config, stdout io.Writer) error {
 	if len(violations) > 0 {
 		return fmt.Errorf("%s source boundary failed:\n- %s", diagnosticPrefix, strings.Join(violations, "\n- "))
 	}
-	fmt.Fprintf(stdout, "%s authored source boundary holds for %d shipped Factories\n", diagnosticPrefix, len(requiredFactories))
+	fmt.Fprintf(stdout, "%s authored source boundary holds for %d shipped Factories\n", diagnosticPrefix, inventoryCount)
 	return nil
 }
 
-func inspectAuthoredBoundary(repoRoot string) []string {
-	boundaryPath := filepath.Join(repoRoot, filepath.FromSlash(authoredBoundary))
-	entries, err := os.ReadDir(boundaryPath)
+func inspectAuthoredBoundary(repoRoot string) (int, []string) {
+	inventory, err := packagedfactorycatalog.Discover(
+		context.Background(),
+		os.DirFS(repoRoot),
+		authoredBoundary,
+	)
 	if err != nil {
-		return []string{fmt.Sprintf("inspect required source boundary %s: %v", authoredBoundary, err)}
+		return 0, []string{err.Error()}
 	}
-
-	found := make(map[string]struct{}, len(entries))
-	var violations []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		found[entry.Name()] = struct{}{}
-		violations = append(violations, inspectFactoryDirectory(boundaryPath, entry.Name())...)
-	}
-	for _, name := range requiredFactories {
-		if _, ok := found[name]; !ok {
-			violations = append(violations, fmt.Sprintf("missing shipped Factory directory %s/%s", authoredBoundary, name))
-		}
-	}
-	return violations
-}
-
-func inspectFactoryDirectory(boundaryPath, name string) []string {
-	directory := filepath.Join(boundaryPath, name)
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return []string{fmt.Sprintf("inspect %s/%s: %v", authoredBoundary, name, err)}
-	}
-	var roots []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			if _, ok := rootDocumentNames[strings.ToLower(entry.Name())]; ok {
-				roots = append(roots, entry.Name())
-			}
-		}
-	}
-	sort.Strings(roots)
-	if len(roots) != 1 {
-		return []string{fmt.Sprintf(
-			"%s/%s contains %d root Factory documents (%s); keep exactly one of factory.json, factory.yaml, or factory.yml",
-			authoredBoundary,
-			name,
-			len(roots),
-			strings.Join(roots, ", "),
-		)}
-	}
-
-	path := filepath.Join(directory, roots[0])
-	identity, err := readFactoryIdentity(path)
-	if err != nil {
-		return []string{fmt.Sprintf("read %s/%s/%s: %v", authoredBoundary, name, roots[0], err)}
-	}
-	wantName := "@you/" + name
-	if identity.Name != wantName {
-		return []string{fmt.Sprintf(
-			"%s/%s/%s declares name %q; want %q so directory and shipped Factory identity agree",
-			authoredBoundary,
-			name,
-			roots[0],
-			identity.Name,
-			wantName,
-		)}
-	}
-	return nil
+	return len(inventory.Entries), nil
 }
 
 func inspectOutsideBoundary(repoRoot string) ([]string, error) {

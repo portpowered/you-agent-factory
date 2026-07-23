@@ -85,6 +85,18 @@ func marshalFactorySchemaDocument(root map[string]any) ([]byte, error) {
 	return contractjoiner.MarshalCanonicalJSON(root)
 }
 
+func marshalFactorySchemaYAML(jsonDocument []byte) ([]byte, error) {
+	var schema any
+	if err := json.Unmarshal(jsonDocument, &schema); err != nil {
+		return nil, fmt.Errorf("decode generated Factory schema for YAML serialization: %w", err)
+	}
+	payload, err := yaml.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("encode generated Factory schema as YAML: %w", err)
+	}
+	return payload, nil
+}
+
 func legacyGenerateFactorySchema(factory map[string]any, components map[string]any) ([]byte, error) {
 	definitions := make(map[string]any)
 	root, err := rewriteComponentRefs(factory, components, definitions)
