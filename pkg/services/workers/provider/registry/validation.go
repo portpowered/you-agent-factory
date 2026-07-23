@@ -55,9 +55,11 @@ func validateSchema(schemaPayload, document []byte) error {
 
 func validateIdentityClaims(candidates []manifestCandidate) []string {
 	claims := make(map[string][]string)
+	canonicalIdentities := make(map[string]struct{}, len(candidates))
 	var violations []string
 	for _, candidate := range candidates {
 		canonical := normalize(candidate.manifest.ID)
+		canonicalIdentities[canonical] = struct{}{}
 		if err := inference.ValidateIdentity(inference.Identity(canonical)); err != nil {
 			violations = append(violations, identityLabel(canonical)+": manifest identity is invalid: "+err.Error())
 		}
@@ -70,6 +72,7 @@ func validateIdentityClaims(candidates []manifestCandidate) []string {
 			claims[alias] = append(claims[alias], "alias of "+identityLabel(canonical))
 		}
 	}
+	addCompatibilityIdentityClaims(claims, canonicalIdentities)
 	for identity, owners := range claims {
 		if len(owners) < 2 {
 			continue
@@ -79,6 +82,18 @@ func validateIdentityClaims(candidates []manifestCandidate) []string {
 		violations = append(violations, fmt.Sprintf("%s: identity collision between %s", identityLabel(identity), strings.Join(sortedOwners, ", ")))
 	}
 	return violations
+}
+
+func addCompatibilityIdentityClaims(claims map[string][]string, canonicalIdentities map[string]struct{}) {
+	for _, compatibility := range providerCompatibilityAliases() {
+		if _, exists := canonicalIdentities[compatibility.canonical]; !exists {
+			continue
+		}
+		claims[compatibility.alias] = append(
+			claims[compatibility.alias],
+			"compatibility alias of "+identityLabel(compatibility.canonical),
+		)
+	}
 }
 
 func validateMaximumCapabilities(identity string, manifest Manifest, integration inference.Integration) []string {

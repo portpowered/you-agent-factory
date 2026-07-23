@@ -10,9 +10,17 @@ import (
 
 const legacyCursorRunnerID = workers.RunnerIDCursorCLI
 
-var legacyNativeProviderAliases = map[string]string{
-	"anthropic": "claude",
-	"openai":    "codex",
+type compatibilityAlias struct {
+	alias     string
+	canonical string
+}
+
+func providerCompatibilityAliases() []compatibilityAlias {
+	return []compatibilityAlias{
+		{alias: "anthropic", canonical: "claude"},
+		{alias: legacyCursorRunnerID, canonical: "cursor"},
+		{alias: "openai", canonical: "codex"},
+	}
 }
 
 // ResolveRunnerSelection applies the existing runner precedence while using
@@ -63,14 +71,7 @@ func isUnresolvedProviderTemplate(identity string) bool {
 // RunnerID resolves a provider canonical ID or alias to the stable native
 // runner ID retained by the current execution path.
 func (r *Registry) RunnerID(identity string) (string, error) {
-	lookup := strings.TrimSpace(identity)
-	if normalize(lookup) == legacyCursorRunnerID {
-		lookup = "cursor"
-	}
-	if target, ok := legacyNativeProviderAliases[normalize(lookup)]; ok {
-		lookup = target
-	}
-	entry, err := r.Lookup(lookup)
+	entry, err := r.Lookup(identity)
 	if err != nil {
 		return "", err
 	}
@@ -90,11 +91,7 @@ func (r *Registry) RunnerID(identity string) (string, error) {
 // RunnerMetadata projects manifest-authoritative execution capabilities onto
 // the existing runner diagnostic contract.
 func (r *Registry) RunnerMetadata(identity string) (workers.RunnerMetadata, error) {
-	lookup := strings.TrimSpace(identity)
-	if normalize(lookup) == legacyCursorRunnerID {
-		lookup = "cursor"
-	}
-	entry, err := r.Lookup(lookup)
+	entry, err := r.Lookup(identity)
 	if err != nil {
 		return workers.RunnerMetadata{}, err
 	}
@@ -120,11 +117,7 @@ func (r *Registry) ValidateRunnerPrerequisites(
 	locator platformprocess.ExecutableLocator,
 	identity string,
 ) error {
-	lookup := strings.TrimSpace(identity)
-	if normalize(lookup) == legacyCursorRunnerID {
-		lookup = "cursor"
-	}
-	entry, err := r.Lookup(lookup)
+	entry, err := r.Lookup(identity)
 	if err != nil {
 		return err
 	}

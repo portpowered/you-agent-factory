@@ -110,10 +110,11 @@ primary-result behavior.
   the registry resolves canonical IDs and published aliases first, with the
   legacy `cursor-cli` runner ID mapped only at the native-execution
   compatibility boundary. Preserve accepted public model-provider aliases
-  (`openai` and `anthropic`) and defer unresolved authored `${...}` provider
-  templates to the existing default-selection path. Other unknown,
-  catalog-only, and not-supported identities fail before dispatch instead of
-  falling through to the default Codex runner.
+  (`openai` and `anthropic`) as collision-validated registry identity claims so
+  static lookup and routed selection cannot disagree, and defer unresolved
+  authored `${...}` provider templates to the existing default-selection path.
+  Other unknown, catalog-only, and not-supported identities fail before
+  dispatch instead of falling through to the default Codex runner.
   Provider-native command construction and `ProviderOverride` execution remain
   unchanged; the manifest-backed capability guard is bypassed for an explicit
   replacement provider because that edge owns its own test/runtime contract.

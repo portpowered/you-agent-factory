@@ -276,6 +276,55 @@ func TestNewRejectsEveryIdentityCollisionIndependentOfInputOrder(t *testing.T) {
 	)
 }
 
+func TestNewRejectsCompatibilityAliasCollisions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		identity string
+		alias    string
+		want     string
+	}{
+		{
+			name:     "openai canonical shadows compatibility alias",
+			identity: "openai",
+			alias:    "customer-openai",
+			want:     `"openai": identity collision between canonical "openai", compatibility alias of "codex"`,
+		},
+		{
+			name:     "anthropic canonical shadows compatibility alias",
+			identity: "anthropic",
+			alias:    "customer-anthropic",
+			want:     `"anthropic": identity collision between canonical "anthropic", compatibility alias of "claude"`,
+		},
+		{
+			name:     "external alias shadows openai compatibility alias",
+			identity: "customer.openai",
+			alias:    "openai",
+			want:     `"openai": identity collision between alias of "customer.openai", compatibility alias of "codex"`,
+		},
+		{
+			name:     "external alias shadows anthropic compatibility alias",
+			identity: "customer.anthropic",
+			alias:    "anthropic",
+			want:     `"anthropic": identity collision between alias of "customer.anthropic", compatibility alias of "claude"`,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			manifest := externalManifest(t, test.identity, test.alias)
+			registrations := append(
+				supportedCatalogRegistrations(t),
+				ExternalRegistration(manifest, integrationFor(manifest)),
+			)
+			_, err := New(registrations...)
+			assertErrorContains(t, err, test.want)
+		})
+	}
+}
+
 func TestNewRejectsMalformedExternalManifestWithStableDiagnostics(t *testing.T) {
 	t.Parallel()
 

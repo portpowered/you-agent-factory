@@ -94,6 +94,45 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 	}
 }
 
+func TestCompatibilityAliasesUseRegistryIdentityAuthority(t *testing.T) {
+	t.Parallel()
+	providers := newBuiltInRegistry(t)
+
+	tests := []struct {
+		alias         string
+		wantCanonical string
+		wantRunner    string
+	}{
+		{alias: "anthropic", wantCanonical: "claude", wantRunner: "claude"},
+		{alias: workers.RunnerIDCursorCLI, wantCanonical: "cursor", wantRunner: workers.RunnerIDCursorCLI},
+		{alias: "openai", wantCanonical: "codex", wantRunner: workers.RunnerIDCodex},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.alias, func(t *testing.T) {
+			t.Parallel()
+			canonical, err := providers.CanonicalIdentity(test.alias)
+			if err != nil {
+				t.Fatalf("CanonicalIdentity(%q) error = %v", test.alias, err)
+			}
+			runner, err := providers.RunnerID(test.alias)
+			if err != nil {
+				t.Fatalf("RunnerID(%q) error = %v", test.alias, err)
+			}
+			if canonical != test.wantCanonical || runner != test.wantRunner {
+				t.Fatalf(
+					"compatibility identity %q = (canonical %q, runner %q), want (%q, %q)",
+					test.alias,
+					canonical,
+					runner,
+					test.wantCanonical,
+					test.wantRunner,
+				)
+			}
+		})
+	}
+}
+
 func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *testing.T) {
 	t.Parallel()
 	providers := newBuiltInRegistry(t)

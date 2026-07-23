@@ -198,6 +198,11 @@ func assembleRegistry(byID map[string][]manifestCandidate, integrations map[stri
 			registry.integrations[identity] = registered[0]
 		}
 	}
+	for _, compatibility := range providerCompatibilityAliases() {
+		if _, exists := registry.manifests[compatibility.canonical]; exists {
+			registry.aliases[compatibility.alias] = compatibility.canonical
+		}
+	}
 	return registry
 }
 
