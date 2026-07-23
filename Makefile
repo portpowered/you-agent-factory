@@ -78,7 +78,7 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-check provider-catalog-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -115,7 +115,7 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke model-provider-package-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
@@ -125,7 +125,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check durable-runtime-construction-check logging-boundary-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -185,6 +185,10 @@ api-smoke:
 
 api-package-pack-smoke:
 	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+
+model-provider-package-smoke:
+	node --test scripts/model-provider-package.test.mjs
+	node scripts/model-provider-package.mjs smoke
 
 contracts-validate:
 	$(GO) run ./cmd/contractsvalidate -root .
@@ -437,6 +441,12 @@ provider-catalog-generate:
 provider-catalog-check:
 	$(GO) run ./cmd/providercatalogcheck -root .
 
+model-provider-package-generate:
+	node scripts/model-provider-package.mjs generate
+
+model-provider-package-check:
+	node scripts/model-provider-package.mjs check
+
 ownership-boundary-check:
 	$(GO) run ./cmd/ownershipboundarycheck
 
@@ -471,6 +481,7 @@ verify-api:
 	$(MAKE) api-smoke
 	$(MAKE) response-stream-stress-smoke
 	$(MAKE) api-package-pack-smoke
+	$(MAKE) model-provider-package-smoke
 	$(MAKE) wire-smoke
 
 verify-build-contracts:

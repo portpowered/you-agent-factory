@@ -1,0 +1,101 @@
+{
+  "formatVersion": "1.0.0",
+  "packageId": "you-agent-factory.model-providers",
+  "packageVersion": "0.0.0",
+  "sourceCommit": "dd6bd92641ae9db4a46571c6f5511d6405ca1986",
+  "familyFormatVersions": {
+    "model-providers": "1.0.0"
+  },
+  "exports": {
+    "catalog": {
+      "path": "generated/catalog.json",
+      "family": "model-providers",
+      "artifactHash": "892aa118f38700dac2f6f2466aa6171180e3c0b5e8527642133026a8d6de7096",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "catalog",
+        "documentation": {
+          "title": {
+            "id": "catalog.title",
+            "canonicalEnglish": "Published model-provider catalog"
+          },
+          "description": {
+            "id": "catalog.description",
+            "canonicalEnglish": "Published model-provider catalog as immutable package data."
+          }
+        },
+        "examples": [
+          "generated/catalog.json"
+        ],
+        "visibility": "public",
+        "sourceHash": "892aa118f38700dac2f6f2466aa6171180e3c0b5e8527642133026a8d6de7096"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "catalog",
+        "state": "active",
+        "since": "0.0.0"
+      }
+    },
+    "provider-catalog-schema": {
+      "path": "generated/provider-catalog.schema.json",
+      "family": "model-providers",
+      "artifactHash": "777dde4eeaf94530b478f354e15ddf9d289bf8139774ac0308ea17a37606cc35",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "provider-catalog-schema",
+        "documentation": {
+          "title": {
+            "id": "provider-catalog-schema.title",
+            "canonicalEnglish": "Published Provider Catalog JSON Schema"
+          },
+          "description": {
+            "id": "provider-catalog-schema.description",
+            "canonicalEnglish": "Published Provider Catalog JSON Schema as immutable package data."
+          }
+        },
+        "examples": [
+          "generated/provider-catalog.schema.json"
+        ],
+        "visibility": "public",
+        "sourceHash": "777dde4eeaf94530b478f354e15ddf9d289bf8139774ac0308ea17a37606cc35"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "provider-catalog-schema",
+        "state": "active",
+        "since": "0.0.0"
+      }
+    },
+    "provider-manifest-schema": {
+      "path": "generated/provider-manifest.schema.json",
+      "family": "model-providers",
+      "artifactHash": "44295316bd922f63622ee5b12767c539d9d798d3a9639a9a7f299ffe9bc46fa2",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "provider-manifest-schema",
+        "documentation": {
+          "title": {
+            "id": "provider-manifest-schema.title",
+            "canonicalEnglish": "Published Provider Manifest JSON Schema"
+          },
+          "description": {
+            "id": "provider-manifest-schema.description",
+            "canonicalEnglish": "Published Provider Manifest JSON Schema as immutable package data."
+          }
+        },
+        "examples": [
+          "generated/provider-manifest.schema.json"
+        ],
+        "visibility": "public",
+        "sourceHash": "44295316bd922f63622ee5b12767c539d9d798d3a9639a9a7f299ffe9bc46fa2"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "provider-manifest-schema",
+        "state": "active",
+        "since": "0.0.0"
+      }
+    }
+  }
+}
