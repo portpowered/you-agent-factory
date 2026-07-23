@@ -189,69 +189,161 @@ func TestRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
 	}
 }
 
-func TestRejectedRuntimeDefinitionsFailBeforeProviderExecution(t *testing.T) {
+func TestPublicMappingFailuresRetainJSONAndYAMLSourceContext(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		body  string
-		wants []string
+		rootName string
+		body     string
+		format   string
 	}{
 		{
-			name:  "JSON representation mismatch",
-			body:  `{"name":["invalid"]}`,
-			wants: []string{"factory.json", "(JSON)", "parse factory config"},
+			rootName: "factory.json",
+			body:     `{"name":["invalid"]}`,
+			format:   "(JSON)",
 		},
 		{
-			name: "blocking topology",
-			body: `{
-				"name":"invalid",
-				"workTypes":[{
-					"name":"task",
-					"states":[
-						{"name":"init","type":"INITIAL"},
-						{"name":"complete","type":"TERMINAL"},
-						{"name":"failed","type":"FAILED"}
-					]
-				}],
-				"workstations":[{
-					"name":"execute",
-					"worker":"missing-worker",
-					"inputs":[{"workType":"task","state":"init"}],
-					"outputs":[{"workType":"task","state":"complete"}],
-					"onFailure":[{"workType":"task","state":"failed"}],
-					"type":"MODEL_WORKSTATION"
-				}]
-			}`,
-			wants: []string{"factory.worker.danglingReference", "missing-worker"},
+			rootName: "factory.yaml",
+			body:     "name:\n  - invalid\n",
+			format:   "(YAML)",
 		},
 	} {
 		test := test
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.rootName, func(t *testing.T) {
 			dir := t.TempDir()
-			writeFile(t, filepath.Join(dir, "factory.json"), test.body)
-			runner := support.NewRecordingCommandRunner("runtime must not execute")
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "run", "--dir", dir, "--no-record", "--quiet",
-			})
-			inputs.Input.WorkingDirectory = t.TempDir()
-			err := support.BuildProcess(
+			sourcePath := writeFile(t, filepath.Join(dir, test.rootName), test.body)
+			assertPublicValidationFailureBeforeProvider(
 				t,
-				serviceedges.Edges{ProviderCommandRunner: runner},
-			).Execute(inputs.Input)
-			if err == nil {
-				t.Fatal("Process.Execute() error = nil")
-			}
-			diagnostic := err.Error() + "\n" + inputs.Stderr()
-			for _, want := range test.wants {
-				if !strings.Contains(diagnostic, want) {
-					t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
-				}
-			}
-			if runner.CallCount() != 0 {
-				t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
-			}
+				sourcePath,
+				test.format,
+				"parse factory config",
+				"name",
+				"cannot unmarshal",
+			)
 		})
 	}
 }
+
+func TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext(t *testing.T) {
+	for _, test := range []struct {
+		rootName string
+		body     string
+		format   string
+	}{
+		{rootName: "factory.json", body: invalidRuntimeTopologyJSON, format: "(JSON)"},
+		{rootName: "factory.yaml", body: invalidRuntimeTopologyYAML, format: "(YAML)"},
+	} {
+		test := test
+		t.Run(test.rootName, func(t *testing.T) {
+			dir := t.TempDir()
+			sourcePath := writeFile(t, filepath.Join(dir, test.rootName), test.body)
+			assertRuntimeFailureBeforeProvider(
+				t,
+				sourcePath,
+				test.format,
+				"validate factory config",
+				"factory.worker.danglingReference",
+				"missing-worker",
+			)
+		})
+	}
+}
+
+func assertRuntimeFailureBeforeProvider(
+	t *testing.T,
+	factorySource string,
+	wants ...string,
+) {
+	t.Helper()
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--factory", factorySource, "--no-record", "--quiet",
+		"runtime must not start",
+	})
+	inputs.Input.WorkingDirectory = t.TempDir()
+	err := support.BuildProcess(
+		t,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+	).Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute() error = nil")
+	}
+	diagnostic := err.Error() + "\n" + inputs.Stdout() + "\n" + inputs.Stderr()
+	for _, want := range wants {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
+		}
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+	}
+}
+
+func assertPublicValidationFailureBeforeProvider(
+	t *testing.T,
+	factorySource string,
+	wants ...string,
+) {
+	t.Helper()
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "factory", "config", "validate", factorySource,
+	})
+	inputs.Input.WorkingDirectory = t.TempDir()
+	err := support.BuildProcess(
+		t,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+	).Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute() error = nil")
+	}
+	diagnostic := err.Error() + "\n" + inputs.Stdout() + "\n" + inputs.Stderr()
+	for _, want := range wants {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
+		}
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+	}
+}
+
+const invalidRuntimeTopologyJSON = `{
+	"name":"invalid",
+	"workTypes":[{
+		"name":"task",
+		"states":[
+			{"name":"init","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]
+	}],
+	"workstations":[{
+		"name":"execute",
+		"worker":"missing-worker",
+		"inputs":[{"workType":"task","state":"init"}],
+		"outputs":[{"workType":"task","state":"complete"}],
+		"onFailure":[{"workType":"task","state":"failed"}],
+		"type":"MODEL_WORKSTATION"
+	}]
+}`
+
+const invalidRuntimeTopologyYAML = `name: invalid
+workTypes:
+  - name: task
+    states:
+      - {name: init, type: INITIAL}
+      - {name: complete, type: TERMINAL}
+      - {name: failed, type: FAILED}
+workstations:
+  - name: execute
+    worker: missing-worker
+    inputs:
+      - {workType: task, state: init}
+    outputs:
+      - {workType: task, state: complete}
+    onFailure:
+      - {workType: task, state: failed}
+    type: MODEL_WORKSTATION
+`
 
 func materializePackagedGoal(t *testing.T, rootName string) string {
 	t.Helper()

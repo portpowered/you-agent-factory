@@ -32,31 +32,35 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 			}
 			loadedPath = wantSource
 			return factorydefinitions.AuthoredFactorySource{
-				Path: wantSource,
-				Data: []byte(`{"name":"injected"}`),
+				Path:   wantSource,
+				Format: factorydefinitions.AuthoredFactoryFormatYAML,
+				Data:   []byte(`{"name":"injected"}`),
 			}, nil
 		},
 	}
 
-	data, sourcePath, factoryDir, split, err := loader.readFactoryConfigSource("factory-dir")
+	source, factoryDir, split, err := loader.readFactoryConfigSource("factory-dir")
 	if err != nil {
 		t.Fatalf("read Factory source: %v", err)
 	}
 	if statPath != "factory-dir" {
 		t.Fatalf("stat path = %q, want factory-dir", statPath)
 	}
-	if loadedPath != wantSource || sourcePath != wantSource {
-		t.Fatalf("loaded/source paths = %q/%q, want %q", loadedPath, sourcePath, wantSource)
+	if loadedPath != wantSource || source.Path != wantSource {
+		t.Fatalf("loaded/source paths = %q/%q, want %q", loadedPath, source.Path, wantSource)
 	}
-	if factoryDir != "factory-dir" || !split || string(data) != `{"name":"injected"}` {
-		t.Fatalf("source result = (%q, %q, %v), want injected directory source", data, factoryDir, split)
+	if source.Format != factorydefinitions.AuthoredFactoryFormatYAML ||
+		factoryDir != "factory-dir" ||
+		!split ||
+		string(source.Data) != `{"name":"injected"}` {
+		t.Fatalf("source result = (%+v, %q, %v), want injected YAML directory source", source, factoryDir, split)
 	}
 }
 
 func TestLoaderFailsClosedWithoutLoadingFileSystem(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, _, err := (&Loader{}).readFactoryConfigSource("factory.json")
+	_, _, _, err := (&Loader{}).readFactoryConfigSource("factory.json")
 	if err == nil || !strings.Contains(err.Error(), "loading filesystem is required") {
 		t.Fatalf("error = %v, want missing loading filesystem", err)
 	}
@@ -67,22 +71,31 @@ func TestSourceContextErrorNamesAuthoredFormat(t *testing.T) {
 
 	want := fs.ErrInvalid
 	for _, test := range []struct {
-		path       string
+		source     factorydefinitions.AuthoredFactorySource
 		wantFormat string
 	}{
-		{path: "factory.json", wantFormat: "(JSON)"},
-		{path: "factory.yaml", wantFormat: "(YAML)"},
-		{path: "factory.yml", wantFormat: "(YAML)"},
-		{path: "factory.toml", wantFormat: ""},
+		{
+			source: factorydefinitions.AuthoredFactorySource{
+				Path: "factory.json", Format: factorydefinitions.AuthoredFactoryFormatJSON,
+			},
+			wantFormat: "(JSON)",
+		},
+		{
+			source: factorydefinitions.AuthoredFactorySource{
+				Path: "factory.yaml", Format: factorydefinitions.AuthoredFactoryFormatYAML,
+			},
+			wantFormat: "(YAML)",
+		},
+		{source: factorydefinitions.AuthoredFactorySource{Path: "factory.toml"}},
 	} {
 		test := test
-		t.Run(test.path, func(t *testing.T) {
+		t.Run(test.source.Path, func(t *testing.T) {
 			t.Parallel()
-			err := sourceContextError(test.path, "parse factory config", want)
+			err := sourceContextError(test.source, "parse factory config", want)
 			if !errors.Is(err, want) {
 				t.Fatalf("error = %v, want wrapped %v", err, want)
 			}
-			if !strings.Contains(err.Error(), test.path) ||
+			if !strings.Contains(err.Error(), test.source.Path) ||
 				(test.wantFormat != "" && !strings.Contains(err.Error(), test.wantFormat)) {
 				t.Fatalf("error = %q, want path and format %q", err, test.wantFormat)
 			}

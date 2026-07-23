@@ -2,6 +2,7 @@ package factoryload
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,6 +25,32 @@ func TestBlockingFactoryLoadError_ErrorNilAndEmptyTargets(t *testing.T) {
 	}
 	if !errors.Is(empty, factorydefinitions.ErrInvalidNamedFactory) {
 		t.Fatal("expected ErrInvalidNamedFactory via Is")
+	}
+}
+
+func TestFormatOperatorDiagnosticPreservesWrappedSourceContext(t *testing.T) {
+	base := factorydefinitions.NewBlockingFactoryLoadError(factorydefinitions.ValidationResult{
+		Targets: []factorydefinitions.ValidationTarget{{
+			Code: "RULE", Message: "missing worker",
+		}},
+	})
+	sourceErr := fmt.Errorf(
+		"validate factory config /factory/factory.yaml (YAML): %w",
+		base,
+	)
+
+	got := FormatOperatorDiagnostic("/factory", sourceErr)
+	if !strings.Contains(
+		got,
+		"validate factory config /factory/factory.yaml (YAML)",
+	) {
+		t.Fatalf("error = %q, want source path and format context", got)
+	}
+	if strings.Contains(got, "blocking validation targets") {
+		t.Fatalf("error = %q, want findings instead of target count summary", got)
+	}
+	if !errors.Is(&OperatorError{FactoryPath: "/factory", Err: sourceErr}, factorydefinitions.ErrInvalidNamedFactory) {
+		t.Fatal("wrapped source error should retain ErrInvalidNamedFactory")
 	}
 }
 
