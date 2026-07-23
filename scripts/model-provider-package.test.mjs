@@ -1,17 +1,34 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import {
 	assertReviewedInventory,
 	generateManifest,
 	generateTypes,
+	resolveSourceCommit,
 	reviewedPackFiles,
 } from "./model-provider-package.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+const executeFile = promisify(execFile);
+
+async function git(repositoryRoot, ...args) {
+	const { stdout } = await executeFile("git", ["-C", repositoryRoot, ...args]);
+	return stdout;
+}
 
 test("generated declarations come from the explicit Provider Catalog schema", async () => {
 	const schema = JSON.parse(
@@ -34,8 +51,11 @@ test("generated declarations come from the explicit Provider Catalog schema", as
 
 test("publication manifest records immutable source and exact artifact hashes", async () => {
 	const sourceCommit = "a".repeat(40);
+	const headCommit = "b".repeat(40);
 	const manifest = JSON.parse(
-		await generateManifest(root, async () => `${sourceCommit}\n`),
+		await generateManifest(root, async (_, args) =>
+			args.includes("rev-list") ? `${sourceCommit}\n` : `${headCommit}\n`,
+		),
 	);
 	assert.equal(manifest.sourceCommit, sourceCommit);
 	assert.equal(manifest.packageId, "you-agent-factory.model-providers");
@@ -47,6 +67,44 @@ test("publication manifest records immutable source and exact artifact hashes", 
 			entry.artifactHash,
 			createHash("sha256").update(payload).digest("hex"),
 		);
+	}
+});
+
+test("source revision rejects an unrelated shallow-clone head", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "you-model-provider-git-"));
+	const origin = join(fixtureRoot, "origin");
+	const shallow = join(fixtureRoot, "shallow");
+	try {
+		await mkdir(join(origin, "packages/model-providers/providers/agy"), {
+			recursive: true,
+		});
+		await writeFile(
+			join(origin, "packages/model-providers/providers/agy/provider.yaml"),
+			"id: agy\n",
+		);
+		await git(origin, "init");
+		await git(origin, "config", "user.name", "Provider Catalog Test");
+		await git(origin, "config", "user.email", "provider-catalog@example.com");
+		await git(origin, "add", "-A");
+		await git(origin, "commit", "-m", "provider source");
+		await writeFile(join(origin, "unrelated.txt"), "follow-up\n");
+		await git(origin, "add", "-A");
+		await git(origin, "commit", "-m", "unrelated follow-up");
+
+		await executeFile("git", [
+			"clone",
+			"--depth",
+			"1",
+			pathToFileURL(origin).href,
+			shallow,
+		]);
+
+		await assert.rejects(
+			resolveSourceCommit(shallow),
+			/too shallow.*fetch full history/i,
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
 	}
 });
 

@@ -169,22 +169,7 @@ function artifactExport({ id, path, title }, payload) {
 }
 
 export async function generateManifest(repositoryRoot, runGit = runCommand) {
-	const sourceCommit = (
-		await runGit("git", [
-			"-C",
-			repositoryRoot,
-			"rev-list",
-			"-1",
-			"HEAD",
-			"--",
-			...sourceIdentityPaths,
-		])
-	).trim();
-	if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceCommit)) {
-		throw new Error(
-			`[model-provider-package] invalid source commit ${JSON.stringify(sourceCommit)}`,
-		);
-	}
+	const sourceCommit = await resolveSourceCommit(repositoryRoot, runGit);
 	const exports = Object.fromEntries(
 		await Promise.all(
 			artifacts.map(async (artifact) =>
@@ -207,6 +192,71 @@ export async function generateManifest(repositoryRoot, runGit = runCommand) {
 		null,
 		2,
 	)}\n`;
+}
+
+export async function resolveSourceCommit(repositoryRoot, runGit = runCommand) {
+	const git = (...args) => runGit("git", ["-C", repositoryRoot, ...args]);
+	const head = (await git("rev-parse", "HEAD")).trim();
+	const sourceCommit = (
+		await git("rev-list", "-1", "HEAD", "--", ...sourceIdentityPaths)
+	).trim();
+	if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceCommit)) {
+		throw new Error(
+			`[model-provider-package] invalid source commit ${JSON.stringify(sourceCommit)}`,
+		);
+	}
+	if (sourceCommit !== head) {
+		return sourceCommit;
+	}
+
+	const changedPaths = (
+		await git(
+			"diff-tree",
+			"--no-commit-id",
+			"--name-only",
+			"-r",
+			head,
+			"--",
+			...sourceIdentityPaths,
+		)
+	).trim();
+	if (changedPaths !== "") {
+		return sourceCommit;
+	}
+
+	let parent;
+	try {
+		parent = (await git("rev-parse", "HEAD^")).trim();
+	} catch {
+		if ((await git("rev-parse", "--is-shallow-repository")).trim() === "true") {
+			throw shallowSourceHistoryError();
+		}
+		return sourceCommit;
+	}
+
+	let parentSource;
+	try {
+		parentSource = (
+			await git("rev-list", "-1", parent, "--", ...sourceIdentityPaths)
+		).trim();
+	} catch {
+		return sourceCommit;
+	}
+	if (parentSource !== "" && parentSource !== sourceCommit) {
+		try {
+			await git("rev-parse", "--verify", `${head}^2`);
+			return sourceCommit;
+		} catch {
+			throw shallowSourceHistoryError();
+		}
+	}
+	return sourceCommit;
+}
+
+function shallowSourceHistoryError() {
+	return new Error(
+		"[model-provider-package] git history is too shallow to determine the last change to package source inputs; fetch full history (for example fetch-depth: 0 in CI)",
+	);
 }
 
 function runCommand(command, arguments_, options = {}) {
