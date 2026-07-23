@@ -17,6 +17,8 @@ const (
 	factorySchemaTarget          = "packages/api/generated/schemas/factory.schema.json"
 	factoryEventSchemaTarget     = "packages/api/generated/schemas/factory-event.schema.json"
 	factoryRecordingSchemaTarget = "packages/api/generated/schemas/factory-recording.schema.json"
+	packagedFactorySchemaJSON    = "packages/packaged-factories/schemas/factory.schema.json"
+	packagedFactorySchemaYAML    = "packages/packaged-factories/schemas/factory.schema.yaml"
 )
 
 // RawArtifact maps one canonical repository artifact into its package-facing
@@ -109,6 +111,8 @@ func AllowedArtifacts() []string {
 		factorySchemaTarget,
 		factoryEventSchemaTarget,
 		factoryRecordingSchemaTarget,
+		packagedFactorySchemaJSON,
+		packagedFactorySchemaYAML,
 	)
 	sort.Strings(artifacts)
 	return artifacts

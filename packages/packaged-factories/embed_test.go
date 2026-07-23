@@ -33,6 +33,23 @@ func TestSourceReadsAuthoredFactoryAndAsset(t *testing.T) {
 	}
 }
 
+func TestSourceReadsEquivalentPackagedFactorySchemas(t *testing.T) {
+	t.Parallel()
+
+	source := packagedfactories.Source()
+	jsonPayload, err := fs.ReadFile(source, "schemas/factory.schema.json")
+	if err != nil {
+		t.Fatalf("read packaged JSON Factory schema: %v", err)
+	}
+	yamlPayload, err := fs.ReadFile(source, "schemas/factory.schema.yaml")
+	if err != nil {
+		t.Fatalf("read packaged YAML Factory schema: %v", err)
+	}
+	if len(jsonPayload) == 0 || len(yamlPayload) == 0 {
+		t.Fatal("packaged Factory schemas must not be empty")
+	}
+}
+
 func TestSourceReadBytesAreDetachedAcrossCallers(t *testing.T) {
 	t.Parallel()
 

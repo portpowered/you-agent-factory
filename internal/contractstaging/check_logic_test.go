@@ -23,13 +23,21 @@ func TestShouldRunArtifactCheck(t *testing.T) {
 
 func TestFilterArtifactsByStagingDirectory(t *testing.T) {
 	actual := map[string]stagedFile{
-		"packages/api/generated/keep.json": {regular: true},
-		"packages/readme.md":               {regular: true},
-		"other/path.txt":                   {regular: false},
+		"packages/api/generated/keep.json":                   {regular: true},
+		"packages/packaged-factories/schemas/keep.yaml":      {regular: true},
+		"packages/packaged-factories/factories/factory.json": {regular: true},
+		"packages/readme.md":                                 {regular: true},
+		"other/path.txt":                                     {regular: false},
 	}
 	got := filterArtifactsByStagingDirectory(actual)
 	if _, ok := got["packages/api/generated/keep.json"]; !ok {
-		t.Fatal("expected staged package artifact to be kept")
+		t.Fatal("expected API package artifact to be kept")
+	}
+	if _, ok := got["packages/packaged-factories/schemas/keep.yaml"]; !ok {
+		t.Fatal("expected packaged Factory schema artifact to be kept")
+	}
+	if _, ok := got["packages/packaged-factories/factories/factory.json"]; ok {
+		t.Fatal("expected authored packaged Factory to be filtered")
 	}
 	if _, ok := got["packages/readme.md"]; ok {
 		t.Fatal("expected non-generated package artifact to be filtered")

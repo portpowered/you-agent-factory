@@ -105,6 +105,16 @@ Use this map when changing the public REST contract.
   `contractjoiner.MarshalCanonicalJSON` for canonical output bytes. Prove the
   converter stays outside API/config/service/CLI/worker/runtime dependency paths in
   `contracts/converter_boundary_test.go`.
+- Packaged Factory schema projections live beside the first-party definitions at
+  `packages/packaged-factories/schemas/factory.schema.{json,yaml}`. Build both
+  through `internal/contractstaging`: the JSON bytes stay identical to
+  `packages/api/generated/schemas/factory.schema.json`, and YAML must be
+  serialized from that same parsed schema value rather than maintained as a
+  second contract. Keep both paths in the generation/check allowlist and the
+  packaged Go and npm source surfaces. Regenerate through
+  `make contracts-generate` and verify through `make contracts-check`;
+  `make contracts-smoke` proves repeated byte stability and is the packaged
+  contract gate run by the development-package CI workflow.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, standalone JSON Schema projections from
   canonical bundled OpenAPI component graphs, and the package contract

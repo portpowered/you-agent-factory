@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
@@ -85,20 +86,26 @@ func assertOnlyAllowedArtifacts(t *testing.T, root string) {
 	t.Helper()
 	want := contractstaging.AllowedArtifacts()
 	var got []string
-	base := filepath.Join(root, "packages", "api", "generated")
-	if err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return err
+	for _, relativeBase := range []string{
+		"packages/api/generated",
+		"packages/packaged-factories/schemas",
+	} {
+		base := filepath.Join(root, filepath.FromSlash(relativeBase))
+		if err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			got = append(got, filepath.ToSlash(relative))
+			return nil
+		}); err != nil {
+			t.Fatalf("walk generated artifacts: %v", err)
 		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		got = append(got, filepath.ToSlash(relative))
-		return nil
-	}); err != nil {
-		t.Fatalf("walk generated artifacts: %v", err)
 	}
+	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("generated paths = %q, want allowlist %q", got, want)
 	}
