@@ -4,8 +4,82 @@ import type { components, operations, paths } from "./openapi";
 
 type FactoryLayoutEmptyState =
   components["schemas"]["FactoryLayoutEmptyState"];
+type ProviderCatalog = components["schemas"]["ProviderCatalog"];
 
 describe("generated session factory OpenAPI types", () => {
+  it("round-trips the typed provider catalog contract without changing meaning", () => {
+    const catalog: ProviderCatalog = {
+      formatVersion: "1.0.0",
+      providers: [
+        {
+          id: "example-alpha",
+          aliases: ["alpha"],
+          displayName: {
+            type: "LOCALIZABLE_ASSET",
+            value: "Example Alpha",
+          },
+          description: {
+            type: "LOCALIZABLE_ASSET",
+            value: "Example provider metadata.",
+          },
+          documentation: [
+            {
+              kind: "reference",
+              url: "https://example.com/providers/alpha",
+            },
+          ],
+          technicalSupportLevel: "experimental",
+          implementationAvailability: "externally-supplied",
+          maximumExecutionCapabilities: {
+            promptSubmission: true,
+            imageInput: false,
+            sessionResume: true,
+            structuredOutput: true,
+            toolExecution: true,
+            workingDirectory: true,
+            worktree: false,
+          },
+          maximumResponseFidelityCapabilities: {
+            nativeStreaming: true,
+            messageDeltas: true,
+            messageSnapshots: true,
+            reasoningSummaries: false,
+            toolLifecycle: true,
+            toolOutputDeltas: false,
+            fileChanges: false,
+            plans: false,
+            usage: true,
+            stableItemIds: true,
+            providerReconnect: true,
+          },
+          discovery: {
+            executableNames: ["example-alpha"],
+            endpointKinds: ["stdio"],
+            configurationKeys: ["providers.example-alpha.enabled"],
+          },
+          deprecation: {
+            deprecatedSince: "2026-07-23",
+            reason: {
+              type: "LOCALIZABLE_ASSET",
+              value: "Use Example Next for new integrations.",
+            },
+            replacementProviderId: "example-next",
+          },
+        },
+      ],
+    };
+
+    const roundTrip: ProviderCatalog = JSON.parse(JSON.stringify(catalog));
+    expect(roundTrip.providers[0]).toMatchObject({
+      id: "example-alpha",
+      technicalSupportLevel: "experimental",
+      implementationAvailability: "externally-supplied",
+      deprecation: {
+        replacementProviderId: "example-next",
+      },
+    });
+  });
+
   it("exposes concrete text and image empty-state variants", () => {
     const textState: FactoryLayoutEmptyState = {
       text: "No work is waiting.",

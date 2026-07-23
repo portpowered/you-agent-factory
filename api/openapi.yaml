@@ -8850,6 +8850,266 @@ components:
         - OPENCODE
         - PI
         - AGY
+    ProviderCatalog:
+      type: object
+      additionalProperties: false
+      description: Versioned public collection of provider manifests.
+      required:
+        - formatVersion
+        - providers
+      properties:
+        formatVersion:
+          type: string
+          enum:
+            - 1.0.0
+          description: Provider Catalog document format version.
+        providers:
+          type: array
+          description: Provider manifests in canonical provider-ID order.
+          items:
+            $ref: '#/components/schemas/ProviderManifest'
+    ProviderManifest:
+      type: object
+      additionalProperties: false
+      description: Public, data-only metadata for one model-provider integration. A manifest describes evidenced maximum behavior and publication posture; it never reports current-machine installation, authentication, readiness, pricing, or runtime registration.
+      required:
+        - id
+        - aliases
+        - displayName
+        - description
+        - documentation
+        - technicalSupportLevel
+        - implementationAvailability
+        - maximumExecutionCapabilities
+        - maximumResponseFidelityCapabilities
+        - discovery
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$
+          description: Stable canonical lowercase provider identifier.
+        aliases:
+          type: array
+          uniqueItems: true
+          description: Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$
+        displayName:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localizable customer-facing provider name.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localizable customer-facing provider summary.
+        documentation:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Stable public documentation links for this provider.
+          items:
+            $ref: '#/components/schemas/ProviderDocumentationLink'
+        technicalSupportLevel:
+          $ref: '#/components/schemas/ProviderTechnicalSupportLevel'
+        implementationAvailability:
+          $ref: '#/components/schemas/ProviderImplementationAvailability'
+        maximumExecutionCapabilities:
+          $ref: '#/components/schemas/ProviderExecutionCapabilities'
+        maximumResponseFidelityCapabilities:
+          $ref: '#/components/schemas/ProviderResponseFidelityCapabilities'
+        discovery:
+          $ref: '#/components/schemas/ProviderDiscoveryPrerequisites'
+        deprecation:
+          $ref: '#/components/schemas/ProviderDeprecation'
+    ProviderTechnicalSupportLevel:
+      type: string
+      description: Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
+      enum:
+        - production
+        - experimental
+        - not-supported
+    ProviderImplementationAvailability:
+      type: string
+      description: How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
+      enum:
+        - bundled
+        - externally-supplied
+        - catalog-only
+    ProviderDocumentationLink:
+      type: object
+      additionalProperties: false
+      description: One stable public documentation resource for a provider.
+      required:
+        - kind
+        - url
+      properties:
+        kind:
+          $ref: '#/components/schemas/ProviderDocumentationLinkKind'
+        url:
+          type: string
+          format: uri
+          minLength: 1
+          description: Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.
+    ProviderDocumentationLinkKind:
+      type: string
+      description: Purpose of one stable public provider documentation link.
+      enum:
+        - homepage
+        - setup
+        - reference
+        - support
+    ProviderExecutionCapabilities:
+      type: object
+      additionalProperties: false
+      description: Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.
+      required:
+        - promptSubmission
+        - imageInput
+        - sessionResume
+        - structuredOutput
+        - toolExecution
+        - workingDirectory
+        - worktree
+      properties:
+        promptSubmission:
+          type: boolean
+          description: Accepts authored prompt input for execution.
+        imageInput:
+          type: boolean
+          description: Accepts image content as invocation input.
+        sessionResume:
+          type: boolean
+          description: Can continue an identified provider session.
+        structuredOutput:
+          type: boolean
+          description: Can constrain authoritative output using a structured schema.
+        toolExecution:
+          type: boolean
+          description: Can execute provider-managed tools during an invocation.
+        workingDirectory:
+          type: boolean
+          description: Can execute with an explicit working directory.
+        worktree:
+          type: boolean
+          description: Can execute against an isolated source-control worktree.
+    ProviderResponseFidelityCapabilities:
+      type: object
+      additionalProperties: false
+      description: Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
+      required:
+        - nativeStreaming
+        - messageDeltas
+        - messageSnapshots
+        - reasoningSummaries
+        - toolLifecycle
+        - toolOutputDeltas
+        - fileChanges
+        - plans
+        - usage
+        - stableItemIds
+        - providerReconnect
+      properties:
+        nativeStreaming:
+          type: boolean
+          description: Exposes native streaming observations.
+        messageDeltas:
+          type: boolean
+          description: Emits incremental assistant-message deltas.
+        messageSnapshots:
+          type: boolean
+          description: Emits assistant-message snapshots.
+        reasoningSummaries:
+          type: boolean
+          description: Emits reasoning summaries or reasoning deltas.
+        toolLifecycle:
+          type: boolean
+          description: Emits correlated tool lifecycle metadata.
+        toolOutputDeltas:
+          type: boolean
+          description: Emits incremental tool-output deltas.
+        fileChanges:
+          type: boolean
+          description: Emits observed file changes.
+        plans:
+          type: boolean
+          description: Emits plan updates.
+        usage:
+          type: boolean
+          description: Emits usage accounting.
+        stableItemIds:
+          type: boolean
+          description: Assigns stable item identifiers across response events.
+        providerReconnect:
+          type: boolean
+          description: Supports reconnecting an interrupted provider response stream.
+    ProviderDiscoveryPrerequisites:
+      type: object
+      additionalProperties: false
+      description: 'Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.'
+      required:
+        - executableNames
+        - endpointKinds
+        - configurationKeys
+      properties:
+        executableNames:
+          type: array
+          uniqueItems: true
+          description: Executable basenames that may supply the provider integration.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+        endpointKinds:
+          type: array
+          uniqueItems: true
+          description: Credential-free endpoint transport kinds; addresses and live status are not published.
+          items:
+            $ref: '#/components/schemas/ProviderDiscoveryEndpointKind'
+        configurationKeys:
+          type: array
+          uniqueItems: true
+          description: Required configuration-key names only; configuration and environment values are forbidden.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[A-Za-z][A-Za-z0-9._-]*$
+    ProviderDiscoveryEndpointKind:
+      type: string
+      description: Static endpoint transport kind that may be checked without credentials.
+      enum:
+        - local-http
+        - remote-http
+        - stdio
+        - unix-socket
+    ProviderDeprecation:
+      type: object
+      additionalProperties: false
+      description: Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.
+      required:
+        - deprecatedSince
+        - reason
+      properties:
+        deprecatedSince:
+          type: string
+          format: date
+          description: UTC calendar date on which the catalog began marking the provider deprecated.
+        reason:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localizable explanation of why the provider is deprecated.
+        replacementProviderId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$
+          description: Canonical ID of a different, non-deprecated replacement provider in this catalog.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.

@@ -1,0 +1,7 @@
+type: string
+description: Purpose of one stable public provider documentation link.
+enum:
+  - homepage
+  - setup
+  - reference
+  - support

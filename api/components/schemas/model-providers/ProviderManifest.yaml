@@ -1,0 +1,61 @@
+type: object
+additionalProperties: false
+description: >-
+  Public, data-only metadata for one model-provider integration. A manifest
+  describes evidenced maximum behavior and publication posture; it never
+  reports current-machine installation, authentication, readiness, pricing, or
+  runtime registration.
+required:
+  - id
+  - aliases
+  - displayName
+  - description
+  - documentation
+  - technicalSupportLevel
+  - implementationAvailability
+  - maximumExecutionCapabilities
+  - maximumResponseFidelityCapabilities
+  - discovery
+properties:
+  id:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$'
+    description: Stable canonical lowercase provider identifier.
+  aliases:
+    type: array
+    uniqueItems: true
+    description: Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$'
+  displayName:
+    allOf:
+      - $ref: '../data-models/NameValue.yaml'
+    description: Localizable customer-facing provider name.
+  description:
+    allOf:
+      - $ref: '../data-models/NameValue.yaml'
+    description: Localizable customer-facing provider summary.
+  documentation:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    description: Stable public documentation links for this provider.
+    items:
+      $ref: './ProviderDocumentationLink.yaml'
+  technicalSupportLevel:
+    $ref: './ProviderTechnicalSupportLevel.yaml'
+  implementationAvailability:
+    $ref: './ProviderImplementationAvailability.yaml'
+  maximumExecutionCapabilities:
+    $ref: './ProviderExecutionCapabilities.yaml'
+  maximumResponseFidelityCapabilities:
+    $ref: './ProviderResponseFidelityCapabilities.yaml'
+  discovery:
+    $ref: './ProviderDiscoveryPrerequisites.yaml'
+  deprecation:
+    $ref: './ProviderDeprecation.yaml'

@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+description: >-
+  Coherent metadata for a deprecated provider entry. Presence of this object
+  means the provider is deprecated. replacementProviderId, when present, must
+  name a different canonical provider in the same catalog; it cannot identify
+  the deprecated provider itself.
+required:
+  - deprecatedSince
+  - reason
+properties:
+  deprecatedSince:
+    type: string
+    format: date
+    description: UTC calendar date on which the catalog began marking the provider deprecated.
+  reason:
+    allOf:
+      - $ref: '../data-models/NameValue.yaml'
+    description: Localizable explanation of why the provider is deprecated.
+  replacementProviderId:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$'
+    description: Canonical ID of a different, non-deprecated replacement provider in this catalog.

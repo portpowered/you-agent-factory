@@ -1,0 +1,36 @@
+type: object
+additionalProperties: false
+description: >-
+  Maximum evidenced execution features of the provider integration. These
+  values are independent of support posture and do not imply current-machine
+  readiness.
+required:
+  - promptSubmission
+  - imageInput
+  - sessionResume
+  - structuredOutput
+  - toolExecution
+  - workingDirectory
+  - worktree
+properties:
+  promptSubmission:
+    type: boolean
+    description: Accepts authored prompt input for execution.
+  imageInput:
+    type: boolean
+    description: Accepts image content as invocation input.
+  sessionResume:
+    type: boolean
+    description: Can continue an identified provider session.
+  structuredOutput:
+    type: boolean
+    description: Can constrain authoritative output using a structured schema.
+  toolExecution:
+    type: boolean
+    description: Can execute provider-managed tools during an invocation.
+  workingDirectory:
+    type: boolean
+    description: Can execute with an explicit working directory.
+  worktree:
+    type: boolean
+    description: Can execute against an isolated source-control worktree.

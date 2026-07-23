@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+description: Versioned public collection of provider manifests.
+required:
+  - formatVersion
+  - providers
+properties:
+  formatVersion:
+    type: string
+    enum:
+      - '1.0.0'
+    description: Provider Catalog document format version.
+  providers:
+    type: array
+    description: Provider manifests in canonical provider-ID order.
+    items:
+      $ref: './ProviderManifest.yaml'

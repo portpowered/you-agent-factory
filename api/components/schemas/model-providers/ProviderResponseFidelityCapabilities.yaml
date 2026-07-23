@@ -1,0 +1,51 @@
+type: object
+additionalProperties: false
+description: >-
+  Maximum evidenced response-event fidelity of the provider integration.
+  Capabilities describe observable output independently of support posture.
+required:
+  - nativeStreaming
+  - messageDeltas
+  - messageSnapshots
+  - reasoningSummaries
+  - toolLifecycle
+  - toolOutputDeltas
+  - fileChanges
+  - plans
+  - usage
+  - stableItemIds
+  - providerReconnect
+properties:
+  nativeStreaming:
+    type: boolean
+    description: Exposes native streaming observations.
+  messageDeltas:
+    type: boolean
+    description: Emits incremental assistant-message deltas.
+  messageSnapshots:
+    type: boolean
+    description: Emits assistant-message snapshots.
+  reasoningSummaries:
+    type: boolean
+    description: Emits reasoning summaries or reasoning deltas.
+  toolLifecycle:
+    type: boolean
+    description: Emits correlated tool lifecycle metadata.
+  toolOutputDeltas:
+    type: boolean
+    description: Emits incremental tool-output deltas.
+  fileChanges:
+    type: boolean
+    description: Emits observed file changes.
+  plans:
+    type: boolean
+    description: Emits plan updates.
+  usage:
+    type: boolean
+    description: Emits usage accounting.
+  stableItemIds:
+    type: boolean
+    description: Assigns stable item identifiers across response events.
+  providerReconnect:
+    type: boolean
+    description: Supports reconnecting an interrupted provider response stream.

@@ -74,6 +74,36 @@ actions:
             - ModelOperationContentTypeAudio
             - ModelOperationContentTypeJSON
             - ModelOperationContentTypeBinary
+    - target: $.components.schemas.ProviderCatalog.properties.formatVersion
+      update:
+        x-enum-varnames:
+            - ProviderCatalogFormatVersionV1
+    - target: $.components.schemas.ProviderDiscoveryEndpointKind
+      update:
+        x-enum-varnames:
+            - ProviderDiscoveryEndpointKindLocalHTTP
+            - ProviderDiscoveryEndpointKindRemoteHTTP
+            - ProviderDiscoveryEndpointKindStdio
+            - ProviderDiscoveryEndpointKindUnixSocket
+    - target: $.components.schemas.ProviderDocumentationLinkKind
+      update:
+        x-enum-varnames:
+            - ProviderDocumentationLinkKindHomepage
+            - ProviderDocumentationLinkKindSetup
+            - ProviderDocumentationLinkKindReference
+            - ProviderDocumentationLinkKindSupport
+    - target: $.components.schemas.ProviderImplementationAvailability
+      update:
+        x-enum-varnames:
+            - ProviderImplementationAvailabilityBundled
+            - ProviderImplementationAvailabilityExternallySupplied
+            - ProviderImplementationAvailabilityCatalogOnly
+    - target: $.components.schemas.ProviderTechnicalSupportLevel
+      update:
+        x-enum-varnames:
+            - ProviderTechnicalSupportLevelProduction
+            - ProviderTechnicalSupportLevelExperimental
+            - ProviderTechnicalSupportLevelNotSupported
     - target: $.components.schemas.ResourceType
       update:
         x-enum-varnames:

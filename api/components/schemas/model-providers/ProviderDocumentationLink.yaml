@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+description: One stable public documentation resource for a provider.
+required:
+  - kind
+  - url
+properties:
+  kind:
+    $ref: './ProviderDocumentationLinkKind.yaml'
+  url:
+    type: string
+    format: uri
+    minLength: 1
+    description: Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.
