@@ -33,7 +33,7 @@ type Adapter struct {
 	durableListing     apisurface.DurableSessionListingAPI
 	durableProjection  apisurface.DurableSessionProjectionAPI
 	durableLister      DurableExecutionSessionLister
-	liveSessionLister  factorysessions.LiveSessionListReader
+	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
@@ -58,7 +58,7 @@ type Dependencies struct {
 	DurableListing     apisurface.DurableSessionListingAPI
 	DurableProjection  apisurface.DurableSessionProjectionAPI
 	DurableLister      DurableExecutionSessionLister
-	LiveSessionLister  factorysessions.LiveSessionListReader
+	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
 	ContentStaging     work.ContentStagingService
 	RequestPreparation work.RequestPreparationService

@@ -30,7 +30,7 @@ func newAPIServerFromRoles(
 	durableListing apisurface.DurableSessionListingAPI,
 	durableProjection apisurface.DurableSessionProjectionAPI,
 	durableLister api.DurableExecutionSessionLister,
-	liveSessionLister factorysessions.LiveSessionListReader,
+	liveSessionLister factorysessionshttp.LiveSessionListReader,
 	providerSessions providersessions.Service,
 	workerPrompts workers.PromptTemplates,
 	contentStaging work.ContentStagingService,

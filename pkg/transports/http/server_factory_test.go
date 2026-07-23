@@ -18,6 +18,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -200,7 +201,7 @@ func newWorkTransportTestServer(workAPI apisurface.WorkAPI) *Server {
 
 func newWorkTransportTestServerWithRoles(sessions apisurface.LiveSessionAPI, workAPI apisurface.WorkAPI, definitions apisurface.FactorySaveAPI) *Server {
 	workRead, _ := workAPI.(apisurface.WorkReadAPI)
-	var liveLister factorysessions.LiveSessionListReader
+	var liveLister factorysessionshttp.LiveSessionListReader
 	if sessions != nil {
 		liveLister = httpLiveSessionListReader{sessions: sessions}
 	}

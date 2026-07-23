@@ -24,6 +24,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"go.uber.org/zap"
@@ -79,7 +80,7 @@ func newFactorySessionRolesTestServer(
 		status = statusRoles[0]
 	}
 	workRead, _ := workAPI.(apisurface.WorkReadAPI)
-	var liveLister factorysessions.LiveSessionListReader
+	var liveLister factorysessionshttp.LiveSessionListReader
 	if sessions != nil {
 		liveLister = httpLiveSessionListReader{sessions: sessions}
 	}

@@ -70,7 +70,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
 		DurableLister:     opened.SessionExecution,
-		LiveSessionLister: factorysessions.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
 		WorkerPrompts:     opened.WorkerPrompts, ContentStaging: handler.contentStaging,
 		RequestPreparation: handler.requestPreparation, SessionRequests: handler.sessionRequests,
 	}, opened.Logger)

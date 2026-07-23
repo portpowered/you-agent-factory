@@ -640,6 +640,14 @@ missing private service; an incomplete internal construction path should fail
 with the existing typed unavailable outcome instead of silently selecting a
 second implementation.
 
+Scoped Factory Session inventory source selection, merging, filtering, and
+ordering are owner-private policy. Keep detached list request/result values at
+the Factory Sessions root, place the policy under `internal`, and declare the
+live-reader role at each service-owned transport adapter that consumes it. The
+HTTP projection adapter belongs with the HTTP transport rather than the root;
+top-level HTTP composition supplies that adapter without publishing transport
+collaborator interfaces from the contract root.
+
 Live Factory Session record construction is owner-private under
 `pkg/services/factory_sessions/internal/livesession`. Runtime and session
 assembly code may use that constructor after dependencies have been injected,

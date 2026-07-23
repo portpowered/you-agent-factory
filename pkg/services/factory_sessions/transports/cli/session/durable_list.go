@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -45,7 +46,7 @@ func mergeScopedListResult(
 	normalized fse.ListSessionsRequest,
 	liveSessions []fse.LiveSessionSummary,
 ) (fse.ScopedSessionListResult, error) {
-	var liveReader fse.LiveSessionListReader
+	var liveReader scopedlisting.LiveReader
 	if normalized.Scope == fse.SessionListScopeLive || normalized.Scope == fse.SessionListScopeAll {
 		rows := make(detachedLiveSessionReader, 0, len(liveSessions))
 		for _, session := range liveSessions {
@@ -57,11 +58,11 @@ func mergeScopedListResult(
 		liveReader = rows
 	}
 
-	var durableReader fse.DurableSessionListReader
+	var durableReader scopedlisting.DurableReader
 	if normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll {
 		durableReader = cfg.DurableLister
 	}
-	result, err := fse.ListScopedSessions(ctx, normalized, liveReader, durableReader)
+	result, err := scopedlisting.List(ctx, normalized, liveReader, durableReader)
 	if err != nil {
 		return fse.ScopedSessionListResult{}, fmt.Errorf("list durable factory sessions failed: %w", err)
 	}

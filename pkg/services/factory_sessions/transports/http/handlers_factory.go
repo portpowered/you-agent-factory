@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -127,7 +128,7 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 
 	response, err := s.mergeScopedFactorySessionList(r.Context(), raw)
 	if err != nil {
-		if errors.Is(err, factorysessionexecution.ErrDurableSessionListReaderRequired) {
+		if errors.Is(err, scopedlisting.ErrDurableReaderRequired) {
 			s.writeError(w, http.StatusNotImplemented, "durable factory session listing is not implemented", "INTERNAL_ERROR")
 			return
 		}
@@ -917,7 +918,7 @@ func (s *Server) mergeScopedFactorySessionList(
 	ctx context.Context,
 	normalized factorysessionexecution.ListSessionsRequest,
 ) (factoryapi.ListFactorySessionsResponse, error) {
-	result, err := factorysessionexecution.ListScopedSessions(
+	result, err := scopedlisting.List(
 		ctx, normalized, s.liveSessionLister, s.durableLister,
 	)
 	if err != nil {

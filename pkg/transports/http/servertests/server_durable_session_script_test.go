@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -231,7 +232,7 @@ func newDurableAndLiveAPITestServer(execution factorysessions.ExecutionService, 
 			apiExecutionLifecycleRoute{execution: execution},
 		)
 	}
-	liveLister, _ := live.(factorysessions.LiveSessionListReader)
+	liveLister, _ := live.(factorysessionshttp.LiveSessionListReader)
 	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
 		durable, durable, durable, durable, execution, liveLister, nil, nil,
