@@ -1,0 +1,39 @@
+id: gemini
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Gemini CLI
+description:
+  type: LOCALIZABLE_ASSET
+  value: Google Gemini CLI integration.
+documentation:
+  - kind: setup
+    url: https://geminicli.com/docs/get-started/installation/
+technicalSupportLevel: experimental
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: false
+  structuredOutput: false
+  toolExecution: true
+  workingDirectory: false
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: false
+  messageDeltas: false
+  messageSnapshots: true
+  reasoningSummaries: false
+  toolLifecycle: false
+  toolOutputDeltas: false
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: false
+  providerReconnect: false
+discovery:
+  executableNames:
+    - gemini
+  endpointKinds:
+    - stdio
+  configurationKeys: []

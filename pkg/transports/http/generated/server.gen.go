@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 )
 
@@ -767,6 +768,39 @@ const (
 	PromptTemplateVariableReferenceCategoryROOT      PromptTemplateVariableReferenceCategory = "ROOT"
 )
 
+// Defines values for ProviderCatalogFormatVersion.
+const (
+	ProviderCatalogFormatVersionV1 ProviderCatalogFormatVersion = "1.0.0"
+)
+
+// Defines values for ProviderCatalogProviderSchema.
+const (
+	HttpsschemasYouDevmodelProvidersproviderManifest100SchemaJson ProviderCatalogProviderSchema = "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json"
+)
+
+// Defines values for ProviderDiscoveryEndpointKind.
+const (
+	ProviderDiscoveryEndpointKindLocalHTTP  ProviderDiscoveryEndpointKind = "local-http"
+	ProviderDiscoveryEndpointKindRemoteHTTP ProviderDiscoveryEndpointKind = "remote-http"
+	ProviderDiscoveryEndpointKindStdio      ProviderDiscoveryEndpointKind = "stdio"
+	ProviderDiscoveryEndpointKindUnixSocket ProviderDiscoveryEndpointKind = "unix-socket"
+)
+
+// Defines values for ProviderDocumentationLinkKind.
+const (
+	ProviderDocumentationLinkKindHomepage  ProviderDocumentationLinkKind = "homepage"
+	ProviderDocumentationLinkKindReference ProviderDocumentationLinkKind = "reference"
+	ProviderDocumentationLinkKindSetup     ProviderDocumentationLinkKind = "setup"
+	ProviderDocumentationLinkKindSupport   ProviderDocumentationLinkKind = "support"
+)
+
+// Defines values for ProviderImplementationAvailability.
+const (
+	ProviderImplementationAvailabilityBundled            ProviderImplementationAvailability = "bundled"
+	ProviderImplementationAvailabilityCatalogOnly        ProviderImplementationAvailability = "catalog-only"
+	ProviderImplementationAvailabilityExternallySupplied ProviderImplementationAvailability = "externally-supplied"
+)
+
 // Defines values for ProviderSessionTranscriptEntryType.
 const (
 	AssistantMessage ProviderSessionTranscriptEntryType = "assistant_message"
@@ -775,6 +809,13 @@ const (
 	ToolCall         ProviderSessionTranscriptEntryType = "tool_call"
 	ToolOutput       ProviderSessionTranscriptEntryType = "tool_output"
 	UserMessage      ProviderSessionTranscriptEntryType = "user_message"
+)
+
+// Defines values for ProviderTechnicalSupportLevel.
+const (
+	ProviderTechnicalSupportLevelExperimental ProviderTechnicalSupportLevel = "experimental"
+	ProviderTechnicalSupportLevelNotSupported ProviderTechnicalSupportLevel = "not-supported"
+	ProviderTechnicalSupportLevelProduction   ProviderTechnicalSupportLevel = "production"
 )
 
 // Defines values for RelationType.
@@ -5016,12 +5057,102 @@ type PromptTemplateVariableReference struct {
 // PromptTemplateVariableReferenceCategory High-level grouping for the variable reference.
 type PromptTemplateVariableReferenceCategory string
 
+// ProviderCatalog Versioned public collection of provider manifests.
+type ProviderCatalog struct {
+	// FormatVersion Provider Catalog document format version.
+	FormatVersion ProviderCatalogFormatVersion `json:"formatVersion"`
+
+	// ProviderSchema Immutable JSON Schema identifier used to validate every provider entry.
+	ProviderSchema ProviderCatalogProviderSchema `json:"providerSchema"`
+
+	// Providers Provider manifests in canonical provider-ID order.
+	Providers []ProviderManifest `json:"providers"`
+
+	// PublicationProvenance Optional source-revision provenance supplied by a publication staging process.
+	PublicationProvenance *struct {
+		// SourceCommit Full immutable Git commit identifying the published source tree.
+		SourceCommit string `json:"sourceCommit"`
+
+		// SourceRepository Public source repository from which the catalog was published.
+		SourceRepository string `json:"sourceRepository"`
+	} `json:"publicationProvenance,omitempty"`
+}
+
+// ProviderCatalogFormatVersion Provider Catalog document format version.
+type ProviderCatalogFormatVersion string
+
+// ProviderCatalogProviderSchema Immutable JSON Schema identifier used to validate every provider entry.
+type ProviderCatalogProviderSchema string
+
+// ProviderDeprecation Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.
+type ProviderDeprecation struct {
+	// DeprecatedSince UTC calendar date on which the catalog began marking the provider deprecated.
+	DeprecatedSince openapi_types.Date `json:"deprecatedSince"`
+
+	// Reason Localizable explanation of why the provider is deprecated.
+	Reason NameValue `json:"reason"`
+
+	// ReplacementProviderId Canonical ID of a different, non-deprecated replacement provider in this catalog.
+	ReplacementProviderId *string `json:"replacementProviderId,omitempty"`
+}
+
 // ProviderDiagnostic defines model for ProviderDiagnostic.
 type ProviderDiagnostic struct {
 	Model            *string    `json:"model,omitempty"`
 	Provider         *string    `json:"provider,omitempty"`
 	RequestMetadata  *StringMap `json:"requestMetadata,omitempty"`
 	ResponseMetadata *StringMap `json:"responseMetadata,omitempty"`
+}
+
+// ProviderDiscoveryEndpointKind Static endpoint transport kind that may be checked without credentials.
+type ProviderDiscoveryEndpointKind string
+
+// ProviderDiscoveryPrerequisites Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.
+type ProviderDiscoveryPrerequisites struct {
+	// ConfigurationKeys Required configuration-key names only; configuration and environment values are forbidden.
+	ConfigurationKeys []string `json:"configurationKeys"`
+
+	// EndpointKinds Credential-free endpoint transport kinds; addresses and live status are not published.
+	EndpointKinds []ProviderDiscoveryEndpointKind `json:"endpointKinds"`
+
+	// ExecutableNames Executable basenames that may supply the provider integration.
+	ExecutableNames []string `json:"executableNames"`
+}
+
+// ProviderDocumentationLink One stable public documentation resource for a provider.
+type ProviderDocumentationLink struct {
+	// Kind Purpose of one stable public provider documentation link.
+	Kind ProviderDocumentationLinkKind `json:"kind"`
+
+	// Url Public HTTPS documentation URL with a DNS hostname. Machine-local, IP-address, and credential-bearing URLs are invalid.
+	Url string `json:"url"`
+}
+
+// ProviderDocumentationLinkKind Purpose of one stable public provider documentation link.
+type ProviderDocumentationLinkKind string
+
+// ProviderExecutionCapabilities Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.
+type ProviderExecutionCapabilities struct {
+	// ImageInput Accepts image content as invocation input.
+	ImageInput bool `json:"imageInput"`
+
+	// PromptSubmission Accepts authored prompt input for execution.
+	PromptSubmission bool `json:"promptSubmission"`
+
+	// SessionResume Can continue an identified provider session.
+	SessionResume bool `json:"sessionResume"`
+
+	// StructuredOutput Can constrain authoritative output using a structured schema.
+	StructuredOutput bool `json:"structuredOutput"`
+
+	// ToolExecution Can execute provider-managed tools during an invocation.
+	ToolExecution bool `json:"toolExecution"`
+
+	// WorkingDirectory Can execute with an explicit working directory.
+	WorkingDirectory bool `json:"workingDirectory"`
+
+	// Worktree Can execute against an isolated source-control worktree.
+	Worktree bool `json:"worktree"`
 }
 
 // ProviderFailureMetadata defines model for ProviderFailureMetadata.
@@ -5031,6 +5162,81 @@ type ProviderFailureMetadata struct {
 
 	// Type Stable machine-readable failure type used to classify failed work across providers and runtimes.
 	Type *WorkFailureType `json:"type,omitempty"`
+}
+
+// ProviderImplementationAvailability How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
+type ProviderImplementationAvailability string
+
+// ProviderManifest Public, data-only metadata for one model-provider integration. A manifest describes evidenced maximum behavior and publication posture; it never reports current-machine installation, authentication, readiness, pricing, or runtime registration.
+type ProviderManifest struct {
+	// Aliases Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias.
+	Aliases []string `json:"aliases"`
+
+	// Deprecation Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.
+	Deprecation *ProviderDeprecation `json:"deprecation,omitempty"`
+
+	// Description Localizable customer-facing provider summary.
+	Description NameValue `json:"description"`
+
+	// Discovery Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.
+	Discovery ProviderDiscoveryPrerequisites `json:"discovery"`
+
+	// DisplayName Localizable customer-facing provider name.
+	DisplayName NameValue `json:"displayName"`
+
+	// Documentation Stable public documentation links for this provider.
+	Documentation []ProviderDocumentationLink `json:"documentation"`
+
+	// Id Stable canonical lowercase provider identifier.
+	Id string `json:"id"`
+
+	// ImplementationAvailability How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
+	ImplementationAvailability ProviderImplementationAvailability `json:"implementationAvailability"`
+
+	// MaximumExecutionCapabilities Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.
+	MaximumExecutionCapabilities ProviderExecutionCapabilities `json:"maximumExecutionCapabilities"`
+
+	// MaximumResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
+	MaximumResponseFidelityCapabilities ProviderResponseFidelityCapabilities `json:"maximumResponseFidelityCapabilities"`
+
+	// TechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
+	TechnicalSupportLevel ProviderTechnicalSupportLevel `json:"technicalSupportLevel"`
+}
+
+// ProviderResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
+type ProviderResponseFidelityCapabilities struct {
+	// FileChanges Emits observed file changes.
+	FileChanges bool `json:"fileChanges"`
+
+	// MessageDeltas Emits incremental assistant-message deltas.
+	MessageDeltas bool `json:"messageDeltas"`
+
+	// MessageSnapshots Emits assistant-message snapshots.
+	MessageSnapshots bool `json:"messageSnapshots"`
+
+	// NativeStreaming Exposes native streaming observations.
+	NativeStreaming bool `json:"nativeStreaming"`
+
+	// Plans Emits plan updates.
+	Plans bool `json:"plans"`
+
+	// ProviderReconnect Supports reconnecting an interrupted provider response stream.
+	ProviderReconnect bool `json:"providerReconnect"`
+
+	// ReasoningSummaries Emits reasoning summaries or reasoning deltas.
+	ReasoningSummaries bool `json:"reasoningSummaries"`
+
+	// StableItemIds Assigns stable item identifiers across response events.
+	StableItemIds bool `json:"stableItemIds"`
+
+	// ToolLifecycle Emits correlated tool lifecycle metadata.
+	ToolLifecycle bool `json:"toolLifecycle"`
+
+	// ToolOutputDeltas Emits incremental tool-output deltas.
+	ToolOutputDeltas bool `json:"toolOutputDeltas"`
+
+	// Usage Emits usage accounting.
+	Usage bool `json:"usage"`
 }
 
 // ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
@@ -5246,6 +5452,9 @@ type ProviderSessionUnknownEvent struct {
 	// Type Raw top-level event type when present.
 	Type *string `json:"type,omitempty"`
 }
+
+// ProviderTechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
+type ProviderTechnicalSupportLevel string
 
 // Relation defines model for Relation.
 type Relation struct {

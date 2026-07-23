@@ -1,0 +1,39 @@
+id: claude
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Claude Code
+description:
+  type: LOCALIZABLE_ASSET
+  value: Anthropic Claude Code CLI integration.
+documentation:
+  - kind: reference
+    url: https://docs.anthropic.com/en/docs/claude-code/cli-usage
+technicalSupportLevel: experimental
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: true
+  structuredOutput: false
+  toolExecution: true
+  workingDirectory: true
+  worktree: true
+maximumResponseFidelityCapabilities:
+  nativeStreaming: true
+  messageDeltas: true
+  messageSnapshots: true
+  reasoningSummaries: false
+  toolLifecycle: true
+  toolOutputDeltas: true
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: true
+  providerReconnect: false
+discovery:
+  executableNames:
+    - claude
+  endpointKinds:
+    - stdio
+  configurationKeys: []

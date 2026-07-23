@@ -75,16 +75,18 @@ func (adapter *recordingHarnessAdapter) Execute(_ context.Context, input Harness
 }
 
 type stubRunner struct {
-	response string
-	err      error
-	delay    time.Duration
-	mu       sync.Mutex
-	calls    int
+	response    string
+	err         error
+	delay       time.Duration
+	mu          sync.Mutex
+	calls       int
+	lastRequest workerexecution.RunnerExecutionRequest
 }
 
-func (runner *stubRunner) Execute(ctx context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+func (runner *stubRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	runner.mu.Lock()
 	runner.calls++
+	runner.lastRequest = request
 	runner.mu.Unlock()
 	if runner.delay > 0 {
 		timer := time.NewTimer(runner.delay)
@@ -99,6 +101,12 @@ func (runner *stubRunner) Execute(ctx context.Context, _ workerexecution.RunnerE
 		return workerexecution.RunnerExecutionResult{}, runner.err
 	}
 	return workerexecution.RunnerExecutionResult{Content: runner.response}, nil
+}
+
+func (runner *stubRunner) executionRequest() workerexecution.RunnerExecutionRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.lastRequest
 }
 
 func testAgentRunRequest() workerexecution.WorkstationExecutionRequest {
@@ -315,6 +323,51 @@ func TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass(t *testing.T) {
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassTimeout {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassTimeout)
+	}
+}
+
+func TestAgentRunExecutor_RequestModelSelectionOverridesWorkerWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	worker := &interfaces.FactoryWorkerConfig{
+		Type:          interfaces.WorkerTypeAgent,
+		Model:         "configured-model",
+		ModelProvider: "configured-provider",
+	}
+	runner := &stubRunner{response: "done"}
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": worker,
+			},
+		},
+		runner,
+		localToolFileSystem{},
+		time.Now,
+	)
+	request := testAgentRunRequest()
+	request.Model = "requested-model"
+	request.ModelProvider = "requested-provider"
+
+	result, err := executor.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
+	}
+	inferenceRequest := runner.executionRequest()
+	if inferenceRequest.Model != request.Model || inferenceRequest.ModelProvider != request.ModelProvider {
+		t.Fatalf(
+			"runner selection = %q/%q, want %q/%q",
+			inferenceRequest.Model,
+			inferenceRequest.ModelProvider,
+			request.Model,
+			request.ModelProvider,
+		)
+	}
+	if worker.Model != "configured-model" || worker.ModelProvider != "configured-provider" {
+		t.Fatalf("configured worker mutated to %q/%q", worker.Model, worker.ModelProvider)
 	}
 }
 

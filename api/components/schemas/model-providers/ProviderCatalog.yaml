@@ -1,0 +1,40 @@
+type: object
+additionalProperties: false
+description: Versioned public collection of provider manifests.
+required:
+  - formatVersion
+  - providerSchema
+  - providers
+properties:
+  formatVersion:
+    type: string
+    enum:
+      - '1.0.0'
+    description: Provider Catalog document format version.
+  providerSchema:
+    type: string
+    format: uri
+    enum:
+      - 'https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json'
+    description: Immutable JSON Schema identifier used to validate every provider entry.
+  publicationProvenance:
+    type: object
+    additionalProperties: false
+    description: Optional source-revision provenance supplied by a publication staging process.
+    required:
+      - sourceRepository
+      - sourceCommit
+    properties:
+      sourceRepository:
+        type: string
+        format: uri
+        description: Public source repository from which the catalog was published.
+      sourceCommit:
+        type: string
+        pattern: '^[0-9a-f]{40}$'
+        description: Full immutable Git commit identifying the published source tree.
+  providers:
+    type: array
+    description: Provider manifests in canonical provider-ID order.
+    items:
+      $ref: './ProviderManifest.yaml'

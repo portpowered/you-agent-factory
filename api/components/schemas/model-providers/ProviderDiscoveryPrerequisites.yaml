@@ -1,0 +1,36 @@
+type: object
+additionalProperties: false
+description: >-
+  Static, credential-free facts that tooling may use to explain how a provider
+  can be discovered. Only names and endpoint kinds are published: credential
+  values, environment values, endpoint addresses, machine-local paths,
+  installation/readiness state, and pricing are outside this contract.
+required:
+  - executableNames
+  - endpointKinds
+  - configurationKeys
+properties:
+  executableNames:
+    type: array
+    uniqueItems: true
+    description: Executable basenames that may supply the provider integration.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+  endpointKinds:
+    type: array
+    uniqueItems: true
+    description: Credential-free endpoint transport kinds; addresses and live status are not published.
+    items:
+      $ref: './ProviderDiscoveryEndpointKind.yaml'
+  configurationKeys:
+    type: array
+    uniqueItems: true
+    description: Required configuration-key names only; configuration and environment values are forbidden.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z][A-Za-z0-9._-]*$'

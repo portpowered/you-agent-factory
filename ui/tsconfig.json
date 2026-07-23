@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.contract-fixtures.json" }
+    { "path": "./tsconfig.contract-fixtures.json" },
+    { "path": "./tsconfig.provider-reference-input.json" }
   ]
 }

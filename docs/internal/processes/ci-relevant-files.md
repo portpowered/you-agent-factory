@@ -101,6 +101,11 @@
   The package's passive embedded-filesystem tests run in `make test-maintenance`,
   matching the repository-boundary checker that protects its authored data
   ownership.
+  Public Go packages under `packages/` are not selected by the default unit
+  lane. Classify passive publication boundaries explicitly in
+  `internal/testlanes` and list them in `make test-maintenance`; the
+  `packages/model-providers` byte-parity and detached-caller tests use this
+  path.
   The portable catalog generator is
   `cmd/packagedfactorycataloggenerate`; its repository surface is
   `make packaged-factory-catalog-generate`. It computes and validates the whole

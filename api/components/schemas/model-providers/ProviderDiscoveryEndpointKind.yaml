@@ -1,0 +1,7 @@
+type: string
+description: Static endpoint transport kind that may be checked without credentials.
+enum:
+  - local-http
+  - remote-http
+  - stdio
+  - unix-socket

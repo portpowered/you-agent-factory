@@ -1,0 +1,8 @@
+type: string
+description: >-
+  How an implementation is supplied. Availability is publication metadata,
+  not a live readiness or installation result.
+enum:
+  - bundled
+  - externally-supplied
+  - catalog-only
