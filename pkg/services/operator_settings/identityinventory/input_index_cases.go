@@ -62,21 +62,6 @@ func ensureScopeGeneratedInputCases() []InputCase {
 				BackendScopeIDMatchesResolved: true,
 			},
 		},
-		{
-			ID:          "valid-whitespace-config",
-			Category:    categoryEnsureScope,
-			Entrypoint:  entrypointEnsureLocalBackendScope,
-			Outcome:     outcomeAccept,
-			Fixture:     "valid/whitespace-only.json",
-			Description: "whitespace-only config file content is treated as missing scope and regenerated",
-			ExpectedScope: &ScopeExpectation{
-				Outcome:          operatorsettings.BackendScopeOutcomeGenerated,
-				RequireLocalUUID: true,
-			},
-			PersistedFileExpectation: &PersistedFileExpectation{
-				BackendScopeIDMatchesResolved: true,
-			},
-		},
 	}
 }
 
@@ -110,23 +95,6 @@ func ensureScopeReuseAndSiblingInputCases() []InputCase {
 				PreservesDefaults:             true,
 			},
 		},
-		{
-			ID:          "valid-tolerates-unknown-sibling",
-			Category:    categoryTolerantSibling,
-			Entrypoint:  entrypointEnsureLocalBackendScope,
-			Outcome:     outcomeAccept,
-			Fixture:     "valid/unknown-sibling.json",
-			Description: "tolerant load ignores unknown top-level siblings on read and preserves them on persist",
-			ExpectedScope: &ScopeExpectation{
-				Outcome:          operatorsettings.BackendScopeOutcomeGenerated,
-				RequireLocalUUID: true,
-			},
-			PersistedFileExpectation: &PersistedFileExpectation{
-				BackendScopeIDMatchesResolved: true,
-				PreservesDefaults:             true,
-				PreservesSiblingKeys:          []string{"unknownTopLevel"},
-			},
-		},
 	}
 }
 
@@ -150,8 +118,26 @@ func ensureScopeRejectInputCases() []InputCase {
 			Fixture:     "invalid/malformed-json.json",
 			Description: "malformed JSON fails parse during load",
 			ErrorFragments: []string{
-				"parse system config",
+				"parse operator config",
 			},
+		},
+		{
+			ID:             "invalid-whitespace-config",
+			Category:       categoryEnsureScope,
+			Entrypoint:     entrypointEnsureLocalBackendScope,
+			Outcome:        outcomeReject,
+			Fixture:        "valid/whitespace-only.json",
+			Description:    "a present whitespace-only file is not a valid generated GlobalConfig document",
+			ErrorFragments: []string{"parse operator config"},
+		},
+		{
+			ID:             "invalid-unknown-sibling",
+			Category:       categoryEnsureScope,
+			Entrypoint:     entrypointEnsureLocalBackendScope,
+			Outcome:        outcomeReject,
+			Fixture:        "valid/unknown-sibling.json",
+			Description:    "the generated closed GlobalConfig contract rejects unknown top-level siblings",
+			ErrorFragments: []string{"parse operator config", "unknownTopLevel"},
 		},
 	}
 }

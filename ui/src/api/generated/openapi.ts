@@ -4850,6 +4850,34 @@ export interface components {
       /** @description Canonical validation targets for the submitted factory definition. */
       targets: components["schemas"]["FactoryValidationTarget"][];
     };
+    /** @description Shared operator configuration stored in .you-agent-factory/config.json. */
+    GlobalConfig: {
+      /** @description Stable identifier for the local provider-backed runtime boundary. */
+      backendScopeID?: string;
+      defaults?: components["schemas"]["GlobalConfigDefaults"];
+      /** @description Named worker model presets loaded from the shared configuration file. */
+      workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
+    };
+    /** @description Operator defaults that participate independently in file, environment, and flag precedence. */
+    GlobalConfigDefaults: {
+      /** @description Default worker model provider, including supported aliases and symbolic DEFAULT resolution. */
+      workerModelProvider?: string;
+      /** @description Default worker model name. */
+      workerModel?: string;
+    };
+    /** @description Named worker model selection available to Factory Session runtime opening. */
+    GlobalConfigWorkerPreset: {
+      /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
+      id: string;
+      modelProvider: components["schemas"]["GlobalConfigWorkerPresetModelProvider"];
+      /** @description Optional model name, trimmed when present. */
+      model?: string;
+      reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
+    };
+    /** @description Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
+    GlobalConfigWorkerPresetModelProvider: string;
+    /** @description Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified. */
+    GlobalConfigWorkerPresetReasoningEffort: string;
     WorkRequest: {
       /** @description Stable client-provided request identifier used for idempotent batch submission. */
       requestId: string;

@@ -2274,6 +2274,16 @@ components:
       $ref: './components/schemas/api/FactoryValidationTarget.yaml'
     FactoryValidationResult:
       $ref: './components/schemas/api/FactoryValidationResult.yaml'
+    GlobalConfig:
+      $ref: './components/schemas/api/GlobalConfig.yaml'
+    GlobalConfigDefaults:
+      $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
+    GlobalConfigWorkerPreset:
+      $ref: './components/schemas/api/GlobalConfigWorkerPreset.yaml'
+    GlobalConfigWorkerPresetModelProvider:
+      $ref: './components/schemas/api/GlobalConfigWorkerPresetModelProvider.yaml'
+    GlobalConfigWorkerPresetReasoningEffort:
+      $ref: './components/schemas/api/GlobalConfigWorkerPresetReasoningEffort.yaml'
     # ==== Raw data types here =======
     WorkRequest:
       $ref: './components/schemas/api/WorkRequest.yaml'

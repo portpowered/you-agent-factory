@@ -4045,6 +4045,48 @@ type FailureDetail struct {
 	Reason WorkFailureType `json:"reason"`
 }
 
+// GlobalConfig Shared operator configuration stored in .you-agent-factory/config.json.
+type GlobalConfig struct {
+	// BackendScopeID Stable identifier for the local provider-backed runtime boundary.
+	BackendScopeID *string `json:"backendScopeID,omitempty"`
+
+	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
+	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
+
+	// WorkerPresets Named worker model presets loaded from the shared configuration file.
+	WorkerPresets *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
+}
+
+// GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
+type GlobalConfigDefaults struct {
+	// WorkerModel Default worker model name.
+	WorkerModel *string `json:"workerModel,omitempty"`
+
+	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
+	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
+}
+
+// GlobalConfigWorkerPreset Named worker model selection available to Factory Session runtime opening.
+type GlobalConfigWorkerPreset struct {
+	// Id Non-empty preset identifier after surrounding whitespace is trimmed.
+	Id string `json:"id"`
+
+	// Model Optional model name, trimmed when present.
+	Model *string `json:"model,omitempty"`
+
+	// ModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
+
+	// ReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
+	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
+}
+
+// GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+type GlobalConfigWorkerPresetModelProvider = string
+
+// GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
+type GlobalConfigWorkerPresetReasoningEffort = string
+
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
 type Guard struct {
 	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.

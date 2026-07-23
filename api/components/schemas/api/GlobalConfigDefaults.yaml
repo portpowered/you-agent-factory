@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+description: Operator defaults that participate independently in file, environment, and flag precedence.
+properties:
+  workerModelProvider:
+    type: string
+    description: Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
+  workerModel:
+    type: string
+    description: Default worker model name.

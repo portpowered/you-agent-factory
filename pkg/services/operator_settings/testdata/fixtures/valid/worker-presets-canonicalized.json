@@ -2,7 +2,7 @@
   "workerPresets": [
     {
       "id": " research ",
-      "modelProvider": "openai",
+      "modelProvider": " openai ",
       "model": " gpt-5.4 ",
       "reasoningEffort": " HIGH "
     }

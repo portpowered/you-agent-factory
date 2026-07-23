@@ -2,6 +2,13 @@
 
 Use this map when changing the public REST contract.
 
+- Shared filesystem documents represented in OpenAPI should decode and encode
+  through the generated model in a focused `pkg/transports/mapping` package,
+  then map into domain-owned values. Inject that codec into the service
+  filesystem loader from `pkg/wire` so services retain IO and normalization
+  ownership without importing generated HTTP contracts; global-config identity
+  persistence follows this pattern in
+  `pkg/transports/mapping/globalconfig` and `pkg/services/operator_settings`.
 - `make api-smoke` regenerates twice and checks generated files against the Git
   index. During an intentional contract change, stage the regenerated
   `api/openapi.yaml`, Go server/client, and TypeScript outputs before running the

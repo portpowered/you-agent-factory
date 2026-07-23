@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *testing.T) {
@@ -65,7 +66,7 @@ func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *
 	if err != nil {
 		t.Fatalf("read persisted config: %v", err)
 	}
-	decoded, err := operatorsettings.ParseFileConfig(persisted)
+	decoded, err := globalconfigmapping.Decode(persisted)
 	if err != nil {
 		t.Fatalf("parse persisted config: %v", err)
 	}
@@ -128,6 +129,8 @@ func operatorConfigService() operatorsettings.ConfigDocumentService {
 				return "", false
 			}
 		},
+		Decoder:         globalconfigmapping.Decode,
+		Encoder:         globalconfigmapping.Encode,
 		PersistenceLock: &sync.Mutex{},
 	}
 }

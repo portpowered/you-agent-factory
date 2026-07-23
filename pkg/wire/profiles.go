@@ -249,9 +249,9 @@ func provideSystemInitializationLegacyFactoryMigrationFileSystem(
 	return platformfilesystem.Local{}
 }
 
-func provideOperatorConfigLoader(files operatorsettings.FileSystem) operatorsettings.ConfigLoader {
-	return func(path string) (operatorsettings.FileConfig, error) {
-		return operatorsettings.LoadFileConfig(files, path)
+func provideOperatorConfigLoader(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.ConfigLoader {
+	return func(path string) (operatorsettings.Config, error) {
+		return operatorsettings.LoadFileConfig(files, decode, path)
 	}
 }
 
@@ -259,9 +259,11 @@ func provideOperatorBackendScopeEnsurer(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
 	generateID operatorsettings.IDGenerator,
+	decode operatorsettings.ConfigDecoder,
+	encode operatorsettings.ConfigEncoder,
 ) operatorsettings.BackendScopeEnsurer {
 	return func(path string) (operatorsettings.ResolvedBackendScope, error) {
-		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, path)
+		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, decode, encode, path)
 	}
 }
 

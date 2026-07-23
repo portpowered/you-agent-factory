@@ -3,12 +3,12 @@ package operatorsettings
 func loadInputCases() []InputCase {
 	return []InputCase{
 		{
-			ID:                 "valid-missing-file",
-			Category:           categoryLoadFile,
-			Entrypoint:         entrypointLoadFileConfig,
-			Outcome:            outcomeAccept,
-			Description:        "missing config file returns empty FileConfig without error",
-			ExpectedFileConfig: &FileConfigExpectation{},
+			ID:             "valid-missing-file",
+			Category:       categoryLoadFile,
+			Entrypoint:     entrypointLoadFileConfig,
+			Outcome:        outcomeAccept,
+			Description:    "missing config file returns empty Config without error",
+			ExpectedConfig: &ConfigExpectation{},
 		},
 		{
 			ID:          "valid-load-defaults",
@@ -17,7 +17,7 @@ func loadInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/load-defaults.json",
 			Description: "LoadFileConfig reads and validates defaults from disk",
-			ExpectedFileConfig: &FileConfigExpectation{
+			ExpectedConfig: &ConfigExpectation{
 				Defaults: DefaultsSnapshot{
 					WorkerModelProvider: "claude",
 					WorkerModel:         "claude-sonnet",
