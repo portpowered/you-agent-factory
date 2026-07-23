@@ -270,7 +270,17 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 		return err
 	}
 	command, positionals, parseErr := ParseArgvForCLIInputsInventory(root, input.Arguments)
-	result := cliobservation.Result{Snapshot: snapshot, Parse: cliobservation.CaptureParseResult(command, positionals)}
+	result := cliobservation.Result{
+		Snapshot: snapshot,
+		Parse:    cliobservation.CaptureParseResult(command, positionals),
+	}
+	if parseErr == nil {
+		resolved, resolveErr := climanifestcobra.ResolvePersistentInputsForObservation(command, positionals)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		result.ResolvedInputs = resolved.Observations()
+	}
 	edgeObservation, err := cliobservation.Encode(result)
 	if err != nil {
 		return err

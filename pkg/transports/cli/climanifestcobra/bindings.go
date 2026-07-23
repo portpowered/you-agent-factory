@@ -287,6 +287,34 @@ func ResolvedPersistentInputsFromContext(ctx context.Context) (resolvedinput.Inp
 	return invocation.inputs, nil
 }
 
+// ResolvePersistentInputsForObservation runs only the root input-resolution
+// boundary after a caller has parsed and validated argv. It never dispatches
+// the selected command handler.
+func ResolvePersistentInputsForObservation(
+	cmd *cobra.Command,
+	args []string,
+) (resolvedinput.Inputs, error) {
+	if cmd == nil {
+		return resolvedinput.Inputs{}, fmt.Errorf("observe resolved persistent inputs: command is required")
+	}
+	root := cmd.Root()
+	if root.PersistentPreRunE == nil {
+		return resolvedinput.Inputs{}, fmt.Errorf("observe resolved persistent inputs: root resolver is unavailable")
+	}
+	if cmd.Context() == nil {
+		cmd.SetContext(root.Context())
+	}
+	if err := root.PersistentPreRunE(cmd, args); err != nil {
+		return resolvedinput.Inputs{}, err
+	}
+	if cmd.DisableFlagParsing {
+		if err := RefreshResolvedPersistentInputs(cmd); err != nil {
+			return resolvedinput.Inputs{}, err
+		}
+	}
+	return ResolvedPersistentInputs(cmd)
+}
+
 // RefreshResolvedPersistentInputs re-resolves the root/global snapshot after a
 // compatibility command performs its own Cobra-permitted flag parsing.
 func RefreshResolvedPersistentInputs(cmd *cobra.Command) error {

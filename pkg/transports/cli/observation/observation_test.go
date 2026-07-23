@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,10 @@ func TestObservationRoundTripDetachesPrivateCLIRepresentation(t *testing.T) {
 			CommandPath: "you run", Positionals: []string{"hello"},
 			Flags: []platformprocess.CLIParsedFlag{{Name: "verbose", Changed: true, Value: "true"}},
 		},
+		ResolvedInputs: []resolvedinput.Observation{{
+			InputID: "you.flag.verbose", Kind: resolvedinput.ValueKindBool,
+			Provenance: resolvedinput.SourceCLIFlag, Changed: true, Value: true,
+		}},
 	}
 	edge, err := Encode(original)
 	if err != nil {

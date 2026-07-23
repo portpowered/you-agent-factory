@@ -528,6 +528,11 @@ response-stream output.
   sensitivity into the detached snapshot: diagnostic and observation boundaries
   expose provenance and changed/default state while replacing sensitive scalar
   or collection values with `resolvedinput.RedactedValue`.
+  The injected `CLIObserver` edge parses and validates the selected command,
+  runs only the root persistent-input resolution boundary, and serializes the
+  resulting stable-ID observations without dispatching the selected handler.
+  Keep its `ResolvedInputsJSON` projection detached and redaction-safe, and
+  refresh after compatibility parsing for commands that disable Cobra parsing.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure

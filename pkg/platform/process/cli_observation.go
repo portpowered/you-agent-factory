@@ -6,6 +6,7 @@ package process
 type CLIObservation struct {
 	CommandIdentityJSON string
 	CommandInputsJSON   string
+	ResolvedInputsJSON  string
 	CommandTree         string
 	RunFlags            string
 	Parse               CLIParseResult

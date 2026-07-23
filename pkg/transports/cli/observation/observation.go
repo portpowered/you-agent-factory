@@ -11,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -36,8 +37,9 @@ func Flag(result platformprocess.CLIParseResult, name string) (platformprocess.C
 
 // Result is the complete observation emitted for one Process.Execute call.
 type Result struct {
-	Snapshot Snapshot
-	Parse    platformprocess.CLIParseResult
+	Snapshot       Snapshot
+	Parse          platformprocess.CLIParseResult
+	ResolvedInputs []resolvedinput.Observation
 }
 
 // Encode converts the typed transport projection into its neutral process-edge
@@ -51,9 +53,14 @@ func Encode(result Result) (platformprocess.CLIObservation, error) {
 	if err != nil {
 		return platformprocess.CLIObservation{}, fmt.Errorf("encode command inputs observation: %w", err)
 	}
+	resolvedInputs, err := json.Marshal(result.ResolvedInputs)
+	if err != nil {
+		return platformprocess.CLIObservation{}, fmt.Errorf("encode resolved CLI inputs observation: %w", err)
+	}
 	return platformprocess.CLIObservation{
 		CommandIdentityJSON: string(commands), CommandInputsJSON: string(inputs),
-		CommandTree: result.Snapshot.CommandTree, RunFlags: result.Snapshot.RunFlags,
+		ResolvedInputsJSON: string(resolvedInputs),
+		CommandTree:        result.Snapshot.CommandTree, RunFlags: result.Snapshot.RunFlags,
 		Parse: result.Parse,
 	}, nil
 }
@@ -67,6 +74,11 @@ func Decode(observed platformprocess.CLIObservation) (Result, error) {
 	}
 	if err := json.Unmarshal([]byte(observed.CommandInputsJSON), &result.Snapshot.Inputs); err != nil {
 		return Result{}, fmt.Errorf("decode command inputs observation: %w", err)
+	}
+	if observed.ResolvedInputsJSON != "" {
+		if err := json.Unmarshal([]byte(observed.ResolvedInputsJSON), &result.ResolvedInputs); err != nil {
+			return Result{}, fmt.Errorf("decode resolved CLI inputs observation: %w", err)
+		}
 	}
 	result.Snapshot.CommandTree = observed.CommandTree
 	result.Snapshot.RunFlags = observed.RunFlags
