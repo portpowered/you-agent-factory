@@ -13,7 +13,10 @@ import {
   type CliManifestMessages,
   getCliManifestMessages,
 } from "../messages/cli-manifest";
-import { validateCliInputSemantics } from "./cli-input-semantics";
+import {
+  resolveInheritedFlagSource,
+  validateCliInputSemantics,
+} from "./cli-input-semantics";
 import {
   type CliCommand,
   type CliFlag,
@@ -291,31 +294,14 @@ function flagSignature(flag: CliFlag): string {
   });
 }
 
-function inheritedFlagSource(
-  command: CliCommand,
-  inheritedFlag: CliFlag,
-  commandsByPath: ReadonlyMap<string, CliCommand>,
-): CliFlag | undefined {
-  const segments = command.path.split(" ");
-  for (let length = segments.length - 1; length > 0; length -= 1) {
-    const ancestor = commandsByPath.get(segments.slice(0, length).join(" "));
-    const source = Object.values(ancestor?.flags ?? {}).find(
-      (candidate) =>
-        candidate.scope === "persistent" &&
-        candidate.long === inheritedFlag.long,
-    );
-    if (source) return source;
-  }
-  return undefined;
-}
-
 function validateHierarchyAndInheritance(
   manifest: CliManifest,
   diagnostics: CliManifestDiagnostic[],
   messages: CliManifestMessages,
 ): void {
+  const commands = Object.values(manifest.commands);
   const commandsByPath = new Map<string, CliCommand>();
-  for (const command of Object.values(manifest.commands)) {
+  for (const command of commands) {
     if (commandsByPath.has(command.path)) {
       addDiagnostic(
         diagnostics,
@@ -346,7 +332,7 @@ function validateHierarchyAndInheritance(
       messages.missingRootCommand(manifest.rootPath),
     );
   }
-  for (const command of Object.values(manifest.commands)) {
+  for (const command of commands) {
     if (command.path !== manifest.rootPath) {
       const parentPath = command.path.split(" ").slice(0, -1).join(" ");
       if (!commandsByPath.has(parentPath)) {
@@ -368,15 +354,17 @@ function validateHierarchyAndInheritance(
     }
     for (const flag of Object.values(command.flags ?? {})) {
       if (flag.scope !== "inherited") continue;
-      const source = inheritedFlagSource(command, flag, commandsByPath);
-      if (!source || flagSignature(source) !== flagSignature(flag)) {
+      const source = resolveInheritedFlagSource(command, flag, commands);
+      if (!source || flagSignature(source.flag) !== flagSignature(flag)) {
         addDiagnostic(
           diagnostics,
           "contradictory_inheritance",
-          ["commands", command.id, "flags", flag.id, "scope"],
+          ["commands", command.id, "flags", flag.id, "inheritedFromInputId"],
           source
             ? messages.inheritedFlagContradiction(flag.long)
-            : messages.inheritedFlagMissing(flag.long),
+            : messages.inheritedFlagMissing(
+                flag.inheritedFromInputId ?? "<missing>",
+              ),
         );
       }
     }

@@ -98,6 +98,11 @@ describe("CLI nested command projections", () => {
         scope: "persistent",
       },
     });
+    const canonicalInheritedVerbose =
+      canonicalCliManifest.commands["you.run"].flags["you.run.flag.verbose"];
+    expect(inheritedVerbose[0]?.source.inputId).toBe(
+      canonicalInheritedVerbose.inheritedFromInputId,
+    );
     expect(
       run.effectiveInputs.filter(({ id }) => id === "you.run.flag.verbose"),
     ).toHaveLength(1);

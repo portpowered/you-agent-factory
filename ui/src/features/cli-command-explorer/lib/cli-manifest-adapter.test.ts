@@ -221,7 +221,7 @@ function expectLocalizedInheritanceAndSchemaDiagnostics() {
   const missingInheritance = validManifest();
   missingInheritance.commands.you.flags = {};
   expect(diagnosticMessages(missingInheritance, "zh-CN")).toContain(
-    "继承标志 --verbose 没有对应的持久祖先定义。",
+    "继承来源 you.flag.verbose 无法解析为持久祖先标志。",
   );
 
   const schemaConstraint = validManifest();
@@ -332,12 +332,6 @@ describe("CLI manifest adapter", () => {
     expect(diagnosticCodes(missingParent)).toContain("invalid_hierarchy");
   });
 
-  it("rejects inherited flags without a matching persistent ancestor", () => {
-    const manifest = validManifest();
-    manifest.commands.you.flags["you.flag.verbose"].default = "true";
-    expect(diagnosticCodes(manifest)).toContain("contradictory_inheritance");
-  });
-
   it("rejects impossible argument and repeatable-flag cardinality", () => {
     const manifest = validManifest();
     manifest.commands["you.run"].arguments["you.run.arg.prompt"].variadic =
@@ -346,6 +340,55 @@ describe("CLI manifest adapter", () => {
     expect(diagnosticCodes(manifest)).toEqual(
       expect.arrayContaining(["invalid_cardinality", "invalid_cardinality"]),
     );
+  });
+});
+
+describe("CLI manifest adapter inheritance validation", () => {
+  it("resolves inherited flags only by their exact persistent ancestor ID", () => {
+    const manifest = validManifest();
+    manifest.commands.you.flags["you.flag.verbose"].default = "true";
+    expect(diagnosticCodes(manifest)).toContain("contradictory_inheritance");
+
+    const nonexistent = validManifest();
+    nonexistent.commands["you.run"].flags[
+      "you.run.flag.verbose"
+    ].inheritedFromInputId = "you.flag.nonexistent";
+    expect(diagnosticCodes(nonexistent)).toContain("contradictory_inheritance");
+
+    const nonPersistent = validManifest();
+    nonPersistent.commands.you.flags["you.flag.local-verbose"] = flag(
+      "you.flag.local-verbose",
+      "local",
+    );
+    nonPersistent.commands["you.run"].flags[
+      "you.run.flag.verbose"
+    ].inheritedFromInputId = "you.flag.local-verbose";
+    expect(diagnosticCodes(nonPersistent)).toContain(
+      "contradictory_inheritance",
+    );
+
+    const nonAncestor = validManifest();
+    nonAncestor.commands["you.other"] = {
+      ...command("you.other", "you other"),
+      flags: {
+        "you.other.flag.verbose": flag("you.other.flag.verbose", "persistent"),
+      },
+    };
+    nonAncestor.commands["you.run"].flags[
+      "you.run.flag.verbose"
+    ].inheritedFromInputId = "you.other.flag.verbose";
+    expect(diagnosticCodes(nonAncestor)).toContain("contradictory_inheritance");
+
+    const wrongSource = validManifest();
+    wrongSource.commands.you.flags["you.flag.work"] = {
+      ...flag("you.flag.work", "persistent"),
+      long: "work",
+      shorthand: "w",
+    };
+    wrongSource.commands["you.run"].flags[
+      "you.run.flag.verbose"
+    ].inheritedFromInputId = "you.flag.work";
+    expect(diagnosticCodes(wrongSource)).toContain("contradictory_inheritance");
   });
 });
 

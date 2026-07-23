@@ -1,3 +1,4 @@
+import { resolveInheritedFlagSource } from "./cli-input-semantics";
 import type {
   CliArgument,
   CliCommand,
@@ -84,28 +85,19 @@ export type CliManifestProjection = {
 function flagSource(
   command: CliCommand,
   flag: CliFlag,
-  commandsByPath: ReadonlyMap<string, CliCommand>,
+  commands: readonly CliCommand[],
 ): CliInputSource {
   if (flag.scope !== "inherited") {
     return { commandId: command.id, inputId: flag.id, scope: flag.scope };
   }
 
-  const pathSegments = command.path.split(" ");
-  for (let length = pathSegments.length - 1; length > 0; length -= 1) {
-    const ancestor = commandsByPath.get(
-      pathSegments.slice(0, length).join(" "),
-    );
-    const source = Object.values(ancestor?.flags ?? {}).find(
-      (candidate) =>
-        candidate.scope === "persistent" && candidate.long === flag.long,
-    );
-    if (ancestor && source) {
-      return {
-        commandId: ancestor.id,
-        inputId: source.id,
-        scope: "persistent",
-      };
-    }
+  const source = resolveInheritedFlagSource(command, flag, commands);
+  if (source) {
+    return {
+      commandId: source.command.id,
+      inputId: source.flag.id,
+      scope: "persistent",
+    };
   }
 
   throw new Error(`Validated inherited flag ${flag.id} has no source.`);
@@ -113,7 +105,7 @@ function flagSource(
 
 function projectInputs(
   command: CliCommand,
-  commandsByPath: ReadonlyMap<string, CliCommand>,
+  commands: readonly CliCommand[],
 ): {
   localInputs: CliCommandInputProjection[];
   inheritedInputs: CliCommandInputProjection[];
@@ -145,7 +137,7 @@ function projectInputs(
       id: flag.id,
       kind: "flag",
       inherited: flag.scope === "inherited",
-      source: flagSource(command, flag, commandsByPath),
+      source: flagSource(command, flag, commands),
       cardinality: {
         minimum:
           flag.kind === "named" ? flag.minCardinality : flag.required ? 1 : 0,
@@ -200,9 +192,9 @@ function projectRelationships(
 
 function projectCommand(
   command: CliCommand,
-  commandsByPath: ReadonlyMap<string, CliCommand>,
+  commands: readonly CliCommand[],
 ): CliCommandProjection {
-  const inputs = projectInputs(command, commandsByPath);
+  const inputs = projectInputs(command, commands);
   const inputsById = new Map(
     inputs.effectiveInputs.map((input) => [input.id, input] as const),
   );
@@ -261,7 +253,7 @@ export function projectCliManifest(
   const projectedCommands = Object.fromEntries(
     canonicalCommands.map((command) => [
       command.id,
-      projectCommand(command, commandsByPath),
+      projectCommand(command, canonicalCommands),
     ]),
   );
   const rootCommand = commandsByPath.get(ready.manifest.rootPath);

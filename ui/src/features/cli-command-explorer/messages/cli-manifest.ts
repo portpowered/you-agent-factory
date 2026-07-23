@@ -23,7 +23,7 @@ export interface CliManifestMessages {
   missingParentCommand: (path: string) => string;
   commandOutsideRoot: (path: string, root: string) => string;
   inheritedFlagContradiction: (name: string) => string;
-  inheritedFlagMissing: (name: string) => string;
+  inheritedFlagMissing: (sourceId: string) => string;
   invalidRootSpacing: () => string;
 }
 
@@ -62,8 +62,8 @@ const cliManifestMessagesByLocale = {
       `Command path ${path} is outside root ${root}.`,
     inheritedFlagContradiction: (name) =>
       `Inherited flag --${name} contradicts its persistent ancestor definition.`,
-    inheritedFlagMissing: (name) =>
-      `Inherited flag --${name} has no persistent ancestor definition.`,
+    inheritedFlagMissing: (sourceId) =>
+      `Inherited source ${sourceId} does not resolve to a persistent ancestor flag.`,
     invalidRootSpacing: () =>
       "Root path must contain non-empty command segments separated by single spaces.",
   },
@@ -107,8 +107,8 @@ const cliManifestMessagesByLocale = {
       `命令路径 ${path} 不在根路径 ${root} 下。`,
     inheritedFlagContradiction: (name) =>
       `继承标志 --${name} 与其持久祖先定义相矛盾。`,
-    inheritedFlagMissing: (name) =>
-      `继承标志 --${name} 没有对应的持久祖先定义。`,
+    inheritedFlagMissing: (sourceId) =>
+      `继承来源 ${sourceId} 无法解析为持久祖先标志。`,
     invalidRootSpacing: () => `根路径必须由单个空格分隔的非空命令段组成。`,
   },
 } satisfies LocalizedMessageCatalog<CliManifestMessages>;

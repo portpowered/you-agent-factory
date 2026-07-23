@@ -1,10 +1,43 @@
 import type { CliManifestMessages } from "../messages/cli-manifest";
 import type {
   CliCommand,
+  CliFlag,
   CliInputValue,
   CliInputValueType,
   CliManifestDiagnostic,
 } from "./cli-manifest-types";
+
+export type CliInheritedFlagSource = {
+  readonly command: CliCommand;
+  readonly flag: CliFlag;
+};
+
+/** Resolves the exact persistent ancestor named by the canonical inheritance reference. */
+export function resolveInheritedFlagSource(
+  command: CliCommand,
+  inheritedFlag: CliFlag,
+  commands: readonly CliCommand[],
+): CliInheritedFlagSource | undefined {
+  if (
+    inheritedFlag.scope !== "inherited" ||
+    !inheritedFlag.inheritedFromInputId
+  ) {
+    return undefined;
+  }
+
+  for (const candidateCommand of commands) {
+    if (!command.path.startsWith(`${candidateCommand.path} `)) continue;
+    const candidateFlag: CliFlag | undefined =
+      candidateCommand.flags?.[inheritedFlag.inheritedFromInputId];
+    if (
+      candidateFlag?.id === inheritedFlag.inheritedFromInputId &&
+      candidateFlag.scope === "persistent"
+    ) {
+      return { command: candidateCommand, flag: candidateFlag };
+    }
+  }
+  return undefined;
+}
 
 function typedValueMatches(
   value: CliInputValue,
