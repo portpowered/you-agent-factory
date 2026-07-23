@@ -156,11 +156,19 @@ func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte
 	mapper := factorymapping.NewFactoryConfigMapper()
 	jsonFactory, err := mapper.Expand(jsonPayload)
 	if err != nil {
-		return fmt.Errorf("%s: decode portable JSON artifact through canonical Factory boundary: %w", sourcePath, err)
+		return fmt.Errorf(
+			"%s: equivalence: decode portable JSON artifact through canonical Factory boundary: %w",
+			sourcePath,
+			err,
+		)
 	}
 	yamlFactory, err := mapper.Expand(yamlJSON)
 	if err != nil {
-		return fmt.Errorf("%s: decode portable YAML artifact through canonical Factory boundary: %w", sourcePath, err)
+		return fmt.Errorf(
+			"%s: equivalence: decode portable YAML artifact through canonical Factory boundary: %w",
+			sourcePath,
+			err,
+		)
 	}
 	for format, factory := range map[string]*factorydefinitions.FactoryConfig{"JSON": jsonFactory, "YAML": yamlFactory} {
 		if validation := factoryvalidation.Validate(factory); validation.HasBlockingTargets() {
@@ -168,11 +176,14 @@ func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte
 			for _, target := range validation.BlockingTargets() {
 				findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))
 			}
-			return fmt.Errorf("%s: validate decoded %s artifact: %s", sourcePath, format, findings)
+			return fmt.Errorf("%s: equivalence: validate decoded %s artifact: %s", sourcePath, format, findings)
 		}
 	}
 	if !reflect.DeepEqual(jsonFactory, yamlFactory) {
-		return fmt.Errorf("%s: JSON and YAML artifacts decode to different canonical Factory values", sourcePath)
+		return fmt.Errorf(
+			"%s: equivalence: JSON and YAML artifacts decode to different canonical Factory values",
+			sourcePath,
+		)
 	}
 	return nil
 }

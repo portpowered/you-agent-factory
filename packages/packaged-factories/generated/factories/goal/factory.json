@@ -1,0 +1,83 @@
+{
+  "id": "builtin-goal",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "goal"
+  },
+  "name": "goal",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "goal",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "execute",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.\n\nWork the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.\n\nWhen the goal is complete, end your response with `\u003cCOMPLETE\u003e` on its own line.\nWhen you made ordinary partial progress and need another pass without rejection, include `\u003cCONTINUE\u003e` in your response.\nOtherwise explain what must change before the goal can complete.\n\nReturn a concise final response the customer can use when you finish.\n",
+      "name": "goal-executor",
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "behavior": "REPEATER",
+      "body": "You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.\n\nWork the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.\n\nWhen the goal is complete, end your response with `\u003cCOMPLETE\u003e` on its own line.\nWhen you made ordinary partial progress and need another pass without rejection, include `\u003cCONTINUE\u003e` in your response.\nOtherwise explain what must change before the goal can complete.\n\nReturn a concise final response the customer can use when you finish.\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "goal"
+        }
+      ],
+      "name": "execute-goal",
+      "onContinue": [
+        {
+          "state": "init",
+          "workType": "goal"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "goal"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "goal"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "goal"
+        }
+      ],
+      "promptFile": "prompts/executor.md",
+      "type": "AGENT_RUN",
+      "worker": "goal-executor"
+    }
+  ]
+}

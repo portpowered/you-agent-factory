@@ -119,6 +119,11 @@ Use this map when changing the public REST contract.
   `internal/packagedfactorycatalog`. Keep the authored `@you/*` identity as
   catalog metadata and use the directory slug for the schema-valid portable
   Factory `name`. Validate JSON and YAML from the same canonical Factory value.
+  Plan the manifest, generated notice, and every artifact pair in memory twice
+  before writing; normalized output collisions or byte/set differences between
+  passes fail generation. `make packaged-factory-catalog-generate` stages the
+  complete plan and replaces `packages/packaged-factories/generated` as one
+  directory so failed planning or staging cannot leave mixed generations.
   Exact `${parameter}` placeholders on enum-backed `workers[].modelProvider`
   fields are an intentional canonical-mapper compatibility form: preserve them
   in artifact bytes and use a concrete representative only for package-schema

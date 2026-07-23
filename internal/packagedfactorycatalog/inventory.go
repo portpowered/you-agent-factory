@@ -221,7 +221,7 @@ func decodeCanonicalFactory(
 		AssetRoot:   directory,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%s: normalize authored Factory assets: %w", sourcePath, err)
+		return nil, fmt.Errorf("%s: asset flattening: normalize authored Factory assets: %w", sourcePath, err)
 	}
 
 	cfg, err := factorymapping.NewFactoryConfigMapper().Expand(assembled)

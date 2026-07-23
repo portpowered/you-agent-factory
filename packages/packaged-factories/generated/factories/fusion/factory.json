@@ -1,0 +1,252 @@
+{
+  "examples": [
+    {
+      "args": {
+        "firstProvider": "CLAUDE",
+        "input": "Draft a release summary",
+        "output": "fusion-summary.md",
+        "secondProvider": "CODEX"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Draft a release summary with provider overrides."
+      },
+      "name": "positional-input-with-provider-overrides"
+    },
+    {
+      "args": {
+        "firstModel": "claude-sonnet-4-20250514",
+        "input": "Draft a release summary",
+        "secondModel": "gpt-5"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Draft a release summary with model overrides."
+      },
+      "name": "stdin-input-with-model-overrides"
+    }
+  ],
+  "id": "builtin-fusion",
+  "invocationSignature": {
+    "outputContract": {
+      "contentType": "text/markdown",
+      "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content.",
+      "fileExtension": ".md",
+      "mode": "FILE",
+      "pathParameter": "output"
+    },
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          }
+        ],
+        "description": "Text request to run through the two-stage fusion flow.",
+        "name": "input",
+        "required": true
+      },
+      {
+        "aliases": [
+          "o"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional output-path hint for file-oriented callers.",
+        "externalName": "output",
+        "name": "output",
+        "typeHint": "FILE_PATH"
+      },
+      {
+        "aliases": [
+          "p1"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional provider override for the first fusion pass.",
+        "externalName": "first-provider",
+        "name": "firstProvider"
+      },
+      {
+        "aliases": [
+          "p2"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional provider override for the second fusion pass.",
+        "externalName": "second-provider",
+        "name": "secondProvider"
+      },
+      {
+        "aliases": [
+          "m1"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model override for the first fusion pass.",
+        "externalName": "first-model",
+        "name": "firstModel"
+      },
+      {
+        "aliases": [
+          "m2"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model override for the second fusion pass.",
+        "externalName": "second-model",
+        "name": "secondModel"
+      },
+      {
+        "aliases": [
+          "e1"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "defaultValue": "medium",
+        "description": "Reasoning effort hint for the first fusion pass.",
+        "externalName": "first-effort",
+        "name": "firstEffort"
+      },
+      {
+        "aliases": [
+          "e2"
+        ],
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "defaultValue": "medium",
+        "description": "Reasoning effort hint for the second fusion pass.",
+        "externalName": "second-effort",
+        "name": "secondEffort"
+      }
+    ]
+  },
+  "name": "fusion",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "draft",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "First-stage drafter for @you/fusion.\nReasoning effort: ${firstEffort}",
+      "model": "${firstModel}",
+      "modelProvider": "${firstProvider}",
+      "name": "fusion-drafter",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Second-stage refiner for @you/fusion.\nReasoning effort: ${secondEffort}",
+      "model": "${secondModel}",
+      "modelProvider": "${secondProvider}",
+      "name": "fusion-refiner",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Create a strong first draft for the request.\n\nRequest:\n${input}",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "draft-fusion",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "draft",
+          "workType": "task"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "fusion-drafter"
+    },
+    {
+      "body": "Refine the current draft into the final response for the same request.\n\nOriginal request:\n${input}",
+      "inputs": [
+        {
+          "state": "draft",
+          "workType": "task"
+        }
+      ],
+      "name": "refine-fusion",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "fusion-refiner"
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "formatVersion": "1",
+  "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
+  "factories": [
+    {
+      "name": "@you/deep-research",
+      "project": "builtin-deep-research",
+      "slug": "deep-research",
+      "json": {
+        "locator": "generated/factories/deep-research/factory.json",
+        "sha256": "0fc85f6ce286a14a487f92a599df22f1abe9391c29cc69e8835cefe144f4c042"
+      },
+      "yaml": {
+        "locator": "generated/factories/deep-research/factory.yaml",
+        "sha256": "d17cfd508c401d529d476571f2562a8b3234db09ffb6ec8c595cfef28da02b56"
+      },
+      "examples": [
+        {
+          "name": "positional-topic",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Compare two workflow architecture approaches."
+          },
+          "args": {
+            "topic": "Compare event sourcing and state machines for workflow orchestration"
+          }
+        },
+        {
+          "name": "stdin-topic",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Research retrieval-augmented generation trade-offs."
+          },
+          "args": {
+            "topic": "What are the trade-offs of retrieval-augmented generation?"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/fusion",
+      "project": "builtin-fusion",
+      "slug": "fusion",
+      "json": {
+        "locator": "generated/factories/fusion/factory.json",
+        "sha256": "0303b984e8e6a7b6042162593f385e5dba17b44160775025002ee40db5081bea"
+      },
+      "yaml": {
+        "locator": "generated/factories/fusion/factory.yaml",
+        "sha256": "2452e78926bfaca6137445eaf27bf6516e64a5adf53416890330d69f4d4e792f"
+      },
+      "examples": [
+        {
+          "name": "positional-input-with-provider-overrides",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Draft a release summary with provider overrides."
+          },
+          "args": {
+            "firstProvider": "CLAUDE",
+            "input": "Draft a release summary",
+            "output": "fusion-summary.md",
+            "secondProvider": "CODEX"
+          }
+        },
+        {
+          "name": "stdin-input-with-model-overrides",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Draft a release summary with model overrides."
+          },
+          "args": {
+            "firstModel": "claude-sonnet-4-20250514",
+            "input": "Draft a release summary",
+            "secondModel": "gpt-5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/goal",
+      "project": "builtin-goal",
+      "slug": "goal",
+      "json": {
+        "locator": "generated/factories/goal/factory.json",
+        "sha256": "4f50b4b59f5b377f422709544aea6dd0b76b798591e81b43598363454f11ea81"
+      },
+      "yaml": {
+        "locator": "generated/factories/goal/factory.yaml",
+        "sha256": "5064b2d7cd30116d356205ad53072ae9b041443b7ba3f41c4a9f858c857f0415"
+      }
+    },
+    {
+      "name": "@you/quorum",
+      "project": "builtin-quorum",
+      "slug": "quorum",
+      "json": {
+        "locator": "generated/factories/quorum/factory.json",
+        "sha256": "787f154e43a0b22b50d0fa3712f640a271035f68bbd97c9f9c4ff1a3b22b7d3d"
+      },
+      "yaml": {
+        "locator": "generated/factories/quorum/factory.yaml",
+        "sha256": "a03d5365a3ba6a6e671c049bc08a8873a80a852ab4174831cff9fb19820c0488"
+      },
+      "examples": [
+        {
+          "name": "default-quorum",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Compare release plans with the default quorum."
+          },
+          "args": {
+            "input": "Compare the two proposed release plans."
+          }
+        },
+        {
+          "name": "role-specific-models",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Compare release plans with role-specific providers and models."
+          },
+          "args": {
+            "branchModel": "gpt-5",
+            "branchProvider": "CODEX",
+            "input": "Compare the two proposed release plans.",
+            "mergeModel": "claude-sonnet-4-20250514",
+            "mergeProvider": "CLAUDE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/review",
+      "project": "builtin-review",
+      "slug": "review",
+      "json": {
+        "locator": "generated/factories/review/factory.json",
+        "sha256": "7d9d51b0f3666a14a08e9b1f38adbd0dadf5a91ce770b1b50924dd8c0f416ca2"
+      },
+      "yaml": {
+        "locator": "generated/factories/review/factory.yaml",
+        "sha256": "720768d66c9c025da40bb19174c887baf0e0f0cac74c301a20366ff888d5f58c"
+      },
+      "examples": [
+        {
+          "name": "positional-input",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Review draft release notes."
+          },
+          "args": {
+            "input": "Draft the release notes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/subagent",
+      "project": "builtin-subagent",
+      "slug": "subagent",
+      "json": {
+        "locator": "generated/factories/subagent/factory.json",
+        "sha256": "7eb4c0d50651dde3dc523d949a259a2252f934f2b419c41fae8fac63944a4424"
+      },
+      "yaml": {
+        "locator": "generated/factories/subagent/factory.yaml",
+        "sha256": "f67e352efee61ee7ef52d8b5e33724100ccacfa97201be20e2fd2bd8b1602e13"
+      },
+      "examples": [
+        {
+          "name": "positional-input",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Summarize a release request."
+          },
+          "args": {
+            "input": "Summarize this release"
+          }
+        },
+        {
+          "name": "stdin-input",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Summarize the same request using structured input."
+          },
+          "args": {
+            "input": "Summarize this release"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/tts",
+      "project": "builtin-tts",
+      "slug": "tts",
+      "json": {
+        "locator": "generated/factories/tts/factory.json",
+        "sha256": "a38464667ca8ffcd525b2763fe6542c24e42c59cea885b38c96994d0bf4ee25f"
+      },
+      "yaml": {
+        "locator": "generated/factories/tts/factory.yaml",
+        "sha256": "6d527753d8a57644a11c12cedb614297f528018757b3163d659e18612e0c4f8d"
+      }
+    }
+  ]
+}

@@ -125,7 +125,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check durable-runtime-construction-check logging-boundary-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-generate durable-runtime-construction-check logging-boundary-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -424,6 +424,9 @@ pkg-structure:
 
 packaged-factory-source-check:
 	$(GO) run ./cmd/packagedfactorysourcecheck -root .
+
+packaged-factory-catalog-generate:
+	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
 ownership-boundary-check:
 	$(GO) run ./cmd/ownershipboundarycheck

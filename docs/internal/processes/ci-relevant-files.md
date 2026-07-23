@@ -101,6 +101,13 @@
   The package's passive embedded-filesystem tests run in `make test-maintenance`,
   matching the repository-boundary checker that protects its authored data
   ownership.
+  The portable catalog generator is
+  `cmd/packagedfactorycataloggenerate`; its repository surface is
+  `make packaged-factory-catalog-generate`. It computes and validates the whole
+  output set before atomically replacing
+  `packages/packaged-factories/generated`, and the npm package allowlist must
+  continue to publish that generated directory alongside authored sources and
+  schemas.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do

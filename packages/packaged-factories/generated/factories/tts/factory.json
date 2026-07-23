@@ -1,0 +1,110 @@
+{
+  "id": "builtin-tts",
+  "name": "tts",
+  "resources": [
+    {
+      "backend": "LLAMACPP",
+      "capacity": 1,
+      "loadPolicy": "ON_DEMAND",
+      "model": "OMNIVOICE_Q4_K_M",
+      "name": "omnivoice-cache",
+      "type": "MODEL"
+    }
+  ],
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "You are the @you/tts built-in factory worker.",
+      "command": "omnivoice-llamacpp",
+      "model": "OMNIVOICE_Q4_K_M",
+      "modelLocality": "LOCAL",
+      "modelProvider": "CODEX",
+      "name": "tts-executor",
+      "operations": [
+        {
+          "inputs": [
+            {
+              "contentTypes": [
+                "TEXT"
+              ],
+              "name": "text",
+              "required": true
+            }
+          ],
+          "name": "TTS",
+          "outputs": [
+            {
+              "contentTypes": [
+                "AUDIO"
+              ],
+              "name": "audio"
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "omnivoice-cache"
+        }
+      ],
+      "type": "INFERENCE_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Convert the requested text into speech for {{ .WorkID }}.",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "execute-tts",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "operation": "TTS",
+      "operationBindings": [
+        {
+          "selector": {
+            "type": "TEXT"
+          },
+          "slot": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "type": "INFERENCE_RUN",
+      "worker": "tts-executor"
+    }
+  ]
+}
