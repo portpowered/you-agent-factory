@@ -11,6 +11,7 @@ import (
 // live Factory Session.
 type ProjectionContext struct {
 	Session                *LiveSession
+	FactorySessionID       string
 	FactoryCfg             *interfaces.FactoryConfig
 	Snapshot               *factory.StateSnapshot
 	LifecycleControlStatus string

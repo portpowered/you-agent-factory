@@ -199,7 +199,7 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
-	responseEvents, err := a.responseStreams.NewEventStore(factorysessions.CanonicalFactorySessionID(session), clock)
+	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
 	}

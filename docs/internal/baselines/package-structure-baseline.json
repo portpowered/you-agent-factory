@@ -1754,21 +1754,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "CanonicalFactorySessionID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "EnsureRuntimeFactorySessionID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/types.go",
-      "target": "IsUUIDFactorySessionID"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_visualization/response_presentation.go",
       "target": "NewResponsePresentation"
     },

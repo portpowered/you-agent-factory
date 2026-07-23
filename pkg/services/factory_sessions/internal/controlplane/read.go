@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
@@ -38,7 +39,9 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 		if err != nil {
 			reads = append(reads, factorysessions.ReadProjection{
-				Context: factorysessions.ProjectionContext{Session: session},
+				Context: factorysessions.ProjectionContext{
+					Session: session, FactorySessionID: livesession.CanonicalID(session),
+				},
 			})
 			continue
 		}
@@ -54,7 +57,7 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		if left.IsDefault != right.IsDefault {
 			return left.IsDefault
 		}
-		return factorysessions.CanonicalFactorySessionID(left) < factorysessions.CanonicalFactorySessionID(right)
+		return livesession.CanonicalID(left) < livesession.CanonicalID(right)
 	})
 	return reads, nil
 }

@@ -664,6 +664,13 @@ while the service root exposes only the detached `LiveSession` value contract.
 Keep the package-boundary synthetic denial for the retired root constructor so
 external consumers cannot reintroduce a parallel construction path.
 
+Canonical live Factory Session ID selection, default-alias UUID allocation,
+and UUID validation are owned by the same private `internal/livesession`
+capability. Owner-projected reads carry `ProjectionContext.FactorySessionID`,
+and open results carry a detached `ScopedLiveSessionSummary`, so transport
+mappers serialize the resolved identity without importing private policy or
+re-deriving it from mutable session records.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

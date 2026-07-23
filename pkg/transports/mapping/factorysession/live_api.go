@@ -28,7 +28,6 @@ type LiveGateway interface {
 	OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
 	ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
 	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	ResolveFactorySession(string) *factorysessions.LiveSession
 	SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (factorysessions.ResponseEventCursor, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error)
 	GetFactorySessionResult(context.Context, string) (workflowresult.LiveSessionResult, error)
@@ -134,9 +133,9 @@ func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.Ope
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
 	if result == nil || strings.TrimSpace(result.SessionID) == "" {
-		return OpenResultToAPI(result, nil), nil
+		return OpenResultToAPI(result), nil
 	}
-	return OpenResultToAPI(result, gateway.ResolveFactorySession(result.SessionID)), nil
+	return OpenResultToAPI(result), nil
 }
 
 func (a *LiveAPI) CloseFactorySession(ctx context.Context, sessionID string) error {

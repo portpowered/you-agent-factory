@@ -60,7 +60,7 @@ func TestServiceOwnsOpenReadAndStop(t *testing.T) {
 		return nil, factorysessions.ErrSessionNotFound
 	}
 	dependencies.BuildProjectionContext = func(_ context.Context, session *factorysessions.LiveSession) (factorysessions.ProjectionContext, error) {
-		return factorysessions.ProjectionContext{Session: session}, nil
+		return factorysessions.ProjectionContext{Session: session, FactorySessionID: session.ID}, nil
 	}
 	dependencies.StopSession = func(id string) error { stopped = id; return nil }
 	service, err := liveruntimewire.NewService(dependencies)

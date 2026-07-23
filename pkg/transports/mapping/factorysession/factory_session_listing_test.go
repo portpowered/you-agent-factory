@@ -119,19 +119,14 @@ func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
 		Targets: []factorysessions.Target{{
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		}},
-	}
-	session := &factorysessions.LiveSession{
-		ID: "session-beta",
-		SessionState: factorysessions.SessionState{
-			FactoryDir:       "/workspace/factory/beta",
-			FolderPath:       "/workspace",
-			ExecutionBaseDir: "/workspace",
+		Session: &factorysessions.ScopedLiveSessionSummary{
+			ID: "session-beta", FactoryDir: "/workspace/factory/beta",
+			FolderPath: "/workspace", Project: "demo",
+			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		},
-		Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
-		Project: "demo",
 	}
 
-	response := factorysession.OpenResultToAPI(result, session)
+	response := factorysession.OpenResultToAPI(result)
 	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
 		response.FolderPath == nil || *response.FolderPath != "/workspace" {
 		t.Fatalf("open hints = %#v, want init hint and trimmed folder", response)
@@ -209,10 +204,10 @@ func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testin
 		Project: "beta-project",
 	}
 	summaries := []factoryapi.FactorySessionSummary{
-		factorysession.SessionSummaryToAPI(defaultSession),
-		factorysession.SessionSummaryToAPI(namedSession),
+		factorysession.SessionSummaryToAPI(defaultSession, defaultSession.RuntimeFactorySessionID),
+		factorysession.SessionSummaryToAPI(namedSession, namedSession.ID),
 	}
-	if !summaries[0].IsDefault || summaries[0].Id != factorysessions.CanonicalFactorySessionID(defaultSession) {
+	if !summaries[0].IsDefault || summaries[0].Id != defaultSession.RuntimeFactorySessionID {
 		t.Fatalf("first summary = %#v, want canonical default session first", summaries[0])
 	}
 	if summaries[1].Project != "beta-project" || summaries[1].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
@@ -239,11 +234,13 @@ func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
 	fallback := &factorysessions.LiveSession{ID: "session-fallback", Project: "fallback-project"}
 	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
 		{
-			Context:          factorysessions.ProjectionContext{Session: withRuntime},
+			Context: factorysessions.ProjectionContext{
+				Session: withRuntime, FactorySessionID: withRuntime.ID,
+			},
 			Runtime:          factorysessions.RuntimeProjection{Status: "IDLE"},
 			RuntimeAvailable: true,
 		},
-		{Context: factorysessions.ProjectionContext{Session: fallback}},
+		{Context: factorysessions.ProjectionContext{Session: fallback, FactorySessionID: fallback.ID}},
 	})
 
 	if len(response.Sessions) != 2 {

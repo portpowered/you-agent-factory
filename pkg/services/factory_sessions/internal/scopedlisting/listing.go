@@ -83,7 +83,7 @@ func ProjectLiveSessions(reads []factorysessions.ReadProjection) []factorysessio
 			continue
 		}
 		row := factorysessions.ScopedLiveSessionSummary{
-			ID: factorysessions.CanonicalFactorySessionID(session), FactoryDir: session.FactoryDir,
+			ID: read.Context.FactorySessionID, FactoryDir: session.FactoryDir,
 			FolderPath: session.FolderPath, Project: session.Project,
 			IsDefault: session.IsDefault, Target: session.Target,
 		}

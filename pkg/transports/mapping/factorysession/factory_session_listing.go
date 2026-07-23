@@ -33,12 +33,9 @@ func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factoryses
 	}
 }
 
-// OpenResultToAPI maps an owner-defined open result and its optional live
-// session to the generated public response.
-func OpenResultToAPI(
-	result *factorysessions.OpenResult,
-	session *factorysessions.LiveSession,
-) factoryapi.OpenFactorySessionResponse {
+// OpenResultToAPI maps an owner-defined open result to the generated public
+// response without re-deriving Factory Session identity policy.
+func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactorySessionResponse {
 	response := factoryapi.OpenFactorySessionResponse{}
 	if result == nil {
 		return response
@@ -54,22 +51,26 @@ func OpenResultToAPI(
 		targets := TargetsToAPI(result.Targets)
 		response.Targets = &targets
 	}
-	if session != nil {
-		summary := SessionSummaryToAPI(session)
+	if result.Session != nil {
+		summary := ScopedLiveSessionSummaryToAPI(*result.Session)
 		response.Session = &summary
 	}
 	return response
 }
 
-// SessionSummaryToAPI maps one live Factory Session to its public summary.
-func SessionSummaryToAPI(session *factorysessions.LiveSession) factoryapi.FactorySessionSummary {
+// SessionSummaryToAPI maps one live Factory Session and its already-projected
+// canonical identity to the public summary.
+func SessionSummaryToAPI(
+	session *factorysessions.LiveSession,
+	factorySessionID string,
+) factoryapi.FactorySessionSummary {
 	if session == nil {
 		return factoryapi.FactorySessionSummary{}
 	}
 	return factoryapi.FactorySessionSummary{
 		FactoryDir: session.FactoryDir,
 		FolderPath: session.FolderPath,
-		Id:         factorysessions.CanonicalFactorySessionID(session),
+		Id:         factorySessionID,
 		IsDefault:  session.IsDefault,
 		Project:    session.Project,
 		Target: factoryapi.FactorySessionTargetRef{
@@ -82,7 +83,7 @@ func SessionSummaryToAPI(session *factorysessions.LiveSession) factoryapi.Factor
 // SessionResponseToAPI maps a live session and its owner-defined runtime
 // projection to the public detail contract.
 func SessionResponseToAPI(read factorysessions.SessionProjection) factoryapi.FactorySession {
-	summary := SessionSummaryToAPI(read.Context.Session)
+	summary := SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID)
 	runtime := RuntimeProjectionToAPI(read.Runtime, read.Context.NormalizedTarget)
 	return factoryapi.FactorySession{
 		FactoryDir: summary.FactoryDir, FolderPath: summary.FolderPath, Id: summary.Id,
@@ -93,7 +94,7 @@ func SessionResponseToAPI(read factorysessions.SessionProjection) factoryapi.Fac
 // SummaryWithRuntimeToAPI maps a live session and runtime projection to the
 // public summary contract.
 func SummaryWithRuntimeToAPI(read factorysessions.ReadProjection) factoryapi.FactorySessionSummary {
-	summary := SessionSummaryToAPI(read.Context.Session)
+	summary := SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID)
 	runtime := RuntimeProjectionToAPI(read.Runtime, read.Context.NormalizedTarget)
 	summary.Runtime = &runtime
 	return summary
@@ -107,7 +108,7 @@ func ReadProjectionsToAPI(reads []factorysessions.ReadProjection) factoryapi.Lis
 			summaries = append(summaries, SummaryWithRuntimeToAPI(read))
 			continue
 		}
-		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session))
+		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID))
 	}
 	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}
 }
@@ -436,14 +437,7 @@ func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResu
 		Scope: &scope, Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
 	}
 	for _, session := range result.LiveSessions {
-		summary := factoryapi.FactorySessionSummary{
-			Id: session.ID, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
-			Project: session.Project, IsDefault: session.IsDefault,
-			Target: factoryapi.FactorySessionTargetRef{
-				Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
-				Name: optionalTrimmedString(session.Target.Name),
-			},
-		}
+		summary := ScopedLiveSessionSummaryToAPI(session)
 		if session.Runtime != nil {
 			runtime := RuntimeProjectionToAPI(*session.Runtime, session.NormalizedTarget)
 			summary.Runtime = &runtime
@@ -458,6 +452,19 @@ func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResu
 		response.DurableSessions = &durable
 	}
 	return response
+}
+
+// ScopedLiveSessionSummaryToAPI maps one Factory Sessions-owned detached live
+// row without selecting identity, scope, or runtime policy.
+func ScopedLiveSessionSummaryToAPI(session factorysessions.ScopedLiveSessionSummary) factoryapi.FactorySessionSummary {
+	return factoryapi.FactorySessionSummary{
+		Id: session.ID, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+		Project: session.Project, IsDefault: session.IsDefault,
+		Target: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
+			Name: optionalTrimmedString(session.Target.Name),
+		},
+	}
 }
 
 // LiveSessionSummaryToAPI maps one live workspace session row to the public summary shape.

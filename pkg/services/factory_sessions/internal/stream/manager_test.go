@@ -202,8 +202,8 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("canonical event count = %d, want 1", len(events))
 	}
-	if events[0].FactorySessionID != factorysessions.CanonicalFactorySessionID(session) {
-		t.Fatalf("factorySessionId = %q, want %q", events[0].FactorySessionID, factorysessions.CanonicalFactorySessionID(session))
+	if events[0].FactorySessionID != livesession.CanonicalID(session) {
+		t.Fatalf("factorySessionId = %q, want %q", events[0].FactorySessionID, livesession.CanonicalID(session))
 	}
 	if events[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)

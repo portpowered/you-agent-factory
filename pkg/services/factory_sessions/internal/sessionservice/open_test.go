@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
@@ -95,7 +96,9 @@ func (h *openTestHost) BuildSessionProjectionContext(
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
-	return factorysessions.ProjectionContext{Session: session}, nil
+	return factorysessions.ProjectionContext{
+		Session: session, FactorySessionID: livesession.CanonicalID(session),
+	}, nil
 }
 
 func (h *openTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error) {
@@ -304,9 +307,12 @@ func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 	if result == nil || result.SessionID != "sess-1" {
 		t.Fatalf("open result = %#v, want sess-1", result)
 	}
+	if result.Session == nil || result.Session.ID != "sess-1" || result.Session.Project != "demo" {
+		t.Fatalf("open session = %#v, want owner-projected sess-1 summary", result.Session)
+	}
 }
 
-func TestService_OpenFactorySession_DoesNotMapLiveSessionAtDomainBoundary(t *testing.T) {
+func TestService_OpenFactorySession_LeavesSummaryAbsentWhenSessionCannotResolve(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -327,5 +333,8 @@ func TestService_OpenFactorySession_DoesNotMapLiveSessionAtDomainBoundary(t *tes
 	}
 	if result == nil || result.SessionID != "sess-1" {
 		t.Fatalf("open result = %#v, want sess-1", result)
+	}
+	if result.Session != nil {
+		t.Fatalf("open session = %#v, want nil for unresolved session", result.Session)
 	}
 }

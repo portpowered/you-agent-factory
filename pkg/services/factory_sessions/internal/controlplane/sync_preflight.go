@@ -8,6 +8,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -69,7 +70,7 @@ func GetLiveFactorySessionSyncPreflight(
 
 	response.BackendScopeID = stringPointer(host.BackendScopeID())
 	response.LogicalSessionKeyID = stringPointer(host.LogicalSessionKeyID(session))
-	response.FactorySessionID = stringPointer(factorysessions.CanonicalFactorySessionID(session))
+	response.FactorySessionID = stringPointer(livesession.CanonicalID(session))
 	response.StreamGenerationID = stringPointer(host.StreamGenerationID(session))
 	if resolved.Remapped {
 		response.Reason = factorysessions.SyncPreflightReasonLogicalSessionRemap

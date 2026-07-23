@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/artifactprojection"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -45,7 +46,7 @@ func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {
 	runtime.Artifacts = artifacts
 	sessionID := ""
 	if ctx.Session != nil {
-		sessionID = CanonicalFactorySessionID(ctx.Session)
+		sessionID = livesession.CanonicalID(ctx.Session)
 	}
 	runtime.StopSummary = ProjectFactorySessionStopSummary(sessionID, ctx.Snapshot, ctx.JavaScript)
 	return runtime
@@ -57,7 +58,7 @@ func projectedSessionStreamIdentity(
 ) *RuntimeStreamIdentity {
 	sessionID := ""
 	if ctx.Session != nil {
-		sessionID = CanonicalFactorySessionID(ctx.Session)
+		sessionID = livesession.CanonicalID(ctx.Session)
 	}
 	backendScopeID := strings.TrimSpace(ctx.BackendScopeID)
 	if backendScopeID == "" || sessionID == "" {

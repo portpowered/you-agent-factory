@@ -3,10 +3,7 @@ package factorysessions
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -84,6 +81,7 @@ type Target struct {
 // OpenResult is the internal outcome of opening or validating a session folder.
 type OpenResult struct {
 	SessionID       string
+	Session         *ScopedLiveSessionSummary
 	Targets         []Target
 	InitsNewFactory bool
 	FolderPath      string
@@ -110,46 +108,6 @@ type LiveSession struct {
 	RuntimeFactorySessionID string
 	ResponseEvents          *SessionResponseEventStore
 	JavaScriptCheckpoints   factory.JavaScriptCheckpointStore
-}
-
-// CanonicalFactorySessionID returns the durable runtime identity for one live
-// session. Default-route sessions keep the ~default registry alias but expose a
-// UUID runtime identity to clients.
-func CanonicalFactorySessionID(session *LiveSession) string {
-	if session == nil {
-		return ""
-	}
-	if runtimeID := strings.TrimSpace(session.RuntimeFactorySessionID); runtimeID != "" {
-		return runtimeID
-	}
-	return strings.TrimSpace(session.ID)
-}
-
-// IsUUIDFactorySessionID reports whether sessionID is a UUID runtime identity.
-func IsUUIDFactorySessionID(sessionID string) bool {
-	_, err := uuid.Parse(strings.TrimSpace(sessionID))
-	return err == nil
-}
-
-// EnsureRuntimeFactorySessionID assigns a UUID runtime identity to default
-// sessions that still use the ~default registry alias.
-func EnsureRuntimeFactorySessionID(session *LiveSession, generateID SessionIDGenerator) error {
-	if session == nil {
-		return nil
-	}
-	if strings.TrimSpace(session.RuntimeFactorySessionID) != "" {
-		return nil
-	}
-	if session.ID == DefaultSessionID {
-		if generateID == nil {
-			return errors.New("Factory Session ID generator is required")
-		}
-		session.RuntimeFactorySessionID = strings.TrimSpace(generateID())
-		if session.RuntimeFactorySessionID == "" {
-			return errors.New("Factory Session ID generator returned an empty identity")
-		}
-	}
-	return nil
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication

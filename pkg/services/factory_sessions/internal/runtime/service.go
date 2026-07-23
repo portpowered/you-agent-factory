@@ -226,7 +226,7 @@ func (s *Service) ResponseStreamsForSession(session *factorysessions.LiveSession
 	if s == nil || s.responses == nil || session == nil {
 		return nil
 	}
-	return s.responses.Streams(factorysessions.CanonicalFactorySessionID(session))
+	return s.responses.Streams(livesession.CanonicalID(session))
 }
 
 // CloseResponseStreams closes response events and every dispatch stream owned
@@ -240,7 +240,7 @@ func (s *Service) CloseResponseStreams(session *factorysessions.LiveSession) {
 	} else {
 		session.CloseResponseEvents()
 	}
-	s.responses.Close(factorysessions.CanonicalFactorySessionID(session))
+	s.responses.Close(livesession.CanonicalID(session))
 }
 
 // Registry exposes the canonical registry to bounded compatibility adapters.
@@ -299,7 +299,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 		return nil
 	}
 	if s.responseEvents != nil {
-		responseEvents, err := s.responseEvents.NewEventStore(factorysessions.CanonicalFactorySessionID(session), s.clock)
+		responseEvents, err := s.responseEvents.NewEventStore(livesession.CanonicalID(session), s.clock)
 		if err != nil {
 			return nil
 		}
@@ -373,7 +373,7 @@ func (s *Service) Resolve(sessionID string) *factorysessions.LiveSession {
 	}
 	for _, id := range s.registry.IDs() {
 		session := s.registry.Get(id)
-		if session != nil && factorysessions.CanonicalFactorySessionID(session) == trimmed {
+		if session != nil && livesession.CanonicalID(session) == trimmed {
 			return session
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
@@ -136,7 +137,7 @@ func (s *Service) OpenFactorySessionFromFolder(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.OpenFromFolder(
+	result, err := controlplane.OpenFromFolder(
 		ctx,
 		s.host,
 		s.liveRuntime,
@@ -145,6 +146,19 @@ func (s *Service) OpenFactorySessionFromFolder(
 		validateOnly,
 		initNewFactory,
 	)
+	if err != nil || result == nil || result.SessionID == "" {
+		return result, err
+	}
+	session := s.liveRuntime.Resolve(result.SessionID)
+	if session == nil {
+		return result, nil
+	}
+	result.Session = &factorysessions.ScopedLiveSessionSummary{
+		ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+		FolderPath: session.FolderPath, Project: session.Project,
+		IsDefault: session.IsDefault, Target: session.Target,
+	}
+	return result, nil
 }
 
 func liveRuntimeDependencies(host Host) liveruntime.Dependencies {

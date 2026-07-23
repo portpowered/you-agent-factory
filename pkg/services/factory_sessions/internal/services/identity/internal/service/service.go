@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -82,7 +83,7 @@ func (s *Service) Resolve(registry sessionregistry.Service, selector string) *fa
 	}
 	for _, id := range registry.IDs() {
 		session := registry.Get(id)
-		if session != nil && factorysessions.CanonicalFactorySessionID(session) == trimmed {
+		if session != nil && livesession.CanonicalID(session) == trimmed {
 			return session
 		}
 	}

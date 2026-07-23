@@ -6,6 +6,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -67,7 +68,7 @@ func TestServiceRegisterResolveAndUnregister(t *testing.T) {
 	if service.Current() != service.Default() || service.Resolve(factorysessions.DefaultSessionID) != service.Default() {
 		t.Fatal("default and selected session did not resolve to one registration")
 	}
-	if service.Resolve(factorysessions.CanonicalFactorySessionID(service.Default())) != service.Default() {
+	if service.Resolve(livesession.CanonicalID(service.Default())) != service.Default() {
 		t.Fatal("canonical runtime ID did not resolve")
 	}
 	service.Unregister(factorysessions.DefaultSessionID)

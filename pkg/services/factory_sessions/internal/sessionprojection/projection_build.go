@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
 // BuildProjectionContext combines runtime state, event projection, JavaScript
@@ -17,7 +18,8 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 		factoryCfg = input.RuntimeConfig.FactoryConfig()
 	}
 	result := ProjectionContext{
-		Session: input.Session, FactoryCfg: factoryCfg, Snapshot: input.Snapshot,
+		Session: input.Session, FactorySessionID: livesession.CanonicalID(input.Session),
+		FactoryCfg: factoryCfg, Snapshot: input.Snapshot,
 		BackendScopeID: input.BackendScopeID, LogicalSessionKeyID: input.LogicalSessionKey,
 		NormalizedTarget: input.NormalizedTarget, RuntimeStartedAt: input.RuntimeStartedAt,
 		Now: input.Now,

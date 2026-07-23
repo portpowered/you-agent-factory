@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
 type readTestHost struct {
@@ -89,7 +90,9 @@ func (h *readTestHost) BuildSessionProjectionContext(
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
-	return factorysessions.ProjectionContext{Session: session, Snapshot: h.snapshot}, nil
+	return factorysessions.ProjectionContext{
+		Session: session, FactorySessionID: livesession.CanonicalID(session), Snapshot: h.snapshot,
+	}, nil
 }
 
 func TestIsDurableExecutionSessionID(t *testing.T) {
@@ -140,7 +143,7 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 	t.Parallel()
 
 	const allocatedSessionID = "11111111-1111-4111-8111-111111111111"
-	if allocatedSessionID == factorysessions.DefaultSessionID || !factorysessions.IsUUIDFactorySessionID(allocatedSessionID) {
+	if allocatedSessionID == factorysessions.DefaultSessionID || !livesession.IsUUIDID(allocatedSessionID) {
 		t.Fatalf("allocated session id %q must be a UUID distinct from the default selector", allocatedSessionID)
 	}
 
@@ -207,7 +210,7 @@ func assertDefaultSessionListProjection(
 	if len(listed) != 1 {
 		t.Fatalf("listed sessions = %d, want 1", len(listed))
 	}
-	if session := listed[0].Context.Session; factorysessions.CanonicalFactorySessionID(session) != allocatedSessionID || !session.IsDefault {
+	if session := listed[0].Context.Session; listed[0].Context.FactorySessionID != allocatedSessionID || !session.IsDefault {
 		t.Fatalf("listed default session = %#v, want id %q and isDefault true", session, allocatedSessionID)
 	}
 	if !listed[0].RuntimeAvailable {
@@ -221,7 +224,7 @@ func assertDefaultSessionDetailProjection(
 	allocatedSessionID string,
 ) {
 	t.Helper()
-	if gotID := factorysessions.CanonicalFactorySessionID(got.Session); gotID != allocatedSessionID {
+	if gotID := got.FactorySessionID; gotID != allocatedSessionID {
 		t.Fatalf("get-by-alias session id = %q, want %q", gotID, allocatedSessionID)
 	}
 }
@@ -247,8 +250,8 @@ func assertResolvedSessionIDsAgree(
 	preflight factorysessions.SyncPreflightResult,
 ) {
 	t.Helper()
-	listedID := factorysessions.CanonicalFactorySessionID(listed[0].Context.Session)
-	gotID := factorysessions.CanonicalFactorySessionID(got.Session)
+	listedID := listed[0].Context.FactorySessionID
+	gotID := got.FactorySessionID
 	if listedID != gotID || gotID != *preflight.FactorySessionID {
 		t.Fatalf(
 			"resolved ids differ: list=%q get=%q preflight=%q",

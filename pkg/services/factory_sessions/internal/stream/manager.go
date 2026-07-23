@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
@@ -244,7 +245,7 @@ func (m *Manager) publishCanonicalResponseEvents(session *factorysessions.LiveSe
 		return nil
 	}
 	events, err := fragmentmap.MapFragment(fragmentmap.Context{
-		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),
+		FactorySessionID: livesession.CanonicalID(session),
 	}, fragment)
 	if err != nil {
 		return fmt.Errorf("map canonical response event: %w", err)
@@ -285,5 +286,5 @@ func responseStreamSessionKey(session *factorysessions.LiveSession) string {
 	if session == nil {
 		return ""
 	}
-	return factorysessions.CanonicalFactorySessionID(session)
+	return livesession.CanonicalID(session)
 }

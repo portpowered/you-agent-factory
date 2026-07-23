@@ -1,7 +1,6 @@
 package sessionprojection
 
 import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-
 import "strings"
 
 type ProjectionBuildInput = factorysessions.ProjectionBuildInput
@@ -43,10 +42,6 @@ const (
 	StopDispatchKindPetriTransition = factorysessions.StopDispatchKindPetriTransition
 	StopFailureTypeUnknown          = factorysessions.StopFailureTypeUnknown
 )
-
-func CanonicalFactorySessionID(session *LiveSession) string {
-	return factorysessions.CanonicalFactorySessionID(session)
-}
 
 func stringPointerOrNil(value string) *string {
 	value = strings.TrimSpace(value)

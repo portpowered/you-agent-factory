@@ -74,7 +74,7 @@ func TestRegistry_SelectUnknownReturnsFalse(t *testing.T) {
 }
 
 // The following compatibility-only cases prove retained selector acceptance.
-// Canonical live identity is covered by CanonicalFactorySessionID and UUID tests.
+// Canonical live identity is covered by the owner-private live-session tests.
 func TestCompatibilityOnlyIsDefaultSessionSelector(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -205,54 +205,5 @@ func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T)
 	}
 	if got := registry.FindByLogicalSessionKeyID("/workspace/other::default::"); got != nil {
 		t.Fatalf("FindByLogicalSessionKeyID(missing) = %#v, want nil", got)
-	}
-}
-
-func TestCanonicalFactorySessionID_PrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
-	session := &LiveSession{
-		ID:                      DefaultSessionID,
-		IsDefault:               true,
-		RuntimeFactorySessionID: "550e8400-e29b-41d4-a716-446655440000",
-	}
-
-	if got := CanonicalFactorySessionID(session); got != session.RuntimeFactorySessionID {
-		t.Fatalf("CanonicalFactorySessionID() = %q, want runtime id %q", got, session.RuntimeFactorySessionID)
-	}
-}
-
-func TestCanonicalFactorySessionID_FallsBackToRegistryID(t *testing.T) {
-	session := &LiveSession{ID: "session-beta"}
-
-	if got := CanonicalFactorySessionID(session); got != "session-beta" {
-		t.Fatalf("CanonicalFactorySessionID() = %q, want session-beta", got)
-	}
-}
-
-func TestEnsureRuntimeFactorySessionID_AssignsUUIDForDefaultAlias(t *testing.T) {
-	session := &LiveSession{ID: DefaultSessionID, IsDefault: true}
-
-	if err := EnsureRuntimeFactorySessionID(session, registrySessionID); err != nil {
-		t.Fatalf("EnsureRuntimeFactorySessionID: %v", err)
-	}
-	if session.RuntimeFactorySessionID == "" {
-		t.Fatal("RuntimeFactorySessionID = empty, want UUID")
-	}
-	if !IsUUIDFactorySessionID(session.RuntimeFactorySessionID) {
-		t.Fatalf("RuntimeFactorySessionID = %q, want UUID", session.RuntimeFactorySessionID)
-	}
-}
-
-func TestEnsureRuntimeFactorySessionID_IsIdempotent(t *testing.T) {
-	session := &LiveSession{
-		ID:                      DefaultSessionID,
-		IsDefault:               true,
-		RuntimeFactorySessionID: "550e8400-e29b-41d4-a716-446655440000",
-	}
-
-	if err := EnsureRuntimeFactorySessionID(session, registrySessionID); err != nil {
-		t.Fatalf("EnsureRuntimeFactorySessionID: %v", err)
-	}
-	if session.RuntimeFactorySessionID != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("RuntimeFactorySessionID = %q, want preserved UUID", session.RuntimeFactorySessionID)
 	}
 }

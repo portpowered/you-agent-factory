@@ -37,8 +37,12 @@ func (reader *scopedDurableReader) ListSessions(_ context.Context, request facto
 func TestListOwnsSourceSelectionMergingAndOrdering(t *testing.T) {
 	t.Parallel()
 	live := &scopedLiveReader{reads: []factorysessions.ReadProjection{
-		{Context: factorysessions.ProjectionContext{Session: &factorysessions.LiveSession{ID: "workspace-z"}}},
-		{Context: factorysessions.ProjectionContext{Session: &factorysessions.LiveSession{ID: "workspace-a"}}, RuntimeAvailable: true, Runtime: factorysessions.RuntimeProjection{Status: "RUNNING"}},
+		{Context: factorysessions.ProjectionContext{
+			Session: &factorysessions.LiveSession{ID: "workspace-z"}, FactorySessionID: "workspace-z",
+		}},
+		{Context: factorysessions.ProjectionContext{
+			Session: &factorysessions.LiveSession{ID: "workspace-a"}, FactorySessionID: "workspace-a",
+		}, RuntimeAvailable: true, Runtime: factorysessions.RuntimeProjection{Status: "RUNNING"}},
 	}}
 	durable := &scopedDurableReader{result: factorysessions.ListSessionsResult{
 		LiveSessions: []factorysessions.LiveSessionSummary{{ID: "durable-live-m"}},
