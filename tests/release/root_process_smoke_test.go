@@ -55,10 +55,11 @@ func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("default startup serves until cancellation", func(t *testing.T) {
-		assertCompiledServiceMode(t, binaryPath, environment, t.TempDir(), []string{
-			"--server", reserveRootProcessSmokeURL(t),
-		})
+	t.Run("bare invocation prints help and exits successfully", func(t *testing.T) {
+		output, err := runBoundedBinary(t, binaryPath, environment)
+		if err != nil || !strings.Contains(output, "Usage:") {
+			t.Fatalf("bare you = (%v, %q), want successful usage output", err, output)
+		}
 	})
 
 	t.Run("API service serves until cancellation", func(t *testing.T) {

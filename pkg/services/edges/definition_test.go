@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -32,6 +33,12 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		return nil
 	})
 	replacementStarter := platformhttpserver.Starter(func(context.Context, platformhttpserver.StartRequest) error {
+		return nil
+	})
+	defaultBrowserOpener := platformbrowser.Opener(func(context.Context, string) error { return nil })
+	replacementBrowserOpened := false
+	replacementBrowserOpener := platformbrowser.Opener(func(context.Context, string) error {
+		replacementBrowserOpened = true
 		return nil
 	})
 	defaultProvider := &stubProvider{id: "default"}
@@ -69,6 +76,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 
 	merged := Merge(Edges{
 		APIServerStarter:     defaultStarter,
+		BrowserOpener:        defaultBrowserOpener,
 		ProviderOverride:     defaultProvider,
 		HostedLinearEndpoint: "https://linear.example.test",
 		ModelAssetHostPlatform: models.AssetHostPlatform{
@@ -78,6 +86,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		WorkContentHostPlatform: "default-os",
 	}, Edges{
 		APIServerStarter: replacementStarter,
+		BrowserOpener:    replacementBrowserOpener,
 		ProviderOverride: replacementProvider,
 		FactoryRuntimeInputDirectoryWalker: func(string, fs.WalkDirFunc) error {
 			walked = true
@@ -176,6 +185,9 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			return "response-event-id"
 		},
 	})
+	if err := merged.BrowserOpener(context.Background(), "https://factory.example"); err != nil || !replacementBrowserOpened {
+		t.Fatalf("BrowserOpener replacement = (opened %t, error %v)", replacementBrowserOpened, err)
+	}
 
 	if merged.APIServerStarter == nil {
 		t.Fatal("APIServerStarter = nil")

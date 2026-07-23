@@ -2,6 +2,7 @@ package observation
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -60,5 +61,21 @@ func TestCaptureObserverDecodesNeutralEdge(t *testing.T) {
 	}
 	if target.Snapshot.Commands.RootPath != "you" || target.Snapshot.CommandTree != "you\tyou\t\n" {
 		t.Fatalf("captured observation = %#v", target)
+	}
+}
+
+func TestResolvedInputObservationRejectsInvalidEdgeValues(t *testing.T) {
+	_, err := Decode(platformprocess.CLIObservation{
+		CommandIdentityJSON: `{"formatVersion":"cli-command-identity/v1","rootPath":"you","commands":[]}`,
+		CommandInputsJSON:   `{"formatVersion":"cli-command-inputs/v1","arguments":[],"flags":[],"relationships":[]}`,
+		ResolvedInputsJSON:  `{`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "decode resolved CLI inputs observation") {
+		t.Fatalf("Decode() error = %v, want resolved-input diagnostic", err)
+	}
+
+	_, err = Encode(Result{ResolvedInputs: []resolvedinput.Observation{{Value: func() {}}}})
+	if err == nil || !strings.Contains(err.Error(), "encode resolved CLI inputs observation") {
+		t.Fatalf("Encode() error = %v, want resolved-input diagnostic", err)
 	}
 }
