@@ -1,11 +1,7 @@
 package run
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,7 +10,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"go.uber.org/zap"
@@ -281,176 +276,6 @@ func invocationSourceLabels(labels []work.InputSourceLabel) []string {
 		out = append(out, string(label))
 	}
 	return out
-}
-
-type responseEventSink = factoryvisualization.ResponseEventSink
-
-// onResponseEvents consumes validated, session-ordered FactoryResponseEvent
-// values. Rendering policy is selected only from canonical kind, phase, and
-// typed payload fields; provider-native names and raw payload fallbacks are not
-// presentation inputs.
-func (r *humanResponseStreamRenderer) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
-	if r == nil {
-		return
-	}
-	r.stream.PresentResponseEvents(events)
-}
-
-func formatHumanResponseEvent(
-	validate factorysessions.ResponseEventValidator,
-	event factorysessions.FactoryResponseEvent,
-) (string, bool) {
-	if err := validate.Validate(event); err != nil {
-		return "", false
-	}
-
-	var line string
-	var ok bool
-	switch event.Kind {
-	case factorysessions.ResponseEventKindReasoning:
-		line, ok = formatHumanReasoningEvent(event)
-	case factorysessions.ResponseEventKindTool:
-		line, ok = formatHumanToolEvent(event)
-	case factorysessions.ResponseEventKindError:
-		line, ok = formatHumanRetryEvent(event)
-	case factorysessions.ResponseEventKindProgress:
-		line, ok = formatHumanProgressEvent(event)
-	case factorysessions.ResponseEventKindStreamGap:
-		line, ok = formatHumanStreamGapEvent(event)
-	default:
-		return "", false
-	}
-	if !ok {
-		return "", false
-	}
-	line = boundedHumanProgressPayload(line)
-	return line, line != ""
-}
-
-func formatHumanToolEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
-	status, ok := map[factorysessions.ResponseEventPhase]string{
-		factorysessions.ResponseEventPhaseStarted:   "started",
-		factorysessions.ResponseEventPhaseCompleted: "completed",
-		factorysessions.ResponseEventPhaseFailed:    "failed",
-		factorysessions.ResponseEventPhaseCanceled:  "canceled",
-	}[event.Phase]
-	if !ok {
-		return "", false
-	}
-	var payload factorysessions.ResponseEventTool
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		return "", false
-	}
-	name := normalizeHumanProgressField(payload.ToolName)
-	callID := normalizeHumanProgressField(payload.ToolCallID)
-	if name == "" || callID == "" {
-		return "", false
-	}
-	return "tool: name=" + name + " call=" + callID + " status=" + status, true
-}
-
-func formatHumanReasoningEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
-	var payload factorysessions.ResponseEventReasoning
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		return "", false
-	}
-	switch event.Phase {
-	case factorysessions.ResponseEventPhaseStarted:
-		return "reasoning: started", true
-	case factorysessions.ResponseEventPhaseDelta:
-		if summary := normalizeHumanProgressField(payload.SummaryDelta); summary != "" {
-			return "reasoning: " + summary, true
-		}
-	case factorysessions.ResponseEventPhaseCompleted:
-		if summary := normalizeHumanProgressField(payload.Summary); summary != "" {
-			return "reasoning: " + summary, true
-		}
-		return "reasoning: completed", true
-	}
-	return "", false
-}
-
-func formatHumanRetryEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
-	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
-		return "", false
-	}
-	var payload factorysessions.ResponseEventErrorPayload
-	if err := json.Unmarshal(event.Payload, &payload); err != nil || !humanRetryStatus(payload) {
-		return "", false
-	}
-	code := normalizeHumanProgressField(payload.Code)
-	if code == "" {
-		return "", false
-	}
-	parts := []string{"retry: code=" + code}
-	if payload.RetryAttempt != nil {
-		parts = append(parts, "attempt="+strconv.Itoa(*payload.RetryAttempt))
-	}
-	if payload.RetryAfterSeconds != nil {
-		parts = append(parts, "retry-in="+strconv.FormatInt(*payload.RetryAfterSeconds, 10)+"s")
-	}
-	return strings.Join(parts, " "), true
-}
-
-func humanRetryStatus(payload factorysessions.ResponseEventErrorPayload) bool {
-	if payload.Retryable || payload.RetryAfterSeconds != nil || payload.RetryAttempt != nil {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(payload.Code)) {
-	case "rate_limited", "throttled", "too_many_requests":
-		return true
-	default:
-		return false
-	}
-}
-
-func formatHumanProgressEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
-	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
-		return "", false
-	}
-	var payload factorysessions.ResponseEventProgress
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		return "", false
-	}
-	label := normalizeHumanProgressField(payload.Label)
-	if label == "" {
-		return "", false
-	}
-	line := "progress: " + label
-	if message := normalizeHumanProgressField(payload.Message); message != "" {
-		line += " — " + message
-	}
-	if payload.PercentComplete != nil && !math.IsNaN(*payload.PercentComplete) &&
-		!math.IsInf(*payload.PercentComplete, 0) && *payload.PercentComplete >= 0 && *payload.PercentComplete <= 100 {
-		line += " (" + strconv.FormatFloat(*payload.PercentComplete, 'f', -1, 64) + "%)"
-	}
-	return line, true
-}
-
-func formatHumanStreamGapEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
-	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
-		return "", false
-	}
-	var payload factorysessions.ResponseEventStreamGap
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		return "", false
-	}
-	if itemID := normalizeHumanProgressField(payload.AffectedItemID); itemID != "" {
-		line := "stream gap: item " + itemID + " lifecycle is incomplete"
-		if reason := normalizeHumanProgressField(payload.Reason); reason != "" {
-			line += " (reason=" + reason + ")"
-		}
-		return line, true
-	}
-	line := fmt.Sprintf(
-		"stream gap: sequences %d-%d unavailable",
-		payload.FromSequence,
-		payload.ToSequence,
-	)
-	if reason := normalizeHumanProgressField(payload.Reason); reason != "" {
-		line += " (reason=" + reason + ")"
-	}
-	return line, true
 }
 
 func isPackagedTTSRun(cfg RunConfig) bool {

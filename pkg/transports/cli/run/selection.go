@@ -18,7 +18,7 @@ type InvocationOperation interface {
 	InvokeModel(context.Context, factorysessions.InvocationTarget, string, models.Request) (models.Result, error)
 	ResolveModelInvocationFactoryDir(string) (string, error)
 	ExportModelInvocationArtifact(string, string) error
-	InvokeFactory(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest) (factorysessions.FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
 }
 
 // DirectJavaScriptRunOperation is the exact direct-workflow capability

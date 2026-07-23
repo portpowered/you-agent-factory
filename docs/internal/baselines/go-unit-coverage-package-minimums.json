@@ -139,6 +139,10 @@
       "minimum": 87.92
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue",
+      "minimum": 90.74
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 84.84
     },
@@ -881,6 +885,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract/testkit",
+      "minimum": 76.13
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
       "minimum": 84.41
     },
@@ -1001,6 +1009,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
       "minimum": 81.70
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput",
+      "minimum": 86.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",

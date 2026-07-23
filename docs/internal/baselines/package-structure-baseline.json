@@ -854,11 +854,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/acceptance/scenario_matrix_test.go",
-      "target": "acceptance"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },
@@ -1299,11 +1294,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_goal_routing_smoke_test.go",
       "target": "smoke"
     },
@@ -1319,17 +1309,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_review_invocation_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -1390,21 +1370,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/packaged_goal_public_contract_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/response_stream_private_contract_closure_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/response_stream_private_ndjson_contract_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -2465,7 +2430,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization",
-      "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponseEventAttachment,pkg/services/factory_visualization/response_presentation.go:ResponseEventSink,pkg/services/factory_visualization/response_presentation.go:ResponseEventSource,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/response_stream.go:ResponseStream,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
+      "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
     },
     {
       "rule": "service-root-interface-count",

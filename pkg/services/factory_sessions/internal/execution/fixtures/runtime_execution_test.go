@@ -74,6 +74,106 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	assertSimpleFinalPrimaryResult(t, result)
 }
 
+func TestJavaScriptRuntimeService_StartSyncStreamsCanonicalPhaseBeforeCompletion(t *testing.T) {
+	phasePublished := make(chan struct{})
+	release := make(chan struct{})
+	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{
+		RunFunc: func(
+			_ context.Context,
+			_ factory.JavaScriptRuntimeRequest,
+			hooks factory.JavaScriptRuntimeHooks,
+		) (factory.JavaScriptRuntimeOutcome, error) {
+			records := []factory.JavaScriptRuntimeRecord{{
+				Sequence: 1, Kind: factory.JavaScriptRecordKindPhase,
+				Phase: &factory.JavaScriptPhaseRecord{Name: "execute"},
+			}}
+			hooks.OnRecord(records[0])
+			close(phasePublished)
+			<-release
+			records = append(records, factory.JavaScriptRuntimeRecord{
+				Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint,
+				Checkpoint: &factory.JavaScriptCheckpointRecord{ID: "checkpoint-live", Label: "live-ready"},
+			})
+			hooks.OnRecord(records[1])
+			value, err := json.Marshal(map[string]any{"status": "complete"})
+			return factory.JavaScriptRuntimeOutcome{
+				OK: true, Value: factory.TypedValue{JSON: value}, Records: records,
+			}, err
+		},
+	}
+	service := newJavaScriptRuntimeService(t, workflows)
+	request := simpleFinalSyncStartRequest()
+	request.RequestID = "req-runtime-sync-live-events-001"
+	eventBatches := make(chan []interfaces.FactoryEvent, 8)
+	request.EventConsumer = func(events []interfaces.FactoryEvent) {
+		eventBatches <- events
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.StartSync(context.Background(), request)
+		done <- err
+	}()
+
+	select {
+	case <-phasePublished:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for live JavaScript phase")
+	}
+	observed := collectFactoryEventTypes(eventBatches)
+	if !containsFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorPhaseChanged) {
+		t.Fatalf("events before completion = %v, want ORCHESTRATOR_PHASE_CHANGED", observed)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("StartSync completed before workflow release: %v", err)
+	default:
+	}
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	observed = append(observed, collectFactoryEventTypes(eventBatches)...)
+	phaseIndex := indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorPhaseChanged)
+	checkpointIndex := indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorCheckpointWritten)
+	if phaseIndex < 0 || checkpointIndex <= phaseIndex {
+		t.Fatalf("canonical JavaScript event order = %v", observed)
+	}
+}
+
+func collectFactoryEventTypes(batches <-chan []interfaces.FactoryEvent) []interfaces.FactoryEventType {
+	var eventTypes []interfaces.FactoryEventType
+	for {
+		select {
+		case events := <-batches:
+			for _, event := range events {
+				eventTypes = append(eventTypes, event.Type)
+			}
+		default:
+			return eventTypes
+		}
+	}
+}
+
+func containsFactoryEventType(
+	eventTypes []interfaces.FactoryEventType,
+	want interfaces.FactoryEventType,
+) bool {
+	return indexFactoryEventType(eventTypes, want) >= 0
+}
+
+func indexFactoryEventType(
+	eventTypes []interfaces.FactoryEventType,
+	want interfaces.FactoryEventType,
+) int {
+	for index, eventType := range eventTypes {
+		if eventType == want {
+			return index
+		}
+	}
+	return -1
+}
+
 func simpleFinalSyncStartRequest() fse.StartRequest {
 	return fse.StartRequest{
 		RequestID: "req-runtime-sync-simple-final-001",

@@ -847,7 +847,7 @@ func TestRunCommand_PositionalPromptRequiresFactoryFlag(t *testing.T) {
 	}
 }
 
-func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) {
+func TestRunCommand_CleanInvocationFailureWritesSingleErrorResponseToStderr(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -876,8 +876,17 @@ func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) 
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty", stdout.String())
 	}
-	if got := stderr.String(); got != "RUN_INVOCATION_FAILED: clean invocation failed: mock worker rejected\n" {
-		t.Fatalf("stderr = %q", got)
+	var payload struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", decodeErr, stderr.String())
+	}
+	if payload.Code != runcli.InvocationErrorCodeFailed || payload.Family != "INTERNAL_SERVER_ERROR" ||
+		payload.Message != "clean invocation failed: mock worker rejected" {
+		t.Fatalf("ErrorResponse = %#v", payload)
 	}
 }
 
@@ -920,6 +929,9 @@ func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t 
 	}
 	if payload["message"] != "clean invocation timed out" {
 		t.Fatalf("message = %q", payload["message"])
+	}
+	if payload["family"] != "INTERNAL_SERVER_ERROR" {
+		t.Fatalf("family = %q", payload["family"])
 	}
 }
 

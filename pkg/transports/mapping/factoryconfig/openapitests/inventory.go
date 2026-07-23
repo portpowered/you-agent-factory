@@ -2,17 +2,8 @@
 // exercises cross-dialect agreement through focused table-driven tests.
 package openapitests
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-)
-
 // ParityInventoryFormatVersion identifies the Factory/OpenAPI parity index shape.
 const ParityInventoryFormatVersion = "factory-openapi-parity/v1"
-
-// ParityIndexBaselineRelativePath is the committed Factory/OpenAPI parity index fixture.
-const ParityIndexBaselineRelativePath = "pkg/transports/mapping/factoryconfig/openapitests/testdata/baseline/factory-openapi-parity-index.json"
 
 const (
 	outcomeAccept = "accept"
@@ -73,17 +64,4 @@ func ProjectParityInventory() ParityInventory {
 			"and projected Draft 2020-12 factory.schema.json outcomes without changing schemas or mapping behavior",
 		Cases: cases,
 	}
-}
-
-// MarshalParityInventoryJSON renders the Factory/OpenAPI parity inventory as stable JSON.
-func MarshalParityInventoryJSON(inventory ParityInventory) ([]byte, error) {
-	payload, err := json.MarshalIndent(inventory, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal factory openapi parity inventory: %w", err)
-	}
-
-	var buffer bytes.Buffer
-	buffer.Write(payload)
-	buffer.WriteByte('\n')
-	return buffer.Bytes(), nil
 }

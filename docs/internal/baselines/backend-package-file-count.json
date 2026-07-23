@@ -29,7 +29,7 @@
     { "packagePath": "pkg/transports/cli/climanifestcobra", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate Cobra manifest adapters by command responsibility." },
     { "packagePath": "pkg/transports/cli/commandregistry", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Separate registry contracts from command construction." },
     { "packagePath": "pkg/transports/cli/factory", "fileCount": 21, "owner": "cli-maintainers", "removalReason": "Split factory commands by lifecycle responsibility." },
-    { "packagePath": "pkg/transports/cli/run", "fileCount": 23, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
+    { "packagePath": "pkg/transports/cli/run", "fileCount": 22, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
     { "packagePath": "pkg/transports/cli/submit", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate submit command cases or extract stable input behavior." },
     { "packagePath": "pkg/transports/http/servertests", "fileCount": 16, "owner": "http-transport-maintainers", "removalReason": "Consolidate server fixtures and move focused scenarios beside handlers." },
     { "packagePath": "pkg/transports/mapping/factorysession", "fileCount": 19, "owner": "transport-mapping-maintainers", "removalReason": "Partition Factory Session mapping by contract direction." },

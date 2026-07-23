@@ -15,6 +15,10 @@ properties:
   name:
     type: string
     description: Customer-authored workstation name used by guards, diagnostics, and authored references.
+  description:
+    allOf:
+      - $ref: './NameValue.yaml'
+    description: Optional localized customer-facing explanation of this workstation.
   behavior:
     allOf:
       - $ref: './WorkstationKind.yaml'

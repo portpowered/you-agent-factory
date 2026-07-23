@@ -1,9 +1,13 @@
 package workerconfig
 
-import factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+import (
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue"
+	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+)
 
 // Clone returns a detached copy of a Worker definition.
 func Clone(def Config) Config {
+	def.Description = cloneDescription(def.Description)
 	def.Args = append([]string(nil), def.Args...)
 	def.Resources = append([]factoryresource.Config(nil), def.Resources...)
 	def.Operations = cloneModelOperations(def.Operations)
@@ -14,6 +18,21 @@ func Clone(def Config) Config {
 		def.AgentTools = &agentTools
 	}
 	return def
+}
+
+func cloneDescription(description *namevalue.Config) *namevalue.Config {
+	if description == nil {
+		return nil
+	}
+	clone := *description
+	clone.Locales = append([]string(nil), description.Locales...)
+	if description.Values != nil {
+		clone.Values = make(map[string]string, len(description.Values))
+		for locale, value := range description.Values {
+			clone.Values[locale] = value
+		}
+	}
+	return &clone
 }
 
 func cloneModelOperations(operations []ModelOperation) []ModelOperation {

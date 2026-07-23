@@ -56,6 +56,7 @@ type stubInvocationService struct {
 	run    func(context.Context) error
 	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
 	close  func(context.Context, string) error
+	events []interfaces.FactoryEvent
 }
 
 func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.T) {
@@ -94,7 +95,7 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 		StdinIsTTY:               func() bool { return true },
 		Output:                   io.Discard,
 		DisableDefaultRecording:  true,
-	}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), testResponseEventValidator(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+	}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -117,6 +118,14 @@ func (s stubInvocationService) Run(ctx context.Context) error {
 
 func (s stubInvocationService) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
 	return factoryapi.Factory{Name: "portable"}, nil
+}
+
+func (s stubInvocationService) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
+	events := make([]interfaces.FactoryEvent, len(s.events))
+	for i := range s.events {
+		events[i] = s.events[i].Clone()
+	}
+	return events, nil
 }
 
 func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {

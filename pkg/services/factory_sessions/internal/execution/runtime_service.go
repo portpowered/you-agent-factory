@@ -44,6 +44,8 @@ type runtimeSessionState struct {
 	sourceContent             string
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
+	eventConsumer             FactoryEventConsumer
+	presentedEventIDs         map[string]struct{}
 }
 
 type startInflightFlight struct {
@@ -323,7 +325,6 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		}
 		return AsyncStartResult{}, err
 	}
-
 	startedAt := s.now()
 	running := projectRuntimeRunningSessionState(
 		reserved.state.session.SessionID,
@@ -343,7 +344,6 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.sourceContent = sourceContent
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.Unlock()
-
 	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 
 	result := s.asyncStartFromState(startState)
@@ -391,6 +391,8 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		}
 		return SyncStartResult{}, err
 	}
+	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
+	defer stopObservingFactoryEvents()
 
 	if hasSyncWait {
 		startedAt := s.now()
@@ -408,6 +410,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		reserved.state.events = running.events
 		reserved.state.runCancel = runCancel
 		s.mu.Unlock()
+		s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 		go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 
@@ -432,6 +435,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		return SyncStartResult{}, err
 	}
 	s.mu.Unlock()
+	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
@@ -942,49 +946,4 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		)
 	}
 	return hooks
-}
-
-func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, record factory.JavaScriptRuntimeRecord) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		return
-	}
-	preservedInterrupted := snapshotInterruptedDispatches(state)
-	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
-	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, s.now())
-	if record.Kind == factory.JavaScriptRecordKindCheckpoint && record.Checkpoint != nil {
-		state.checkpointSummary = s.checkpointSummaries.Build(factory.JavaScriptCheckpointSummaryInput{
-			SessionID:       sessionID,
-			CheckpointID:    record.Checkpoint.ID,
-			Label:           record.Checkpoint.Label,
-			Phase:           strings.TrimSpace(projection.Phase),
-			SourceHash:      strings.TrimSpace(state.session.SourceHash),
-			PolicyHash:      strings.TrimSpace(state.session.Policy.EffectiveHash),
-			CreatedAt:       s.now(),
-			CheckpointState: record.Checkpoint.State,
-			Records:         state.runtimeRecords,
-		})
-	}
-	state.dispatches = cloneDispatchSummaries(projection.Dispatches)
-	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(projection.DispatchJavaScript)
-	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(projection.DispatchStatusTransitions)
-	state.artifacts = cloneArtifactSummaries(projection.Artifacts)
-	if phase := strings.TrimSpace(projection.Phase); phase != "" {
-		state.session.Phase = phase
-	}
-	state.session.PhaseSummaries = append([]PhaseSummary(nil), projection.PhaseSummaries...)
-	if record.Kind == factory.JavaScriptRecordKindCheckpoint && record.Checkpoint != nil {
-		state.session.LatestCheckpoint = &CheckpointRef{
-			ID: strings.TrimSpace(record.Checkpoint.ID), Label: strings.TrimSpace(record.Checkpoint.Label), Phase: strings.TrimSpace(projection.Phase),
-		}
-	}
-	progress := projection.Progress
-	state.session.Progress = &progress
-	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
-	state.session.ArtifactCount = len(state.session.ArtifactRefs)
-	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
-	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 }

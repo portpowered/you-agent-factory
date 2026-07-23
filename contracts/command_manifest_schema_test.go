@@ -126,6 +126,59 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 	}
 }
 
+func TestCommandManifestSchemaInheritedFlagRequiresExclusiveSourceReference(t *testing.T) {
+	t.Parallel()
+	schema := commandManifestSchema(t)
+
+	t.Run("inherited flag requires source", func(t *testing.T) {
+		instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json"))).(map[string]any)
+		commands := instance["commands"].(map[string]any)
+		flags := commands["example.factory.watch"].(map[string]any)["flags"].(map[string]any)
+		delete(flags["example.factory.watch.flag.verbose"].(map[string]any), "inheritedFromInputId")
+		err := schema.Validate(instance)
+		if err == nil {
+			t.Fatal("expected inherited flag without source reference to fail")
+		}
+		wantPath := "/commands/example.factory.watch/flags/example.factory.watch.flag.verbose"
+		if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+			t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+		}
+	})
+
+	t.Run("persistent flag forbids inherited source", func(t *testing.T) {
+		instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json"))).(map[string]any)
+		commands := instance["commands"].(map[string]any)
+		flags := commands["example.factory"].(map[string]any)["flags"].(map[string]any)
+		flags["example.factory.flag.verbose"].(map[string]any)["inheritedFromInputId"] = "example.flag.verbose"
+		err := schema.Validate(instance)
+		if err == nil {
+			t.Fatal("expected persistent flag with inherited source reference to fail")
+		}
+		wantPath := "/commands/example.factory/flags/example.factory.flag.verbose"
+		if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+			t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+		}
+	})
+}
+
+func TestCommandManifestSchemaRejectsInheritedPositionalArgument(t *testing.T) {
+	t.Parallel()
+	schema := commandManifestSchema(t)
+	instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-canonical-input-kinds.json"))).(map[string]any)
+	commands := instance["commands"].(map[string]any)
+	arguments := commands["example.invoke"].(map[string]any)["arguments"].(map[string]any)
+	arguments["example.invoke.arg.count"].(map[string]any)["scope"] = "inherited"
+
+	err := schema.Validate(instance)
+	if err == nil {
+		t.Fatal("expected inherited positional argument to fail validation")
+	}
+	wantPath := "/commands/example.invoke/arguments/example.invoke.arg.count/scope"
+	if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+		t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+	}
+}
+
 func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
 	t.Parallel()
 	schema := commandManifestSchema(t)
@@ -188,6 +241,7 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 		{name: "conditional relationship", fixture: "valid-conditional-relationship.json"},
 		{name: "precedence and execution metadata", fixture: "valid-precedence.json"},
 		{name: "handler binding", fixture: "valid-handler-binding.json"},
+		{name: "canonical input kinds", fixture: "valid-canonical-input-kinds.json"},
 	}
 
 	for _, test := range tests {

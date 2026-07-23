@@ -16,7 +16,11 @@ import (
 func ObjectFromFactoryConfig(
 	factoryConfig *interfaces.FactoryConfig,
 ) (map[string]any, error) {
-	payload, err := json.Marshal(factorymapping.FactoryConfigToOpenAPI(factoryConfig))
+	publicFactory, err := factorymapping.FactoryConfigToOpenAPI(factoryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("map Factory snapshot boundary: %w", err)
+	}
+	payload, err := json.Marshal(publicFactory)
 	if err != nil {
 		return nil, fmt.Errorf("encode Factory snapshot boundary: %w", err)
 	}

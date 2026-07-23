@@ -56,9 +56,11 @@ type InvocationTarget struct {
 
 // FactoryInvocationOutcome is the detached result of one Factory invocation.
 type FactoryInvocationOutcome struct {
-	Result         interfaces.FactoryInvocationResult
-	ResponseEvents []FactoryResponseEvent
+	Result interfaces.FactoryInvocationResult
 }
+
+// FactoryEventConsumer receives ordered canonical events during one invocation.
+type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
 // ApplicationOpeningPorts contains invocation-local observation edges.
 type ApplicationOpeningPorts struct {

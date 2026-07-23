@@ -1,41 +1,19 @@
 package factory_visualization
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	visualizationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 const (
 	defaultProgressQueueCapacity = 64
 	progressDrainTimeout         = 250 * time.Millisecond
 )
-
-// ResponseEventSink is the transport-owned encoding edge for canonical
-// Factory Session response events.
-type ResponseEventSink interface {
-	PresentResponseEvents([]factorysessions.FactoryResponseEvent)
-}
-
-// ResponseEventSource is the exact Factory Session observation capability
-// consumed by response presentation.
-type ResponseEventSource interface {
-	SubscribeSessionResponseEventsFromLatest(string) (ResponseEventCursor, error)
-}
-
-// ResponseEventCursor is the consumer-owned retained response-event role.
-type ResponseEventCursor = visualizationcontracts.ResponseEventCursor
-
-// ResponseEventAttachment owns one response-event subscription lifecycle.
-type ResponseEventAttachment interface {
-	Stop()
-}
 
 // Output serializes encoded presentation records onto one transport writer.
 // Best-effort outputs may reject records under backpressure; lossless outputs
@@ -49,11 +27,18 @@ type Output interface {
 
 // ResponsePresentation is the service-root operation used by transports.
 type ResponsePresentation interface {
-	Attach(context.Context, ResponseEventSource, string, ResponseEventSink) ResponseEventAttachment
 	OpenBestEffortOutput(io.Writer) Output
 	OpenLosslessOutput(io.Writer) Output
-	OpenBestEffortResponseStream(io.Writer, ResponseEventEncoder) ResponseStream
-	OpenLosslessResponseStream(io.Writer, ResponseEventEncoder) ResponseStream
+	OpenBestEffortFactoryEventStream(io.Writer, FactoryEventEncoder) interface {
+		PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+		Finalize(FinalResponseWriter) (bool, error)
+		CloseAndDrain() error
+	}
+	OpenLosslessFactoryEventStream(io.Writer, FactoryEventEncoder) interface {
+		PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+		Finalize(FinalResponseWriter) (bool, error)
+		CloseAndDrain() error
+	}
 }
 
 type responsePresentation struct{}
@@ -64,27 +49,6 @@ func NewResponsePresentation() ResponsePresentation {
 	return responsePresentation{}
 }
 
-func (responsePresentation) Attach(
-	ctx context.Context,
-	source ResponseEventSource,
-	sessionID string,
-	sink ResponseEventSink,
-) ResponseEventAttachment {
-	if source == nil || sink == nil {
-		return nil
-	}
-	cursor, err := source.SubscribeSessionResponseEventsFromLatest(sessionID)
-	if err != nil || cursor == nil {
-		return nil
-	}
-	attachCtx, cancel := context.WithCancel(ctx)
-	attachment := &responseEventAttachment{
-		cancel: cancel, done: make(chan struct{}), cursor: cursor, sink: sink,
-	}
-	go attachment.consume(attachCtx)
-	return attachment
-}
-
 func (responsePresentation) OpenBestEffortOutput(writer io.Writer) Output {
 	return newBestEffortOutput(writer)
 }
@@ -93,48 +57,26 @@ func (responsePresentation) OpenLosslessOutput(writer io.Writer) Output {
 	return newLosslessOutput(writer)
 }
 
-func (responsePresentation) OpenBestEffortResponseStream(
+func (responsePresentation) OpenBestEffortFactoryEventStream(
 	writer io.Writer,
-	encode ResponseEventEncoder,
-) ResponseStream {
-	return newSerializedResponseStream(newBestEffortOutput(writer), encode)
+	encode FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return newSerializedFactoryEventStream(newBestEffortOutput(writer), encode)
 }
 
-func (responsePresentation) OpenLosslessResponseStream(
+func (responsePresentation) OpenLosslessFactoryEventStream(
 	writer io.Writer,
-	encode ResponseEventEncoder,
-) ResponseStream {
-	return newSerializedResponseStream(newLosslessOutput(writer), encode)
-}
-
-type responseEventAttachment struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	cursor ResponseEventCursor
-	sink   ResponseEventSink
-}
-
-func (a *responseEventAttachment) consume(ctx context.Context) {
-	defer close(a.done)
-	for {
-		events, err := a.cursor.Next(ctx)
-		if err != nil {
-			return
-		}
-		a.sink.PresentResponseEvents(events)
-	}
-}
-
-func (a *responseEventAttachment) Stop() {
-	if a == nil {
-		return
-	}
-	a.cancel()
-	<-a.done
-	if events, err := a.cursor.Drain(); err == nil && len(events) > 0 {
-		a.sink.PresentResponseEvents(events)
-	}
-	a.cursor.Detach()
+	encode FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return newSerializedFactoryEventStream(newLosslessOutput(writer), encode)
 }
 
 type bestEffortOutput struct {

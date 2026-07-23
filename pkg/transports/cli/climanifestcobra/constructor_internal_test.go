@@ -1,8 +1,10 @@
 package climanifestcobra
 
 import (
+	"strings"
 	"testing"
 
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/spf13/cobra"
@@ -20,6 +22,43 @@ func TestLocalBindingTargetParsesIntDefaults(t *testing.T) {
 	}
 	if target.intValue == nil || *target.intValue != 3 {
 		t.Fatalf("int binding = %#v, want 3", target.intValue)
+	}
+}
+
+func TestSessionLocalBindingTargetsRejectInheritedJSON(t *testing.T) {
+	flag := climanifest.Flag{Long: "json"}
+	tests := []struct {
+		name   string
+		target func() error
+	}{
+		{
+			name: "create",
+			target: func() error {
+				_, err := sessionCreateFlagTarget(flag, &sessioncli.CreateConfig{})
+				return err
+			},
+		},
+		{
+			name: "list",
+			target: func() error {
+				_, err := sessionListFlagTarget(flag, &sessioncli.ListConfig{})
+				return err
+			},
+		},
+		{
+			name: "delete",
+			target: func() error {
+				_, err := sessionDeleteFlagTarget(flag, &sessioncli.DeleteConfig{})
+				return err
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.target(); err == nil || !strings.Contains(err.Error(), "unsupported") {
+				t.Fatalf("local JSON target error = %v, want unsupported inherited flag", err)
+			}
+		})
 	}
 }
 

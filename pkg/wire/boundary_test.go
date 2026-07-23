@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -18,6 +19,28 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 )
+
+func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	presentationOutput := provideResponsePresentation().OpenLosslessOutput(&output)
+	if err := presentationOutput.Enqueue([]byte("factory event")); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	if err := presentationOutput.CloseAndDrain(); err != nil {
+		t.Fatalf("CloseAndDrain: %v", err)
+	}
+	if got, want := output.String(), "factory event\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestProvideWorkStopSummaryProjectorDelegatesToFactorySessions(t *testing.T) {
+	t.Parallel()
+	if got := provideWorkStopSummaryProjector()(factorysessions.WorkStopSummaryRequest{}); got != nil {
+		t.Fatalf("empty Work stop summary = %#v, want nil", got)
+	}
+}
 
 func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsPlatformDefault(t *testing.T) {
 	t.Parallel()

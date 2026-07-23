@@ -9,11 +9,129 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
+
+func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseCheckpointPhase(t *testing.T) {
+	records := []factory.JavaScriptRuntimeRecord{
+		{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "plan"}},
+		{Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{ID: "checkpoint-plan", Label: "plan-ready"}},
+		{Sequence: 3, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "execute"}},
+	}
+	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{RunFunc: func(
+		_ context.Context,
+		_ factory.JavaScriptRuntimeRequest,
+		hooks factory.JavaScriptRuntimeHooks,
+	) (factory.JavaScriptRuntimeOutcome, error) {
+		for _, record := range records {
+			hooks.OnRecord(record)
+		}
+		value, err := json.Marshal(map[string]any{"status": "complete"})
+		return factory.JavaScriptRuntimeOutcome{OK: true, Value: factory.TypedValue{JSON: value}, Records: records}, err
+	}}
+	service := newJavaScriptRuntimeService(t, workflows)
+	request := simpleFinalSyncStartRequest()
+	request.RequestID = "req-runtime-phase-checkpoint-phase-live-replay"
+	var live []interfaces.FactoryEvent
+	request.EventConsumer = func(events []interfaces.FactoryEvent) {
+		for _, event := range events {
+			live = append(live, event.Clone())
+		}
+	}
+
+	completed, err := service.StartSync(context.Background(), request)
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	replayed, err := service.ReadEvents(context.Background(), completed.SessionID, fse.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	replay := decodeCanonicalFactoryEvents(t, replayed.Events)
+	assertCanonicalEventStreamsEqual(t, live, replay)
+	assertStrictlyIncreasingFactoryEventSequences(t, live)
+	assertPhaseCheckpointPhaseTransitions(t, live)
+}
+
+func decodeCanonicalFactoryEvents(t *testing.T, rawEvents []json.RawMessage) []interfaces.FactoryEvent {
+	t.Helper()
+	events := make([]interfaces.FactoryEvent, len(rawEvents))
+	for index, raw := range rawEvents {
+		if err := json.Unmarshal(raw, &events[index]); err != nil {
+			t.Fatalf("decode canonical Factory Event %d: %v", index, err)
+		}
+	}
+	return events
+}
+
+func assertCanonicalEventStreamsEqual(t *testing.T, live, replay []interfaces.FactoryEvent) {
+	t.Helper()
+	if len(live) != len(replay) {
+		t.Fatalf("live events = %d, replay events = %d", len(live), len(replay))
+	}
+	for index := range live {
+		liveJSON, _ := json.Marshal(live[index])
+		replayJSON, _ := json.Marshal(replay[index])
+		if string(liveJSON) != string(replayJSON) {
+			t.Fatalf("event %d differs:\nlive=%s\nreplay=%s", index, liveJSON, replayJSON)
+		}
+	}
+}
+
+func assertStrictlyIncreasingFactoryEventSequences(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	previousSequence := 0
+	previousSessionSequence := -1
+	for index, event := range events {
+		if event.Context.Sequence <= previousSequence {
+			t.Fatalf("event %d sequence = %d after %d", index, event.Context.Sequence, previousSequence)
+		}
+		if event.Context.SessionSequence == nil || *event.Context.SessionSequence <= previousSessionSequence {
+			t.Fatalf("event %d sessionSequence = %#v after %d", index, event.Context.SessionSequence, previousSessionSequence)
+		}
+		previousSequence = event.Context.Sequence
+		previousSessionSequence = *event.Context.SessionSequence
+	}
+}
+
+func assertPhaseCheckpointPhaseTransitions(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	var transitions []interfaces.FactoryEvent
+	for _, event := range events {
+		if event.Type == interfaces.FactoryEventTypeOrchestratorPhaseChanged ||
+			event.Type == interfaces.FactoryEventTypeOrchestratorCheckpointWritten {
+			transitions = append(transitions, event)
+		}
+	}
+	wantTypes := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+	}
+	if len(transitions) != len(wantTypes) {
+		t.Fatalf("orchestrator transitions = %d, want %d: %#v", len(transitions), len(wantTypes), transitions)
+	}
+	for index, wantType := range wantTypes {
+		if transitions[index].Type != wantType {
+			t.Fatalf("orchestrator transition %d type = %s, want %s", index, transitions[index].Type, wantType)
+		}
+	}
+	var terminalPhase struct {
+		PhaseStatus string `json:"phaseStatus"`
+	}
+	if err := json.Unmarshal(transitions[len(transitions)-1].Payload, &terminalPhase); err != nil {
+		t.Fatalf("decode terminal phase payload: %v", err)
+	}
+	if terminalPhase.PhaseStatus != "COMPLETED" {
+		t.Fatalf("terminal phase status = %q, want COMPLETED", terminalPhase.PhaseStatus)
+	}
+}
 
 func TestJavaScriptRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndProgress(t *testing.T) {
 	service := newJavaScriptRuntimeServiceWithFixture(t, "progress-primitives.workflow.js", "progress-primitives",

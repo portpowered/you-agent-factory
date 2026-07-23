@@ -122,6 +122,26 @@
             "$ref": "#/$defs/flag"
           }
         },
+        "sourceBindings": {
+          "description": "Environment, operator-configuration, and stdin routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sourceBinding"
+          }
+        },
+        "handlerBindings": {
+          "description": "Handler routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/handlerBinding"
+          }
+        },
         "relationships": {
           "description": "Parse-constraint relationship records keyed by stable relationship identifiers. Object keys make duplicate relationship IDs structurally unrepresentable.",
           "type": "object",
@@ -251,7 +271,6 @@
         "enum",
         "pattern",
         "completion",
-        "channels",
         "doubleDash"
       ],
       "properties": {
@@ -275,9 +294,19 @@
           ]
         },
         "valueType": {
-          "description": "The scalar type accepted for one positional value.",
+          "description": "The scalar or repeated value kind accepted by this positional input.",
           "enum": [
-            "string"
+            "bool",
+            "string",
+            "int",
+            "int64",
+            "stringArray"
+          ]
+        },
+        "scope": {
+          "description": "The command-local scope of this positional input. Positional arguments are never persistent or inherited.",
+          "enum": [
+            "local"
           ]
         },
         "required": {
@@ -297,6 +326,9 @@
         "variadic": {
           "description": "Whether the argument consumes all remaining positional values.",
           "type": "boolean"
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
         },
         "enum": {
           "description": "Closed set of accepted values when the argument is restricted to enumerated strings.",
@@ -333,6 +365,35 @@
           },
           "uniqueItems": true
         },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "visibility": {
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
         "doubleDash": {
           "description": "How a bare -- token is interpreted relative to this command's positional arguments.",
           "enum": [
@@ -342,6 +403,29 @@
         }
       },
       "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "channels"
+              ]
+            },
+            {
+              "required": [
+                "scope",
+                "acceptedSources",
+                "handlerBindingId",
+                "visibility",
+                "lifecycle"
+              ],
+              "not": {
+                "required": [
+                  "channels"
+                ]
+              }
+            }
+          ]
+        },
         {
           "if": {
             "properties": {
@@ -417,19 +501,21 @@
         "scope",
         "valueType",
         "required",
-        "default",
-        "changedDefault",
-        "noOptionDefault",
         "repeatable",
         "normalization",
         "completion",
-        "binding",
         "visibility",
         "lifecycle"
       ],
       "properties": {
         "id": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The transport-neutral input category.",
+          "enum": [
+            "named"
+          ]
         },
         "long": {
           "description": "The primary long flag name without leading dashes.",
@@ -458,6 +544,10 @@
             "inherited"
           ]
         },
+        "inheritedFromInputId": {
+          "description": "Stable ID of the persistent ancestor input represented by an inherited flag.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
         "valueType": {
           "description": "The scalar or collection type accepted for one flag value.",
           "enum": [
@@ -481,6 +571,22 @@
         "required": {
           "description": "Whether the flag must be supplied before invocation proceeds.",
           "type": "boolean"
+        },
+        "minCardinality": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCardinality": {
+          "description": "Maximum accepted values, or -1 when unbounded.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
+        },
+        "noOptionDefaultValue": {
+          "description": "Typed value used when a named input is present without an option value.",
+          "$ref": "#/$defs/inputValue"
         },
         "default": {
           "description": "Serialized default value for the flag when it is omitted.",
@@ -520,6 +626,26 @@
           "description": "Optional binding target for this flag. Use an empty string when the flag is not bound to another input surface.",
           "type": "string"
         },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
         "visibility": {
           "description": "Whether the flag is shown in default help output.",
           "enum": [
@@ -532,6 +658,59 @@
         }
       },
       "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "default",
+                "changedDefault",
+                "noOptionDefault",
+                "binding"
+              ]
+            },
+            {
+              "required": [
+                "kind",
+                "minCardinality",
+                "maxCardinality",
+                "acceptedSources",
+                "handlerBindingId"
+              ],
+              "not": {
+                "anyOf": [
+                  { "required": ["default"] },
+                  { "required": ["changedDefault"] },
+                  { "required": ["noOptionDefault"] },
+                  { "required": ["binding"] }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "inherited"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "inheritedFromInputId"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "inheritedFromInputId"
+              ]
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -601,6 +780,76 @@
         }
       ]
     },
+    "inputValue": {
+      "description": "An explicitly typed scalar or repeated input value. The member name preserves the authored value kind without serialized reinterpretation.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "boolean": {
+          "type": "boolean"
+        },
+        "string": {
+          "type": "string"
+        },
+        "int": {
+          "type": "integer"
+        },
+        "int64": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "stringArray": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "source": {
+          "enum": ["stdin", "environment", "operator-config"]
+        },
+        "externalKey": {
+          "description": "Environment variable or operator-configuration key consumed by this binding.",
+          "type": "string",
+          "minLength": 1
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source": {"const": "stdin"}}, "required": ["source"]},
+          "then": {"not": {"required": ["externalKey"]}},
+          "else": {"required": ["externalKey"]}
+        }
+      ]
+    },
+    "handlerBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      }
+    },
     "participantRef": {
       "description": "Stable reference to one flag or argument participant in a relationship group.",
       "type": "object",
@@ -623,6 +872,7 @@
       }
     },
     "relationship": {
+      "description": "A deterministic input-constraint record. Group participants are unordered. Dependency and conditional records create directed edges from when to each participant. Equivalent same-kind records are duplicates; required-together contradicts exclusion over the same set, and a directed edge contradicts exclusion of its endpoints. Directed relationship edges must be acyclic.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -640,21 +890,21 @@
             "mutually-exclusive",
             "required-together",
             "at-least-one",
+            "dependency",
             "conditional",
             "conflict"
           ]
         },
         "participants": {
-          "description": "Ordered participant references constrained by this relationship.",
+          "description": "Participant references constrained by this relationship. Group relationship participants are an unordered set. Dependency and conditional participants are targets of the input named by when.",
           "type": "array",
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/participantRef"
-          },
-          "uniqueItems": true
+          }
         },
         "when": {
-          "description": "Trigger participant for conditional relationships. Required when kind is conditional.",
+          "description": "Trigger participant for dependency and conditional relationships.",
           "$ref": "#/$defs/participantRef"
         }
       },
@@ -676,6 +926,11 @@
             ]
           },
           "then": {
+            "not": {
+              "required": [
+                "when"
+              ]
+            },
             "properties": {
               "participants": {
                 "minItems": 2
@@ -687,7 +942,10 @@
           "if": {
             "properties": {
               "kind": {
-                "const": "conditional"
+                "enum": [
+                  "dependency",
+                  "conditional"
+                ]
               }
             },
             "required": [
@@ -700,7 +958,7 @@
             ],
             "properties": {
               "participants": {
-                "minItems": 2
+                "minItems": 1
               }
             }
           }
@@ -752,29 +1010,50 @@
       }
     },
     "precedence": {
-      "description": "Relative precedence of input sources when resolving one command invocation.",
+      "description": "Canonical source resolution policy. Explicit named flags and positional arguments share the cli tier; selected-Factory defaults are the lowest tier.",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "order"
+        "order",
+        "withinTier",
+        "acrossTiers",
+        "multipleBindings"
       ],
       "properties": {
         "order": {
-          "description": "Ordered input sources from highest to lowest precedence. Each source appears exactly once.",
+          "description": "Input sources from highest to lowest precedence. Semantic validation requires this exact order.",
           "type": "array",
           "minItems": 6,
           "maxItems": 6,
           "uniqueItems": true,
           "items": {
             "enum": [
-              "flags",
-              "args",
-              "env",
-              "config",
+              "cli",
               "stdin",
-              "defaults"
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
             ]
           }
+        },
+        "withinTier": {
+          "description": "Tie behavior for observations from one binding in invocation order.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scalar", "repeated"],
+          "properties": {
+            "scalar": { "const": "last" },
+            "repeated": { "const": "append" }
+          }
+        },
+        "acrossTiers": {
+          "description": "A value from the highest populated tier replaces values from all lower tiers, including for repeated inputs.",
+          "const": "replace"
+        },
+        "multipleBindings": {
+          "description": "Multiple bindings in the same tier targeting one input are ambiguous and rejected.",
+          "const": "reject"
         }
       }
     },

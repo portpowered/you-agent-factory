@@ -52,7 +52,6 @@ type InvocationSignatureConfig struct {
 	Parameters                 []InvocationParameterConfig     `json:"parameters,omitempty"`
 	UnknownNamedArgumentPolicy string                          `json:"unknownNamedArgumentPolicy,omitempty"`
 	OutputContract             *InvocationOutputContractConfig `json:"outputContract,omitempty"`
-	Examples                   []InvocationExampleConfig       `json:"examples,omitempty"`
 }
 
 type InvocationParameterConfig struct {
@@ -81,13 +80,6 @@ type InvocationOutputContractConfig struct {
 	ContentType   string `json:"contentType,omitempty"`
 	FileExtension string `json:"fileExtension,omitempty"`
 	Description   string `json:"description,omitempty"`
-}
-
-type InvocationExampleConfig struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Argv        []string `json:"argv,omitempty"`
-	Stdin       string   `json:"stdin,omitempty"`
 }
 
 // InvocationWorldStateProvider supplies the Work-owned projection required by

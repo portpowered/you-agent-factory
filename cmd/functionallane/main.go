@@ -9,9 +9,9 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-)
 
-const supportPackageSuffix = "/internal/support"
+	"github.com/portpowered/infinite-you/internal/testlanes"
+)
 
 type config struct {
 	count   int
@@ -53,7 +53,7 @@ func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 1, "go test -count value")
 	flag.IntVar(&cfg.jobs, "jobs", 2, "go test -p value")
-	flag.StringVar(&cfg.root, "root", "./tests/functional/...", "go list package pattern for functional test discovery")
+	flag.StringVar(&cfg.root, "root", testlanes.FunctionalPackagePattern, "go list package pattern for functional test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.Parse()
@@ -79,10 +79,15 @@ func discoverPackages(root string) ([]string, error) {
 	pkgs := make([]string, 0, len(lines))
 	for _, line := range lines {
 		pkg := strings.TrimSpace(line)
-		if pkg == "" || strings.HasSuffix(pkg, supportPackageSuffix) {
+		if pkg == "" || !testlanes.IsRunnableFunctionalPackage(pkg) {
 			continue
 		}
 		pkgs = append(pkgs, pkg)
+	}
+	if root == testlanes.FunctionalPackagePattern {
+		if err := testlanes.ValidateProviderFunctionalPackages(pkgs); err != nil {
+			return nil, err
+		}
 	}
 	return pkgs, nil
 }

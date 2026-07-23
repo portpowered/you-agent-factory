@@ -139,7 +139,6 @@ type Operation struct {
 	invocationTarget  factorysessions.InvocationTarget
 	invocation        InvocationOperation
 	presentation      factoryvisualization.ResponsePresentation
-	responseEvents    factorysessions.ResponseEventValidator
 	prepareWorkTarget work.SingleWorkTargetPreparation
 	invocationMode    bool
 	recordPath        resolvedRunRecordPath
@@ -153,7 +152,6 @@ func Open(
 	buildRunner RuntimeRunnerBuilder,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
@@ -186,7 +184,6 @@ func Open(
 			recordPath,
 			invocation,
 			presentation,
-			responseEvents,
 			mockWorkersConfig,
 		)
 	}
@@ -239,7 +236,6 @@ func (operation *Operation) Run(ctx context.Context) error {
 		return runFactoryInvocation(
 			ctx, operation.cfg, operation.invocationTarget, *operation.invocationRequest,
 			operation.invocation, operation.presentation,
-			operation.responseEvents,
 		)
 	}
 

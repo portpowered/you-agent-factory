@@ -327,6 +327,122 @@ const (
 	SessionListScopeAll       SessionListScope = "all"
 )
 
+func uniqueRuntimeRecords(records []workflowsource.JavaScriptRuntimeRecord) []workflowsource.JavaScriptRuntimeRecord {
+	unique := make([]workflowsource.JavaScriptRuntimeRecord, 0, len(records))
+	seen := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			continue
+		}
+		key := string(encoded)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, cloneRuntimeRecord(record))
+	}
+	return unique
+}
+
+func appendCanonicalOrchestratorRuntimeRecordEvents(events []json.RawMessage, session SessionReadResult, input RuntimeDispatchEventInput, source string) []json.RawMessage {
+	if len(input.RuntimeRecords) == 0 {
+		return events
+	}
+	eventTime := canonicalSessionEventTime(session)
+	var dialect *string
+	if value := strings.TrimSpace(session.Dialect); value != "" {
+		dialect = &value
+	}
+	checkpointByID := make(map[string]RuntimeCheckpointEventProjection, len(input.CheckpointEvents))
+	for _, checkpoint := range input.CheckpointEvents {
+		checkpointByID[strings.TrimSpace(checkpoint.CheckpointID)] = checkpoint
+	}
+	projected := make([]json.RawMessage, 0, len(input.RuntimeRecords)*2)
+	var activePhase *orchestratorPhaseTransition
+	for index, record := range input.RuntimeRecords {
+		switch record.Kind {
+		case workflowsource.JavaScriptRecordKindPhase:
+			if record.Phase == nil || strings.TrimSpace(record.Phase.Name) == "" {
+				continue
+			}
+			if activePhase != nil {
+				projected = append(projected, canonicalOrchestratorPhaseTransitionEvent(events, session, source, dialect, *activePhase, "COMPLETED", index, len(projected)))
+			}
+			activePhase = &orchestratorPhaseTransition{index: index, name: strings.TrimSpace(record.Phase.Name)}
+			projected = append(projected, canonicalOrchestratorPhaseTransitionEvent(events, session, source, dialect, *activePhase, "ACTIVE", index, len(projected)))
+		case workflowsource.JavaScriptRecordKindCheckpoint:
+			if record.Checkpoint == nil || strings.TrimSpace(record.Checkpoint.ID) == "" {
+				continue
+			}
+			checkpointID := strings.TrimSpace(record.Checkpoint.ID)
+			checkpoint := checkpointByID[checkpointID]
+			checkpoint.CheckpointID = checkpointID
+			if checkpoint.Label == "" {
+				checkpoint.Label = strings.TrimSpace(record.Checkpoint.Label)
+			}
+			projected = append(projected, canonicalOrchestratorCheckpointRecordEvent(events, session, source, dialect, activePhase, checkpoint, eventTime, index, len(projected)))
+		}
+	}
+	if activePhase != nil && IsTerminalLifecycleStatus(session.Status) {
+		projected = append(projected, canonicalOrchestratorPhaseTransitionEvent(events, session, source, dialect, *activePhase, "COMPLETED", len(input.RuntimeRecords), len(projected)))
+	}
+	return insertEventsBeforeSessionCompleted(events, projected)
+}
+
+type orchestratorPhaseTransition struct {
+	index int
+	name  string
+}
+
+func canonicalOrchestratorPhaseTransitionEvent(events []json.RawMessage, session SessionReadResult, source string, dialect *string, phase orchestratorPhaseTransition, status string, transitionIndex, projectedIndex int) json.RawMessage {
+	phaseName := phase.name
+	builder := canonicalSessionEventBuilder{
+		sessionID: session.SessionID, orchestratorKind: string(session.OrchestratorKind),
+		orchestratorDialect: dialect, phaseID: &phaseName, phaseName: &phaseName,
+		source: source, eventTime: canonicalSessionEventTime(session),
+	}
+	return builder.event(
+		"ORCHESTRATOR_PHASE_CHANGED",
+		fmt.Sprintf("orchestrator-phase-changed/%s/%d/%s/%s/%d", session.SessionID, phase.index, phase.name, strings.ToLower(status), transitionIndex),
+		nextCanonicalSessionEventSequence(events)+projectedIndex,
+		mustMarshalPayload(map[string]any{"phaseStatus": status}),
+	)
+}
+
+func canonicalOrchestratorCheckpointRecordEvent(events []json.RawMessage, session SessionReadResult, source string, dialect *string, activePhase *orchestratorPhaseTransition, checkpoint RuntimeCheckpointEventProjection, eventTime time.Time, recordIndex, projectedIndex int) json.RawMessage {
+	var phaseID *string
+	if activePhase != nil {
+		phase := activePhase.name
+		phaseID = &phase
+	}
+	builder := canonicalSessionEventBuilder{
+		sessionID: session.SessionID, orchestratorKind: string(session.OrchestratorKind),
+		orchestratorDialect: dialect, phaseID: phaseID, phaseName: phaseID,
+		source: source, eventTime: eventTime,
+	}
+	payload := map[string]any{"label": checkpoint.Label, "resumabilityStatus": checkpoint.ResumabilityStatus}
+	if summary := strings.TrimSpace(checkpoint.Summary); summary != "" {
+		payload["summary"] = summary
+	}
+	if sourceHash := strings.TrimSpace(checkpoint.SourceHash); sourceHash != "" {
+		payload["sourceHash"] = sourceHash
+	}
+	timestamp := checkpoint.Timestamp
+	if timestamp.IsZero() {
+		timestamp = eventTime.Add(time.Duration(recordIndex+1) * time.Second)
+	}
+	payload["timestamp"] = timestamp.UTC().Format(time.RFC3339)
+	checkpointID := checkpoint.CheckpointID
+	return builder.eventWithCheckpoint(
+		"ORCHESTRATOR_CHECKPOINT_WRITTEN",
+		fmt.Sprintf("orchestrator-checkpoint-written/%s/%d/%s", session.SessionID, recordIndex, checkpointID),
+		nextCanonicalSessionEventSequence(events)+projectedIndex,
+		&checkpointID,
+		mustMarshalPayload(payload),
+	)
+}
+
 // DefaultSessionListScope is live for backward-compatible live workspace session listing.
 const DefaultSessionListScope = SessionListScopeLive
 
@@ -452,11 +568,21 @@ func BuildCanonicalRuntimeSessionEvents(
 ) []json.RawMessage {
 	events := buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
 	if len(dispatch) == 0 {
+		if len(session.PhaseSummaries) > 0 {
+			events = appendCanonicalOrchestratorPhaseEvents(events, session, canonicalEventSourceRuntimeService)
+		}
 		return events
 	}
 	input := dispatch[0]
-	if len(input.CheckpointEvents) > 0 {
-		events = appendCanonicalOrchestratorCheckpointEvents(events, session, input.CheckpointEvents, canonicalEventSourceRuntimeService)
+	if len(input.RuntimeRecords) > 0 {
+		events = appendCanonicalOrchestratorRuntimeRecordEvents(events, session, input, canonicalEventSourceRuntimeService)
+	} else {
+		if len(session.PhaseSummaries) > 0 {
+			events = appendCanonicalOrchestratorPhaseEvents(events, session, canonicalEventSourceRuntimeService)
+		}
+		if len(input.CheckpointEvents) > 0 {
+			events = appendCanonicalOrchestratorCheckpointEvents(events, session, input.CheckpointEvents, canonicalEventSourceRuntimeService)
+		}
 	}
 	if len(input.Dispatches) == 0 {
 		return events

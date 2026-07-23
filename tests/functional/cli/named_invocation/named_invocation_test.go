@@ -130,16 +130,17 @@ func runHermeticNamedInvocation(
 	assertPackagedFactoryInstalled(t, initStdout, factoryName)
 
 	mockWorkersPath := writeMockWorkersConfig(t, mockWorkers)
+	args := []string{
+		"you", "run", "--named", factoryName,
+		"--with-mock-workers", "--no-record", "--quiet",
+		mockWorkersPath, requestText,
+	}
 	stdout, stderr := executeCustomerCommand(
 		t,
 		process,
 		environment,
 		workingDirectory,
-		[]string{
-			"you", "run", "--named", factoryName,
-			"--with-mock-workers", "--no-record", "--quiet",
-			mockWorkersPath, requestText,
-		},
+		args,
 	)
 	if stderr != "" {
 		t.Fatalf("named invocation stderr = %q, want empty; stdout=%s", stderr, stdout)

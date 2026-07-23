@@ -2,19 +2,7 @@
 // Visualization without widening the service root interface inventory.
 package contracts
 
-import (
-	"context"
-
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-)
-
-// ResponseEventCursor is the retained response-event role consumed by response
-// presentation.
-type ResponseEventCursor interface {
-	Next(context.Context) ([]factorysessions.FactoryResponseEvent, error)
-	Drain() ([]factorysessions.FactoryResponseEvent, error)
-	Detach()
-}
+import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 
 // RuntimeReader is the live-runtime observation role consumed by Factory
 // Visualization.

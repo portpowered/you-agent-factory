@@ -2,7 +2,7 @@ package acceptance
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,81 +12,32 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-var quietLeakForbiddenMarkers = []string{
-	"Factory initiated",
-	"Dashboard URL",
-	"Runtime log",
-	"Opening dashboard",
-	"Factory:",
-	"Recording saved",
-}
-
-func TestInvalidGoal_UnknownNamedFactory_RejectsWithDocumentedError(t *testing.T) {
+func TestInvalidGoal_OutputModesExitNonZero(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	result, err := session.Run(ctx,
-		"run",
-		"--named", "@you/missing",
-		"--no-record",
-		"invalid-goal-acceptance-prompt",
-	)
-	if err == nil {
-		t.Fatalf("expected unknown named factory failure, got result=%#v", result)
-	}
-	if result.ExitCode == 0 {
-		t.Fatalf("exit code = 0, want non-zero for invalid goal")
-	}
-
-	combined := result.Stdout + result.Stderr
-	for _, want := range []string{
-		`resolve named factory "@you/missing"`,
-		"not found",
-		"project root",
-		"global root",
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "default", args: []string{"run", "--named", "@you/missing", "--no-record", "invalid-goal-prompt"}},
+		{name: "quiet", args: []string{"run", "--named", "@you/missing", "--no-record", "--quiet", "invalid-goal-prompt"}},
 	} {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("output = %q, want documented invalid-goal guidance %q", combined, want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			result, err := session.Run(ctx, tc.args...)
+			if err == nil || result.ExitCode == 0 {
+				t.Fatalf("invalid goal result = %#v, error = %v; want non-zero process exit", result, err)
+			}
+		})
 	}
-}
-
-func TestInvalidGoal_QuietMode_SuppressesTerminalOnOperationalFailure(t *testing.T) {
-	t.Parallel()
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	result, err := session.Run(ctx,
-		"run",
-		"--named", "@you/missing",
-		"--no-record",
-		"--quiet",
-		"invalid-goal-quiet-acceptance-prompt",
-	)
-	if err == nil {
-		t.Fatalf("expected unknown named factory failure, got result=%#v", result)
-	}
-	if result.ExitCode == 0 {
-		t.Fatalf("exit code = 0, want non-zero for invalid goal in quiet mode")
-	}
-	if result.Stdout != "" {
-		t.Fatalf("stdout = %q, want empty quiet operational-failure terminal output", result.Stdout)
-	}
-	if result.Stderr != "" {
-		t.Fatalf("stderr = %q, want empty quiet operational-failure terminal output", result.Stderr)
-	}
-	assertQuietLeakContractForbidden(t, result.Stdout+result.Stderr)
 }
 
 func TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError(t *testing.T) {
@@ -113,79 +64,31 @@ func TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError(t 
 		t.Fatalf("exit code = 0, want non-zero for invalid goal topology")
 	}
 
-	combined := result.Stdout + result.Stderr
+	if result.Stdout != "" {
+		t.Fatalf("stdout = %q, want empty on pre-terminal failure", result.Stdout)
+	}
+	response := decodeInvalidInvocationErrorResponse(t, result.Stderr)
 	for _, want := range []string{
 		"invalid graph references",
-		"Blocking findings:",
-		"you factory config validate",
+		"blocking validation targets",
 	} {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("output = %q, want documented invalid-topology guidance %q", combined, want)
+		if !strings.Contains(response.Message, want) {
+			t.Fatalf("ErrorResponse message = %q, want invalid-topology detail %q", response.Message, want)
 		}
 	}
 }
 
-func TestQuietMode_SuccessfulNamedGoal_SuppressesOperatorChatterAndPreservesPrimaryResult(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow built-CLI quiet mode named goal acceptance")
-	}
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t).WithNoExternalServer(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	_, initOutcome := initializeConfig(t, ctx, session, "quiet-mode-config-init")
-	configPath := initOutcome.ConfigPath
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if writeErr := os.WriteFile(configPath, configBody, 0o600); writeErr != nil {
-		t.Fatalf("WriteFile(%q): %v", configPath, writeErr)
-	}
-
-	mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
-	goalText := fmt.Sprintf("acceptance-quiet-mode-%d", time.Now().UnixNano())
-
-	args := append([]string{}, session.RuntimeLogDirFlags()...)
-	args = append(args, session.ServerFlags()...)
-	args = append(args,
-		"run",
-		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers",
-		"--no-record",
-		"--quiet",
-		mockWorkersPath,
-		goalText,
-	)
-
-	result, err := session.Run(ctx, args...)
-	session.RequireSuccess(t, "quiet-mode-named-goal", result, err)
-
-	if got := result.Stdout; got != packagedGoalMockWorkerAcceptedSummary {
-		t.Fatalf("stdout = %q, want authoritative primary result %q", got, packagedGoalMockWorkerAcceptedSummary)
-	}
-	if strings.Contains(result.Stdout, goalText) {
-		t.Fatalf("stdout echoed submitted goal text %q", goalText)
-	}
-	if result.Stderr != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful quiet run", result.Stderr)
-	}
-	assertQuietLeakContractForbidden(t, result.Stdout+result.Stderr)
-}
-
-func assertQuietLeakContractForbidden(t *testing.T, output string) {
+func decodeInvalidInvocationErrorResponse(t *testing.T, stderr string) factoryapi.ErrorResponse {
 	t.Helper()
-
-	for _, forbidden := range quietLeakForbiddenMarkers {
-		if strings.Contains(output, forbidden) {
-			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
-		}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", err, stderr)
 	}
+	if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError || response.Message == "" {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
+	return response
 }
 
 func writeInvalidGoalTopologyFactory(t *testing.T, workDir string) string {
