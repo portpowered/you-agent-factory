@@ -237,7 +237,9 @@ func TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext(t *testing.T) {
 			sourcePath := writeFile(t, filepath.Join(dir, test.rootName), test.body)
 			assertRuntimeFailureBeforeProvider(
 				t,
+				"--factory",
 				sourcePath,
+				"runtime must not start",
 				test.format,
 				"validate factory config",
 				"factory.worker.danglingReference",
@@ -247,17 +249,40 @@ func TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext(t *testing.T) {
 	}
 }
 
+func TestRuntimeMappingFailureRetainsSelectedSourceContext(t *testing.T) {
+	dir := t.TempDir()
+	sourcePath := writeFile(
+		t,
+		filepath.Join(dir, "factory.json"),
+		`{"name":["invalid"]}`,
+	)
+	assertRuntimeFailureBeforeProvider(
+		t,
+		"--dir",
+		dir,
+		"",
+		sourcePath,
+		"(JSON)",
+		"parse factory config",
+		"name",
+		"cannot unmarshal",
+	)
+}
+
 func assertRuntimeFailureBeforeProvider(
 	t *testing.T,
+	sourceFlag string,
 	factorySource string,
+	invocationInput string,
 	wants ...string,
 ) {
 	t.Helper()
 	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", factorySource, "--no-record", "--quiet",
-		"runtime must not start",
-	})
+	args := []string{"you", "run", sourceFlag, factorySource, "--no-record", "--quiet"}
+	if invocationInput != "" {
+		args = append(args, invocationInput)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = t.TempDir()
 	err := support.BuildProcess(
 		t,
