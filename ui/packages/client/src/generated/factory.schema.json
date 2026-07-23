@@ -2,7 +2,11 @@
   "$defs": {
     "AgentWorkerToolPolicy": {
       "description": "Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.",
-      "enum": ["DISABLED", "READ_ONLY", "ENABLED"],
+      "enum": [
+        "DISABLED",
+        "READ_ONLY",
+        "ENABLED"
+      ],
       "type": "string"
     },
     "AgentWorkerToolsConfig": {
@@ -18,7 +22,9 @@
           "description": "Required executor policy for agent-loop tool use on this worker."
         }
       },
-      "required": ["policy"],
+      "required": [
+        "policy"
+      ],
       "type": "object"
     },
     "BundledFile": {
@@ -38,11 +44,20 @@
         },
         "type": {
           "description": "Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/\u003cwork-type\u003e/\u003cchannel\u003e/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.",
-          "enum": ["SCRIPT", "DOC", "INPUT", "ROOT_HELPER"],
+          "enum": [
+            "SCRIPT",
+            "DOC",
+            "INPUT",
+            "ROOT_HELPER"
+          ],
           "type": "string"
         }
       },
-      "required": ["type", "targetPath", "content"],
+      "required": [
+        "type",
+        "targetPath",
+        "content"
+      ],
       "type": "object"
     },
     "BundledFileContent": {
@@ -51,7 +66,9 @@
       "properties": {
         "encoding": {
           "description": "Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.",
-          "enum": ["utf-8"],
+          "enum": [
+            "utf-8"
+          ],
           "type": "string"
         },
         "inline": {
@@ -59,7 +76,10 @@
           "type": "string"
         }
       },
-      "required": ["encoding", "inline"],
+      "required": [
+        "encoding",
+        "inline"
+      ],
       "type": "object"
     },
     "ClassificationRoute": {
@@ -77,7 +97,10 @@
           "type": "array"
         }
       },
-      "required": ["label", "outputs"],
+      "required": [
+        "label",
+        "outputs"
+      ],
       "type": "object"
     },
     "FactoryGuard": {
@@ -109,12 +132,18 @@
           "description": "Factory-level guard condition to evaluate before dispatch-ready transitions can proceed."
         }
       },
-      "required": ["type", "modelProvider", "refreshWindow"],
+      "required": [
+        "type",
+        "modelProvider",
+        "refreshWindow"
+      ],
       "type": "object"
     },
     "FactoryGuardType": {
       "description": "Factory-level guard condition attached at the root factory definition.",
-      "enum": ["INFERENCE_THROTTLE_GUARD"],
+      "enum": [
+        "INFERENCE_THROTTLE_GUARD"
+      ],
       "type": "string"
     },
     "FactoryInvocationArguments": {
@@ -160,7 +189,11 @@
           "type": "string"
         }
       },
-      "required": ["name", "description", "args"],
+      "required": [
+        "name",
+        "description",
+        "args"
+      ],
       "type": "object"
     },
     "FactoryInvocationOutputContract": {
@@ -196,7 +229,11 @@
     },
     "FactoryInvocationOutputContractMode": {
       "description": "High-level output shape hint exposed by a factory invocation signature.",
-      "enum": ["INLINE", "FILE", "JSON"],
+      "enum": [
+        "INLINE",
+        "FILE",
+        "JSON"
+      ],
       "type": "string"
     },
     "FactoryInvocationParameter": {
@@ -272,7 +309,9 @@
           "description": "Declares whether the parameter consumes one value, repeated values, variadic values, or file contents."
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "type": "object"
     },
     "FactoryInvocationParameterBinding": {
@@ -293,12 +332,19 @@
           "type": "integer"
         }
       },
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "type": "object"
     },
     "FactoryInvocationParameterBindingKind": {
       "description": "Public invocation binding kinds supported by factory signatures.",
-      "enum": ["POSITIONAL", "NAMED", "STDIN", "NAMED_REST"],
+      "enum": [
+        "POSITIONAL",
+        "NAMED",
+        "STDIN",
+        "NAMED_REST"
+      ],
       "type": "string"
     },
     "FactoryInvocationParameterTypeHint": {
@@ -315,7 +361,12 @@
     },
     "FactoryInvocationParameterValueMode": {
       "description": "Declares how one invocation parameter consumes one or more string values.",
-      "enum": ["EXACT", "REPEATED", "VARIADIC", "FILE_CONTENTS"],
+      "enum": [
+        "EXACT",
+        "REPEATED",
+        "VARIADIC",
+        "FILE_CONTENTS"
+      ],
       "type": "string"
     },
     "FactoryInvocationSignature": {
@@ -350,7 +401,11 @@
     },
     "FactoryInvocationUnknownNamedArgumentPolicy": {
       "description": "Policy for named inputs that do not match any declared parameter binding.",
-      "enum": ["REJECT", "ALLOW", "COLLECT"],
+      "enum": [
+        "REJECT",
+        "ALLOW",
+        "COLLECT"
+      ],
       "type": "string"
     },
     "FactoryLayout": {
@@ -398,7 +453,9 @@
           "$ref": "#/$defs/FactoryLayoutViewport"
         }
       },
-      "required": ["schemaVersion"],
+      "required": [
+        "schemaVersion"
+      ],
       "type": "object"
     },
     "FactoryLayoutAnnotation": {
@@ -412,7 +469,9 @@
               "type": "string"
             },
             "kind": {
-              "enum": ["NOTE"],
+              "enum": [
+                "NOTE"
+              ],
               "type": "string"
             },
             "note": {
@@ -425,7 +484,12 @@
               "$ref": "#/$defs/FactoryLayoutAnnotationSize"
             }
           },
-          "required": ["id", "kind", "position", "note"],
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "note"
+          ],
           "type": "object"
         },
         {
@@ -438,7 +502,9 @@
               "$ref": "#/$defs/FactoryLayoutImage"
             },
             "kind": {
-              "enum": ["IMAGE"],
+              "enum": [
+                "IMAGE"
+              ],
               "type": "string"
             },
             "position": {
@@ -448,7 +514,13 @@
               "$ref": "#/$defs/FactoryLayoutAnnotationSize"
             }
           },
-          "required": ["id", "kind", "position", "size", "image"],
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "size",
+            "image"
+          ],
           "type": "object"
         }
       ],
@@ -475,12 +547,19 @@
           "$ref": "#/$defs/FactoryLayoutAnnotationSize"
         }
       },
-      "required": ["id", "kind", "position"],
+      "required": [
+        "id",
+        "kind",
+        "position"
+      ],
       "type": "object"
     },
     "FactoryLayoutAnnotationKind": {
       "description": "The inert annotation content variant.",
-      "enum": ["NOTE", "IMAGE"],
+      "enum": [
+        "NOTE",
+        "IMAGE"
+      ],
       "type": "string"
     },
     "FactoryLayoutAnnotationPosition": {
@@ -500,7 +579,10 @@
           "type": "number"
         }
       },
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "type": "object"
     },
     "FactoryLayoutAnnotationSize": {
@@ -520,7 +602,10 @@
           "type": "number"
         }
       },
-      "required": ["width", "height"],
+      "required": [
+        "width",
+        "height"
+      ],
       "type": "object"
     },
     "FactoryLayoutBounds": {
@@ -544,7 +629,12 @@
           "type": "number"
         }
       },
-      "required": ["x", "y", "width", "height"],
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
       "type": "object"
     },
     "FactoryLayoutEdge": {
@@ -566,7 +656,9 @@
           "type": "array"
         }
       },
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "type": "object"
     },
     "FactoryLayoutEmptyState": {
@@ -584,7 +676,9 @@
               "type": "string"
             }
           },
-          "required": ["text"],
+          "required": [
+            "text"
+          ],
           "type": "object"
         },
         {
@@ -594,7 +688,9 @@
               "$ref": "#/$defs/FactoryLayoutImage"
             }
           },
-          "required": ["image"],
+          "required": [
+            "image"
+          ],
           "type": "object"
         }
       ],
@@ -644,10 +740,17 @@
         },
         "parentGroupId": {
           "description": "Reserved for future nested groups. Omit or set null for flat groups.",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": ["id", "bounds", "nodeIds"],
+      "required": [
+        "id",
+        "bounds",
+        "nodeIds"
+      ],
       "type": "object"
     },
     "FactoryLayoutImage": {
@@ -665,7 +768,10 @@
           "$ref": "#/$defs/FactoryLayoutImageSource"
         }
       },
-      "required": ["source", "alternativeText"],
+      "required": [
+        "source",
+        "alternativeText"
+      ],
       "type": "object"
     },
     "FactoryLayoutImageSource": {
@@ -681,16 +787,26 @@
         },
         "kind": {
           "description": "Source variant discriminator. EMBEDDED carries portable base64 raster data.",
-          "enum": ["EMBEDDED"],
+          "enum": [
+            "EMBEDDED"
+          ],
           "type": "string"
         },
         "mediaType": {
           "description": "Declared media type for the embedded raster.",
-          "enum": ["image/png", "image/jpeg", "image/webp"],
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ],
           "type": "string"
         }
       },
-      "required": ["kind", "mediaType", "data"],
+      "required": [
+        "kind",
+        "mediaType",
+        "data"
+      ],
       "type": "object"
     },
     "FactoryLayoutNode": {
@@ -717,7 +833,10 @@
           "$ref": "#/$defs/FactoryLayoutSize"
         }
       },
-      "required": ["id", "position"],
+      "required": [
+        "id",
+        "position"
+      ],
       "type": "object"
     },
     "FactoryLayoutNote": {
@@ -740,12 +859,22 @@
           "$ref": "#/$defs/FactoryLayoutNoteTone"
         }
       },
-      "required": ["body", "tone"],
+      "required": [
+        "body",
+        "tone"
+      ],
       "type": "object"
     },
     "FactoryLayoutNoteTone": {
       "description": "Presentation-only tone for a note annotation.",
-      "enum": ["NEUTRAL", "ACCENT", "INFO", "SUCCESS", "WARNING", "DANGER"],
+      "enum": [
+        "NEUTRAL",
+        "ACCENT",
+        "INFO",
+        "SUCCESS",
+        "WARNING",
+        "DANGER"
+      ],
       "type": "string"
     },
     "FactoryLayoutPoint": {
@@ -761,7 +890,10 @@
           "type": "number"
         }
       },
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "type": "object"
     },
     "FactoryLayoutPreferences": {
@@ -770,7 +902,12 @@
       "properties": {
         "direction": {
           "description": "Preferred authored graph direction for portable layout rendering.",
-          "enum": ["UP", "DOWN", "LEFT", "RIGHT"],
+          "enum": [
+            "UP",
+            "DOWN",
+            "LEFT",
+            "RIGHT"
+          ],
           "type": "string"
         }
       },
@@ -789,7 +926,10 @@
           "type": "number"
         }
       },
-      "required": ["width", "height"],
+      "required": [
+        "width",
+        "height"
+      ],
       "type": "object"
     },
     "FactoryLayoutViewport": {
@@ -809,7 +949,11 @@
           "type": "number"
         }
       },
-      "required": ["x", "y", "zoom"],
+      "required": [
+        "x",
+        "y",
+        "zoom"
+      ],
       "type": "object"
     },
     "FactoryName": {
@@ -842,7 +986,9 @@
           "description": "Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored."
         }
       },
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "type": "object"
     },
     "FactoryOrchestratorJavaScriptAgent": {
@@ -855,7 +1001,9 @@
           "type": "string"
         }
       },
-      "required": ["preset"],
+      "required": [
+        "preset"
+      ],
       "type": "object"
     },
     "FactoryOrchestratorJavaScriptConfig": {
@@ -920,7 +1068,9 @@
       "properties": {
         "encoding": {
           "description": "Declared content encoding for the inline workflow source.",
-          "enum": ["utf-8"],
+          "enum": [
+            "utf-8"
+          ],
           "type": "string"
         },
         "inline": {
@@ -928,12 +1078,18 @@
           "type": "string"
         }
       },
-      "required": ["encoding", "inline"],
+      "required": [
+        "encoding",
+        "inline"
+      ],
       "type": "object"
     },
     "FactoryOrchestratorKind": {
       "description": "Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.",
-      "enum": ["PETRI", "JAVASCRIPT"],
+      "enum": [
+        "PETRI",
+        "JAVASCRIPT"
+      ],
       "type": "string"
     },
     "FactoryOrchestratorPetriConfig": {
@@ -950,7 +1106,9 @@
           "type": "string"
         }
       },
-      "required": ["inputKey"],
+      "required": [
+        "inputKey"
+      ],
       "type": "object"
     },
     "HostedLinearWorkerClaim": {
@@ -1033,7 +1191,9 @@
     },
     "HostedWorkerProvider": {
       "description": "Built-in repository-owned hosted worker providers supported by the public factory-config contract.",
-      "enum": ["LINEAR"],
+      "enum": [
+        "LINEAR"
+      ],
       "type": "string"
     },
     "HybridLogicalTimestamp": {
@@ -1051,7 +1211,10 @@
           "type": "string"
         }
       },
-      "required": ["logical", "physical"],
+      "required": [
+        "logical",
+        "physical"
+      ],
       "type": "object"
     },
     "InputGuard": {
@@ -1096,7 +1259,9 @@
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "InputGuardType": {
@@ -1112,7 +1277,9 @@
     },
     "InputKind": {
       "description": "Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.",
-      "enum": ["DEFAULT"],
+      "enum": [
+        "DEFAULT"
+      ],
       "type": "string"
     },
     "InputType": {
@@ -1127,7 +1294,10 @@
           "$ref": "#/$defs/InputKind"
         }
       },
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "type": "object"
     },
     "InvocationReturn": {
@@ -1155,12 +1325,17 @@
           "type": "string"
         }
       },
-      "required": ["policy"],
+      "required": [
+        "policy"
+      ],
       "type": "object"
     },
     "InvocationReturnPolicy": {
       "description": "Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.",
-      "enum": ["SUBMITTED_WORK_TERMINAL", "EXPLICIT"],
+      "enum": [
+        "SUBMITTED_WORK_TERMINAL",
+        "EXPLICIT"
+      ],
       "type": "string"
     },
     "ModelOperation": {
@@ -1185,12 +1360,20 @@
           "type": "array"
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "type": "object"
     },
     "ModelOperationContentType": {
       "description": "Uppercase content-part categories supported by worker model-operation capability slots.",
-      "enum": ["TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"],
+      "enum": [
+        "TEXT",
+        "IMAGE",
+        "AUDIO",
+        "JSON",
+        "BINARY"
+      ],
       "type": "string"
     },
     "ModelOperationName": {
@@ -1219,7 +1402,10 @@
           "type": "boolean"
         }
       },
-      "required": ["name", "contentTypes"],
+      "required": [
+        "name",
+        "contentTypes"
+      ],
       "type": "object"
     },
     "NameValue": {
@@ -1241,7 +1427,9 @@
         },
         "type": {
           "description": "Discriminator for localized customer-facing metadata.",
-          "enum": ["LOCALIZABLE_ASSET"],
+          "enum": [
+            "LOCALIZABLE_ASSET"
+          ],
           "type": "string"
         },
         "value": {
@@ -1257,7 +1445,10 @@
           "type": "object"
         }
       },
-      "required": ["type", "value"],
+      "required": [
+        "type",
+        "value"
+      ],
       "type": "object"
     },
     "RequiredTool": {
@@ -1284,7 +1475,10 @@
           "type": "array"
         }
       },
-      "required": ["name", "command"],
+      "required": [
+        "name",
+        "command"
+      ],
       "type": "object"
     },
     "Resource": {
@@ -1329,7 +1523,10 @@
           "description": "Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`."
         }
       },
-      "required": ["name", "capacity"],
+      "required": [
+        "name",
+        "capacity"
+      ],
       "type": "object"
     },
     "ResourceManifest": {
@@ -1364,17 +1561,31 @@
           "type": "string"
         }
       },
-      "required": ["name", "capacity"],
+      "required": [
+        "name",
+        "capacity"
+      ],
       "type": "object"
     },
     "ResourceType": {
       "description": "Uppercase resource families supported by the public factory-config contract.",
-      "enum": ["MODEL", "PROVIDER_QUOTA", "INVOCATION_SLOT"],
+      "enum": [
+        "MODEL",
+        "PROVIDER_QUOTA",
+        "INVOCATION_SLOT"
+      ],
       "type": "string"
     },
     "RunnerID": {
       "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
-      "enum": ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
+      "enum": [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi"
+      ],
       "type": "string"
     },
     "StringMap": {
@@ -1399,13 +1610,18 @@
                   "$ref": "#/$defs/WorkContentPartType"
                 }
               ],
-              "enum": ["AUDIO"]
+              "enum": [
+                "AUDIO"
+              ]
             },
             "url": {
               "$ref": "#/$defs/WorkContentURLProperty"
             }
           },
-          "required": ["type", "url"],
+          "required": [
+            "type",
+            "url"
+          ],
           "type": "object"
         }
       ],
@@ -1427,13 +1643,18 @@
                   "$ref": "#/$defs/WorkContentPartType"
                 }
               ],
-              "enum": ["BINARY"]
+              "enum": [
+                "BINARY"
+              ]
             },
             "url": {
               "$ref": "#/$defs/WorkContentURLProperty"
             }
           },
-          "required": ["type", "url"],
+          "required": [
+            "type",
+            "url"
+          ],
           "type": "object"
         }
       ],
@@ -1505,7 +1726,15 @@
     },
     "WorkContentPartType": {
       "description": "Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.",
-      "enum": ["text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"],
+      "enum": [
+        "text",
+        "image",
+        "TEXT",
+        "IMAGE",
+        "AUDIO",
+        "JSON",
+        "BINARY"
+      ],
       "type": "string"
     },
     "WorkContentURLProperty": {
@@ -1529,13 +1758,19 @@
                   "$ref": "#/$defs/WorkContentPartType"
                 }
               ],
-              "enum": ["image", "IMAGE"]
+              "enum": [
+                "image",
+                "IMAGE"
+              ]
             },
             "url": {
               "$ref": "#/$defs/WorkContentURLProperty"
             }
           },
-          "required": ["type", "url"],
+          "required": [
+            "type",
+            "url"
+          ],
           "type": "object"
         }
       ],
@@ -1557,10 +1792,15 @@
                   "$ref": "#/$defs/WorkContentPartType"
                 }
               ],
-              "enum": ["JSON"]
+              "enum": [
+                "JSON"
+              ]
             }
           },
-          "required": ["type", "json"],
+          "required": [
+            "type",
+            "json"
+          ],
           "type": "object"
         }
       ],
@@ -1579,12 +1819,17 @@
           "description": "Propagation mode for downstream work payload selection after this workstation succeeds."
         }
       },
-      "required": ["mode"],
+      "required": [
+        "mode"
+      ],
       "type": "object"
     },
     "WorkPropagationMode": {
       "description": "Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.",
-      "enum": ["OUTPUT_AS_PAYLOAD", "PRESERVE_INPUT"],
+      "enum": [
+        "OUTPUT_AS_PAYLOAD",
+        "PRESERVE_INPUT"
+      ],
       "type": "string"
     },
     "WorkState": {
@@ -1608,12 +1853,20 @@
           "description": "Lifecycle category for this state, such as initial, processing, terminal, or failed."
         }
       },
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "type": "object"
     },
     "WorkStateType": {
       "description": "Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.",
-      "enum": ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"],
+      "enum": [
+        "INITIAL",
+        "PROCESSING",
+        "TERMINAL",
+        "FAILED"
+      ],
       "type": "string"
     },
     "WorkTextContentPart": {
@@ -1633,10 +1886,16 @@
                   "$ref": "#/$defs/WorkContentPartType"
                 }
               ],
-              "enum": ["text", "TEXT"]
+              "enum": [
+                "text",
+                "TEXT"
+              ]
             }
           },
-          "required": ["type", "text"],
+          "required": [
+            "type",
+            "text"
+          ],
           "type": "object"
         }
       ],
@@ -1677,12 +1936,17 @@
           "type": "array"
         }
       },
-      "required": ["name", "states"],
+      "required": [
+        "name",
+        "states"
+      ],
       "type": "object"
     },
     "WorkTypeHandlingBehavior": {
       "description": "Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.",
-      "enum": ["DEFAULT"],
+      "enum": [
+        "DEFAULT"
+      ],
       "type": "string"
     },
     "Worker": {
@@ -1823,12 +2087,17 @@
           "description": "Worker implementation family to instantiate for this definition."
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "type": "object"
     },
     "WorkerModelLocality": {
       "description": "Provider locality for a model worker capability declaration.",
-      "enum": ["LOCAL", "CLOUD"],
+      "enum": [
+        "LOCAL",
+        "CLOUD"
+      ],
       "type": "string"
     },
     "WorkerModelProvider": {
@@ -1847,7 +2116,9 @@
     },
     "WorkerProvider": {
       "description": "Concrete worker-provider wrappers supported by the public factory-config contract.",
-      "enum": ["SCRIPT_WRAP"],
+      "enum": [
+        "SCRIPT_WRAP"
+      ],
       "type": "string"
     },
     "WorkerType": {
@@ -2057,7 +2328,11 @@
           "type": "string"
         }
       },
-      "required": ["name", "worker", "inputs"],
+      "required": [
+        "name",
+        "worker",
+        "inputs"
+      ],
       "type": "object"
     },
     "WorkstationCron": {
@@ -2082,7 +2357,9 @@
           "type": "boolean"
         }
       },
-      "required": ["schedule"],
+      "required": [
+        "schedule"
+      ],
       "type": "object"
     },
     "WorkstationGuard": {
@@ -2127,12 +2404,17 @@
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "WorkstationGuardType": {
       "description": "Guard condition attached to a workstation as a whole.",
-      "enum": ["VISIT_COUNT", "MATCHES_FIELDS"],
+      "enum": [
+        "VISIT_COUNT",
+        "MATCHES_FIELDS"
+      ],
       "type": "string"
     },
     "WorkstationIO": {
@@ -2155,13 +2437,21 @@
           "type": "string"
         }
       },
-      "required": ["workType", "state"],
+      "required": [
+        "workType",
+        "state"
+      ],
       "type": "object"
     },
     "WorkstationKind": {
       "default": "STANDARD",
       "description": "Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.",
-      "enum": ["STANDARD", "REPEATER", "CRON", "POLLER"],
+      "enum": [
+        "STANDARD",
+        "REPEATER",
+        "CRON",
+        "POLLER"
+      ],
       "type": "string"
     },
     "WorkstationLimits": {
@@ -2212,7 +2502,9 @@
           "type": "string"
         }
       },
-      "required": ["slot"],
+      "required": [
+        "slot"
+      ],
       "type": "object"
     },
     "WorkstationOperationBindingSelector": {
@@ -2244,7 +2536,9 @@
     },
     "WorkstationOutcomeFormat": {
       "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.",
-      "enum": ["decision-envelope"],
+      "enum": [
+        "decision-envelope"
+      ],
       "type": "string"
     },
     "WorkstationType": {
@@ -2404,7 +2698,9 @@
       "type": "array"
     }
   },
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "title": "You Factory configuration",
   "type": "object"
 }
