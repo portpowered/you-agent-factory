@@ -35,23 +35,10 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	})
 
 	t.Run("terminal failure emits failed result and standard error", func(t *testing.T) {
-		exitCode := 7
-		mockWorkers := &workers.MockWorkersConfig{
-			UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      "goal-executor",
-				WorkstationName: "execute-goal",
-				RunType:         workers.MockWorkerRunTypeReject,
-				RejectConfig: &workers.MockWorkerRejectConfig{
-					Stderr:   "deterministic worker rejection",
-					ExitCode: &exitCode,
-				},
-			}},
-		}
 		result := executeFailureInvocation(t, []string{
 			"you", "--json", "run", "--named", goalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
-		}, goalFactoryName, mockWorkers)
+		}, goalFactoryName, rejectingGoalWorker())
 
 		if result.err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
@@ -92,6 +79,51 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 			t.Fatalf("ErrorResponse = %#v", response)
 		}
 	})
+
+	t.Run("human lifecycle presents canonical failed dispatch", func(t *testing.T) {
+		result := executeFailureInvocation(t, []string{
+			"you", "run", "--named", goalFactoryName, "--no-record",
+			"--output", "response-stream", "deterministic terminal failure",
+		}, goalFactoryName, rejectingGoalWorker())
+
+		if result.err == nil {
+			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
+		}
+		lines := nonEmptyLines(result.stdout)
+		failedIndex := -1
+		for index, line := range lines {
+			if strings.Contains(line, "workstation failed: execute-goal") {
+				failedIndex = index
+			}
+			if strings.Contains(line, "textDelta") || strings.Contains(line, "toolCall") || strings.Contains(line, "providerSession") {
+				t.Fatalf("human lifecycle exposed provider-only output %q\nstdout:\n%s", line, result.stdout)
+			}
+		}
+		if failedIndex < 0 {
+			t.Fatalf("stdout lacks canonical failed-dispatch lifecycle\nstdout:\n%s", result.stdout)
+		}
+		outcomeIndex := strings.Index(result.stdout, "--- invocation outcome ---")
+		failureOffset := strings.LastIndex(result.stdout, "workstation failed: execute-goal")
+		if outcomeIndex < 0 || failureOffset > outcomeIndex {
+			t.Fatalf("canonical failed dispatch does not precede terminal invocation outcome\nstdout:\n%s", result.stdout)
+		}
+	})
+}
+
+func rejectingGoalWorker() *workers.MockWorkersConfig {
+	exitCode := 7
+	return &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: "execute-goal",
+			RunType:         workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stderr:   "deterministic worker rejection",
+				ExitCode: &exitCode,
+			},
+		}},
+	}
 }
 
 type failureInvocationResult struct {
