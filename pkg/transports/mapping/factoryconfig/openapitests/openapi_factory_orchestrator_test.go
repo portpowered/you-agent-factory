@@ -25,7 +25,11 @@ func TestFactoryConfigFromOpenAPIJSON_DefaultsLegacyPetriFactoryToOrchestratorPr
 		t.Fatalf("effective orchestrator kind = %q, want PETRI", interfaces.EffectiveOrchestratorKind(cfg))
 	}
 
-	public := ProjectEffectiveOrchestratorForAPIRead(FactoryConfigToOpenAPI(cfg), cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
+	public := ProjectEffectiveOrchestratorForAPIRead(generated, cfg)
 	if public.Orchestrator == nil || public.Orchestrator.Kind != factoryapi.PETRI {
 		t.Fatalf("public orchestrator = %#v, want projected PETRI orchestrator", public.Orchestrator)
 	}
@@ -69,7 +73,10 @@ func TestFactoryConfigFromOpenAPIJSON_RoundTripsJavaScriptOrchestratorFactory(t 
 		t.Fatalf("reviewer preset = %q, want careful-review", got)
 	}
 
-	public := FactoryConfigToOpenAPI(cfg)
+	public, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	encoded, err := json.Marshal(public)
 	if err != nil {
 		t.Fatalf("marshal public factory: %v", err)

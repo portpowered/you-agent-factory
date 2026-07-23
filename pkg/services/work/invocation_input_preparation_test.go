@@ -130,6 +130,23 @@ func TestResolveSignatureFactoryInvocationInput_RejectsMissingNamedValue(t *test
 	}
 }
 
+func TestNormalizeLegacyInvocationExampleRejectsUnstructuredInputs(t *testing.T) {
+	t.Parallel()
+
+	normalizer := InvocationExampleNormalizer{}
+	if _, err := normalizer.NormalizeLegacyInvocationExample(
+		[]string{"draft", "--mode"},
+		signatureFactoryInvocationConfig(),
+		nil,
+	); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Fatalf("missing named value error = %v", err)
+	}
+	if _, err := normalizer.NormalizeLegacyInvocationExample([]string{"free-form input"}, nil, nil); err == nil ||
+		!strings.Contains(err.Error(), "does not resolve to structured invocation arguments") {
+		t.Fatalf("unstructured compatibility input error = %v", err)
+	}
+}
+
 func TestPrepareInvocationInputReturnsDetachedCanonicalValues(t *testing.T) {
 	signature := signatureFactoryInvocationConfig()
 	arguments := []string{"draft", "--mode=fast"}

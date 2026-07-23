@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -35,6 +36,7 @@ type factoryInvocationHelpData struct {
 	selectionText string
 	commandPrefix string
 	signature     *interfaces.InvocationSignatureConfig
+	examples      []interfaces.InvocationExampleConfig
 }
 
 func WriteFactoryInvocationHelp(w io.Writer, cliName string, cfg RunConfig) (bool, error) {
@@ -72,6 +74,7 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 			selectionText: fmt.Sprintf("named factory %s", cfg.NamedFactoryName),
 			commandPrefix: fmt.Sprintf("%s run --named %s", cliName, cfg.NamedFactoryName),
 			signature:     loaded.InvocationSignature,
+			examples:      loaded.Examples,
 		}, nil
 	case strings.TrimSpace(cfg.FactoryConfigPath) != "":
 		if javascriptWorkflowPath(cfg.FactoryConfigPath) {
@@ -89,6 +92,7 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 			selectionText: fmt.Sprintf("factory config %s", cfg.FactoryConfigPath),
 			commandPrefix: fmt.Sprintf("%s run --factory %s", cliName, cfg.FactoryConfigPath),
 			signature:     loaded.InvocationSignature,
+			examples:      loaded.Examples,
 		}, nil
 	default:
 		return nil, nil
@@ -132,10 +136,10 @@ func formatFactoryInvocationHelp(data factoryInvocationHelpData) string {
 		builder.WriteString("\nOutput contract:\n")
 		builder.WriteString(formatOutputContract(data.signature.OutputContract))
 	}
-	if len(data.signature.Examples) > 0 {
+	if len(data.examples) > 0 {
 		builder.WriteString("\nExamples:\n")
-		for _, example := range data.signature.Examples {
-			builder.WriteString(formatInvocationExample(data.commandPrefix, example))
+		for _, example := range data.examples {
+			builder.WriteString(formatInvocationExample(data.commandPrefix, data.signature, example))
 		}
 	}
 	builder.WriteString("\nRun-level flags:\n")
@@ -378,33 +382,103 @@ func formatOutputContract(contract *interfaces.InvocationOutputContractConfig) s
 	return builder.String()
 }
 
-func formatInvocationExample(commandPrefix string, example interfaces.InvocationExampleConfig) string {
+func formatInvocationExample(commandPrefix string, signature *interfaces.InvocationSignatureConfig, example interfaces.InvocationExampleConfig) string {
 	var builder strings.Builder
 	builder.WriteString("  ")
-	if description := strings.TrimSpace(example.Description); description != "" {
+	if description := strings.TrimSpace(example.Description.Value); description != "" {
 		builder.WriteString("# ")
 		builder.WriteString(description)
 		builder.WriteString("\n  ")
 	}
-	if stdin := strings.TrimSpace(example.Stdin); stdin != "" {
+	argv, stdin := invocationExampleCommandArguments(signature, example.Args)
+	if strings.TrimSpace(stdin) != "" {
 		builder.WriteString("printf '%s\\n' ")
 		builder.WriteString(shellQuoteArg(stdin))
 		builder.WriteString(" | ")
 		builder.WriteString(commandPrefix)
-		if len(example.Argv) > 0 {
+		if len(argv) > 0 {
 			builder.WriteString(" ")
-			builder.WriteString(joinShellArgs(example.Argv))
+			builder.WriteString(joinShellArgs(argv))
 		}
 		builder.WriteString("\n")
 		return builder.String()
 	}
 	builder.WriteString(commandPrefix)
-	if len(example.Argv) > 0 {
+	if len(argv) > 0 {
 		builder.WriteString(" ")
-		builder.WriteString(joinShellArgs(example.Argv))
+		builder.WriteString(joinShellArgs(argv))
 	}
 	builder.WriteString("\n")
 	return builder.String()
+}
+
+func invocationExampleCommandArguments(signature *interfaces.InvocationSignatureConfig, args map[string]interface{}) ([]string, string) {
+	if signature == nil {
+		signature = &interfaces.InvocationSignatureConfig{}
+	}
+	parameters := make(map[string]interfaces.InvocationParameterConfig, len(signature.Parameters))
+	for _, parameter := range signature.Parameters {
+		for _, key := range append([]string{parameter.Name, parameter.ExternalName}, parameter.Aliases...) {
+			if key = strings.TrimSpace(key); key != "" {
+				parameters[key] = parameter
+			}
+		}
+	}
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	positionals := map[int][]string{}
+	var named []string
+	stdin := ""
+	for _, key := range keys {
+		values := invocationExampleValues(args[key])
+		parameter, known := parameters[key]
+		if known {
+			if position, ok := positionalSlot(parameter); ok {
+				positionals[position] = values
+				continue
+			}
+			if hasStdinBinding(parameter) && !hasNamedBinding(parameter) && len(values) == 1 {
+				stdin = values[0]
+				continue
+			}
+			key = namedParameterKey(parameter)
+		}
+		for _, value := range values {
+			named = append(named, "--"+key, value)
+		}
+	}
+	positions := make([]int, 0, len(positionals))
+	for position := range positionals {
+		positions = append(positions, position)
+	}
+	sort.Ints(positions)
+	var argv []string
+	for _, position := range positions {
+		argv = append(argv, positionals[position]...)
+	}
+	return append(argv, named...), stdin
+}
+
+func invocationExampleValues(value interface{}) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []string:
+		return append([]string(nil), typed...)
+	case []interface{}:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				values = append(values, text)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
 }
 
 func joinShellArgs(args []string) string {

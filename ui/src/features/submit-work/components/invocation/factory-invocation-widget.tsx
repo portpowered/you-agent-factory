@@ -1,23 +1,23 @@
-// biome-ignore lint/style/noExcessiveLinesPerFile: invocation widget keeps the generated form controls colocated with the widget shell.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: invocation widget keeps the generated form controls colocated with the widget shell.
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
-
 import type { SessionFactoryInvocationResponse } from "../../../../api/session-factory";
 import {
   AlertPanel,
   AlertPanelText,
   Button,
   DashboardIconButtonShell,
-  Label,
-  Text,
   FormError,
   Input,
+  Label,
+  Text,
 } from "../../../../components/ui";
-import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { DashboardWidgetFrame } from "../../../bento/public";
 import { useFactoryInvocationWidget } from "../../hooks/use-factory-invocation-widget";
 import type { InvocationFieldModel } from "../../lib/factory-invocation-form";
 import { getSubmitWorkMessages } from "../../messages/submit-work";
+import { FactoryInvocationExamples } from "./factory-invocation-examples";
 
 export interface FactoryInvocationWidgetProps {
   headerAction?: ReactNode;
@@ -124,7 +124,11 @@ export function FactoryInvocationWidget({
             />
           ) : null}
           {projection.examples.length > 0 ? (
-            <InvocationExamples examples={projection.examples} messages={messages} />
+            <FactoryInvocationExamples
+              examples={projection.examples}
+              locale={locale}
+              title={messages.invocation.examplesTitle}
+            />
           ) : null}
         </div>
         <div className="grid gap-3">
@@ -276,7 +280,9 @@ function InvocationField({
               aria-describedby={describedBy || undefined}
               aria-invalid={error ? "true" : undefined}
               id={controlID}
-              onChange={(event) => onValueChange(field.name, event.target.value)}
+              onChange={(event) =>
+                onValueChange(field.name, event.target.value)
+              }
               placeholder={inputPlaceholder(field, messages)}
               type="text"
               value={value[0] ?? ""}
@@ -337,7 +343,10 @@ function RepeatedFieldEditor({
             value={entry}
           />
           <DashboardIconButtonShell
-            aria-label={messages.invocation.removeRepeatedValue(field.label, index + 1)}
+            aria-label={messages.invocation.removeRepeatedValue(
+              field.label,
+              index + 1,
+            )}
             onClick={() => {
               const next = rows.filter((_, rowIndex) => rowIndex !== index);
               onValueChange(next.length > 0 ? next : [""]);
@@ -370,7 +379,9 @@ function InvocationOutputHint({
 }: {
   messages: ReturnType<typeof getSubmitWorkMessages>;
   outputContract: NonNullable<
-    ReturnType<typeof useFactoryInvocationWidget>["projection"]["outputContract"]
+    ReturnType<
+      typeof useFactoryInvocationWidget
+    >["projection"]["outputContract"]
   >;
 }) {
   const detailLines = [
@@ -387,7 +398,9 @@ function InvocationOutputHint({
     outputContract.fileExtension
       ? messages.invocation.outputFileExtension(outputContract.fileExtension)
       : undefined,
-  ].filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  ].filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
 
   return (
     <AlertPanel compact role="status" tone="info" variant="empty">
@@ -407,52 +420,6 @@ function InvocationOutputHint({
   );
 }
 
-function InvocationExamples({
-  examples,
-  messages,
-}: {
-  examples: NonNullable<
-    ReturnType<typeof useFactoryInvocationWidget>["projection"]["examples"]
-  >;
-  messages: ReturnType<typeof getSubmitWorkMessages>;
-}) {
-  return (
-    <AlertPanel compact role="status" tone="neutral" variant="empty">
-      <AlertPanelText>{messages.invocation.examplesTitle}</AlertPanelText>
-      <div className="grid gap-2 pt-1">
-        {examples.map((example) => (
-          <div className="grid gap-1" key={example.name}>
-            <Text className="font-medium" variant="supporting">
-              {example.name}
-            </Text>
-            {example.description ? (
-              <Text
-                className="text-on-surface-variant"
-                variant="supporting"
-              >
-                {example.description}
-              </Text>
-            ) : null}
-            {example.argv && example.argv.length > 0 ? (
-              <Text className="font-mono text-xs" variant="supporting">
-                {example.argv.join(" ")}
-              </Text>
-            ) : null}
-            {example.stdin ? (
-              <Text
-                className="text-on-surface-variant"
-                variant="supporting"
-              >
-                {messages.invocation.exampleStdin(example.stdin)}
-              </Text>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </AlertPanel>
-  );
-}
-
 function InvocationPrimaryResult({
   messages,
   response,
@@ -462,13 +429,17 @@ function InvocationPrimaryResult({
 }) {
   const parts = response.primaryResult ?? [];
   const textParts = parts
-    .map((part) => ("text" in part && typeof part.text === "string" ? part.text : null))
+    .map((part) =>
+      "text" in part && typeof part.text === "string" ? part.text : null,
+    )
     .filter((part): part is string => part !== null);
 
   if (textParts.length === 0) {
     return (
       <AlertPanel compact role="status" tone="success" variant="empty">
-        <AlertPanelText>{messages.invocation.primaryResultReady}</AlertPanelText>
+        <AlertPanelText>
+          {messages.invocation.primaryResultReady}
+        </AlertPanelText>
       </AlertPanel>
     );
   }

@@ -129,7 +129,10 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	if cfg.Layout.Annotations[1].Image.Source.MediaType != "image/png" || cfg.Layout.Annotations[1].Image.AlternativeText != "Review workflow illustration" {
 		t.Fatalf("image annotation = %#v", cfg.Layout.Annotations[1].Image)
 	}
-	public := FactoryConfigToOpenAPI(cfg)
+	public, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	if public.Layout == nil || public.Layout.Preferences == nil || public.Layout.Preferences.Direction == nil || *public.Layout.Preferences.Direction != factoryapi.RIGHT {
 		t.Fatalf("expected public layout preferences direction RIGHT, got %#v", public.Layout)
 	}
@@ -201,7 +204,10 @@ func TestFactoryConfigFromOpenAPIJSON_AllowsPortableLayoutNodesWithoutSize(t *te
 		t.Fatalf("layout edges = %#v, want one edge with two waypoints", cfg.Layout.Edges)
 	}
 
-	public := FactoryConfigToOpenAPI(cfg)
+	public, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	if public.Layout == nil || public.Layout.Nodes == nil || len(*public.Layout.Nodes) != 2 {
 		t.Fatalf("public layout nodes = %#v, want 2", public.Layout)
 	}
@@ -276,7 +282,10 @@ func assertInternalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfi
 func assertPublicGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
 	t.Helper()
 
-	public := FactoryConfigToOpenAPI(cfg)
+	public, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	if public.WorkTypes == nil || (*public.WorkTypes)[0].Id == nil || *(*public.WorkTypes)[0].Id != "work-type-story" {
 		t.Fatalf("public work type id = %#v", public.WorkTypes)
 	}

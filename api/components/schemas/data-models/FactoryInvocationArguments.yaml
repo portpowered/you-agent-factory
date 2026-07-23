@@ -1,0 +1,10 @@
+type: object
+description: >-
+  Structured Factory invocation arguments keyed by parameter name, external
+  name, or alias. Each value is either one string or an ordered array of strings.
+additionalProperties:
+  oneOf:
+    - type: string
+    - type: array
+      items:
+        type: string
