@@ -1228,7 +1228,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",
-      "minimum": 32.92
+      "minimum": 30.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliserver",

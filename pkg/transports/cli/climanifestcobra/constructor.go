@@ -859,6 +859,16 @@ func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error 
 		return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
 	}
 	if hasGenericFlagDefault(flag) {
+		if isCanonicalFlagRecord(flag) {
+			count := genericInputValueCount(defaultValue)
+			if count < flag.MinCardinality ||
+				(flag.MaxCardinality != -1 && count > flag.MaxCardinality) {
+				return genericFlagError(commandID, flag.ID, "typed default count is outside declared cardinality")
+			}
+		}
+		if normalized := normalizeGenericInput(defaultValue, flag.Normalization); !reflect.DeepEqual(normalized, defaultValue) {
+			return genericFlagError(commandID, flag.ID, "typed default is not in declared normalized form")
+		}
 		if err := validateEnumValue(flag, defaultValue); err != nil {
 			return genericFlagError(commandID, flag.ID, "invalid typed default: %v", err)
 		}
@@ -872,6 +882,9 @@ func validateGenericFlagDefaults(commandID string, flag climanifest.Flag) error 
 	}
 	if flag.ValueType == "stringArray" {
 		return genericFlagError(commandID, flag.ID, "no-option default is incompatible with repeated-string flags")
+	}
+	if normalized := normalizeGenericInput(noOptionValue, flag.Normalization); !reflect.DeepEqual(normalized, noOptionValue) {
+		return genericFlagError(commandID, flag.ID, "no-option default is not in declared normalized form")
 	}
 	if err := validateEnumValue(flag, noOptionValue); err != nil {
 		return genericFlagError(commandID, flag.ID, "invalid no-option default: %v", err)
@@ -893,6 +906,22 @@ func validateInheritedFlag(inherited, declared climanifest.Flag) error {
 
 func genericFlagError(commandID, inputID, format string, args ...any) error {
 	return fmt.Errorf("command %q input %q: %s", commandID, inputID, fmt.Sprintf(format, args...))
+}
+
+func sortedKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func genericInputValueCount(value any) int {
+	if values, ok := value.([]string); ok {
+		return len(values)
+	}
+	return 1
 }
 
 func projectFlags(cmd *cobra.Command, plan plannedCommand, targets map[string]*genericFlagValue) error {

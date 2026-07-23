@@ -98,14 +98,8 @@ func argumentDecodeTarget(valueType string) (any, error) {
 		return new(int), nil
 	case "int64":
 		return new(int64), nil
-	case "boolArray":
-		return new([]bool), nil
 	case "stringArray":
 		return new([]string), nil
-	case "intArray":
-		return new([]int), nil
-	case "int64Array":
-		return new([]int64), nil
 	default:
 		return nil, fmt.Errorf("unsupported stored value type %q", valueType)
 	}
@@ -121,14 +115,8 @@ func dereferenceArgumentValue(target any) (any, error) {
 		return *typed, nil
 	case *int64:
 		return *typed, nil
-	case *[]bool:
-		return append([]bool(nil), (*typed)...), nil
 	case *[]string:
 		return append([]string(nil), (*typed)...), nil
-	case *[]int:
-		return append([]int(nil), (*typed)...), nil
-	case *[]int64:
-		return append([]int64(nil), (*typed)...), nil
 	default:
 		return nil, fmt.Errorf("unsupported decoded value")
 	}
@@ -341,21 +329,83 @@ func parseGenericFlagString(valueType, raw string) (any, error) {
 }
 
 func normalizeGenericInput(value any, mode string) any {
-	if mode != "trim" {
+	if mode == "" {
 		return value
+	}
+	normalize := func(candidate string) string {
+		switch mode {
+		case "lowercase":
+			return strings.ToLower(candidate)
+		case "trim":
+			return strings.TrimSpace(candidate)
+		case "lowercase-trim":
+			return strings.ToLower(strings.TrimSpace(candidate))
+		default:
+			return candidate
+		}
 	}
 	switch typed := value.(type) {
 	case string:
-		return strings.TrimSpace(typed)
+		return normalize(typed)
 	case []string:
 		normalized := make([]string, len(typed))
 		for index := range typed {
-			normalized[index] = strings.TrimSpace(typed[index])
+			normalized[index] = normalize(typed[index])
 		}
 		return normalized
 	default:
 		return value
 	}
+}
+
+func validateCanonicalSourceBinding(
+	commandID, key string,
+	binding climanifest.SourceBinding,
+	all map[string]canonicalCommandInput,
+) (canonicalCommandInput, error) {
+	if key != binding.ID || strings.TrimSpace(binding.ID) == "" {
+		return canonicalCommandInput{}, fmt.Errorf(
+			"command %q source binding map key %q does not match id %q",
+			commandID,
+			key,
+			binding.ID,
+		)
+	}
+	input, exists := all[binding.InputID]
+	if !exists {
+		return canonicalCommandInput{}, fmt.Errorf(
+			"command %q source binding %q references unknown input %q",
+			commandID,
+			key,
+			binding.InputID,
+		)
+	}
+	if !isExternalInputSource(binding.Source) || !input.accepted[binding.Source] {
+		return canonicalCommandInput{}, fmt.Errorf(
+			"command %q source binding %q source %q is not accepted by input %q",
+			commandID,
+			key,
+			binding.Source,
+			binding.InputID,
+		)
+	}
+	if binding.Source == "stdin" {
+		if binding.ExternalKey != "" || (input.valueType != "string" && input.valueType != "stringArray") ||
+			input.maximum == 0 {
+			return canonicalCommandInput{}, fmt.Errorf(
+				"command %q source binding %q has incompatible stdin input shape",
+				commandID,
+				key,
+			)
+		}
+	} else if strings.TrimSpace(binding.ExternalKey) == "" {
+		return canonicalCommandInput{}, fmt.Errorf(
+			"command %q source binding %q requires an external key",
+			commandID,
+			key,
+		)
+	}
+	return input, nil
 }
 
 func validateEnumValue(flag climanifest.Flag, value any) error {
@@ -413,6 +463,7 @@ type plannedRelationship struct {
 
 type plannedParticipant struct {
 	id        string
+	identity  string
 	kind      string
 	public    string
 	flagNames []string
@@ -431,6 +482,9 @@ func planCommandArgumentsAndRelationships(plan []plannedCommand) error {
 			return err
 		}
 		plan[index].arguments = arguments
+		if err := validateCanonicalCommandInputs(plan[index].record); err != nil {
+			return err
+		}
 		relationships, err := planRelationships(plan, index)
 		if err != nil {
 			return err
@@ -514,6 +568,14 @@ func validateArgumentCardinality(commandID string, argument climanifest.Argument
 	if argument.MaxCardinality == 0 {
 		return genericArgumentError(commandID, argument.ID, "maximum cardinality must accept at least one value")
 	}
+	if (argument.Variadic || argument.MaxCardinality == -1 || argument.MaxCardinality > 1) &&
+		argument.ValueType != "stringArray" {
+		return genericArgumentError(
+			commandID,
+			argument.ID,
+			"repeated or unbounded input must use stringArray value type",
+		)
+	}
 	return nil
 }
 
@@ -555,6 +617,11 @@ func validateArgumentValueContract(commandID string, argument climanifest.Argume
 	if err := validateArgumentCandidate(argument, value); err != nil {
 		return genericArgumentError(commandID, argument.ID, "invalid typed default: %v", err)
 	}
+	count := genericInputValueCount(value)
+	if count < argument.MinCardinality ||
+		(argument.MaxCardinality != -1 && count > argument.MaxCardinality) {
+		return genericArgumentError(commandID, argument.ID, "typed default count is outside declared cardinality")
+	}
 	return nil
 }
 
@@ -582,6 +649,9 @@ func planRelationships(plan []plannedCommand, commandIndex int) ([]plannedRelati
 		}
 		relationships = append(relationships, planned)
 	}
+	if err := validateRelationshipSet(record.ID, relationships); err != nil {
+		return nil, err
+	}
 	return relationships, nil
 }
 
@@ -596,14 +666,21 @@ func effectiveParticipants(plan []plannedCommand, commandIndex int) map[string]p
 		for _, flag := range record.Flags {
 			if record.Path == commandPath || flag.Scope == "persistent" {
 				names := append([]string{flag.Long}, flag.Aliases...)
+				identity := flag.ID
+				if flag.InheritedFromID != "" {
+					identity = flag.InheritedFromID
+				}
 				available[flag.ID] = plannedParticipant{
-					id: flag.ID, kind: "flag", public: "--" + flag.Long, flagNames: names,
+					id: flag.ID, identity: identity, kind: "flag",
+					public: "--" + flag.Long, flagNames: names,
 				}
 			}
 		}
 	}
 	for _, argument := range plan[commandIndex].arguments {
-		available[argument.ID] = plannedParticipant{id: argument.ID, kind: "argument", public: argument.Name}
+		available[argument.ID] = plannedParticipant{
+			id: argument.ID, identity: argument.ID, kind: "argument", public: argument.Name,
+		}
 	}
 	return available
 }
@@ -819,51 +896,21 @@ func argumentStrings(value any) []string {
 	}
 }
 
-func emptyArgumentSlice(valueType string) any {
-	switch valueType {
-	case "bool":
-		return []bool{}
-	case "int":
-		return []int{}
-	case "int64":
-		return []int64{}
-	default:
-		return []string{}
-	}
+func emptyArgumentSlice(string) any {
+	return []string{}
 }
 
-func typedArgumentSlice(valueType string, values []any) any {
-	switch valueType {
-	case "bool":
-		result := make([]bool, len(values))
-		for index := range values {
-			result[index] = values[index].(bool)
+func typedArgumentSlice(_ string, values []any) any {
+	result := make([]string, len(values))
+	for index := range values {
+		item := values[index]
+		if repeated, ok := item.([]string); ok {
+			result[index] = repeated[0]
+		} else {
+			result[index] = item.(string)
 		}
-		return result
-	case "int":
-		result := make([]int, len(values))
-		for index := range values {
-			result[index] = values[index].(int)
-		}
-		return result
-	case "int64":
-		result := make([]int64, len(values))
-		for index := range values {
-			result[index] = values[index].(int64)
-		}
-		return result
-	default:
-		result := make([]string, len(values))
-		for index := range values {
-			item := values[index]
-			if repeated, ok := item.([]string); ok {
-				result[index] = repeated[0]
-			} else {
-				result[index] = item.(string)
-			}
-		}
-		return result
 	}
+	return result
 }
 
 func storeArgumentValue(cmd *cobra.Command, argument climanifest.Argument, present bool, value any) error {
@@ -872,16 +919,7 @@ func storeArgumentValue(cmd *cobra.Command, argument climanifest.Argument, prese
 	}
 	valueType := argument.ValueType
 	if argument.MaxCardinality != 1 {
-		switch argument.ValueType {
-		case "bool":
-			valueType = "boolArray"
-		case "int":
-			valueType = "intArray"
-		case "int64":
-			valueType = "int64Array"
-		default:
-			valueType = "stringArray"
-		}
+		valueType = "stringArray"
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {

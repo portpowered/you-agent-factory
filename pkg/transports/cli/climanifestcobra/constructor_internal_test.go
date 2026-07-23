@@ -3,6 +3,7 @@ package climanifestcobra
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -288,10 +289,147 @@ func TestGenericFlagsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T
 			delete(manifest.Commands, "feedback.zeta")
 			alpha := manifest.Commands["feedback.alpha"]
 			flag := canonicalFeedbackFlag()
-			test.mutate(&flag)
 			alpha.Flags = map[string]climanifest.Flag{flag.ID: flag}
+			completeFeedbackCanonicalCommandContract(&alpha)
+			test.mutate(&flag)
+			alpha.Flags[flag.ID] = flag
 			manifest.Commands[alpha.ID] = alpha
 			assertFeedbackConstructionFailure(t, manifest, "input")
+		})
+	}
+}
+
+func TestCanonicalInputTablesRejectIncompleteBindingsAndPrecedenceBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*climanifest.Command)
+		want   string
+	}{
+		{name: "unknown handler binding", mutate: func(command *climanifest.Command) {
+			delete(command.HandlerBindings, "feedback.alpha.arg.value.binding")
+		}, want: "unknown handler binding"},
+		{name: "mismatched handler target", mutate: func(command *climanifest.Command) {
+			other := compatibilityFeedbackArgument("feedback.alpha.arg.other", "other", 1)
+			command.Arguments[other.ID] = other
+			binding := command.HandlerBindings["feedback.alpha.arg.value.binding"]
+			binding.InputID = other.ID
+			command.HandlerBindings[binding.ID] = binding
+		}, want: "targets input"},
+		{name: "duplicate handler binding", mutate: func(command *climanifest.Command) {
+			other := canonicalFeedbackArgument("feedback.alpha.arg.other", "other", 1, "visible")
+			other.HandlerBindingID = "feedback.alpha.arg.value.binding"
+			command.Arguments[other.ID] = other
+		}, want: "claimed by inputs"},
+		{name: "missing source binding", mutate: func(command *climanifest.Command) {
+			delete(command.SourceBindings, "feedback.alpha.arg.value.source.environment")
+		}, want: "without a source binding"},
+		{name: "mismatched source binding", mutate: func(command *climanifest.Command) {
+			binding := command.SourceBindings["feedback.alpha.arg.value.source.environment"]
+			binding.Source = "operator-config"
+			command.SourceBindings[binding.ID] = binding
+		}, want: "is not accepted"},
+		{name: "missing precedence", mutate: func(command *climanifest.Command) {
+			command.Precedence = climanifest.Precedence{}
+		}, want: "precedence is missing or incomplete"},
+		{name: "incomplete precedence", mutate: func(command *climanifest.Command) {
+			command.Precedence.WithinTier.Repeated = ""
+		}, want: "precedence policy is incomplete"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			argument := canonicalFeedbackArgument("feedback.alpha.arg.value", "value", 0, "visible")
+			argument.AcceptedSources = []string{"cli", "environment"}
+			manifest := feedbackManifestWithArgument(argument)
+			alpha := manifest.Commands["feedback.alpha"]
+			test.mutate(&alpha)
+			manifest.Commands[alpha.ID] = alpha
+			assertFeedbackConstructionFailure(t, manifest, test.want)
+		})
+	}
+}
+
+func TestCanonicalFlagNormalizationDispatchesDefaultsAndExplicitValues(t *testing.T) {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	worker, stable, base := "worker", "stable", []string{"base"}
+	alpha.Flags = map[string]climanifest.Flag{
+		"feedback.alpha.flag.name": canonicalNormalizedFlag(
+			"feedback.alpha.flag.name", "name", "string", "lowercase-trim",
+			&climanifest.InputValue{String: &worker}, []string{"worker"},
+		),
+		"feedback.alpha.flag.code": canonicalNormalizedFlag(
+			"feedback.alpha.flag.code", "code", "string", "lowercase",
+			&climanifest.InputValue{String: &stable}, []string{"stable", "mixed"},
+		),
+		"feedback.alpha.flag.tag": canonicalNormalizedFlag(
+			"feedback.alpha.flag.tag", "tag", "stringArray", "lowercase-trim",
+			&climanifest.InputValue{StringArray: &base}, []string{"base", "alpha", "beta"},
+		),
+	}
+	completeFeedbackCanonicalCommandContract(&alpha)
+	manifest.Commands[alpha.ID] = alpha
+
+	var received map[string]any
+	build := func() *cobra.Command {
+		root, err := NewCommandTree(manifest, feedbackBindings(
+			manifest,
+			func(_ context.Context, values map[string]any) error {
+				received = values
+				return nil
+			},
+		))
+		if err != nil {
+			t.Fatalf("NewCommandTree() error = %v", err)
+		}
+		return root
+	}
+	root := build()
+	root.SetArgs([]string{"alpha"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(defaults) error = %v", err)
+	}
+	if received["feedback.alpha.flag.name"] != "worker" ||
+		received["feedback.alpha.flag.code"] != "stable" ||
+		!reflect.DeepEqual(received["feedback.alpha.flag.tag"], []string{"base"}) {
+		t.Fatalf("default values = %#v, want normalized typed defaults", received)
+	}
+
+	root = build()
+	root.SetArgs([]string{"alpha", "--name", " WoRkEr ", "--code", "MiXeD", "--tag", " ALPHA ", "--tag", " BeTa "})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(explicit) error = %v", err)
+	}
+	if received["feedback.alpha.flag.name"] != "worker" ||
+		received["feedback.alpha.flag.code"] != "mixed" ||
+		!reflect.DeepEqual(received["feedback.alpha.flag.tag"], []string{"alpha", "beta"}) {
+		t.Fatalf("explicit values = %#v, want lowercase/trim normalization", received)
+	}
+}
+
+func TestRelationshipSetsRejectDuplicatesContradictionsAndCyclesBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name          string
+		relationships map[string]climanifest.Relationship
+		want          string
+	}{
+		{name: "duplicate", relationships: map[string]climanifest.Relationship{
+			"rel.one": relationship("rel.one", "mutually-exclusive", "flag.alpha", "flag.beta"),
+			"rel.two": relationship("rel.two", "mutually-exclusive", "flag.beta", "flag.alpha"),
+		}, want: "duplicates equivalent relationship"},
+		{name: "contradictory", relationships: map[string]climanifest.Relationship{
+			"rel.one": relationship("rel.one", "required-together", "flag.alpha", "flag.beta"),
+			"rel.two": relationship("rel.two", "conflict", "flag.alpha", "flag.beta"),
+		}, want: "contradicts relationship"},
+		{name: "cycle", relationships: map[string]climanifest.Relationship{
+			"rel.one": directedFeedbackRelationship("rel.one", "flag.alpha", "flag.beta"),
+			"rel.two": directedFeedbackRelationship("rel.two", "flag.beta", "flag.alpha"),
+		}, want: "contains a cycle"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := feedbackRelationshipManifest(test.relationships)
+			assertFeedbackConstructionFailure(t, manifest, test.want)
 		})
 	}
 }
@@ -340,6 +478,60 @@ func canonicalFeedbackFlag() climanifest.Flag {
 	}
 }
 
+func canonicalNormalizedFlag(
+	id, long, valueType, normalization string,
+	defaultValue *climanifest.InputValue,
+	enum []string,
+) climanifest.Flag {
+	repeatable := valueType == "stringArray"
+	maximum := 1
+	if repeatable {
+		maximum = -1
+	}
+	return climanifest.Flag{
+		ID: id, Kind: "named", Long: long, Scope: "local", ValueType: valueType,
+		MaxCardinality: maximum, DefaultValue: defaultValue, Repeatable: repeatable,
+		Normalization: normalization, Completion: "none", Enum: enum,
+		AcceptedSources:  []string{"cli", "manifest-default"},
+		HandlerBindingID: id + ".binding", Visibility: "visible", Lifecycle: feedbackLifecycle(id),
+	}
+}
+
+func feedbackRelationshipManifest(relationships map[string]climanifest.Relationship) climanifest.Manifest {
+	manifest := feedbackManifest()
+	delete(manifest.Commands, "feedback.zeta")
+	alpha := manifest.Commands["feedback.alpha"]
+	alpha.Flags = map[string]climanifest.Flag{
+		"flag.alpha": {
+			ID: "flag.alpha", Long: "alpha", Scope: "local", ValueType: "bool",
+			NoOptionDefault: "true", Completion: "none", Visibility: "visible",
+			Lifecycle: feedbackLifecycle("flag.alpha"),
+		},
+		"flag.beta": {
+			ID: "flag.beta", Long: "beta", Scope: "local", ValueType: "bool",
+			NoOptionDefault: "true", Completion: "none", Visibility: "visible",
+			Lifecycle: feedbackLifecycle("flag.beta"),
+		},
+	}
+	alpha.Relationships = relationships
+	manifest.Commands[alpha.ID] = alpha
+	return manifest
+}
+
+func relationship(id, kind string, inputIDs ...string) climanifest.Relationship {
+	participants := make([]climanifest.ParticipantRef, len(inputIDs))
+	for index, inputID := range inputIDs {
+		participants[index] = climanifest.ParticipantRef{Type: "flag", ID: inputID}
+	}
+	return climanifest.Relationship{ID: id, Kind: kind, Participants: participants}
+}
+
+func directedFeedbackRelationship(id, trigger, target string) climanifest.Relationship {
+	relationship := relationship(id, "dependency", target)
+	relationship.When = &climanifest.ParticipantRef{Type: "flag", ID: trigger}
+	return relationship
+}
+
 func feedbackManifestWithArgument(argument climanifest.Argument) climanifest.Manifest {
 	return feedbackManifestWithArguments(argument)
 }
@@ -352,8 +544,44 @@ func feedbackManifestWithArguments(arguments ...climanifest.Argument) climanifes
 	for _, argument := range arguments {
 		alpha.Arguments[argument.ID] = argument
 	}
+	completeFeedbackCanonicalCommandContract(&alpha)
 	manifest.Commands[alpha.ID] = alpha
 	return manifest
+}
+
+func completeFeedbackCanonicalCommandContract(command *climanifest.Command) {
+	command.HandlerBindings = make(map[string]climanifest.HandlerBinding)
+	command.SourceBindings = make(map[string]climanifest.SourceBinding)
+	add := func(id, bindingID string, sources []string) {
+		if bindingID == "" {
+			return
+		}
+		command.HandlerBindings[bindingID] = climanifest.HandlerBinding{ID: bindingID, InputID: id}
+		for _, source := range sources {
+			if source != "environment" {
+				continue
+			}
+			sourceID := id + ".source.environment"
+			command.SourceBindings[sourceID] = climanifest.SourceBinding{
+				ID: sourceID, Source: source, ExternalKey: strings.ToUpper(id), InputID: id,
+			}
+		}
+	}
+	for _, argument := range command.Arguments {
+		add(argument.ID, argument.HandlerBindingID, argument.AcceptedSources)
+	}
+	for _, flag := range command.Flags {
+		add(flag.ID, flag.HandlerBindingID, flag.AcceptedSources)
+	}
+	command.Precedence = climanifest.Precedence{
+		Order: []string{
+			"cli", "stdin", "environment", "operator-config",
+			"manifest-default", "factory-signature-default",
+		},
+		WithinTier:       climanifest.WithinTierRule{Scalar: "last", Repeated: "append"},
+		AcrossTiers:      "replace",
+		MultipleBindings: "reject",
+	}
 }
 
 func updateFeedbackArgument(manifest *climanifest.Manifest, update func(*climanifest.Argument)) {

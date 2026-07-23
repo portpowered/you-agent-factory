@@ -241,6 +241,16 @@ func isCanonicalFlagRecord(flag climanifest.Flag) bool {
 }
 
 func validateCanonicalFlagCardinality(commandID string, flag climanifest.Flag) error {
+	if flag.MinCardinality < 0 || flag.MaxCardinality < -1 ||
+		(flag.MaxCardinality != -1 && flag.MinCardinality > flag.MaxCardinality) {
+		return genericFlagError(
+			commandID,
+			flag.ID,
+			"invalid cardinality %d..%d",
+			flag.MinCardinality,
+			flag.MaxCardinality,
+		)
+	}
 	if flag.Required != (flag.MinCardinality > 0) {
 		return genericFlagError(
 			commandID,
@@ -263,6 +273,10 @@ func validateCanonicalFlagCardinality(commandID string, flag climanifest.Flag) e
 			flag.Repeatable,
 		)
 	}
+	if (flag.Repeatable || flag.MaxCardinality == -1 || flag.MaxCardinality > 1) &&
+		flag.ValueType != "stringArray" {
+		return genericFlagError(commandID, flag.ID, "repeated or unbounded input must use stringArray value type")
+	}
 	return nil
 }
 
@@ -284,14 +298,8 @@ func validateGenericFlagShape(commandID string, flag climanifest.Flag) error {
 			flag.ValueType,
 		)
 	}
-	switch flag.Normalization {
-	case "":
-	case "trim":
-		if flag.ValueType != "string" && flag.ValueType != "stringArray" {
-			return genericFlagError(commandID, flag.ID, "normalization %q is incompatible with value type %q", flag.Normalization, flag.ValueType)
-		}
-	default:
-		return genericFlagError(commandID, flag.ID, "unsupported normalization %q", flag.Normalization)
+	if err := validateGenericFlagNormalization(commandID, flag); err != nil {
+		return err
 	}
 	switch flag.Visibility {
 	case "", "visible", "hidden":
@@ -300,6 +308,24 @@ func validateGenericFlagShape(commandID string, flag climanifest.Flag) error {
 	}
 	if len(flag.Enum) > 0 && flag.ValueType != "string" && flag.ValueType != "stringArray" {
 		return genericFlagError(commandID, flag.ID, "enumerated choices are incompatible with value type %q", flag.ValueType)
+	}
+	return nil
+}
+
+func validateGenericFlagNormalization(commandID string, flag climanifest.Flag) error {
+	switch flag.Normalization {
+	case "":
+	case "lowercase", "trim", "lowercase-trim":
+		if flag.ValueType != "string" && flag.ValueType != "stringArray" {
+			return genericFlagError(commandID, flag.ID, "normalization %q is incompatible with value type %q", flag.Normalization, flag.ValueType)
+		}
+	default:
+		return genericFlagError(commandID, flag.ID, "unsupported normalization %q", flag.Normalization)
+	}
+	for _, choice := range flag.Enum {
+		if normalizeGenericInput(choice, flag.Normalization) != choice {
+			return genericFlagError(commandID, flag.ID, "enumerated choice %q is not in declared normalized form", choice)
+		}
 	}
 	return nil
 }
@@ -395,6 +421,304 @@ func validateManifestDefaultSource(
 		)
 	}
 	return nil
+}
+
+type canonicalCommandInput struct {
+	id        string
+	bindingID string
+	valueType string
+	maximum   int
+	accepted  map[string]bool
+}
+
+var canonicalSourcePrecedence = []string{
+	"cli",
+	"stdin",
+	"environment",
+	"operator-config",
+	"manifest-default",
+	"factory-signature-default",
+}
+
+func validateCanonicalCommandInputs(command climanifest.Command) error {
+	all := make(map[string]canonicalCommandInput, len(command.Arguments)+len(command.Flags))
+	var canonical []canonicalCommandInput
+	add := func(input canonicalCommandInput, isCanonical bool) {
+		all[input.id] = input
+		if isCanonical {
+			canonical = append(canonical, input)
+		}
+	}
+	for _, argument := range command.Arguments {
+		add(canonicalInput(
+			argument.ID,
+			argument.HandlerBindingID,
+			argument.ValueType,
+			argument.MaxCardinality,
+			argument.AcceptedSources,
+		), argument.HandlerBindingID != "")
+	}
+	for _, flag := range command.Flags {
+		add(canonicalInput(
+			flag.ID,
+			flag.HandlerBindingID,
+			flag.ValueType,
+			flag.MaxCardinality,
+			flag.AcceptedSources,
+		), isCanonicalFlagRecord(flag))
+	}
+	if len(canonical) == 0 {
+		return nil
+	}
+	sort.Slice(canonical, func(i, j int) bool { return canonical[i].id < canonical[j].id })
+	if err := validateCanonicalPrecedence(command); err != nil {
+		return err
+	}
+	if err := validateCanonicalHandlerBindings(command, all, canonical); err != nil {
+		return err
+	}
+	return validateCanonicalSourceBindings(command, all, canonical)
+}
+
+func canonicalInput(id, bindingID, valueType string, maximum int, sources []string) canonicalCommandInput {
+	accepted := make(map[string]bool, len(sources))
+	for _, source := range sources {
+		accepted[source] = true
+	}
+	return canonicalCommandInput{
+		id: id, bindingID: bindingID, valueType: valueType, maximum: maximum, accepted: accepted,
+	}
+}
+
+func validateCanonicalPrecedence(command climanifest.Command) error {
+	if len(command.Precedence.Order) != len(canonicalSourcePrecedence) {
+		return fmt.Errorf("command %q canonical input precedence is missing or incomplete", command.ID)
+	}
+	for index, source := range canonicalSourcePrecedence {
+		if command.Precedence.Order[index] != source {
+			return fmt.Errorf(
+				"command %q canonical input precedence tier %d is %q, want %q",
+				command.ID,
+				index,
+				command.Precedence.Order[index],
+				source,
+			)
+		}
+	}
+	if command.Precedence.WithinTier.Scalar != "last" ||
+		command.Precedence.WithinTier.Repeated != "append" ||
+		command.Precedence.AcrossTiers != "replace" ||
+		command.Precedence.MultipleBindings != "reject" {
+		return fmt.Errorf("command %q canonical input precedence policy is incomplete or unsupported", command.ID)
+	}
+	return nil
+}
+
+func validateCanonicalHandlerBindings(
+	command climanifest.Command,
+	all map[string]canonicalCommandInput,
+	canonical []canonicalCommandInput,
+) error {
+	for _, key := range sortedKeys(command.HandlerBindings) {
+		binding := command.HandlerBindings[key]
+		if key != binding.ID || strings.TrimSpace(binding.ID) == "" {
+			return fmt.Errorf("command %q handler binding map key %q does not match id %q", command.ID, key, binding.ID)
+		}
+		if _, exists := all[binding.InputID]; !exists {
+			return fmt.Errorf("command %q handler binding %q references unknown input %q", command.ID, key, binding.InputID)
+		}
+	}
+	owners := make(map[string]string, len(canonical))
+	for _, input := range canonical {
+		if owner, exists := owners[input.bindingID]; exists {
+			return fmt.Errorf(
+				"command %q handler binding %q is claimed by inputs %q and %q",
+				command.ID,
+				input.bindingID,
+				owner,
+				input.id,
+			)
+		}
+		owners[input.bindingID] = input.id
+	}
+	for _, input := range canonical {
+		binding, exists := command.HandlerBindings[input.bindingID]
+		if !exists {
+			return fmt.Errorf(
+				"command %q input %q references unknown handler binding %q",
+				command.ID,
+				input.id,
+				input.bindingID,
+			)
+		}
+		if binding.InputID != input.id {
+			return fmt.Errorf(
+				"command %q input %q handler binding %q targets input %q",
+				command.ID,
+				input.id,
+				input.bindingID,
+				binding.InputID,
+			)
+		}
+	}
+	return nil
+}
+
+func validateCanonicalSourceBindings(
+	command climanifest.Command,
+	all map[string]canonicalCommandInput,
+	canonical []canonicalCommandInput,
+) error {
+	bound := make(map[string]map[string]bool)
+	routes := make(map[string]string)
+	for _, key := range sortedKeys(command.SourceBindings) {
+		binding := command.SourceBindings[key]
+		input, err := validateCanonicalSourceBinding(command.ID, key, binding, all)
+		if err != nil {
+			return err
+		}
+		route := binding.Source + ":" + binding.ExternalKey
+		if owner, exists := routes[route]; exists {
+			return fmt.Errorf("command %q source route %q targets bindings %q and %q", command.ID, route, owner, key)
+		}
+		routes[route] = key
+		if bound[input.id] == nil {
+			bound[input.id] = make(map[string]bool)
+		}
+		if bound[input.id][binding.Source] {
+			return fmt.Errorf(
+				"command %q input %q has multiple bindings for source %q",
+				command.ID,
+				input.id,
+				binding.Source,
+			)
+		}
+		bound[input.id][binding.Source] = true
+	}
+	for _, input := range canonical {
+		for _, source := range []string{"stdin", "environment", "operator-config"} {
+			if input.accepted[source] && !bound[input.id][source] {
+				return fmt.Errorf(
+					"command %q input %q accepts source %q without a source binding",
+					command.ID,
+					input.id,
+					source,
+				)
+			}
+		}
+	}
+	return nil
+}
+
+func isExternalInputSource(source string) bool {
+	return source == "stdin" || source == "environment" || source == "operator-config"
+}
+
+func validateRelationshipSet(commandID string, relationships []plannedRelationship) error {
+	seen := make(map[string]string, len(relationships))
+	adjacency := make(map[string][]string)
+	for index, relationship := range relationships {
+		signature := relationship.record.Kind + ":" + relationshipSignature(relationship)
+		if owner, exists := seen[signature]; exists {
+			return fmt.Errorf(
+				"command %q relationship %q duplicates equivalent relationship %q",
+				commandID,
+				relationship.record.ID,
+				owner,
+			)
+		}
+		seen[signature] = relationship.record.ID
+		for prior := 0; prior < index; prior++ {
+			if relationshipsContradict(relationships[prior], relationship) {
+				return fmt.Errorf(
+					"command %q relationship %q contradicts relationship %q",
+					commandID,
+					relationship.record.ID,
+					relationships[prior].record.ID,
+				)
+			}
+		}
+		if relationshipMode(relationship.record.Kind) == "directed" {
+			for _, participant := range relationship.participants {
+				adjacency[relationship.when.identity] = append(
+					adjacency[relationship.when.identity],
+					participant.identity,
+				)
+			}
+		}
+	}
+	for from, targets := range adjacency {
+		for _, target := range targets {
+			if relationshipReachable(target, from, adjacency, make(map[string]bool)) {
+				return fmt.Errorf("command %q relationship dependency graph contains a cycle", commandID)
+			}
+		}
+	}
+	return nil
+}
+
+func relationshipSignature(relationship plannedRelationship) string {
+	participants := make([]string, len(relationship.participants))
+	for index, participant := range relationship.participants {
+		participants[index] = participant.kind + ":" + participant.identity
+	}
+	sort.Strings(participants)
+	trigger := ""
+	if relationship.when != nil {
+		trigger = relationship.when.kind + ":" + relationship.when.identity + "->"
+	}
+	return trigger + strings.Join(participants, ",")
+}
+
+func relationshipsContradict(left, right plannedRelationship) bool {
+	if relationshipGroupsContradict(left, right) {
+		return true
+	}
+	for _, pair := range [][2]plannedRelationship{{left, right}, {right, left}} {
+		directed, excluded := pair[0], pair[1]
+		if relationshipMode(directed.record.Kind) != "directed" ||
+			!relationshipIsExclusion(excluded.record.Kind) {
+			continue
+		}
+		ids := make(map[string]bool, len(excluded.participants))
+		for _, participant := range excluded.participants {
+			ids[participant.identity] = true
+		}
+		for _, participant := range directed.participants {
+			if ids[directed.when.identity] && ids[participant.identity] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func relationshipGroupsContradict(left, right plannedRelationship) bool {
+	if relationshipSignature(left) != relationshipSignature(right) {
+		return false
+	}
+	return left.record.Kind == "required-together" && relationshipIsExclusion(right.record.Kind) ||
+		right.record.Kind == "required-together" && relationshipIsExclusion(left.record.Kind)
+}
+
+func relationshipIsExclusion(kind string) bool {
+	return kind == "mutually-exclusive" || kind == "conflict"
+}
+
+func relationshipReachable(current, target string, adjacency map[string][]string, visited map[string]bool) bool {
+	if current == target {
+		return true
+	}
+	if visited[current] {
+		return false
+	}
+	visited[current] = true
+	for _, next := range adjacency[current] {
+		if relationshipReachable(next, target, adjacency, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateInheritedPresentation(plan []plannedCommand, flags map[string]climanifest.Flag) error {

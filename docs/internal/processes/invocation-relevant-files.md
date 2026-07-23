@@ -423,7 +423,18 @@ response-stream output.
   generated usage/help. Before projection, require each input to be one complete
   compatibility or canonical record, validate its source vocabulary and stable
   handler binding, and require `defaultValue` presence to exactly match the
-  canonical `manifest-default` source.
+  canonical `manifest-default` source. For canonical inputs, also reconcile
+  every input-owned binding ID with the command's `handlerBindings`, require
+  explicit `sourceBindings` for accepted external sources, and validate the
+  complete canonical precedence policy before allocating Cobra state. Repeated,
+  fixed-multiple, and unbounded cardinality use `stringArray`; reject repeated
+  scalar types and typed defaults outside the declared range. Apply
+  `lowercase`, `trim`, and `lowercase-trim` to explicit string and string-array
+  values, while requiring authored defaults and enum choices to already be in
+  their declared normalized form. Validate relationship records both
+  individually and as one command-owned set so equivalent duplicates,
+  contradictions, and directed dependency cycles fail during planning rather
+  than reaching pre-handler evaluation.
   Generic runnable dispatch follows the same boundary: validate every
   `Command.Handler.ID` and `GenericBindings.Handlers` entry before Cobra
   projection, reject duplicate handler ownership, and invoke the selected

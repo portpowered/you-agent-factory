@@ -510,6 +510,7 @@ func syntheticFlagManifest() climanifest.Manifest {
 		},
 	}
 	withActiveFlagLifecycle(root.Flags)
+	completeCanonicalCommandContract(&root)
 	manifest.Commands[root.ID] = root
 
 	alpha := manifest.Commands["stable.alpha"]
@@ -584,6 +585,7 @@ func syntheticFlagManifest() climanifest.Manifest {
 		},
 	}
 	withActiveFlagLifecycle(alpha.Flags)
+	completeCanonicalCommandContract(&alpha)
 	manifest.Commands[alpha.ID] = alpha
 	return manifest
 }
@@ -692,7 +694,7 @@ func TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID(t *testing
 	want := map[string]any{
 		"stable.shape.arg.count": 7,
 		"stable.shape.arg.label": "label",
-		"stable.shape.arg.ids":   []int64{11, 12},
+		"stable.shape.arg.ids":   []string{"11", "12"},
 	}
 	if !reflect.DeepEqual(values, want) {
 		t.Fatalf("InputValues() = %#v, want %#v", values, want)
@@ -713,6 +715,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 	ids.Variadic = false
 	ids.Required = true
 	command.Arguments[ids.ID] = ids
+	completeCanonicalCommandContract(&command)
 	manifest.Commands[command.ID] = command
 
 	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
@@ -730,7 +733,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 		t.Fatalf("InputValues() error = %v", err)
 	}
 	if values["stable.shape.arg.label"] != "fallback" ||
-		!reflect.DeepEqual(values["stable.shape.arg.ids"], []int64{11, 12}) {
+		!reflect.DeepEqual(values["stable.shape.arg.ids"], []string{"11", "12"}) {
 		t.Fatalf("InputValues() = %#v, want typed default and fixed repeated values", values)
 	}
 }
@@ -908,7 +911,7 @@ func syntheticArgumentManifest() climanifest.Manifest {
 		},
 		"stable.shape.arg.ids": {
 			ID: "stable.shape.arg.ids", Name: "ids", Position: 2, Kind: "positional",
-			ValueType: "int64", MinCardinality: 0, MaxCardinality: -1, Variadic: true,
+			ValueType: "stringArray", MinCardinality: 0, MaxCardinality: -1, Variadic: true,
 		},
 	}
 	withNoneArgumentCompletion(command.Arguments)

@@ -244,17 +244,15 @@ func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T
 	}
 }
 
-func TestNewCommandTreeDispatchesEveryVariadicArgumentValueType(t *testing.T) {
+func TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes(t *testing.T) {
 	tests := []struct {
 		name      string
 		valueType string
-		args      []string
-		want      any
 	}{
-		{name: "booleans", valueType: "bool", args: []string{"true", "false"}, want: []bool{true, false}},
-		{name: "strings", valueType: "string", args: []string{"first", "second"}, want: []string{"first", "second"}},
-		{name: "integers", valueType: "int", args: []string{"7", "9"}, want: []int{7, 9}},
-		{name: "empty strings", valueType: "string", want: []string(nil)},
+		{name: "booleans", valueType: "bool"},
+		{name: "strings", valueType: "string"},
+		{name: "integers", valueType: "int"},
+		{name: "64-bit integers", valueType: "int64"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -269,22 +267,18 @@ func TestNewCommandTreeDispatchesEveryVariadicArgumentValueType(t *testing.T) {
 			}
 			withNoneArgumentCompletion(command.Arguments)
 			manifest.Commands[command.ID] = command
-			var received map[string]any
 			bindings := genericBindingsForManifest(manifest)
+			calls := 0
 			bindings.Handlers[command.Handler.ID] = func(_ context.Context, values map[string]any) error {
-				received = values
+				calls++
 				return nil
 			}
 			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
-			if err != nil {
-				t.Fatalf("NewCommandTree() error = %v", err)
+			if root != nil || err == nil || !strings.Contains(err.Error(), "must use stringArray") {
+				t.Fatalf("NewCommandTree() = (%v, %v), want repeated scalar rejection", root, err)
 			}
-			root.SetArgs(append([]string{"shape"}, test.args...))
-			if err := root.Execute(); err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if !reflect.DeepEqual(received["stable.shape.arg.values"], test.want) {
-				t.Fatalf("handler values = %#v, want %#v", received, test.want)
+			if calls != 0 {
+				t.Fatalf("handler calls = %d, want 0", calls)
 			}
 		})
 	}
