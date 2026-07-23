@@ -3,9 +3,9 @@ import { access } from "node:fs/promises";
 import test from "node:test";
 
 import {
+	PackagePublicationError,
 	PUBLICATION_FAILURES,
 	PUBLICATION_OUTCOMES,
-	PackagePublicationError,
 	publishAndVerifyCandidate,
 	publishCandidateDirectory,
 } from "./api-package-publish.mjs";
@@ -128,8 +128,7 @@ test("post-publish verification is bounded and never republishes", async () => {
 
 	await assert.rejects(
 		publishAndVerifyCandidate(subject.input, subject.dependencies),
-		(error) =>
-			error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
+		(error) => error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
 	);
 	assert.deepEqual(subject.calls, {
 		install: 0,
@@ -216,6 +215,7 @@ test("publish directory loads the preserved candidate and cleans its external co
 	const result = await publishCandidateDirectory(
 		{
 			candidateDirectory: "/preserved",
+			expectedSourceCommit: evidence.sourceCommit,
 			workspaceDirectory: "/workspace",
 		},
 		{
@@ -238,4 +238,28 @@ test("publish directory loads the preserved candidate and cleans its external co
 
 	assert.equal(result.outcome, PUBLICATION_OUTCOMES.VERIFIED_EXISTING);
 	await assert.rejects(access(consumerDirectory));
+});
+
+test("publish directory rejects a candidate from a different source commit", async () => {
+	let publishCalled = false;
+	await assert.rejects(
+		publishCandidateDirectory(
+			{
+				candidateDirectory: "/preserved",
+				expectedSourceCommit: "f".repeat(40),
+				workspaceDirectory: "/workspace",
+			},
+			{
+				async candidateFiles() {
+					return { evidence, tarballPath: "/preserved/candidate.tgz" };
+				},
+				async publishAndVerifyCandidate() {
+					publishCalled = true;
+				},
+				registryClient: {},
+			},
+		),
+		(error) => error.code === PUBLICATION_FAILURES.REGISTRY_VERIFICATION_FAILED,
+	);
+	assert.equal(publishCalled, false);
 });

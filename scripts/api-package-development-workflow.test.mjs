@@ -73,10 +73,15 @@ test("failed prerequisites block every production action before side effects", a
 	for (const action of Object.values(DEVELOPMENT_PACKAGE_ACTIONS)) {
 		const subject = fixture({
 			action,
-			eventName: action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN ? "pull_request" : "push",
+			eventName:
+				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
+					? "pull_request"
+					: "push",
 			prerequisiteResult: "failure",
 			pullRequestHeadSha:
-				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN ? sourceCommit : undefined,
+				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
+					? sourceCommit
+					: undefined,
 			ref:
 				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
 					? "refs/pull/1160/merge"
@@ -120,6 +125,7 @@ test("production protected-main commands prepare once and publish the preserved 
 	assert.deepEqual(subject.calls.publish, [
 		{
 			candidateDirectory: "/preserved",
+			expectedSourceCommit: sourceCommit,
 			workspaceDirectory: "/workspace",
 		},
 	]);

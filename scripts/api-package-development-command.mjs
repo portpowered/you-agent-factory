@@ -4,8 +4,8 @@ import { parseArgs } from "node:util";
 
 import { prepareCandidate } from "./api-package-candidate.mjs";
 import {
-	DEVELOPMENT_PACKAGE_ACTIONS,
 	assertDevelopmentPackageAction,
+	DEVELOPMENT_PACKAGE_ACTIONS,
 } from "./api-package-development-policy.mjs";
 import { validatePullRequestCandidate } from "./api-package-pr-dry-run.mjs";
 import { publishCandidateDirectory } from "./api-package-publish.mjs";
@@ -41,6 +41,7 @@ export async function executeDevelopmentPackageCommand(
 		case DEVELOPMENT_PACKAGE_ACTIONS.PUBLISH_MAIN:
 			return dependencies.publishCandidateDirectory({
 				candidateDirectory: input.candidateDirectory,
+				expectedSourceCommit: plan.sourceCommit,
 				workspaceDirectory: input.workspaceDirectory,
 			});
 		default:

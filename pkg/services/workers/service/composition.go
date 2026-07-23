@@ -14,9 +14,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
@@ -121,6 +123,7 @@ func NewRuntimeWithSelection(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
+	providerRegistry *providerregistry.Registry,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providerCommandRunner, scriptCommandRunner,
@@ -135,6 +138,12 @@ func NewRuntimeWithSelection(
 	service := runtimeService.(*Service)
 	service.providerCommandInjected = providerCommandInjected
 	service.scriptCommandInjected = scriptCommandInjected
+	service.providerRegistry = providerRegistry
+	if providerRegistry != nil {
+		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
+			service.executorBuilder = builder.WithRunnerSelection(providerRegistry.ResolveRunnerSelection)
+		}
+	}
 	return service, nil
 }
 

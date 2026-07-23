@@ -110,12 +110,54 @@
   `cmd/packagedfactorycataloggenerate`; its repository surface is
   `make packaged-factory-catalog-generate`. It computes and validates the whole
   output set before atomically replacing
-  `packages/packaged-factories/generated`, and the npm package allowlist must
-  continue to publish that generated directory alongside authored sources and
-  schemas. `cmd/packagedfactorycatalogcheck` recomputes that same complete plan
+  `packages/packaged-factories/generated`. The npm data-only package allowlist
+  publishes its manifest, flattened generated Factory pairs, schemas, and
+  package documentation while excluding authored Factory sources, prompts, and
+  scripts. `cmd/packagedfactorycatalogcheck` recomputes that same complete plan
   without writing, reports sorted package-relative stale, missing, and
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
+  Packaged Factory npm candidates use the shared release identity and staging
+  core in `scripts/package-release-candidate.mjs` through
+  `scripts/packaged-factories-package-candidate.mjs`; keep its run ID, full
+  source commit, candidate-version policy, staged manifest provenance, and
+  evidence shape aligned with `scripts/api-package-candidate.mjs`. The focused
+  behavioral coverage runs in `make packaged-factory-package-smoke`.
+  `scripts/packaged-factories-package-pack.mjs` owns the manifest-derived exact
+  tarball inventory and portable-file boundary after that drift gate; keep npm
+  lifecycle scripts disabled and reject missing, unexpected, stale, escaping,
+  symlinked, externally dependent, or digest-mismatched candidate contents.
+  `scripts/packaged-factories-package-consumer.mjs` owns the clean installed
+  data-contract proof: create the consumer outside the workspace, disable npm
+  scripts, lockfiles, workspaces, and links, resolve artifacts only through
+  public package specifiers, and validate both generated representations
+  against the installed schema before removing the consumer.
+  Pull-request authorization is shared through
+  `scripts/package-development-policy.mjs`; keep the API compatibility re-export
+  and require every candidate to match the reviewed full head SHA after
+  prerequisites succeed. The Development Package pull-request job runs
+  `scripts/packaged-factories-package-pr-dry-run.mjs` without registry access
+  and preserves the exact tarball, candidate evidence, consumer evidence, and
+  no-publish outcome for review. Keep generation, identity, inventory, pack,
+  and installed-consumer failures stage-specific.
+  Protected-main publication must download that package's preserved candidate,
+  rebind its evidence source commit to the protected workflow head, and use the
+  shared `scripts/package-registry.mjs` and
+  `scripts/package-publication.mjs` mechanics. Package wrappers own exact npm
+  identity and installed-consumer semantics; shared orchestration owns local
+  digest verification, immutable-version reconciliation, publish-at-most-once
+  behavior, and bounded retries for transient lookup, download, visibility, and
+  registry-consumer install failures. Candidate identity/digest, immutable
+  conflict, registry integrity, authentication, permission, and installed-data
+  contract failures remain fail-fast and retain classified diagnostics.
+  The tagged Release workflow prepares API and Packaged Factories candidates
+  together from the successful release-candidate workflow's exact head commit,
+  uploads them under separate artifact names, and publishes only those
+  downloaded directories after rechecking their source commit. Local
+  maintainers can isolate generation, drift, script tests, exact packing,
+  pull-request dry-run, and clean-consumer behavior through the focused
+  `packaged-factory-*` Make targets documented in
+  `docs/internal/development/cli-release-policy.md`.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do

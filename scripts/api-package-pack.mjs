@@ -105,7 +105,7 @@ function runNpmPack(packageDirectory, packDestination) {
 	});
 }
 
-export async function packAndVerify({ packageDirectory, packDestination }) {
+export async function packPackage({ packageDirectory, packDestination }) {
 	const packageRoot = resolve(packageDirectory);
 	const destination = resolve(packDestination);
 	const stdout = await runNpmPack(packageRoot, destination);
@@ -141,8 +141,6 @@ export async function packAndVerify({ packageDirectory, packDestination }) {
 			"[api-package-pack] npm pack report has no valid file inventory",
 		);
 	}
-	assertReviewedInventory(files);
-
 	const tarballPath = join(destination, report.filename);
 	await access(tarballPath);
 	return {
@@ -151,4 +149,10 @@ export async function packAndVerify({ packageDirectory, packDestination }) {
 		packageVersion: report.version,
 		tarballPath,
 	};
+}
+
+export async function packAndVerify(input) {
+	const packed = await packPackage(input);
+	assertReviewedInventory(packed.files);
+	return packed;
 }

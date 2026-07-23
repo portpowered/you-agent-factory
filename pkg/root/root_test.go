@@ -13,10 +13,12 @@ import (
 	"sync"
 	"testing"
 
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	"github.com/spf13/cobra"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 func TestMain(m *testing.M) {
@@ -60,6 +62,76 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	}
 	if apiStarts != 0 {
 		t.Fatalf("construction failure started API lifecycle %d times, want zero", apiStarts)
+	}
+}
+
+func TestBuildProcessComposesDetachedExternalProviderWithBuiltInsInertly(t *testing.T) {
+	t.Parallel()
+
+	manifest := rootExternalManifest(t, "customer.provider", "customer")
+	integration := &rootRecordingIntegration{identity: "customer.provider"}
+	registrations := []inference.Registration{
+		{Manifest: manifest, Integration: integration},
+	}
+	apiStarts := 0
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: registrations,
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			apiStarts++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	registrations[0] = inference.Registration{
+		Manifest:    rootExternalManifest(t, "mutated.provider", "mutated"),
+		Integration: &rootRecordingIntegration{identity: "mutated.provider"},
+	}
+
+	assertProviderLookup(t, process.ProviderRegistry(), "customer.provider", "customer.provider")
+	assertProviderLookup(t, process.ProviderRegistry(), "customer", "customer.provider")
+	assertProviderLookup(t, process.ProviderRegistry(), "claude", "claude")
+	assertProviderLookup(t, process.ProviderRegistry(), "agent", "cursor")
+	if apiStarts != 0 || integration.discoverCalls != 0 ||
+		integration.capabilityCalls != 0 || integration.invokeCalls != 0 {
+		t.Fatalf(
+			"construction side effects = api:%d discover:%d capabilities:%d invoke:%d, want zero",
+			apiStarts,
+			integration.discoverCalls,
+			integration.capabilityCalls,
+			integration.invokeCalls,
+		)
+	}
+
+	independent, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("independent BuildProcess() error = %v", err)
+	}
+	if _, err := independent.ProviderRegistry().CanonicalIdentity("customer.provider"); err == nil {
+		t.Fatal("independent process retained another build's external registration")
+	}
+}
+
+func TestBuildProcessReportsCanonicalRegistryValidationFailure(t *testing.T) {
+	t.Parallel()
+
+	manifest := rootExternalManifest(t, "claude", "customer-claude")
+	registration := inference.Registration{
+		Manifest:    manifest,
+		Integration: &rootRecordingIntegration{identity: "claude"},
+	}
+
+	process, buildErr := BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{registration},
+	})
+	if process != nil {
+		t.Fatal("BuildProcess() returned process for invalid provider registration")
+	}
+	if buildErr == nil ||
+		!strings.Contains(buildErr.Error(), "provider registry validation failed") ||
+		!strings.Contains(buildErr.Error(), `"claude": identity collision`) {
+		t.Fatalf("BuildProcess() error = %v, want canonical identity-collision diagnostic", buildErr)
 	}
 }
 
@@ -325,4 +397,78 @@ func homeEnvironment(home string) []string {
 		return []string{"home=" + home}
 	}
 	return []string{"HOME=" + home}
+}
+
+type rootRecordingIntegration struct {
+	identity        inference.Identity
+	discoverCalls   int
+	capabilityCalls int
+	invokeCalls     int
+}
+
+func (i *rootRecordingIntegration) Identity() inference.Identity { return i.identity }
+
+func (*rootRecordingIntegration) MaximumCapabilities() inference.CapabilitySet {
+	return inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+}
+
+func (i *rootRecordingIntegration) Discover(context.Context) (inference.Discovery, error) {
+	i.discoverCalls++
+	panic("process construction must not discover external providers")
+}
+
+func (i *rootRecordingIntegration) Capabilities(
+	context.Context,
+	inference.InvocationRequest,
+) (inference.CapabilitySet, error) {
+	i.capabilityCalls++
+	panic("process construction must not negotiate external provider capabilities")
+}
+
+func (i *rootRecordingIntegration) Invoke(
+	_ context.Context,
+	_ inference.InvocationRequest,
+	_ inference.ResponseWriter,
+) error {
+	i.invokeCalls++
+	panic("process construction must not invoke external providers")
+}
+
+func rootExternalManifest(t *testing.T, identity, alias string) inference.Manifest {
+	t.Helper()
+	var catalog struct {
+		Providers []inference.Manifest `json:"providers"`
+	}
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		t.Fatalf("decode embedded provider catalog: %v", err)
+	}
+	manifest := catalog.Providers[0]
+	manifest.ID = identity
+	manifest.Aliases = []string{alias}
+	manifest.ImplementationAvailability = inference.ImplementationExternallySupplied
+	manifest.TechnicalSupportLevel = inference.SupportProduction
+	manifest.Deprecation = nil
+	manifest.MaximumExecutionCapabilities = inference.ExecutionCapabilities{
+		PromptSubmission: true,
+	}
+	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
+	return manifest
+}
+
+func assertProviderLookup(
+	t *testing.T,
+	registry interface {
+		CanonicalIdentity(string) (string, error)
+	},
+	identity string,
+	want inference.Identity,
+) {
+	t.Helper()
+	canonical, err := registry.CanonicalIdentity(identity)
+	if err != nil {
+		t.Fatalf("CanonicalIdentity(%q) error = %v", identity, err)
+	}
+	if canonical != string(want) {
+		t.Fatalf("CanonicalIdentity(%q) = %q, want %q", identity, canonical, want)
+	}
 }

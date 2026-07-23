@@ -286,11 +286,17 @@ Use this map when changing the public REST contract.
   later-phase families such as `./components/*` until a truthful owner exists.
   `scripts/api-package-{pack,consumer,contract}.mjs` prove `npm pack` inventory
   and isolated export resolution without mutating staged artifact bytes.
-  Development candidates are prepared by
-  `scripts/api-package-candidate.mjs`: derive their version from a stable base,
-  immutable run ID, and fixed 12-character commit prefix; stage the manifest
-  change outside the source package; and retain exactly one reviewed tarball
-  plus digest/inventory evidence. Immutable registry reconciliation lives in
+  Development candidate identity and staging are shared through
+  `scripts/package-release-candidate.mjs`: derive every package version from a
+  stable base, immutable run ID, and fixed 12-character commit prefix; bind the
+  staged public manifest to the full candidate source commit outside the source
+  package; and retain exactly one tarball plus attributable digest/inventory
+  evidence. `scripts/api-package-candidate.mjs` preserves the API-specific
+  entrypoint and reviewed inventory gate, while
+  `scripts/packaged-factories-package-candidate.mjs` supplies the Packaged
+  Factories package identity to the same release-candidate core. Candidates
+  prepared for one release must receive the same run ID and full source commit.
+  Immutable registry reconciliation lives in
   `scripts/api-package-registry.mjs`: verify the preserved local tarball first,
   treat an absent exact version as a publish decision, digest-check an existing
   registry tarball for idempotent success, and fail authentication, permission,
@@ -302,7 +308,7 @@ Use this map when changing the public REST contract.
   dependent dry-run job must pass the reviewed head SHA and one preserved
   candidate directly through `scripts/api-package-pr-dry-run.mjs`; it must not
   receive registry mutation credentials or OIDC permission.
-  `scripts/api-package-development-policy.mjs` owns the pure event,
+  `scripts/package-development-policy.mjs` owns the shared pure event,
   prerequisite, and exact-head policy. Every candidate/publication job invokes
   `scripts/api-package-development-command.mjs`, which enforces that policy and
   calls the real mode-specific dry-run, preparation, or publication boundary;

@@ -29,6 +29,14 @@ function digest(contents) {
 	return `sha256:${createHash("sha256").update(contents).digest("hex")}`;
 }
 
+function stagedContractManifest(contents) {
+	return `${JSON.stringify(
+		{ ...JSON.parse(contents), sourceCommit },
+		null,
+		2,
+	)}\n`;
+}
+
 test("candidate version uses the immutable run ID and fixed commit prefix", () => {
 	assert.equal(SHORT_SHA_LENGTH, 12);
 	assert.equal(
@@ -82,7 +90,7 @@ test("preparation packs one attributable candidate without mutating package sour
 		packageName: "@you-agent-factory/api",
 		candidateVersion: "0.0.0-dev.9876543210.0123456789ab",
 		sourceCommit,
-		contractDigest: digest(contractManifestBefore),
+		contractDigest: digest(stagedContractManifest(contractManifestBefore)),
 		artifactDigest: digest(await readFile(result.tarballPath)),
 		inventory: [...REVIEWED_PACK_FILES].sort((left, right) =>
 			left.localeCompare(right),

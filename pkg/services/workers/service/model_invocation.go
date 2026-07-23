@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 
@@ -133,7 +131,22 @@ func (s *Service) InvokeModel(
 	if err != nil {
 		return modelinference.Result{}, classifyModelInvocationError(err, failureContext)
 	}
-	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID)
+	selection, err := resolveRuntimeRunnerSelection(
+		s.providerRegistry,
+		"",
+		s.factoryRunnerID,
+		workerDef.ModelProvider,
+	)
+	if err != nil {
+		return modelinference.Result{}, classifyModelInvocationError(err, failureContext)
+	}
+	workstationRequest := directModelInvocationWorkstationRequest(
+		workerDef,
+		request,
+		inputTokens,
+		resolvedBindings,
+		selection,
+	)
 
 	result, err := executor.Execute(ctx, workstationRequest)
 	if err != nil {
@@ -233,9 +246,8 @@ func directModelInvocationWorkstationRequest(
 	request modelinference.Request,
 	inputTokens []workerexecution.Token,
 	resolvedBindings []workerexecution.ResolvedModelOperationBinding,
-	factoryRunnerID string,
+	selection workerexecution.ResolvedRunnerSelection,
 ) workerexecution.WorkstationExecutionRequest {
-	selection := workerrunner.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
 	inputContent := request.Content
 	return workerexecution.WorkstationExecutionRequest{
 		Dispatch: work.WorkDispatch{
