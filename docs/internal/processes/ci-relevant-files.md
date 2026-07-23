@@ -123,6 +123,10 @@
   source commit, candidate-version policy, staged manifest provenance, and
   evidence shape aligned with `scripts/api-package-candidate.mjs`. The focused
   behavioral coverage runs in `make packaged-factory-package-smoke`.
+  `scripts/packaged-factories-package-pack.mjs` owns the manifest-derived exact
+  tarball inventory and portable-file boundary after that drift gate; keep npm
+  lifecycle scripts disabled and reject missing, unexpected, stale, escaping,
+  symlinked, externally dependent, or digest-mismatched candidate contents.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do

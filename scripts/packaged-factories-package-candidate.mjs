@@ -2,12 +2,15 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { packPackage } from "./api-package-pack.mjs";
 import {
 	DEVELOPMENT_DIST_TAG,
 	deriveCandidateVersion,
 	prepareReleaseCandidate,
 } from "./package-release-candidate.mjs";
+import {
+	packAndVerify,
+	runCatalogDriftCheck,
+} from "./packaged-factories-package-pack.mjs";
 
 export const PACKAGED_FACTORIES_PACKAGE_NAME =
 	"@you-agent-factory/packaged-factories";
@@ -19,14 +22,17 @@ export async function prepareCandidate({
 	outputDirectory,
 	runId,
 	sourceCommit,
+	verifyGeneratedCatalog = runCatalogDriftCheck,
 }) {
+	const repositoryRoot = resolve(packageDirectory, "..", "..");
+	await verifyGeneratedCatalog(repositoryRoot);
 	return prepareReleaseCandidate({
 		packageDirectory,
 		outputDirectory,
 		runId,
 		sourceCommit,
 		packageName: PACKAGED_FACTORIES_PACKAGE_NAME,
-		pack: packPackage,
+		pack: packAndVerify,
 	});
 }
 

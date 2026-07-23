@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
@@ -78,7 +78,10 @@ test("Packaged Factories candidate is attributable and leaves package sources un
 	});
 
 	assert.deepEqual(await readFile(packageManifestPath), packageManifestBefore);
-	assert.deepEqual(await readFile(contractManifestPath), contractManifestBefore);
+	assert.deepEqual(
+		await readFile(contractManifestPath),
+		contractManifestBefore,
+	);
 	assert.deepEqual(result.evidence, {
 		packageName: "@you-agent-factory/packaged-factories",
 		candidateVersion: "0.0.0-dev.9876543210.0123456789ab",
@@ -117,7 +120,10 @@ test("API and Packaged Factories candidates share release identity and provenanc
 		outputDirectory: factoriesOutput,
 	});
 
-	assert.equal(factories.evidence.candidateVersion, api.evidence.candidateVersion);
+	assert.equal(
+		factories.evidence.candidateVersion,
+		api.evidence.candidateVersion,
+	);
 	assert.equal(factories.evidence.sourceCommit, api.evidence.sourceCommit);
 	assert.equal(factories.evidence.distTag, api.evidence.distTag);
 });
@@ -156,6 +162,25 @@ test("invalid shared identity fails before creating candidate output", async (t)
 			sourceCommit,
 		}),
 		/run ID must be a canonical positive integer/,
+	);
+	await assert.rejects(readdir(outputDirectory), { code: "ENOENT" });
+});
+
+test("candidate packing stops when generated catalog drift verification fails", async (t) => {
+	const parent = await temporaryDirectory(t, "you-factories-drift-");
+	const outputDirectory = join(parent, "candidate");
+
+	await assert.rejects(
+		prepareCandidate({
+			packageDirectory,
+			outputDirectory,
+			runId: "42",
+			sourceCommit,
+			verifyGeneratedCatalog: async () => {
+				throw new Error("generated catalog differs from accepted sources");
+			},
+		}),
+		/generated catalog differs from accepted sources/,
 	);
 	await assert.rejects(readdir(outputDirectory), { code: "ENOENT" });
 });
