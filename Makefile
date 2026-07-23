@@ -115,7 +115,7 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke model-provider-package-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke model-provider-package-smoke model-provider-reference-input-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
@@ -189,6 +189,9 @@ api-package-pack-smoke:
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs
 	node scripts/model-provider-package.mjs smoke
+
+model-provider-reference-input-smoke:
+	cd ui && $(UI_SCRIPT) test:model-provider-reference-input
 
 contracts-validate:
 	$(GO) run ./cmd/contractsvalidate -root .
@@ -482,6 +485,7 @@ verify-api:
 	$(MAKE) response-stream-stress-smoke
 	$(MAKE) api-package-pack-smoke
 	$(MAKE) model-provider-package-smoke
+	$(MAKE) model-provider-reference-input-smoke
 	$(MAKE) wire-smoke
 
 verify-build-contracts:
