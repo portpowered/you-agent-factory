@@ -78,6 +78,16 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- The authoritative manifest-to-Integration join belongs in
+  `pkg/services/workers/provider/registry/`. Catalog registrations name only
+  the canonical embedded identity; external registrations carry one detached
+  registry-owned typed manifest. Keep generated OpenAPI types out of this
+  Workers domain package: parse the exact bytes from `packages/model-providers`
+  into registry-owned values and validate them against the published schemas.
+  Construction must aggregate and sort normalized identity, collision,
+  implementation-coverage, support-posture, and maximum-capability violations
+  without calling provider discovery, request-sensitive capabilities, or
+  invocation.
 
 ## CLI run and submit command contracts
 

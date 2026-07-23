@@ -1,0 +1,331 @@
+package registry
+
+import (
+	"context"
+	"encoding/json"
+	"math/rand"
+	"strings"
+	"testing"
+
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+)
+
+type fakeIntegration struct {
+	identity inference.Identity
+	maximum  inference.CapabilitySet
+}
+
+func (f *fakeIntegration) Identity() inference.Identity { return f.identity }
+func (f *fakeIntegration) MaximumCapabilities() inference.CapabilitySet {
+	return f.maximum
+}
+func (f *fakeIntegration) Discover(context.Context) (inference.Discovery, error) {
+	panic("registry construction must not discover providers")
+}
+func (f *fakeIntegration) Capabilities(context.Context, inference.InvocationRequest) (inference.CapabilitySet, error) {
+	panic("registry construction must not negotiate capabilities")
+}
+func (f *fakeIntegration) Invoke(context.Context, inference.InvocationRequest, inference.ResponseWriter) error {
+	panic("registry construction must not invoke providers")
+}
+
+func TestNewJoinsSupportedCatalogManifestsWithoutProviderSideEffects(t *testing.T) {
+	t.Parallel()
+
+	registrations := supportedCatalogRegistrations(t)
+	registry, err := New(registrations...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if len(registry.manifests) != 8 || len(registry.integrations) != 7 {
+		t.Fatalf("joined counts = (%d manifests, %d integrations), want (8, 7)", len(registry.manifests), len(registry.integrations))
+	}
+	if _, selectable := registry.integrations["agy"]; selectable {
+		t.Fatal("not-supported catalog entry is selectable")
+	}
+}
+
+func TestNewAcceptsDetachedSchemaValidExternalManifest(t *testing.T) {
+	t.Parallel()
+
+	registrations := supportedCatalogRegistrations(t)
+	manifest := externalManifest(t, "customer.provider", "customer")
+	localizedNames := map[string]string{"en-US": "Customer Provider"}
+	manifest.DisplayName.Values = &localizedNames
+	registrations = append(registrations, ExternalRegistration(manifest, integrationFor(manifest)))
+	manifest.ID = "mutated"
+	manifest.Aliases[0] = "mutated"
+	localizedNames["en-US"] = "Mutated"
+
+	registry, err := New(registrations...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if _, ok := registry.manifests["customer.provider"]; !ok {
+		t.Fatal("external manifest was not joined under its detached identity")
+	}
+	if _, ok := registry.manifests["mutated"]; ok {
+		t.Fatal("caller mutation changed the registered external manifest")
+	}
+	storedNames := registry.manifests["customer.provider"].DisplayName.Values
+	if storedNames == nil || (*storedNames)["en-US"] != "Customer Provider" {
+		t.Fatal("caller mutation changed nested external manifest metadata")
+	}
+}
+
+func TestBuildAcceptsCatalogOnlyAndNotSupportedManifestsWithoutImplementations(t *testing.T) {
+	t.Parallel()
+
+	catalogOnly := externalManifest(t, "catalog.entry", "catalog-alias")
+	catalogOnly.ImplementationAvailability = ImplementationCatalogOnly
+	notSupported := externalManifest(t, "unsupported.entry", "unsupported-alias")
+	notSupported.TechnicalSupportLevel = SupportNotSupported
+
+	registry, err := build([]Manifest{catalogOnly, notSupported}, nil)
+	if err != nil {
+		t.Fatalf("build() error = %v", err)
+	}
+	if len(registry.manifests) != 2 || len(registry.integrations) != 0 {
+		t.Fatalf("joined counts = (%d manifests, %d integrations), want (2, 0)", len(registry.manifests), len(registry.integrations))
+	}
+}
+
+func TestNewRejectsInvalidRegistrationInvariants(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *fakeIntegration
+	tests := []struct {
+		name   string
+		mutate func([]Registration) []Registration
+		want   []string
+	}{
+		{
+			name: "nil integration",
+			mutate: func(registrations []Registration) []Registration {
+				registrations[0].integration = typedNil
+				return registrations
+			},
+			want: []string{`"claude": integration is nil`, `"claude": supported bundled manifest has no matching implementation`},
+		},
+		{
+			name: "mismatched integration identity",
+			mutate: func(registrations []Registration) []Registration {
+				registrations[0].integration = &fakeIntegration{
+					identity: "different",
+					maximum:  registrations[0].integration.MaximumCapabilities(),
+				}
+				return registrations
+			},
+			want: []string{`"claude": integration identity "different" differs from its manifest binding`},
+		},
+		{
+			name: "malformed binding",
+			mutate: func(registrations []Registration) []Registration {
+				registrations[0].identity = " Bad Identity "
+				return registrations
+			},
+			want: []string{`"bad identity": manifest binding identity is invalid`, `"bad identity": implementation has no matching manifest`, `"claude": supported bundled manifest has no matching implementation`},
+		},
+		{
+			name: "not supported implementation",
+			mutate: func(registrations []Registration) []Registration {
+				agy := findManifest(t, publishedCatalog(t), "agy")
+				return append(registrations, CatalogRegistration("agy", integrationFor(agy)))
+			},
+			want: []string{`"agy": non-selectable manifest cannot have a runnable integration`},
+		},
+		{
+			name: "external manifest claims bundled availability",
+			mutate: func(registrations []Registration) []Registration {
+				manifest := externalManifest(t, "customer.provider", "customer")
+				manifest.ImplementationAvailability = ImplementationBundled
+				return append(registrations, ExternalRegistration(manifest, integrationFor(manifest)))
+			},
+			want: []string{`"customer.provider": external manifest implementation availability must be externally-supplied`},
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := New(test.mutate(supportedCatalogRegistrations(t))...)
+			assertErrorContains(t, err, test.want...)
+		})
+	}
+}
+
+func TestNewRejectsCoverageAndCapabilityContradictions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func([]Registration) []Registration
+		want   string
+	}{
+		{
+			name: "missing bundled implementation",
+			mutate: func(registrations []Registration) []Registration {
+				return registrations[1:]
+			},
+			want: `"claude": supported bundled manifest has no matching implementation`,
+		},
+		{
+			name: "implementation without manifest",
+			mutate: func(registrations []Registration) []Registration {
+				return append(registrations, CatalogRegistration("missing", &fakeIntegration{
+					identity: "missing",
+					maximum:  inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+				}))
+			},
+			want: `"missing": implementation has no matching manifest`,
+		},
+		{
+			name: "maximum exceeds manifest",
+			mutate: func(registrations []Registration) []Registration {
+				current := registrations[0].integration.MaximumCapabilities().Values()
+				current = append(current, inference.CapabilityProviderReconnect)
+				registrations[0].integration = &fakeIntegration{identity: "claude", maximum: inference.NewCapabilitySet(current...)}
+				return registrations
+			},
+			want: `"claude": integration maximum exceeds manifest maximum: provider_reconnect`,
+		},
+		{
+			name: "maximum contradicts manifest",
+			mutate: func(registrations []Registration) []Registration {
+				registrations[0].integration = &fakeIntegration{
+					identity: "claude",
+					maximum:  inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+				}
+				return registrations
+			},
+			want: `"claude": integration maximum contradicts manifest maximum by omitting: message_deltas`,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := New(test.mutate(supportedCatalogRegistrations(t))...)
+			assertErrorContains(t, err, test.want)
+		})
+	}
+}
+
+func TestNewRejectsEveryIdentityCollisionIndependentOfInputOrder(t *testing.T) {
+	t.Parallel()
+
+	base := supportedCatalogRegistrations(t)
+	first := externalManifest(t, "customer.one", "customer-alias")
+	second := externalManifest(t, "customer.two", "customer-alias")
+	third := externalManifest(t, "agent", "third-alias")
+	fourth := externalManifest(t, "customer.one", "fourth-alias")
+	additions := []Registration{
+		ExternalRegistration(first, integrationFor(first)),
+		ExternalRegistration(second, integrationFor(second)),
+		ExternalRegistration(third, integrationFor(third)),
+		ExternalRegistration(fourth, integrationFor(fourth)),
+	}
+
+	var want string
+	for seed := int64(0); seed < 20; seed++ {
+		permuted := append([]Registration(nil), additions...)
+		rand.New(rand.NewSource(seed)).Shuffle(len(permuted), func(i, j int) {
+			permuted[i], permuted[j] = permuted[j], permuted[i]
+		})
+		_, err := New(append(append([]Registration(nil), base...), permuted...)...)
+		if err == nil {
+			t.Fatal("New() error = nil")
+		}
+		if seed == 0 {
+			want = err.Error()
+		} else if err.Error() != want {
+			t.Fatalf("seed %d error differs\n got: %s\nwant: %s", seed, err, want)
+		}
+	}
+	assertErrorContains(t, errorString(want),
+		`"agent": identity collision between alias of "cursor", canonical "agent"`,
+		`"customer-alias": identity collision between alias of "customer.one", alias of "customer.two"`,
+		`"customer.one": identity collision between canonical "customer.one", canonical "customer.one"`,
+	)
+}
+
+func TestNewRejectsMalformedExternalManifestWithStableDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	manifest := externalManifest(t, "customer.valid", "customer-alias")
+	manifest.ID = " INVALID "
+	registrations := append(supportedCatalogRegistrations(t), ExternalRegistration(manifest, &fakeIntegration{
+		identity: "invalid",
+		maximum:  inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+	}))
+	_, err := New(registrations...)
+	assertErrorContains(t, err,
+		`"invalid": external manifest violates the published schema`,
+	)
+}
+
+func supportedCatalogRegistrations(t *testing.T) []Registration {
+	t.Helper()
+	var registrations []Registration
+	for _, manifest := range publishedCatalog(t) {
+		if manifest.TechnicalSupportLevel == SupportNotSupported ||
+			manifest.ImplementationAvailability == ImplementationCatalogOnly {
+			continue
+		}
+		registrations = append(registrations, CatalogRegistration(inference.Identity(manifest.ID), integrationFor(manifest)))
+	}
+	return registrations
+}
+
+func externalManifest(t *testing.T, identity, alias string) Manifest {
+	t.Helper()
+	manifest := cloneManifest(findManifest(t, publishedCatalog(t), "codex"))
+	manifest.ID = identity
+	manifest.Aliases = []string{alias}
+	manifest.ImplementationAvailability = ImplementationExternallySupplied
+	return manifest
+}
+
+func publishedCatalog(t *testing.T) []Manifest {
+	t.Helper()
+	var catalog catalogDocument
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		t.Fatalf("parse published catalog: %v", err)
+	}
+	return catalog.Providers
+}
+
+func findManifest(t *testing.T, manifests []Manifest, identity string) Manifest {
+	t.Helper()
+	for _, manifest := range manifests {
+		if manifest.ID == identity {
+			return manifest
+		}
+	}
+	t.Fatalf("manifest %q not found", identity)
+	return Manifest{}
+}
+
+func integrationFor(manifest Manifest) inference.Integration {
+	return &fakeIntegration{
+		identity: inference.Identity(manifest.ID),
+		maximum:  manifestCapabilities(manifest),
+	}
+}
+
+func assertErrorContains(t *testing.T, err error, fragments ...string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("error = nil")
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error %q does not contain %q", err, fragment)
+		}
+	}
+}
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
