@@ -124,6 +124,10 @@ Use this map when changing the public REST contract.
   passes fail generation. `make packaged-factory-catalog-generate` stages the
   complete plan and replaces `packages/packaged-factories/generated` as one
   directory so failed planning or staging cannot leave mixed generations.
+  `make packaged-factory-catalog-check` uses the same complete projection to
+  compare exact checked-in paths and bytes without writing; this one comparison
+  protects authored-inventory coverage, paired Factory equivalence, schema
+  validation, and manifest locator/hash integrity.
   Exact `${parameter}` placeholders on enum-backed `workers[].modelProvider`
   fields are an intentional canonical-mapper compatibility form: preserve them
   in artifact bytes and use a concrete representative only for package-schema

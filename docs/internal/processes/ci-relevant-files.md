@@ -107,7 +107,10 @@
   output set before atomically replacing
   `packages/packaged-factories/generated`, and the npm package allowlist must
   continue to publish that generated directory alongside authored sources and
-  schemas.
+  schemas. `cmd/packagedfactorycatalogcheck` recomputes that same complete plan
+  without writing, reports sorted package-relative stale, missing, and
+  unexpected outputs with the regeneration remedy, and runs through
+  `make packaged-factory-catalog-check` in the default lint aggregation.
 
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
