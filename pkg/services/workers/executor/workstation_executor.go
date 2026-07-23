@@ -55,6 +55,7 @@ type WorkstationExecutor struct {
 	CurrentWorkingDirectory func() (string, error)
 	RuntimeConfig           interfaces.RuntimeConfigLookup
 	DefaultRunnerID         string
+	ResolveRunnerSelection  workerexecution.RunnerSelectionResolver
 	WorkflowContext         *workerexecution.Context
 	Executor                WorkstationRequestExecutor
 	Interpolation           factorydefinitions.InvocationInterpolationService
@@ -392,7 +393,16 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
 ) *workerexecution.WorkResult {
-	selection := workerrunner.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(workstationDef.Runner, workerDef.ModelProvider)
+	if err != nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			err,
+		)
+		return &failed
+	}
 	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
 	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
 		return nil
@@ -509,7 +519,17 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection := workerrunner.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(workstationDef.Runner, workerDef.ModelProvider)
+	if err != nil {
+		failed := workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "provider selection failed: " + err.Error(),
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}
+		return workerexecution.WorkstationExecutionRequest{}, &failed
+	}
 	return workerexecution.WorkstationExecutionRequest{
 		Dispatch:                 work.CloneWorkDispatch(dispatch),
 		WorkerType:               workerName,
@@ -532,6 +552,24 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		WorkingDirectory:         requestContext.WorkingDirectory,
 		WorkingDirectoryAuthored: workstationDef.WorkingDirectory != "",
 	}, nil
+}
+
+func (we *WorkstationExecutor) resolveRunnerSelection(
+	workstationRunner string,
+	workerModelProvider string,
+) (workerexecution.ResolvedRunnerSelection, error) {
+	if we.ResolveRunnerSelection != nil {
+		return we.ResolveRunnerSelection(
+			workstationRunner,
+			we.DefaultRunnerID,
+			workerModelProvider,
+		)
+	}
+	return workerrunner.ResolveRunnerSelection(
+		workstationRunner,
+		we.DefaultRunnerID,
+		workerModelProvider,
+	), nil
 }
 
 func processEnvironment(read func() []string) []string {

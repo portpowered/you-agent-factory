@@ -21,7 +21,125 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
+
+func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T) {
+	t.Parallel()
+	var gotWorkstation, gotFactory, gotWorker string
+	executor := &WorkstationExecutor{
+		DefaultRunnerID: "factory-provider",
+		ResolveRunnerSelection: func(
+			workstation string,
+			factory string,
+			worker string,
+		) (workerexecution.ResolvedRunnerSelection, error) {
+			gotWorkstation, gotFactory, gotWorker = workstation, factory, worker
+			return workerexecution.ResolvedRunnerSelection{
+				RunnerID: workerexecution.RunnerIDCursorCLI,
+				Source:   workerexecution.RunnerSelectionSourceWorkstation,
+			}, nil
+		},
+	}
+
+	selection, err := executor.resolveRunnerSelection("agent", "codex")
+	if err != nil {
+		t.Fatalf("resolveRunnerSelection() error = %v", err)
+	}
+	if selection.RunnerID != workerexecution.RunnerIDCursorCLI {
+		t.Fatalf("selection = %#v", selection)
+	}
+	if gotWorkstation != "agent" || gotFactory != "factory-provider" || gotWorker != "codex" {
+		t.Fatalf(
+			"resolver inputs = (%q, %q, %q)",
+			gotWorkstation,
+			gotFactory,
+			gotWorker,
+		)
+	}
+}
+
+func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *testing.T) {
+	t.Parallel()
+
+	registrations, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := providerregistry.New(registrations...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		alias     string
+		canonical string
+	}{
+		{alias: "openai", canonical: "codex"},
+		{alias: "anthropic", canonical: "claude"},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			t.Parallel()
+
+			runtimeConfig := staticRuntimeConfig{
+				Workers: map[string]*interfaces.FactoryWorkerConfig{
+					"worker-a": {
+						Type:          interfaces.WorkerTypeModel,
+						ModelProvider: tc.alias,
+					},
+				},
+				Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+					"standard": {
+						Type:           interfaces.WorkstationTypeModel,
+						PromptTemplate: "run",
+					},
+				},
+			}
+			provider := &agentMockProvider{
+				response: workerexecution.InferenceResponse{Content: "done"},
+			}
+			agent := NewAgentExecutor(
+				runtimeConfig,
+				provider,
+				nil,
+				time.Now,
+				deterministicRetryRandom,
+			)
+			workstation := newTestWorkstationExecutor(runtimeConfig, agent)
+			workstation.ResolveRunnerSelection = providers.ResolveRunnerSelection
+
+			result, executeErr := workstation.Execute(context.Background(), work.WorkDispatch{
+				DispatchID:      "dispatch-" + tc.alias,
+				TransitionID:    "transition-" + tc.alias,
+				WorkerType:      "worker-a",
+				WorkstationName: "standard",
+			})
+			if executeErr != nil {
+				t.Fatalf("Execute() error = %v", executeErr)
+			}
+			if result.Outcome == workerexecution.OutcomeFailed {
+				t.Fatalf("Execute() result = %#v", result)
+			}
+			if provider.callCount != 1 {
+				t.Fatalf("provider calls = %d, want 1", provider.callCount)
+			}
+			if provider.lastReq.ModelProvider != tc.canonical {
+				t.Fatalf(
+					"final provider request ModelProvider = %q, want canonical %q",
+					provider.lastReq.ModelProvider,
+					tc.canonical,
+				)
+			}
+			if provider.lastReq.RunnerID != tc.canonical {
+				t.Fatalf(
+					"final provider request RunnerID = %q, want canonical %q",
+					provider.lastReq.RunnerID,
+					tc.canonical,
+				)
+			}
+		})
+	}
+}
 
 type wsMockExecutor struct {
 	dispatch workerexecution.WorkstationExecutionRequest

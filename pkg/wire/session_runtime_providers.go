@@ -49,6 +49,7 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
@@ -57,6 +58,21 @@ import (
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 	"go.uber.org/zap"
 )
+
+func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Registry, error) {
+	builtIns, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		return nil, err
+	}
+	registrations := append([]providerregistry.Registration(nil), builtIns...)
+	for _, addition := range edges.ProviderRegistrations {
+		registrations = append(
+			registrations,
+			providerregistry.ExternalRegistration(addition.Manifest, addition.Integration),
+		)
+	}
+	return providerregistry.New(registrations...)
+}
 
 func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service, error) {
 	files := edges.ProviderSessionFileSystem
@@ -560,6 +576,7 @@ func provideWorkersRuntimeFactory(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	defaultAllocator agypty.PTYAllocator,
 	edges serviceedges.Edges,
+	providerRegistry *providerregistry.Registry,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, agypty.ErrHostRequired
@@ -671,6 +688,7 @@ func provideWorkersRuntimeFactory(
 			decisionEnvelopes,
 			providerInjected,
 			scriptInjected,
+			providerRegistry,
 		)
 	}, nil
 }

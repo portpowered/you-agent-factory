@@ -104,6 +104,41 @@ func TestServiceBuildRequiresRuntimeConfig(t *testing.T) {
 	}
 }
 
+func TestServiceWithRunnerSelectionReturnsConfiguredCopy(t *testing.T) {
+	t.Parallel()
+
+	if configured := (*Service)(nil).WithRunnerSelection(nil); configured != nil {
+		t.Fatalf("nil Service.WithRunnerSelection() = %#v, want nil", configured)
+	}
+
+	service := New(
+		nil, nil, nil, nil, testFactoryDocs, nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	)
+	resolver := func(workstation, factory, worker string) (workers.ResolvedRunnerSelection, error) {
+		return workers.ResolvedRunnerSelection{
+			RunnerID: workstation + factory + worker,
+			Source:   workers.RunnerSelectionSourceWorkstation,
+		}, nil
+	}
+	configured := service.WithRunnerSelection(resolver)
+	if configured == service {
+		t.Fatal("WithRunnerSelection() mutated the original service")
+	}
+	if service.resolveRunner != nil {
+		t.Fatal("WithRunnerSelection() configured the original service")
+	}
+	selection, err := configured.resolveRunner("workstation", "factory", "worker")
+	if err != nil {
+		t.Fatalf("configured resolver error = %v", err)
+	}
+	if selection.RunnerID != "workstationfactoryworker" {
+		t.Fatalf("configured resolver selection = %#v", selection)
+	}
+}
+
 type providerStub struct{}
 
 func testClock() time.Time { return time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC) }

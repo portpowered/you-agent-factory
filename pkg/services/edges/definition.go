@@ -115,18 +115,19 @@ type Edges struct {
 	SystemInitializationInspectPath                 systeminitialization.InspectPath
 	SystemInitializationMigrationFileSystem         systeminitialization.LegacyFactoryMigrationFileSystem
 
-	Clock                              platformclock.Source
-	SubmissionRecorder                 recordings.SubmissionRecorder
-	DispatchRecorder                   recordings.DispatchRecorder
-	RecordingMakeDirectories           recordings.RecordingMakeDirectories
-	RecordingCreateTempFile            recordings.RecordingCreateTemporaryFile
-	RecordingRemovePath                recordings.RecordingRemovePath
-	RecordingRenamePath                recordings.RecordingRenamePath
-	APIServerStarter                   platformhttpserver.Starter
-	InvocationMetricsRecorder          factorysessions.InvocationMetricsRecorder
-	RuntimeHostObserver                factorysessions.RuntimeHostObserver
-	ModelPullMetricsRecorder           models.PullMetricsRecorder
-	ProviderOverride                   providercontract.Provider
+	Clock                     platformclock.Source
+	SubmissionRecorder        recordings.SubmissionRecorder
+	DispatchRecorder          recordings.DispatchRecorder
+	RecordingMakeDirectories  recordings.RecordingMakeDirectories
+	RecordingCreateTempFile   recordings.RecordingCreateTemporaryFile
+	RecordingRemovePath       recordings.RecordingRemovePath
+	RecordingRenamePath       recordings.RecordingRenamePath
+	APIServerStarter          platformhttpserver.Starter
+	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
+	RuntimeHostObserver       factorysessions.RuntimeHostObserver
+	ModelPullMetricsRecorder  models.PullMetricsRecorder
+	ProviderOverride          providercontract.Provider
+	providercontract.ProviderRegistrations
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -162,6 +163,10 @@ type Edges struct {
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func Merge(defaults Edges, replacements Edges) Edges {
+	defaults.ProviderRegistrations = append(
+		append(providercontract.ProviderRegistrations(nil), defaults.ProviderRegistrations...),
+		replacements.ProviderRegistrations...,
+	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
 	}

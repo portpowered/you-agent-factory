@@ -724,7 +724,8 @@ func recordingProviderStringMapValue(values *factoryapi.StringMap) map[string]st
 }
 
 func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvents(t *testing.T) {
-	t.Parallel()
+	// Do not run in parallel: Linux CI can return "text file busy" when executing
+	// the freshly written shell script under heavy parallel package load.
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
 		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-1\"}\n"+
 			"{\"type\":\"response.output_text.delta\",\"delta\":\"hello from delta\"}\n"+
@@ -772,7 +773,8 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEventsToBoundedDiagnostics(t *testing.T) {
-	t.Parallel()
+	// Do not run in parallel: Linux CI can return "text file busy" when executing
+	// the freshly written shell script under heavy parallel package load.
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
 		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-2\"}\n"+
 			"{\"type\":\"response.mystery\",\"message\":\"secret-token-123 should never be retained\"}\n"+
@@ -819,7 +821,6 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation(t *testing.T) {
-	t.Parallel()
 	// Do not run in parallel: Linux CI can return "text file busy" when executing
 	// the freshly written shell script under heavy parallel package load.
 

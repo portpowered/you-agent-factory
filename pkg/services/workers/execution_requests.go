@@ -76,6 +76,14 @@ type ResolvedRunnerSelection struct {
 	Source   RunnerSelectionSource `json:"source,omitempty"`
 }
 
+// RunnerSelectionResolver resolves configured provider precedence into the
+// stable native runner contract.
+type RunnerSelectionResolver func(
+	workstationRunner string,
+	factoryRunner string,
+	workerModelProvider string,
+) (ResolvedRunnerSelection, error)
+
 type ResolvedModelOperationBinding struct {
 	Slot    string                      `json:"slot"`
 	Source  ModelOperationBindingSource `json:"source"`

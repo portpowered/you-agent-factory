@@ -1007,6 +1007,10 @@
       "minimum": 81.29
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry",
+      "minimum": 87.87
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
       "minimum": 95.83
     },

@@ -78,6 +78,50 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- The authoritative manifest-to-Integration join belongs in
+  `pkg/services/workers/provider/registry/`. Catalog registrations name only
+  the canonical embedded identity; external registrations carry one detached
+  public inference-contract manifest. Keep generated OpenAPI types out of this
+  Workers domain boundary: parse the exact bytes from
+  `packages/model-providers` into Workers-owned values and validate them
+  against the published schemas.
+  Construction must aggregate and sort normalized identity, collision,
+  implementation-coverage, support-posture, and maximum-capability violations
+  without calling provider discovery, request-sensitive capabilities, or
+  invocation. Registry query projections must clone and canonically order
+  manifest-backed collections; normalized canonical IDs and aliases share one
+  fail-closed resolver. Static entry, diagnostic, and maximum-capability reads
+  remain inert. Only explicit request-sensitive capability and discovery
+  methods delegate to an Integration, validate the returned provider-neutral
+  contract, and return canonical detached values; invocation access resolves
+  the bound Integration without invoking it.
+- Provider registry composition is additive and inert. `pkg/services/edges`
+  aggregates `[]inferencecontract.Registration` unchanged and `edges.Merge`
+  appends into a detached slice; `pkg/wire` maps those public external bindings
+  into the registry and joins them with catalog-derived built-in registrations
+  exactly once. The application process retains only a narrow structural
+  canonical-identity projection of that same immutable registry so root-level
+  embedding tests can verify composition without importing service packages
+  into `pkg/initializer`. Keep `ProviderOverride` on its existing replacement
+  path until provider-native execution migrates to the neutral conductor.
+- Wire supplies that same registry to the Workers runtime for routed provider
+  selection, manifest-maximum capability checks, and executable-prerequisite
+  preflight. Preserve the existing selection precedence and native runner IDs;
+  the registry resolves canonical IDs and published aliases first, with the
+  legacy `cursor-cli` runner ID mapped only at the native-execution
+  compatibility boundary. Preserve accepted public model-provider aliases
+  (`openai` and `anthropic`) as collision-validated registry identity claims so
+  static lookup and routed selection cannot disagree. Carry the registry's
+  canonical legacy-provider selection through the workstation boundary into
+  the final `ProviderInferenceRequest.ModelProvider`; restoring the authored
+  alias there makes provider command behavior disagree with registry lookup.
+  Defer unresolved authored `${...}` provider templates to the existing
+  default-selection path.
+  Other unknown, catalog-only, and not-supported identities fail before
+  dispatch instead of falling through to the default Codex runner.
+  Provider-native command construction and `ProviderOverride` execution remain
+  unchanged; the manifest-backed capability guard is bypassed for an explicit
+  replacement provider because that edge owns its own test/runtime contract.
 
 ## CLI run and submit command contracts
 
