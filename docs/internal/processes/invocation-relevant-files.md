@@ -104,6 +104,16 @@ primary-result behavior.
   embedding tests can verify composition without importing service packages
   into `pkg/initializer`. Keep `ProviderOverride` on its existing replacement
   path until provider-native execution migrates to the neutral conductor.
+- Wire supplies that same registry to the Workers runtime for routed provider
+  selection, manifest-maximum capability checks, and executable-prerequisite
+  preflight. Preserve the existing selection precedence and native runner IDs;
+  the registry resolves canonical IDs and published aliases first, with the
+  legacy `cursor-cli` runner ID mapped only at the native-execution
+  compatibility boundary. Unknown, catalog-only, and not-supported identities
+  fail before dispatch instead of falling through to the default Codex runner.
+  Provider-native command construction and `ProviderOverride` execution remain
+  unchanged; the manifest-backed capability guard is bypassed for an explicit
+  replacement provider because that edge owns its own test/runtime contract.
 
 ## CLI run and submit command contracts
 

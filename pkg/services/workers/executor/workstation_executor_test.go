@@ -23,6 +23,41 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T) {
+	t.Parallel()
+	var gotWorkstation, gotFactory, gotWorker string
+	executor := &WorkstationExecutor{
+		DefaultRunnerID: "factory-provider",
+		ResolveRunnerSelection: func(
+			workstation string,
+			factory string,
+			worker string,
+		) (workerexecution.ResolvedRunnerSelection, error) {
+			gotWorkstation, gotFactory, gotWorker = workstation, factory, worker
+			return workerexecution.ResolvedRunnerSelection{
+				RunnerID: workerexecution.RunnerIDCursorCLI,
+				Source:   workerexecution.RunnerSelectionSourceWorkstation,
+			}, nil
+		},
+	}
+
+	selection, err := executor.resolveRunnerSelection("agent", "codex")
+	if err != nil {
+		t.Fatalf("resolveRunnerSelection() error = %v", err)
+	}
+	if selection.RunnerID != workerexecution.RunnerIDCursorCLI {
+		t.Fatalf("selection = %#v", selection)
+	}
+	if gotWorkstation != "agent" || gotFactory != "factory-provider" || gotWorker != "codex" {
+		t.Fatalf(
+			"resolver inputs = (%q, %q, %q)",
+			gotWorkstation,
+			gotFactory,
+			gotWorker,
+		)
+	}
+}
+
 type wsMockExecutor struct {
 	dispatch workerexecution.WorkstationExecutionRequest
 	called   bool

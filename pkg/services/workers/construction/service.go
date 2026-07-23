@@ -75,6 +75,7 @@ type Service struct {
 	agentRunHarness   workeragentrun.HarnessAdapter
 	retryRandom       platformrandom.Source
 	workstationFiles  platformfilesystem.ReadFileInspector
+	resolveRunner     workers.RunnerSelectionResolver
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -106,6 +107,17 @@ func New(
 		workstationFiles:  workstationFiles,
 		decisionEnvelopes: selected,
 	}
+}
+
+// WithRunnerSelection returns a service copy that uses the process-owned
+// provider authority for runner identity and alias resolution.
+func (s *Service) WithRunnerSelection(resolve workers.RunnerSelectionResolver) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.resolveRunner = resolve
+	return &clone
 }
 
 // Build constructs one configured worker executor from direct collaborators.
@@ -180,11 +192,13 @@ func (s *Service) Build(
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
 			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.resolveRunner,
 		), nil
 	case interfaces.WorkstationTypeLogical:
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
 			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.resolveRunner,
 		), nil
 	case interfaces.WorkerTypeScript:
 		if s == nil || s.scriptFactory == nil {
@@ -199,6 +213,7 @@ func (s *Service) Build(
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
 			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.resolveRunner,
 		), nil
 	default:
 		return Result{}, nil
@@ -233,6 +248,7 @@ func (s *Service) BuildLogical(
 		s.factoryDocs,
 		s.worktreePreparer,
 		s.workstationFiles,
+		s.resolveRunner,
 	)
 }
 
@@ -305,6 +321,7 @@ func workstationResult(
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	workstationFiles platformfilesystem.ReadFileInspector,
+	resolveRunner workers.RunnerSelectionResolver,
 ) Result {
 	renderer := &workerprompting.DefaultPromptRenderer{FactoryDocs: factoryDocs}
 	return Result{
@@ -314,7 +331,8 @@ func workstationResult(
 			ProcessEnvironment:      processEnvironment,
 			CurrentWorkingDirectory: currentWorkingDirectory,
 			RuntimeConfig:           runtimeConfig, DefaultRunnerID: factoryRunnerID,
-			WorkflowContext: workflowContext, Executor: direct,
+			ResolveRunnerSelection: resolveRunner,
+			WorkflowContext:        workflowContext, Executor: direct,
 			Interpolation:   interpolation,
 			ExecutionPolicy: executionPolicy,
 			Renderer:        renderer, Logger: logger,

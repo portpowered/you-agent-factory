@@ -13,6 +13,7 @@ import (
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
 )
@@ -60,11 +61,25 @@ func (s *Service) BuildRuntimeExecutors(
 	}
 	factoryRunnerID = EffectiveFactoryRunnerID(factoryRunnerID, factoryConfig)
 	preflight := runnerSelectionPreflight{skipCommandAvailability: providerOverride != nil || s.providerCommandInjected || skipBuiltInRunnerPrerequisiteValidation}
-	if err := ValidateRuntimeSelections(factoryConfig, factoryRunnerID, runtimeConfig, s.executableLocator, preflight.skipCommandAvailability, invocationSkipPermissionsOverride); err != nil {
+	if err := ValidateRuntimeSelections(
+		factoryConfig,
+		factoryRunnerID,
+		runtimeConfig,
+		s.executableLocator,
+		preflight.skipCommandAvailability,
+		invocationSkipPermissionsOverride,
+		s.providerRegistry,
+	); err != nil {
 		return nil, err
 	}
 
-	decorators := s.runtimeRunnerDecorators(runtimeConfig, factoryConfig, modelRecorder, now)
+	decorators := s.runtimeRunnerDecorators(
+		runtimeConfig,
+		factoryConfig,
+		modelRecorder,
+		now,
+		providerOverride == nil,
+	)
 	executors := make(map[string]workers.WorkerExecutor, len(factoryConfig.Workers)+len(factoryConfig.Workstations))
 	for _, configured := range factoryConfig.Workers {
 		definition, ok := runtimeConfig.Worker(configured.Name)
@@ -98,8 +113,14 @@ func (s *Service) BuildRuntimeExecutors(
 	return executors, nil
 }
 
-func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLookup, factoryCfg *interfaces.FactoryConfig, recorder workers.ModelEventRecorder, now func() time.Time) []workerconstruction.RunnerDecorator {
-	return []workerconstruction.RunnerDecorator{
+func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLookup, factoryCfg *interfaces.FactoryConfig, recorder workers.ModelEventRecorder, now func() time.Time, useRegistryCapabilities bool) []workerconstruction.RunnerDecorator {
+	decorators := make([]workerconstruction.RunnerDecorator, 0, 3)
+	if useRegistryCapabilities && s.providerRegistry != nil {
+		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
+			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
+		})
+	}
+	return append(decorators,
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return wrapLocalModelRunner(
 				inner, s.models, factoryCfg, definition,
@@ -108,7 +129,7 @@ func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLoo
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return modelrecording.NewRunner(inner, factoryCfg, definition, recorder, now)
 		},
-	}
+	)
 }
 
 // EffectiveFactoryRunnerID resolves an explicit runtime runner before the
@@ -132,6 +153,7 @@ func ValidateRuntimeSelections(
 	executableLocator platformprocess.ExecutableLocator,
 	skipCommandAvailability bool,
 	invocationSkipPermissionsOverride *bool,
+	providerRegistries ...*providerregistry.Registry,
 ) error {
 	if cfg == nil {
 		return fmt.Errorf("factory config is required")
@@ -139,19 +161,57 @@ func ValidateRuntimeSelections(
 	if runtimeCfg == nil {
 		return fmt.Errorf("runtime config is required")
 	}
-	return validateWorkerLoadPreflight(cfg, factoryRunnerID, runtimeCfg, executableLocator, runnerSelectionPreflight{skipCommandAvailability: skipCommandAvailability}, invocationSkipPermissionsOverride)
+	var providers *providerregistry.Registry
+	if len(providerRegistries) > 0 {
+		providers = providerRegistries[0]
+	}
+	return validateRuntimeSelectionsWithRegistry(
+		cfg,
+		factoryRunnerID,
+		runtimeCfg,
+		executableLocator,
+		skipCommandAvailability,
+		invocationSkipPermissionsOverride,
+		providers,
+	)
 }
 
 type runnerSelectionPreflight struct{ skipCommandAvailability bool }
 
-func validateWorkerLoadPreflight(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, invocationSkipPermissionsOverride *bool) error {
-	if err := validateConfiguredWorkstationRunners(cfg, factoryRunnerID, runtimeCfg, executableLocator, preflight); err != nil {
+func validateRuntimeSelectionsWithRegistry(
+	cfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	executableLocator platformprocess.ExecutableLocator,
+	skipCommandAvailability bool,
+	invocationSkipPermissionsOverride *bool,
+	providers *providerregistry.Registry,
+) error {
+	if cfg == nil {
+		return fmt.Errorf("factory config is required")
+	}
+	if runtimeCfg == nil {
+		return fmt.Errorf("runtime config is required")
+	}
+	return validateWorkerLoadPreflight(
+		cfg,
+		factoryRunnerID,
+		runtimeCfg,
+		executableLocator,
+		runnerSelectionPreflight{skipCommandAvailability: skipCommandAvailability},
+		invocationSkipPermissionsOverride,
+		providers,
+	)
+}
+
+func validateWorkerLoadPreflight(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, invocationSkipPermissionsOverride *bool, providers *providerregistry.Registry) error {
+	if err := validateConfiguredWorkstationRunners(cfg, factoryRunnerID, runtimeCfg, executableLocator, preflight, providers); err != nil {
 		return err
 	}
 	return skippermissions.ValidateInvocationSkipPermissionsWorkers(cfg, runtimeCfg, invocationSkipPermissionsOverride)
 }
 
-func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight) error {
+func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, providers *providerregistry.Registry) error {
 	for index, workstation := range cfg.Workstations {
 		if configured, ok := runtimeCfg.Workstation(workstation.Name); ok && configured != nil {
 			workstation = *configured
@@ -161,24 +221,66 @@ func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factory
 		if worker != nil {
 			modelProvider, openCodeAgent = worker.ModelProvider, worker.OpenCodeAgent
 		}
-		selection := workerrunner.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, modelProvider)
+		selection, selectionErr := resolveRuntimeRunnerSelection(
+			providers,
+			workstation.Runner,
+			factoryRunnerID,
+			modelProvider,
+		)
+		if selectionErr != nil {
+			return fmt.Errorf("workstations[%d](%s).runner: %w", index, workstation.Name, selectionErr)
+		}
 		if err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, openCodeAgent, selection); err != nil {
 			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", index, workstation.Name, err)
 		}
 		if selection.Source == workerexecution.RunnerSelectionSourceDefault {
 			continue
 		}
-		if _, ok := workerrunner.BuiltInRunnerMetadata(selection.RunnerID); !ok {
-			return fmt.Errorf("workstations[%d](%s).runner: unknown runner %q", index, workstation.Name, selection.RunnerID)
-		}
-		if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
-			return fmt.Errorf("workstations[%d](%s).runner: %s", index, workstation.Name, status.UnavailableReason)
+		if err := validateRuntimeRunnerIdentity(providers, selection.RunnerID); err != nil {
+			return fmt.Errorf("workstations[%d](%s).runner: %w", index, workstation.Name, err)
 		}
 		if !preflight.skipCommandAvailability {
-			if err := workers.ValidateBuiltInRunnerPrerequisites(executableLocator, selection.RunnerID); err != nil {
+			if err := validateRuntimeRunnerPrerequisites(providers, executableLocator, selection.RunnerID); err != nil {
 				return fmt.Errorf("workstations[%d](%s).runner: %w", index, workstation.Name, err)
 			}
 		}
 	}
 	return nil
+}
+
+func resolveRuntimeRunnerSelection(
+	providers *providerregistry.Registry,
+	workstationRunner string,
+	factoryRunnerID string,
+	modelProvider string,
+) (workers.ResolvedRunnerSelection, error) {
+	if providers != nil {
+		return providers.ResolveRunnerSelection(workstationRunner, factoryRunnerID, modelProvider)
+	}
+	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunnerID, modelProvider), nil
+}
+
+func validateRuntimeRunnerIdentity(providers *providerregistry.Registry, runnerID string) error {
+	if providers != nil {
+		_, err := providers.RunnerMetadata(runnerID)
+		return err
+	}
+	if _, ok := workerrunner.BuiltInRunnerMetadata(runnerID); !ok {
+		return fmt.Errorf("unknown runner %q", runnerID)
+	}
+	if status, ok := workers.BuiltInRunnerStatus(runnerID); ok && !status.Available {
+		return fmt.Errorf("%s", status.UnavailableReason)
+	}
+	return nil
+}
+
+func validateRuntimeRunnerPrerequisites(
+	providers *providerregistry.Registry,
+	executableLocator platformprocess.ExecutableLocator,
+	runnerID string,
+) error {
+	if providers != nil {
+		return providers.ValidateRunnerPrerequisites(executableLocator, runnerID)
+	}
+	return workers.ValidateBuiltInRunnerPrerequisites(executableLocator, runnerID)
 }

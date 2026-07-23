@@ -576,6 +576,7 @@ func provideWorkersRuntimeFactory(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	defaultAllocator agypty.PTYAllocator,
 	edges serviceedges.Edges,
+	providerRegistry *providerregistry.Registry,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, agypty.ErrHostRequired
@@ -687,6 +688,7 @@ func provideWorkersRuntimeFactory(
 			decisionEnvelopes,
 			providerInjected,
 			scriptInjected,
+			providerRegistry,
 		)
 	}, nil
 }

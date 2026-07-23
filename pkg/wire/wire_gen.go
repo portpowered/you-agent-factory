@@ -150,7 +150,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v29, err := provideWorkersRuntimeFactory(invocationInterpolationService, decisionEnvelopeService, v27, v28, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2)
+	registry, err := provideProviderRegistry(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v29, err := provideWorkersRuntimeFactory(invocationInterpolationService, decisionEnvelopeService, v27, v28, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, registry)
 	if err != nil {
 		return nil, err
 	}
@@ -492,10 +496,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	initializer, err := application.NewInitializer(processStdioApplicationOpener)
-	if err != nil {
-		return nil, err
-	}
-	registry, err := provideProviderRegistry(edges2)
 	if err != nil {
 		return nil, err
 	}
