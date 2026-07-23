@@ -7,18 +7,18 @@ import {
   StandardListSelection,
   StandardListSelectionItem,
   SurfacePanel,
-  Text,
 } from "../../../components/ui";
 import { useAppLocale } from "../../../i18n";
 import { usePackagedFactoryInventory } from "../hooks/use-packaged-factory-inventory";
-import type { PackagedFactoryDetailViewModel } from "../lib/projection";
 import type { PackagedFactoryPublicDataSource } from "../lib/public-contract";
+import { getPackagedFactoryInventoryMessages } from "../messages/inventory";
 import {
-  getPackagedFactoryInventoryMessages,
-  type PackagedFactoryInventoryMessages,
-} from "../messages/inventory";
+  type PackagedFactoryCopyText,
+  PackagedFactoryDetail,
+} from "./packaged-factory-detail";
 
 export interface PackagedFactoryInventoryProps {
+  readonly copyText?: PackagedFactoryCopyText;
   readonly locale?: string;
   readonly source: PackagedFactoryPublicDataSource;
 }
@@ -39,33 +39,11 @@ function CatalogStatus({
   );
 }
 
-function ReadyDetail({
-  detail,
-  headingID,
-  messages,
-}: {
-  readonly detail: PackagedFactoryDetailViewModel;
-  readonly headingID: string;
-  readonly messages: PackagedFactoryInventoryMessages;
-}) {
-  return (
-    <article
-      aria-labelledby={headingID}
-      className="grid min-w-0 gap-layout-element"
-    >
-      <Heading as="h3" id={headingID}>
-        {detail.stableName}
-      </Heading>
-      <Text as="p">
-        {detail.description.status === "available"
-          ? detail.description.value
-          : messages.descriptionUnavailable}
-      </Text>
-      <Text as="p" variant="supporting">
-        {messages.projectLabel}: {detail.project}
-      </Text>
-    </article>
-  );
+async function copyToClipboard(value: string) {
+  if (!navigator.clipboard?.writeText) {
+    throw new Error("Clipboard API unavailable.");
+  }
+  await navigator.clipboard.writeText(value);
 }
 
 function focusRelativeItem(
@@ -95,6 +73,7 @@ function focusRelativeItem(
 }
 
 export function PackagedFactoryInventory({
+  copyText = copyToClipboard,
   locale: localeOverride,
   source,
 }: PackagedFactoryInventoryProps) {
@@ -184,7 +163,8 @@ export function PackagedFactoryInventory({
               {messages.detailError}
             </CatalogStatus>
           ) : (
-            <ReadyDetail
+            <PackagedFactoryDetail
+              copyText={copyText}
               detail={state.selection.detail}
               headingID={detailHeadingID}
               messages={messages}

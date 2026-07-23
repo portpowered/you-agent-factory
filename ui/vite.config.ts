@@ -10,6 +10,10 @@ import { createComponentsPackageAliases } from "./packages/components/src/vite-a
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const uiRoot = path.dirname(fileURLToPath(import.meta.url));
+const packagedFactoriesPackageRoot = path.resolve(
+  uiRoot,
+  "../packages/packaged-factories",
+);
 const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
 const factoryEmulatorPackageRoot = path.resolve(
   uiRoot,
@@ -261,6 +265,9 @@ export default defineConfig({
     ],
   },
   server: {
+    fs: {
+      allow: [uiRoot, packagedFactoriesPackageRoot],
+    },
     host: true,
     port: 4173,
     proxy: apiProxy,

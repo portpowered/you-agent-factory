@@ -27,6 +27,10 @@ const entry = (slug: string) => ({
     sha256: "b".repeat(64),
   },
 });
+const entryWithoutDescription = (slug: string) => {
+  const { description: _description, ...value } = entry(slug);
+  return value;
+};
 const schema = {
   $id: schemaIdentity,
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -91,6 +95,10 @@ export const ReadyResponsive = {
     await expect(
       canvas.findByRole("heading", { level: 3, name: "@you/beta" }),
     ).resolves.toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "YAML" }));
+    await expect(canvasElement.querySelector("code")).toHaveTextContent(
+      "id: builtin-beta name: beta",
+    );
     await expect(canvas.getByLabelText("Packaged Factory catalog")).toHaveClass(
       "min-w-0",
     );
@@ -137,5 +145,43 @@ export const SelectedArtifactFailureRecovery = {
     await expect(
       canvas.findByRole("heading", { level: 3, name: "@you/beta" }),
     ).resolves.toBeVisible();
+  },
+};
+
+export const MissingMetadata = {
+  args: {
+    source: storySource({
+      ...readyManifest,
+      factories: [entryWithoutDescription("alpha")],
+    }),
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.findAllByText("Description unavailable"),
+    ).resolves.toHaveLength(2);
+    await expect(
+      canvas.findByText("No invocation examples are available."),
+    ).resolves.toBeVisible();
+  },
+};
+
+export const CopyFailure = {
+  args: {
+    copyText: async () => {
+      throw new Error("Clipboard permission denied.");
+    },
+    source: storySource(readyManifest),
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Copy JSON configuration",
+      }),
+    );
+    await expect(canvas.findByRole("alert")).resolves.toHaveTextContent(
+      "Could not copy configuration. Try again.",
+    );
   },
 };

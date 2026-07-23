@@ -15,13 +15,14 @@
     "check:inline-component-class-usage": "node scripts/check-inline-component-class-usage.mjs",
     "check:semantic-colors": "bun scripts/check-semantic-color-tokens.ts",
     "check:localized-copy": "bun scripts/check-hardcoded-ui-copy.ts",
-    "check:public-package-boundaries": "node scripts/check-public-package-boundaries.mjs",
+    "check:public-package-boundaries": "node scripts/check-public-package-boundaries.mjs && node scripts/generate-packaged-factory-resolver.mjs --check",
     "check:work-outcome-memory": "bun scripts/check-work-outcome-memory.ts",
     "check": "biome check . && bun run check:semantic-colors && node scripts/check-tailwind-spacing-tokens.mjs && node scripts/check-feature-root-files.mjs && node scripts/check-feature-folder-file-count.mjs && node scripts/check-feature-boundary.mjs && node scripts/check-shared-ui-boundary.mjs && bun run check:public-package-boundaries && node scripts/check-button-usage.mjs && node scripts/check-feature-form-control-usage.mjs && node scripts/check-dashboard-expand-disclosure.mjs && bun run check:inline-component-class-usage",
     "deadcode": "bun scripts/check-deadcode-baseline.ts",
     "dev": "vite",
     "format": "biome format --write .",
     "generate-api": "node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts",
+    "generate:packaged-factory-resolver": "node scripts/generate-packaged-factory-resolver.mjs",
     "lint": "biome lint . && bun run check:localized-copy && bun run check:semantic-colors && node scripts/check-tailwind-spacing-tokens.mjs && node scripts/check-feature-root-files.mjs && node scripts/check-feature-folder-file-count.mjs && node scripts/check-feature-boundary.mjs && node scripts/check-shared-ui-boundary.mjs && bun run check:public-package-boundaries && node scripts/check-button-usage.mjs && node scripts/check-feature-form-control-usage.mjs && node scripts/check-dashboard-expand-disclosure.mjs && bun run check:inline-component-class-usage",
     "link:public-package-dependencies": "node scripts/link-public-package-dependencies.mjs",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
@@ -69,6 +70,7 @@
     "verify:public-packages": "node scripts/verify-public-package-release.mjs"
   },
   "dependencies": {
+    "@you-agent-factory/packaged-factories": "file:../packages/packaged-factories",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
