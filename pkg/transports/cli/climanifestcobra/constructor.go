@@ -753,7 +753,7 @@ func projectCobraFlagGroupAnnotations(
 	for _, relationship := range relationships {
 		names := make([]string, 0, len(relationship.participants))
 		for _, participant := range relationship.participants {
-			if participant.kind != "flag" {
+			if participant.kind != "flag" || !participant.cobraGroupAnnotationSafe {
 				names = nil
 				break
 			}

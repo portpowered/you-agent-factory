@@ -431,7 +431,11 @@ response-stream output.
   by effective semantic identity so an inherited record and its persistent
   ancestor cannot count as separate inputs. Attach the complete Cobra hierarchy
   before projecting flag-group annotations so inherited persistent flags are
-  resolvable without a construction panic.
+  resolvable without a construction panic. Only project Cobra group annotations
+  when every participant is a flag locally owned by the relationship command;
+  persistent, inherited, and ancestor flags share `pflag.Flag` objects, so
+  command-owned relationships involving them must rely on the generic
+  pre-handler enforcement without mutating shared annotations.
   Generic help, lifecycle, and completion projection lives beside the docs
   transport boundary in
   `pkg/transports/cli/climanifestcobra/docs_constructor.go`. Validate command

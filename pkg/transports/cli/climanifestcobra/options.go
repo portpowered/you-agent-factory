@@ -469,11 +469,12 @@ type plannedRelationship struct {
 }
 
 type plannedParticipant struct {
-	id        string
-	identity  string
-	kind      string
-	public    string
-	flagNames []string
+	id                       string
+	identity                 string
+	kind                     string
+	public                   string
+	flagNames                []string
+	cobraGroupAnnotationSafe bool
 }
 
 func planCommandArgumentsAndRelationships(plan []plannedCommand) error {
@@ -680,6 +681,7 @@ func effectiveParticipants(plan []plannedCommand, commandIndex int) map[string]p
 				available[flag.ID] = plannedParticipant{
 					id: flag.ID, identity: identity, kind: "flag",
 					public: "--" + flag.Long, flagNames: names,
+					cobraGroupAnnotationSafe: record.Path == commandPath && flag.Scope == "local",
 				}
 			}
 		}

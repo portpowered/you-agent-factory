@@ -605,6 +605,122 @@ func genericBindingsForManifest(manifest climanifest.Manifest) climanifestcobra.
 	return climanifestcobra.GenericBindings{Handlers: handlers}
 }
 
+func TestInheritedFlagGroupsStayCommandLocalAcrossRootAndSiblings(t *testing.T) {
+	tests := []struct {
+		kind           string
+		unrelatedArgs  []string
+		completionArgs []string
+	}{
+		{kind: "mutually-exclusive", unrelatedArgs: []string{"--mode", "--other"}, completionArgs: []string{"--mode", "--"}},
+		{kind: "conflict", unrelatedArgs: []string{"--mode", "--other"}, completionArgs: []string{"--mode", "--"}},
+		{kind: "required-together", unrelatedArgs: []string{"--mode"}, completionArgs: []string{"--mode", "--"}},
+		{kind: "at-least-one", completionArgs: []string{"--"}},
+	}
+	for _, test := range tests {
+		t.Run(test.kind, func(t *testing.T) {
+			assertUnrelatedRelationshipInvocation(t, test.kind, "", test.unrelatedArgs)
+			assertUnrelatedRelationshipInvocation(t, test.kind, "zeta", test.unrelatedArgs)
+			assertUnrelatedRelationshipCompletion(t, test.kind, "zeta", test.completionArgs)
+		})
+	}
+}
+
+func assertUnrelatedRelationshipInvocation(t *testing.T, kind, command string, args []string) {
+	t.Helper()
+	manifest := inheritedRelationshipIsolationManifest(kind)
+	calls := 0
+	bindings := genericBindingsForManifest(manifest)
+	for id := range bindings.Handlers {
+		bindings.Handlers[id] = func(context.Context, map[string]any) error {
+			calls++
+			return nil
+		}
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	invocation := append(make([]string, 0, len(args)+1), args...)
+	if command != "" {
+		invocation = append([]string{command}, invocation...)
+	}
+	root.SetArgs(invocation)
+	if err := root.Execute(); err != nil || calls != 1 {
+		t.Fatalf("unrelated %q invocation = (error %v, calls %d), want nil and one handler call", command, err, calls)
+	}
+}
+
+func assertUnrelatedRelationshipCompletion(t *testing.T, kind, command string, args []string) {
+	t.Helper()
+	manifest := inheritedRelationshipIsolationManifest(kind)
+	control := inheritedRelationshipIsolationManifest(kind)
+	alpha := control.Commands["stable.alpha"]
+	alpha.Relationships = nil
+	control.Commands[alpha.ID] = alpha
+	got := commandCompletionOutput(t, manifest, command, args)
+	want := commandCompletionOutput(t, control, command, args)
+	if got != want {
+		t.Fatalf("unrelated %q completion with %s relationship = %q, want control %q", command, kind, got, want)
+	}
+}
+
+func commandCompletionOutput(t *testing.T, manifest climanifest.Manifest, command string, args []string) string {
+	t.Helper()
+	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	if err != nil {
+		t.Fatalf("NewCommandTree() error = %v", err)
+	}
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	completionArgs := append([]string{"__complete", command}, args...)
+	root.SetArgs(completionArgs)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("completion %v error = %v", completionArgs, err)
+	}
+	return output.String()
+}
+
+func inheritedRelationshipIsolationManifest(kind string) climanifest.Manifest {
+	manifest := syntheticTreeManifest()
+	delete(manifest.Commands, "stable.leaf")
+	root := syntheticCommand("stable.root", "forge", "forge", true)
+	root.Flags = map[string]climanifest.Flag{
+		"stable.root.flag.mode":  relationshipIsolationFlag("stable.root.flag.mode", "persistent", "", "mode"),
+		"stable.root.flag.other": relationshipIsolationFlag("stable.root.flag.other", "local", "", "other"),
+	}
+	manifest.Commands[root.ID] = root
+
+	alpha := manifest.Commands["stable.alpha"]
+	alpha.Flags = map[string]climanifest.Flag{
+		"stable.alpha.flag.mode":  relationshipIsolationFlag("stable.alpha.flag.mode", "inherited", "stable.root.flag.mode", "mode"),
+		"stable.alpha.flag.other": relationshipIsolationFlag("stable.alpha.flag.other", "local", "", "other"),
+	}
+	relationship := groupRelationship(
+		"stable.alpha.relationship.inherited",
+		kind,
+		flagRef("stable.alpha.flag.mode"),
+		flagRef("stable.alpha.flag.other"),
+	)
+	alpha.Relationships = map[string]climanifest.Relationship{relationship.ID: relationship}
+	manifest.Commands[alpha.ID] = alpha
+
+	zeta := syntheticCommand("stable.zeta", "zeta", "forge zeta", true)
+	zeta.Flags = map[string]climanifest.Flag{
+		"stable.zeta.flag.other": relationshipIsolationFlag("stable.zeta.flag.other", "local", "", "other"),
+	}
+	manifest.Commands[zeta.ID] = zeta
+	return manifest
+}
+
+func relationshipIsolationFlag(id, scope, inheritedFromID, long string) climanifest.Flag {
+	return climanifest.Flag{
+		ID: id, Long: long, Scope: scope, InheritedFromID: inheritedFromID,
+		ValueType: "bool", NoOptionDefault: "true", Completion: "none",
+		Visibility: "visible", Lifecycle: activeLifecycle(id),
+	}
+}
+
 func deprecatedLifecycle(id, target, guidance string) climanifest.Lifecycle {
 	return climanifest.Lifecycle{
 		FormatVersion: "1.0.0",
