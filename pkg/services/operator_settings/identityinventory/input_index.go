@@ -8,10 +8,9 @@ func ProjectInputInventory() InputInventory {
 	cases = append(cases, persistScopeInputCases()...)
 
 	return InputInventory{
-		FormatVersion: InputInventoryFormatVersion,
-		UnknownFieldPolicy: "loadBackendScopeID unmarshals only backendScopeID and ignores other top-level keys on read; " +
-			"persistBackendScopeID rewrites through a raw-message map that preserves unrelated sibling keys",
-		SiblingPreservation: "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
+		FormatVersion:       InputInventoryFormatVersion,
+		UnknownFieldPolicy:  "EnsureLocalBackendScope decodes the generated closed GlobalConfig contract and rejects unknown fields before identity reuse or persistence",
+		SiblingPreservation: "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
 		Cases:               cases,
 	}
 }

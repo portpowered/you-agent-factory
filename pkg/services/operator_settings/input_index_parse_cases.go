@@ -5,11 +5,11 @@ func parseValidInputCases() []InputCase {
 		{
 			ID:          "valid-defaults-only",
 			Category:    categoryParseDefaults,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/defaults-only.json",
 			Description: "defaults.workerModelProvider and defaults.workerModel parse from file",
-			ExpectedFileConfig: &FileConfigExpectation{
+			ExpectedConfig: &ConfigExpectation{
 				Defaults: DefaultsSnapshot{
 					WorkerModelProvider: "codex",
 					WorkerModel:         "gpt-5-codex",
@@ -19,11 +19,12 @@ func parseValidInputCases() []InputCase {
 		{
 			ID:          "valid-backend-scope-sibling",
 			Category:    categoryParseDefaults,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/backend-scope-sibling.json",
-			Description: "operatorconfig tolerates sibling backendScopeID without returning it on FileConfig",
-			ExpectedFileConfig: &FileConfigExpectation{
+			Description: "generated global config decode returns backendScopeID with normalized defaults",
+			ExpectedConfig: &ConfigExpectation{
+				BackendScopeID: "local-11111111-1111-4111-8111-111111111111",
 				Defaults: DefaultsSnapshot{
 					WorkerModelProvider: "claude",
 					WorkerModel:         "claude-sonnet",
@@ -33,11 +34,11 @@ func parseValidInputCases() []InputCase {
 		{
 			ID:          "valid-worker-presets-canonicalized",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/worker-presets-canonicalized.json",
 			Description: "workerPresets ids, providers, models, and reasoningEffort are trimmed and canonicalized",
-			ExpectedFileConfig: &FileConfigExpectation{
+			ExpectedConfig: &ConfigExpectation{
 				WorkerPresets: []WorkerPreset{{
 					ID:              "research",
 					ModelProvider:   "CODEX",
@@ -49,11 +50,11 @@ func parseValidInputCases() []InputCase {
 		{
 			ID:          "valid-worker-presets-missing",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/worker-presets-missing.json",
 			Description: "missing workerPresets array is backward compatible",
-			ExpectedFileConfig: &FileConfigExpectation{
+			ExpectedConfig: &ConfigExpectation{
 				Defaults: DefaultsSnapshot{WorkerModel: "existing-model"},
 			},
 		},
@@ -65,18 +66,18 @@ func parseInvalidDefaultsInputCases() []InputCase {
 		{
 			ID:          "invalid-malformed-json",
 			Category:    categoryParseDefaults,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/malformed-json.json",
 			Description: "malformed JSON fails parse",
 			ErrorFragments: []string{
-				"decode operator config JSON",
+				"decode generated global config",
 			},
 		},
 		{
 			ID:          "invalid-unknown-top-level",
 			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/unknown-top-level.json",
 			Description: "unknown top-level keys are rejected under strict decode",
@@ -87,7 +88,7 @@ func parseInvalidDefaultsInputCases() []InputCase {
 		{
 			ID:          "invalid-unknown-nested-defaults",
 			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/unknown-nested-defaults.json",
 			Description: "unknown nested defaults keys are rejected under strict decode",
@@ -98,7 +99,7 @@ func parseInvalidDefaultsInputCases() []InputCase {
 		{
 			ID:          "invalid-trailing-json",
 			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/trailing-json.json",
 			Description: "trailing JSON values after the root object are rejected",
@@ -114,7 +115,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-empty-id",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-empty-id.json",
 			Description: "workerPresets[].id must be non-empty after trim",
@@ -126,7 +127,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-duplicate-id",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-duplicate-id.json",
 			Description: "duplicate workerPresets[].id values are rejected",
@@ -138,7 +139,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-missing-provider",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-missing-provider.json",
 			Description: "workerPresets[].modelProvider is required",
@@ -150,7 +151,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-symbolic-provider",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-symbolic-provider.json",
 			Description: "symbolic DEFAULT provider is rejected in worker presets",
@@ -163,7 +164,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-unsupported-provider",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-unsupported-provider.json",
 			Description: "unsupported workerPresets[].modelProvider values are rejected",
@@ -176,7 +177,7 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 		{
 			ID:          "invalid-preset-unsupported-reasoning",
 			Category:    categoryParseWorkerPreset,
-			Entrypoint:  entrypointParseFileConfig,
+			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-unsupported-reasoning.json",
 			Description: "unsupported workerPresets[].reasoningEffort values are rejected",

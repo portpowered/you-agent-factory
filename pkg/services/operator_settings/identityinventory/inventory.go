@@ -17,9 +17,8 @@ const (
 	entrypointEnsureLocalBackendScope = "EnsureLocalBackendScope"
 	entrypointPersistBackendScopeID   = "persistBackendScopeID"
 
-	categoryEnsureScope     = "ensure-scope"
-	categoryPersistScope    = "persist-scope"
-	categoryTolerantSibling = "tolerant-sibling"
+	categoryEnsureScope  = "ensure-scope"
+	categoryPersistScope = "persist-scope"
 )
 
 // InputInventory indexes deterministic system-config inputs and expected loader outcomes.

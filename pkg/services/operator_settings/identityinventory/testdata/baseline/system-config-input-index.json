@@ -1,7 +1,7 @@
 {
   "formatVersion": "system-config-input/v1",
-  "unknownFieldPolicy": "loadBackendScopeID unmarshals only backendScopeID and ignores other top-level keys on read; persistBackendScopeID rewrites through a raw-message map that preserves unrelated sibling keys",
-  "siblingPreservation": "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
+  "unknownFieldPolicy": "EnsureLocalBackendScope decodes the generated closed GlobalConfig contract and rejects unknown fields before identity reuse or persistence",
+  "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
   "cases": [
     {
       "id": "valid-missing-file",
@@ -48,21 +48,6 @@
       }
     },
     {
-      "id": "valid-whitespace-config",
-      "category": "ensure-scope",
-      "entrypoint": "EnsureLocalBackendScope",
-      "outcome": "accept",
-      "fixture": "valid/whitespace-only.json",
-      "description": "whitespace-only config file content is treated as missing scope and regenerated",
-      "expectedScope": {
-        "outcome": "generated",
-        "requireLocalUUID": true
-      },
-      "persistedFileExpectation": {
-        "backendScopeIDMatchesResolved": true
-      }
-    },
-    {
       "id": "valid-reuse-persisted-scope",
       "category": "ensure-scope",
       "entrypoint": "EnsureLocalBackendScope",
@@ -91,25 +76,6 @@
       }
     },
     {
-      "id": "valid-tolerates-unknown-sibling",
-      "category": "tolerant-sibling",
-      "entrypoint": "EnsureLocalBackendScope",
-      "outcome": "accept",
-      "fixture": "valid/unknown-sibling.json",
-      "description": "tolerant load ignores unknown top-level siblings on read and preserves them on persist",
-      "expectedScope": {
-        "outcome": "generated",
-        "requireLocalUUID": true
-      },
-      "persistedFileExpectation": {
-        "backendScopeIDMatchesResolved": true,
-        "preservesDefaults": true,
-        "preservesSiblingKeys": [
-          "unknownTopLevel"
-        ]
-      }
-    },
-    {
       "id": "invalid-empty-config-path",
       "category": "ensure-scope",
       "entrypoint": "EnsureLocalBackendScope",
@@ -127,7 +93,30 @@
       "fixture": "invalid/malformed-json.json",
       "description": "malformed JSON fails parse during load",
       "errorFragments": [
-        "parse system config"
+        "parse operator config"
+      ]
+    },
+    {
+      "id": "invalid-whitespace-config",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "reject",
+      "fixture": "valid/whitespace-only.json",
+      "description": "a present whitespace-only file is not a valid generated GlobalConfig document",
+      "errorFragments": [
+        "parse operator config"
+      ]
+    },
+    {
+      "id": "invalid-unknown-sibling",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "reject",
+      "fixture": "valid/unknown-sibling.json",
+      "description": "the generated closed GlobalConfig contract rejects unknown top-level siblings",
+      "errorFragments": [
+        "parse operator config",
+        "unknownTopLevel"
       ]
     },
     {

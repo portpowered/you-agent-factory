@@ -1,10 +1,7 @@
 package operatorsettings
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -36,17 +33,24 @@ type ResolvedBackendScope struct {
 
 // EnsureLocalBackendScope loads backendScopeID from configPath, generates
 // local-<uuid> when missing, and persists a newly generated value before returning.
-func EnsureLocalBackendScope(files FileSystem, createTemp CreateTemporaryFile, generateID IDGenerator, configPath string) (ResolvedBackendScope, error) {
+func EnsureLocalBackendScope(
+	files FileSystem,
+	createTemp CreateTemporaryFile,
+	generateID IDGenerator,
+	decode ConfigDecoder,
+	encode ConfigEncoder,
+	configPath string,
+) (ResolvedBackendScope, error) {
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
 		return ResolvedBackendScope{}, fmt.Errorf("system config path is required to resolve backend scope")
 	}
 
-	existing, err := loadBackendScopeID(files, configPath)
+	config, err := LoadFileConfig(files, decode, configPath)
 	if err != nil {
 		return ResolvedBackendScope{}, err
 	}
-	if trimmed := strings.TrimSpace(existing); trimmed != "" {
+	if trimmed := strings.TrimSpace(config.BackendScopeID); trimmed != "" {
 		return ResolvedBackendScope{
 			BackendScopeID: trimmed,
 			Outcome:        BackendScopeOutcomeReused,
@@ -55,7 +59,8 @@ func EnsureLocalBackendScope(files FileSystem, createTemp CreateTemporaryFile, g
 	}
 
 	generated := GenerateLocalBackendScopeID(generateID)
-	if err := persistBackendScopeID(files, createTemp, configPath, generated); err != nil {
+	config.BackendScopeID = generated
+	if err := persistBackendScopeID(files, createTemp, encode, configPath, config); err != nil {
 		return ResolvedBackendScope{}, fmt.Errorf(
 			"persist generated backend scope ID to system config %q: %w; local backends require a stable backendScopeID before exposing session identity",
 			configPath,
@@ -97,28 +102,8 @@ func diagnosticsBackendScopeID(value string) string {
 	return trimmed
 }
 
-func loadBackendScopeID(files FileSystem, configPath string) (string, error) {
-	data, err := files.ReadFile(configPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil
-		}
-		return "", fmt.Errorf("read system config %q: %w", configPath, err)
-	}
-	if len(strings.TrimSpace(string(data))) == 0 {
-		return "", nil
-	}
-	var cfg struct {
-		BackendScopeID string `json:"backendScopeID"`
-	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return "", fmt.Errorf("parse system config %q: %w", configPath, err)
-	}
-	return strings.TrimSpace(cfg.BackendScopeID), nil
-}
-
-func persistBackendScopeID(files FileSystem, createTemp CreateTemporaryFile, configPath, backendScopeID string) error {
-	backendScopeID = strings.TrimSpace(backendScopeID)
+func persistBackendScopeID(files FileSystem, createTemp CreateTemporaryFile, encode ConfigEncoder, configPath string, config Config) error {
+	backendScopeID := strings.TrimSpace(config.BackendScopeID)
 	if backendScopeID == "" {
 		return fmt.Errorf("backend scope ID is required")
 	}
@@ -126,47 +111,21 @@ func persistBackendScopeID(files FileSystem, createTemp CreateTemporaryFile, con
 		return fmt.Errorf("backend scope ID %q is not a valid local backend scope", backendScopeID)
 	}
 
-	configMap, err := readConfigMap(files, configPath)
+	if encode == nil {
+		return fmt.Errorf("global config encoder is required")
+	}
+	data, err := encode(config)
 	if err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(backendScopeID)
-	if err != nil {
-		return fmt.Errorf("marshal backend scope ID: %w", err)
-	}
-	configMap["backendScopeID"] = encoded
-	return writeConfigMap(files, createTemp, configPath, configMap)
+	return writeConfig(files, createTemp, configPath, data)
 }
 
-func readConfigMap(files FileSystem, configPath string) (map[string]json.RawMessage, error) {
-	data, err := files.ReadFile(configPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return map[string]json.RawMessage{}, nil
-		}
-		return nil, fmt.Errorf("read system config %q: %w", configPath, err)
-	}
-	configMap := map[string]json.RawMessage{}
-	if len(strings.TrimSpace(string(data))) == 0 {
-		return configMap, nil
-	}
-	if err := json.Unmarshal(data, &configMap); err != nil {
-		return nil, fmt.Errorf("parse system config %q: %w", configPath, err)
-	}
-	return configMap, nil
-}
-
-func writeConfigMap(files FileSystem, createTemp CreateTemporaryFile, configPath string, configMap map[string]json.RawMessage) error {
+func writeConfig(files FileSystem, createTemp CreateTemporaryFile, configPath string, data []byte) error {
 	dir := filepath.Dir(configPath)
 	if err := files.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create system config directory %q: %w", dir, err)
 	}
-
-	data, err := json.MarshalIndent(configMap, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal system config: %w", err)
-	}
-	data = append(data, '\n')
 
 	tmp, err := createTemp(dir, filepath.Base(configPath)+".*.tmp")
 	if err != nil {

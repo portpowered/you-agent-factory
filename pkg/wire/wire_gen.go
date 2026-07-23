@@ -61,7 +61,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	directoryCreator := provideRunDirectoryCreator()
 	opener := provideBrowserOpener()
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
-	defaultsResolver := provideOperatorDefaultsResolver(fileSystem)
+	configDecoder := provideOperatorConfigDecoder()
+	defaultsResolver := provideOperatorDefaultsResolver(fileSystem, configDecoder)
 	providersessionsService, err := provideProviderSessions(edges2)
 	if err != nil {
 		return nil, err
@@ -97,7 +98,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	loader := provideFactoryDefinitionLoader(v4, v5, v6, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v7, portableBundledFileInspection, v8)
 	validationService := provideFactoryDefinitionValidationService(javaScriptWorkflows, loader)
 	v9 := provideFactoryDefinitionValidator(validationService)
-	configLoader := provideOperatorConfigLoader(fileSystem)
+	configLoader := provideOperatorConfigLoader(fileSystem, configDecoder)
 	v10 := provideDurableExecutionFactory(configLoader)
 	v11 := provideWorkerExecutionFactory()
 	modelsService, err := provideModelsService(edges2)
@@ -237,7 +238,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	createTemporaryFile := provideOperatorSettingsCreateTemporaryFile(edges2)
 	operatorsettingsIDGenerator := provideOperatorSettingsIDGenerator(edges2)
-	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator)
+	configEncoder := provideOperatorConfigEncoder()
+	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator, configDecoder, configEncoder)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
 	v45 := provideFactorySessionReplayRecordingReader(edges2)
 	runtimeOpeningDependencies := wire.RuntimeOpeningDependencies{
@@ -504,6 +506,8 @@ var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, api
 var servicesSet = wire2.NewSet(wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
+	provideOperatorConfigDecoder,
+	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
 	provideOperatorConfigLoader,

@@ -278,9 +278,11 @@ response-stream output.
   CLI baselines and run `make docs-reference-smoke`.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
-  logic in `pkg/services/operator_settings`, resolve it during `service.BuildFactoryCore`
-  before session identity is exposed, and keep `pkg/services/operator_settings` tolerant
-  of the top-level `backendScopeID` field so operator-default parsing still works.
+  logic in `pkg/services/operator_settings`, inject the generated-model codec from
+  `pkg/transports/mapping/globalconfig`, and resolve identity before any Factory
+  Session identity is exposed. Present documents are decoded as the closed
+  `GlobalConfig` contract before reuse or persistence, so malformed content,
+  trailing JSON, and unknown fields fail with the config path.
   Local backend scope policy: blank values generate `local-<uuid>` once and persist
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail

@@ -2,11 +2,29 @@ package operatorsettings
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type renameFailingFileSystem struct{ FileSystem }
+
+func (f renameFailingFileSystem) Rename(_, _ string) error {
+	return errors.New("injected rename failure")
+}
+
+type chmodRecordingFileSystem struct {
+	FileSystem
+	mode fs.FileMode
+}
+
+func (f *chmodRecordingFileSystem) Chmod(path string, mode fs.FileMode) error {
+	f.mode = mode
+	return f.FileSystem.Chmod(path, mode)
+}
 
 func TestEnsureLocalBackendScope_GeneratesAndPersistsMissingScope(t *testing.T) {
 	t.Parallel()
@@ -14,7 +32,7 @@ func TestEnsureLocalBackendScope_GeneratesAndPersistsMissingScope(t *testing.T) 
 	homeDir := t.TempDir()
 	configPath := DefaultConfigPath(homeDir)
 
-	first, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath)
+	first, err := ensureTestBackendScope(configPath)
 	if err != nil {
 		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
 	}
@@ -39,7 +57,7 @@ func TestEnsureLocalBackendScope_GeneratesAndPersistsMissingScope(t *testing.T) 
 		t.Fatalf("persisted backendScopeID = %q, want %q", persisted.BackendScopeID, first.BackendScopeID)
 	}
 
-	second, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath)
+	second, err := ensureTestBackendScope(configPath)
 	if err != nil {
 		t.Fatalf("EnsureLocalBackendScope() second call error = %v", err)
 	}
@@ -59,6 +77,8 @@ func TestEnsureLocalBackendScopeUsesInjectedIdentityGenerator(t *testing.T) {
 		testFiles,
 		testCreateTemp,
 		func() string { return generated },
+		decodeTestConfig,
+		encodeTestConfig,
 		configPath,
 	)
 	if err != nil {
@@ -69,7 +89,7 @@ func TestEnsureLocalBackendScopeUsesInjectedIdentityGenerator(t *testing.T) {
 	}
 }
 
-func TestEnsureLocalBackendScope_PreservesExistingDefaults(t *testing.T) {
+func TestEnsureLocalBackendScope_PreservesExistingSettings(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -81,12 +101,18 @@ func TestEnsureLocalBackendScope_PreservesExistingDefaults(t *testing.T) {
   "defaults": {
     "workerModelProvider": "codex",
     "workerModel": "gpt-5-codex"
-  }
+  },
+  "workerPresets": [{
+    "id": "research",
+    "modelProvider": "codex",
+    "model": "gpt-5-mini",
+    "reasoningEffort": "high"
+  }]
 }`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	resolved, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath)
+	resolved, err := ensureTestBackendScope(configPath)
 	if err != nil {
 		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
 	}
@@ -115,6 +141,59 @@ func TestEnsureLocalBackendScope_PreservesExistingDefaults(t *testing.T) {
 	}
 	if defaults.WorkerModelProvider != "codex" || defaults.WorkerModel != "gpt-5-codex" {
 		t.Fatalf("defaults = %#v, want codex/gpt-5-codex preserved", defaults)
+	}
+	var presets []WorkerPreset
+	if err := json.Unmarshal(persisted["workerPresets"], &presets); err != nil {
+		t.Fatalf("Unmarshal workerPresets: %v", err)
+	}
+	wantPreset := WorkerPreset{ID: "research", ModelProvider: "CODEX", Model: "gpt-5-mini", ReasoningEffort: "high"}
+	if len(presets) != 1 || presets[0] != wantPreset {
+		t.Fatalf("workerPresets = %#v, want %#v", presets, []WorkerPreset{wantPreset})
+	}
+}
+
+func TestEnsureLocalBackendScope_WriteFailureLeavesOriginalDocument(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	original := []byte(`{"defaults":{"workerModelProvider":"codex"}}`)
+	if err := os.WriteFile(configPath, original, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := EnsureLocalBackendScope(
+		renameFailingFileSystem{FileSystem: testFiles},
+		testCreateTemp,
+		testIDGenerator,
+		decodeTestConfig,
+		encodeTestConfig,
+		configPath,
+	)
+	if err == nil || !strings.Contains(err.Error(), "injected rename failure") || !strings.Contains(err.Error(), "persist generated backend scope ID to system config") {
+		t.Fatalf("EnsureLocalBackendScope() error = %v, want path-aware rename failure", err)
+	}
+	got, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("config after failed replace = %q, want original %q", got, original)
+	}
+}
+
+func TestEnsureLocalBackendScope_RestrictsPersistedFilePermissions(t *testing.T) {
+	files := &chmodRecordingFileSystem{FileSystem: testFiles}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if _, err := EnsureLocalBackendScope(
+		files,
+		testCreateTemp,
+		testIDGenerator,
+		decodeTestConfig,
+		encodeTestConfig,
+		configPath,
+	); err != nil {
+		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
+	}
+	if files.mode.Perm() != 0o600 {
+		t.Fatalf("persisted file permissions = %o, want 600", files.mode.Perm())
 	}
 }
 
@@ -167,7 +246,7 @@ func TestEnsureLocalBackendScope_ReusesPersistedScope(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	resolved, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath)
+	resolved, err := ensureTestBackendScope(configPath)
 	if err != nil {
 		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
 	}
@@ -182,7 +261,7 @@ func TestEnsureLocalBackendScope_ReusesPersistedScope(t *testing.T) {
 func TestEnsureLocalBackendScope_RejectsEmptyConfigPath(t *testing.T) {
 	t.Parallel()
 
-	if _, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, "   "); err == nil {
+	if _, err := ensureTestBackendScope("   "); err == nil {
 		t.Fatal("expected error for empty config path")
 	}
 }
@@ -199,7 +278,7 @@ func TestEnsureLocalBackendScope_RejectsInvalidJSON(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	if _, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath); err == nil {
+	if _, err := ensureTestBackendScope(configPath); err == nil {
 		t.Fatal("expected parse error for invalid config JSON")
 	}
 }
@@ -210,10 +289,10 @@ func TestPersistBackendScopeID_RejectsInvalidScope(t *testing.T) {
 	homeDir := t.TempDir()
 	configPath := DefaultConfigPath(homeDir)
 
-	if err := persistBackendScopeID(testFiles, testCreateTemp, configPath, "not-a-local-scope"); err == nil {
+	if err := persistBackendScopeID(testFiles, testCreateTemp, encodeTestConfig, configPath, Config{BackendScopeID: "not-a-local-scope"}); err == nil {
 		t.Fatal("expected error for invalid backend scope id")
 	}
-	if err := persistBackendScopeID(testFiles, testCreateTemp, configPath, ""); err == nil {
+	if err := persistBackendScopeID(testFiles, testCreateTemp, encodeTestConfig, configPath, Config{}); err == nil {
 		t.Fatal("expected error for empty backend scope id")
 	}
 }
@@ -242,7 +321,7 @@ func TestDeriveProviderBackendScopeID_SanitizesEmptySegments(t *testing.T) {
 	}
 }
 
-func TestEnsureLocalBackendScope_TreatsWhitespaceConfigAsMissingScope(t *testing.T) {
+func TestEnsureLocalBackendScope_RejectsWhitespaceConfig(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -254,14 +333,7 @@ func TestEnsureLocalBackendScope_TreatsWhitespaceConfigAsMissingScope(t *testing
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	resolved, err := EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, configPath)
-	if err != nil {
-		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
-	}
-	if resolved.Outcome != BackendScopeOutcomeGenerated {
-		t.Fatalf("outcome = %q, want %q", resolved.Outcome, BackendScopeOutcomeGenerated)
-	}
-	if !IsLocalBackendScopeID(resolved.BackendScopeID) {
-		t.Fatalf("backendScopeID = %q, want generated local scope", resolved.BackendScopeID)
+	if _, err := ensureTestBackendScope(configPath); err == nil || !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("EnsureLocalBackendScope() error = %v, want path-aware parse failure", err)
 	}
 }

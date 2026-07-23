@@ -1,7 +1,6 @@
 package identityinventory_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,42 +11,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/globalconfiginventory"
 	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
-
-func TestProjectInputInventory_RecordsTolerantUnknownFieldPolicy(t *testing.T) {
-	t.Parallel()
-
-	inventory := identityinventory.ProjectInputInventory()
-	if inventory.FormatVersion != identityinventory.InputInventoryFormatVersion {
-		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, identityinventory.InputInventoryFormatVersion)
-	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "ignores other top-level keys on read") {
-		t.Fatalf("unknown field policy = %q, want tolerant load reference", inventory.UnknownFieldPolicy)
-	}
-	if !strings.Contains(inventory.SiblingPreservation, "preserves defaults") {
-		t.Fatalf("sibling preservation = %q, want defaults preservation note", inventory.SiblingPreservation)
-	}
-}
-
-func TestProjectInputInventory_HasTolerantSiblingCase(t *testing.T) {
-	t.Parallel()
-
-	inventory := identityinventory.ProjectInputInventory()
-	for _, inputCase := range inventory.Cases {
-		if inputCase.Category != "tolerant-sibling" || inputCase.Outcome != "accept" {
-			continue
-		}
-		if inputCase.Fixture == "" {
-			t.Fatalf("tolerant-sibling case %q missing fixture", inputCase.ID)
-		}
-		return
-	}
-	t.Fatal("missing tolerant-sibling accept case in input inventory")
-}
 
 func TestIndexedEnsureScopeCases_MatchProductionLoader(t *testing.T) {
 	inventory := identityinventory.ProjectInputInventory()
@@ -87,6 +55,8 @@ func runEnsureScopeCase(t *testing.T, inputCase identityinventory.InputCase) {
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
 		uuid.NewString,
+		globalconfig.Decode,
+		globalconfig.Encode,
 		configPath,
 	)
 	if inputCase.Outcome == "accept" {
@@ -207,71 +177,4 @@ func writeFixtureToTemp(t *testing.T, rel string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
-}
-
-func TestMarshalInputInventoryJSON_IsByteIdenticalAcrossRepeatedProjections(t *testing.T) {
-	t.Parallel()
-
-	first := identityinventory.ProjectInputInventory()
-	second := identityinventory.ProjectInputInventory()
-
-	firstJSON, err := identityinventory.MarshalInputInventoryJSON(first)
-	if err != nil {
-		t.Fatalf("first MarshalInputInventoryJSON() error = %v", err)
-	}
-	secondJSON, err := identityinventory.MarshalInputInventoryJSON(second)
-	if err != nil {
-		t.Fatalf("second MarshalInputInventoryJSON() error = %v", err)
-	}
-	if !bytes.Equal(firstJSON, secondJSON) {
-		t.Fatalf("repeated system config input inventory json differs")
-	}
-	if firstJSON[len(firstJSON)-1] != '\n' {
-		t.Fatalf("system config input inventory json missing trailing newline")
-	}
-}
-
-func TestProjectInputInventory_MatchesCommittedBaseline(t *testing.T) {
-	inventory := identityinventory.ProjectInputInventory()
-	got, err := identityinventory.MarshalInputInventoryJSON(inventory)
-	if err != nil {
-		t.Fatalf("MarshalInputInventoryJSON() error = %v", err)
-	}
-
-	fixturePath := testutil.MustRepoPath(t, identityinventory.InputIndexBaselineRelativePath)
-	want, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read baseline fixture %s: %v", fixturePath, err)
-	}
-	want = globalconfiginventory.NormalizeFixtureBytes(want)
-	if bytes.Equal(got, want) {
-		return
-	}
-
-	t.Fatalf(
-		"system config input index baseline drift detected; update %s when intentional\nwant %d bytes, got %d bytes",
-		identityinventory.InputIndexBaselineRelativePath,
-		len(want),
-		len(got),
-	)
-}
-
-func TestWriteSystemConfigInputIndexBaseline(t *testing.T) {
-	if os.Getenv("UPDATE_SYSTEM_CONFIG_BASELINES") != "1" {
-		t.Skip("set UPDATE_SYSTEM_CONFIG_BASELINES=1 to rewrite fixtures")
-	}
-
-	inventory := identityinventory.ProjectInputInventory()
-	got, err := identityinventory.MarshalInputInventoryJSON(inventory)
-	if err != nil {
-		t.Fatalf("MarshalInputInventoryJSON() error = %v", err)
-	}
-
-	fixturePath := testutil.MustRepoPath(t, identityinventory.InputIndexBaselineRelativePath)
-	if err := os.MkdirAll(filepath.Dir(fixturePath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(fixturePath, got, 0o644); err != nil {
-		t.Fatalf("write baseline fixture %s: %v", fixturePath, err)
-	}
 }

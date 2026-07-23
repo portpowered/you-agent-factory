@@ -1734,11 +1734,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/encode.go",
-      "target": "MarshalInputInventoryJSON"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/environment_resolution.go",
       "target": "ResolveFromHomeWithEnvironment"
     },
@@ -1776,16 +1771,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/operator_config.go",
       "target": "LoadFileDefaults"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/operator_config.go",
-      "target": "ParseFileConfig"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/operator_config.go",
-      "target": "ParseFileDefaults"
     },
     {
       "rule": "service-root-exported-function",
@@ -2771,11 +2756,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/tooling",
       "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/globalconfiginventory",
-      "target": "pkg/services/operator_settings"
     },
     {
       "rule": "service-root-unexpected-directory",
