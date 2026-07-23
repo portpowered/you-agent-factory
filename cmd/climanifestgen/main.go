@@ -32,25 +32,6 @@ func run(store generatedartifacts.Store, root string, check bool, stdout, stderr
 		return 1
 	}
 	if check {
-		violations, err := climanifestgen.CheckRootGlobalAuthority(os.DirFS(root))
-		if err != nil {
-			fmt.Fprintf(stderr, "[agent-factory:cli-manifest-check] check failed: %v\n", err)
-			return 1
-		}
-		if len(violations) > 0 {
-			fmt.Fprintln(stderr, "[agent-factory:cli-manifest-check] duplicate root/global CLI authority detected")
-			for _, violation := range violations {
-				fmt.Fprintf(
-					stderr,
-					"  - %s:%d registers a root persistent flag with %s; author it in %s and regenerate\n",
-					violation.Path,
-					violation.Line,
-					violation.Method,
-					climanifestgen.ProductionManifestPath,
-				)
-			}
-			return 1
-		}
 		artifacts, err := climanifestgen.Artifacts(store, root)
 		if err != nil {
 			fmt.Fprintf(stderr, "[agent-factory:cli-manifest-check] check failed: %v\n", err)

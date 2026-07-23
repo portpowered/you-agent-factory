@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
@@ -24,6 +25,7 @@ const (
 	ViolationStaleMetadata       DeliberateViolation = "stale-generated-metadata"
 	ViolationMissingHandler      DeliberateViolation = "missing-handler"
 	ViolationAliasAsCanonical    DeliberateViolation = "compatibility-alias-as-canonical"
+	ViolationUncontractedGlobal  DeliberateViolation = "uncontracted-root-global"
 )
 
 type compatibilityInventory struct {
@@ -35,8 +37,13 @@ type compatibilityInventory struct {
 }
 
 // CheckProduction loads committed contracts and validates a detached production observation.
-func CheckProduction(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string) ([]Finding, error) {
-	input, err := loadProductionInput(store, production, repositoryRoot)
+func CheckProduction(
+	store generatedartifacts.SourceStore,
+	production commandidentity.Inventory,
+	productionInputs cliinputs.Inventory,
+	repositoryRoot string,
+) ([]Finding, error) {
+	input, err := loadProductionInput(store, production, productionInputs, repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +52,14 @@ func CheckProduction(store generatedartifacts.SourceStore, production commandide
 
 // CheckProductionViolation applies one deliberate structural violation to
 // snapshots, then runs the production validator. The Cobra tree is unchanged.
-func CheckProductionViolation(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string, violation DeliberateViolation) ([]Finding, error) {
-	input, err := loadProductionInput(store, production, repositoryRoot)
+func CheckProductionViolation(
+	store generatedartifacts.SourceStore,
+	production commandidentity.Inventory,
+	productionInputs cliinputs.Inventory,
+	repositoryRoot string,
+	violation DeliberateViolation,
+) ([]Finding, error) {
+	input, err := loadProductionInput(store, production, productionInputs, repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +69,12 @@ func CheckProductionViolation(store generatedartifacts.SourceStore, production c
 	return Validate(input), nil
 }
 
-func loadProductionInput(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string) (Input, error) {
+func loadProductionInput(
+	store generatedartifacts.SourceStore,
+	production commandidentity.Inventory,
+	productionInputs cliinputs.Inventory,
+	repositoryRoot string,
+) (Input, error) {
 	canonical, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(climanifest.ProductionManifestPath)))
 	if err != nil {
 		return Input{}, err
@@ -74,7 +92,8 @@ func loadProductionInput(store generatedartifacts.SourceStore, production comman
 		return Input{}, err
 	}
 	return Input{
-		Production: production, Canonical: canonical, Compatibility: compatibility,
+		Production: production, ProductionInputs: productionInputs,
+		Canonical: canonical, Compatibility: compatibility,
 		ApprovedCompatibility: approved, GeneratedCanonical: canonicalGenerated,
 		GeneratedCompatibility: compatibilityGenerated,
 	}, nil
@@ -109,6 +128,21 @@ func applyDeliberateViolation(input *Input, violation DeliberateViolation) error
 		manifest.Commands[compatibility.ID] = compatibility
 		input.GeneratedCanonical = append([]climanifest.Manifest(nil), input.GeneratedCanonical...)
 		input.GeneratedCanonical[0] = manifest
+	case ViolationUncontractedGlobal:
+		input.ProductionInputs.Flags = append(
+			input.ProductionInputs.Flags,
+			cliinputs.FlagRecord{
+				CommandJoin: cliinputs.CommandJoin{
+					CommandPath:        "you",
+					CommandIDCandidate: "you",
+				},
+				IDCandidate: "you.flag.extra-global",
+				Long:        "extra-global",
+				Scope:       "persistent",
+				ValueType:   "string",
+				Visibility:  "visible",
+			},
+		)
 	default:
 		return fmt.Errorf("unknown deliberate CLI contract violation %q", violation)
 	}

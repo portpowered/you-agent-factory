@@ -5,15 +5,22 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 )
 
 func TestCheckProductionAcceptsCompleteApprovedTree(t *testing.T) {
 	production := productionCLIInventory(t)
+	productionInputs := productionCLIInputs(t)
 	before := append([]commandidentity.CommandRecord(nil), production.Commands...)
 
-	findings, err := CheckProduction(testSourceStore(), production, repositoryRoot(t))
+	findings, err := CheckProduction(
+		testSourceStore(),
+		production,
+		productionInputs,
+		repositoryRoot(t),
+	)
 	if err != nil {
 		t.Fatalf("CheckProduction() error = %v", err)
 	}
@@ -38,14 +45,22 @@ func TestCheckProductionViolationUsesProductionDiagnosticsWithoutMutatingTree(t 
 		{ViolationStaleMetadata, KindStaleMetadata, "you", "you", "name"},
 		{ViolationMissingHandler, KindMissingHandler, "you.run", "you run", "handler"},
 		{ViolationAliasAsCanonical, KindAliasAsCanonical, "you.compatibility-preview", "you compatibility-preview", "classification"},
+		{ViolationUncontractedGlobal, KindUncontractedGlobal, "you.flag.extra-global", "you", "long"},
 	}
 
 	for _, tc := range tests {
 		t.Run(string(tc.violation), func(t *testing.T) {
 			production := productionCLIInventory(t)
+			productionInputs := productionCLIInputs(t)
 			before := append([]commandidentity.CommandRecord(nil), production.Commands...)
 
-			findings, err := CheckProductionViolation(testSourceStore(), production, repositoryRoot(t), tc.violation)
+			findings, err := CheckProductionViolation(
+				testSourceStore(),
+				production,
+				productionInputs,
+				repositoryRoot(t),
+				tc.violation,
+			)
 			if err != nil {
 				t.Fatalf("CheckProductionViolation() error = %v", err)
 			}
@@ -59,7 +74,13 @@ func TestCheckProductionViolationUsesProductionDiagnosticsWithoutMutatingTree(t 
 }
 
 func TestCheckProductionViolationRejectsUnknownFixture(t *testing.T) {
-	findings, err := CheckProductionViolation(testSourceStore(), productionCLIInventory(t), repositoryRoot(t), DeliberateViolation("unknown"))
+	findings, err := CheckProductionViolation(
+		testSourceStore(),
+		productionCLIInventory(t),
+		productionCLIInputs(t),
+		repositoryRoot(t),
+		DeliberateViolation("unknown"),
+	)
 	if err == nil || err.Error() != `unknown deliberate CLI contract violation "unknown"` {
 		t.Fatalf("CheckProductionViolation() findings = %#v, error = %v", findings, err)
 	}
@@ -78,6 +99,54 @@ func TestValidateRejectsMissingAndUncontractedProductionCommands(t *testing.T) {
 	findings := Validate(input)
 	assertFinding(t, findings, KindMissingCommand, "you.run", "you run", "")
 	assertFinding(t, findings, KindUncontractedCommand, "you.experimental", "you experimental", "")
+}
+
+func TestValidateRejectsRootGlobalSetAndMetadataDrift(t *testing.T) {
+	tests := []struct {
+		name     string
+		mutate   func(*Input)
+		kind     string
+		stableID string
+		field    string
+	}{
+		{
+			name: "missing executable global",
+			mutate: func(input *Input) {
+				input.ProductionInputs.Flags = removeProductionFlag(
+					input.ProductionInputs.Flags,
+					"you.flag.server",
+				)
+			},
+			kind:     KindMissingGlobal,
+			stableID: "you.flag.server",
+			field:    "long",
+		},
+		{
+			name: "changed executable metadata",
+			mutate: func(input *Input) {
+				for index := range input.ProductionInputs.Flags {
+					flag := &input.ProductionInputs.Flags[index]
+					if flag.CommandPath == "you" && flag.IDCandidate == "you.flag.server" {
+						flag.Default = "http://example.invalid"
+						return
+					}
+				}
+				t.Fatal("production server global is missing")
+			},
+			kind:     KindRootGlobalDrift,
+			stableID: "you.flag.server",
+			field:    "default",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := productionInput(t)
+			test.mutate(&input)
+			findings := Validate(input)
+			assertFinding(t, findings, test.kind, test.stableID, "you", test.field)
+		})
+	}
 }
 
 func TestValidateKeepsCompatibilityOutOfCanonicalContracts(t *testing.T) {
@@ -152,6 +221,7 @@ func productionInput(t *testing.T) Input {
 	t.Helper()
 	root := repositoryRoot(t)
 	production := productionCLIInventory(t)
+	productionInputs := productionCLIInputs(t)
 	canonical, err := climanifest.LoadProduction(testSourceStore(), filepath.Join(root, filepath.FromSlash(climanifest.ProductionManifestPath)))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
@@ -169,7 +239,8 @@ func productionInput(t *testing.T) Input {
 		t.Fatalf("loadGeneratedManifests() error = %v", err)
 	}
 	return Input{
-		Production: production, Canonical: cloneManifest(canonical), Compatibility: cloneManifest(compatibility),
+		Production: production, ProductionInputs: productionInputs,
+		Canonical: cloneManifest(canonical), Compatibility: cloneManifest(compatibility),
 		ApprovedCompatibility: approved, GeneratedCanonical: cloneManifests(canonicalGenerated),
 		GeneratedCompatibility: cloneManifests(compatibilityGenerated),
 	}
@@ -205,6 +276,19 @@ func removeProductionCommand(commands []commandidentity.CommandRecord, path stri
 	for _, command := range commands {
 		if command.Path != path {
 			result = append(result, command)
+		}
+	}
+	return result
+}
+
+func removeProductionFlag(
+	flags []cliinputs.FlagRecord,
+	inputID string,
+) []cliinputs.FlagRecord {
+	result := flags[:0]
+	for _, flag := range flags {
+		if flag.CommandPath != "you" || flag.IDCandidate != inputID {
+			result = append(result, flag)
 		}
 	}
 	return result

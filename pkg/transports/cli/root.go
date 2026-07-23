@@ -103,6 +103,7 @@ type CommandOperations struct {
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
+	LoadOperatorConfig                operatorconfig.ConfigLoader
 	BuildExecution                    ExecutionServiceBuilder
 	ModelsCLI                         modelscli.Service
 	SubmitWork                        SubmitWorkOperation
@@ -154,6 +155,7 @@ type CommandFactory struct {
 	runDirectoryCreator               platformfilesystem.DirectoryCreator
 	browserOpener                     platformbrowser.Opener
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
+	loadOperatorConfig                operatorconfig.ConfigLoader
 
 	SubmitWork            func(submitcli.SubmitConfig) error
 	SubmitBatch           func(submitcli.BatchConfig) error
@@ -203,6 +205,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		runDirectoryCreator:               operations.RunDirectoryCreator,
 		browserOpener:                     operations.BrowserOpener,
 		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
+		loadOperatorConfig:                operations.LoadOperatorConfig,
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
 		ListSessions:                      operations.ListSessions,
@@ -601,9 +604,37 @@ func representativeSourceValues(options CommandFactory) climanifestcobra.SourceC
 		if binding.Source != climanifest.SourceOperatorConfig {
 			return resolvedinput.Value{}, false, nil
 		}
-		// Operator Settings currently exposes a final CLI-inclusive resolver,
-		// not the raw lower-priority candidate required by this boundary.
-		return resolvedinput.Value{}, false, nil
+		if options.loadOperatorConfig == nil {
+			return resolvedinput.Value{}, false, nil
+		}
+		homeDir, err := resolveProcessHomeDir(options)
+		if err != nil {
+			return resolvedinput.Value{}, false, err
+		}
+		config, err := options.loadOperatorConfig(
+			operatorconfig.DefaultConfigPath(homeDir),
+		)
+		if err != nil {
+			return resolvedinput.Value{}, false, err
+		}
+		value := ""
+		switch binding.ExternalKey {
+		case "defaults.workerModelProvider":
+			value = config.Defaults.WorkerModelProvider
+		case "defaults.workerModel":
+			value = config.Defaults.WorkerModel
+		default:
+			return resolvedinput.Value{}, false, fmt.Errorf(
+				"source binding %q has unsupported operator-config key %q",
+				binding.ID,
+				binding.ExternalKey,
+			)
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return resolvedinput.Value{}, false, nil
+		}
+		return resolvedinput.StringValue(value), true, nil
 	}
 }
 

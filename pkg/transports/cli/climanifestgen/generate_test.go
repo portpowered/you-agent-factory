@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"testing/fstest"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
@@ -807,41 +806,4 @@ func checkCLIArtifacts(root string) (climanifestgen.Drift, error) {
 		return climanifestgen.Drift{}, err
 	}
 	return climanifestgen.AnnotateDrift(base), nil
-}
-
-func TestCheckRootGlobalAuthorityPassesCanonicalProjection(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
-	violations, err := climanifestgen.CheckRootGlobalAuthority(os.DirFS(repoRoot))
-	if err != nil {
-		t.Fatalf("CheckRootGlobalAuthority() error = %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("CheckRootGlobalAuthority() violations = %#v", violations)
-	}
-}
-
-func TestCheckRootGlobalAuthorityRejectsHandwrittenPersistentRegistration(t *testing.T) {
-	source := fstest.MapFS{
-		"pkg/transports/cli/root_extra.go": {
-			Data: []byte(`package cli
-
-import "github.com/spf13/cobra"
-
-func registerExtraGlobal(root *cobra.Command) {
-	root.PersistentFlags().String("extra-global", "", "duplicate authority")
-}
-`),
-		},
-	}
-	violations, err := climanifestgen.CheckRootGlobalAuthority(source)
-	if err != nil {
-		t.Fatalf("CheckRootGlobalAuthority() error = %v", err)
-	}
-	if len(violations) != 1 {
-		t.Fatalf("CheckRootGlobalAuthority() violations = %#v, want one", violations)
-	}
-	if got := violations[0]; got.Path != "pkg/transports/cli/root_extra.go" ||
-		got.Line != 6 || got.Method != "String" {
-		t.Fatalf("violation = %#v, want actionable registration location", got)
-	}
 }

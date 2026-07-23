@@ -28,9 +28,10 @@ primary-result behavior.
   assertions for observable help output and zero effect calls.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
-  records into Cobra and resolved inputs; `make cli-manifest-check` rejects
-  handwritten root persistent-flag registration outside that projection
-  boundary.
+  records into Cobra and resolved inputs; `make cli-manifest-check` compares
+  the constructed production root/global inventory against those records and
+  rejects extra, missing, or metadata-drifted persistent inputs regardless of
+  registration source shape.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.
@@ -664,11 +665,18 @@ response-stream output.
   been removed. `WorkFamilyBindings.FlagUsages` supplies local flag help text.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
+  The same behavioral smoke is part of `make cli-manifest-check` and compares
+  the constructed root persistent-flag spelling and metadata set against the
+  authored manifest, so duplicate registration is rejected independently of
+  the Go source shape or helper used to register it.
   Keep deliberate smoke violations snapshot-only: they must use the production
   validator and diagnostics without executing commands, invoking services,
   mutating Cobra state, or requiring network access.
 - Operator default worker model settings resolve at the CLI/process boundary in
-  `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
+  `pkg/transports/cli/root.go`: the injected Operator Settings config loader
+  supplies raw `operator-config` candidates to manifest-owned global input
+  resolution, while `resolveOperatorDefaults` consumes those resolved values
+  for legacy run behavior. The effective defaults flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.

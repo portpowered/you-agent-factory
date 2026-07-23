@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"os"
-	"strings"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -123,18 +121,5 @@ func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
 	state, ok := received.State("you.flag.default-worker-model-provider")
 	if !ok || state.Provenance != resolvedinput.SourceCLIFlag || !state.Changed {
 		t.Fatalf("resolved provider state = (%#v, %t), want changed CLI provenance", state, ok)
-	}
-}
-
-func TestRootDoesNotSelectOperatorSettingsImplementation(t *testing.T) {
-	t.Parallel()
-	payload, err := os.ReadFile("root.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, forbidden := range []string{"operatorconfig.ResolveFromHomeWithEnvironment", "operatorconfig.ResolveFromHome("} {
-		if strings.Contains(string(payload), forbidden) {
-			t.Errorf("root.go contains owner implementation call %q", forbidden)
-		}
 	}
 }

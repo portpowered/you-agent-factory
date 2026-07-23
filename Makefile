@@ -249,6 +249,7 @@ cli-manifest-generate:
 
 cli-manifest-check:
 	$(GO) run ./cmd/climanifestgen -root . -check
+	$(GO) run ./cmd/clicontractsmoke -root .
 
 cli-contract-smoke:
 	$(GO) run ./cmd/clicontractsmoke -root .
