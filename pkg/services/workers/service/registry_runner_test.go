@@ -64,6 +64,59 @@ func TestRegistrySelectionRejectsUnknownInsteadOfDefaulting(t *testing.T) {
 	}
 }
 
+func TestRuntimeSelectionCompatibilityWithoutRegistry(t *testing.T) {
+	t.Parallel()
+
+	selection, err := resolveRuntimeRunnerSelection(nil, "", "", workers.RunnerIDCodex)
+	if err != nil {
+		t.Fatalf("resolveRuntimeRunnerSelection() error = %v", err)
+	}
+	if selection.RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("resolveRuntimeRunnerSelection() = %#v", selection)
+	}
+	if err := validateRuntimeRunnerIdentity(nil, workers.RunnerIDCodex); err != nil {
+		t.Fatalf("validateRuntimeRunnerIdentity(codex) error = %v", err)
+	}
+	if err := validateRuntimeRunnerIdentity(nil, "unknown-provider"); err == nil {
+		t.Fatal("validateRuntimeRunnerIdentity(unknown) succeeded")
+	}
+}
+
+func TestRegistryCapabilityValidationWithoutRegistryPreservesNativeRunner(t *testing.T) {
+	t.Parallel()
+
+	next := &registryRunnerRecorder{}
+	runner := registryCapabilityRunner{next: next}
+	_, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		RunnerID: workers.RunnerIDCodex,
+		RequiredOptionalCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityStructuredOutput,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if next.calls != 1 {
+		t.Fatalf("native runner calls = %d, want 1", next.calls)
+	}
+}
+
+func TestRegistryCapabilityRunnerRejectsUnknownRunnerBeforeNativeExecution(t *testing.T) {
+	t.Parallel()
+
+	next := &registryRunnerRecorder{}
+	runner := registryCapabilityRunner{next: next, providers: builtInProviderRegistry(t)}
+	_, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		RunnerID: "unknown-provider",
+	})
+	if err == nil || !strings.Contains(err.Error(), `provider "unknown-provider" is unknown`) {
+		t.Fatalf("Execute() error = %v, want unknown-provider diagnostic", err)
+	}
+	if next.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0", next.calls)
+	}
+}
+
 func builtInProviderRegistry(t *testing.T) *providerregistry.Registry {
 	t.Helper()
 	registrations, err := providerregistry.BuiltInRegistrations()

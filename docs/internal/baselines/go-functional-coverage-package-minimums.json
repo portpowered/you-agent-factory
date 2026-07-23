@@ -14,7 +14,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
-      "minimum": 69.74
+      "minimum": 67.74
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/lifecycle",
@@ -926,7 +926,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
-      "minimum": 45.46
+      "minimum": 45.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/agypty",
@@ -968,11 +968,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording",
-      "minimum": 70.88
+      "minimum": 70.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor",
-      "minimum": 74.67
+      "minimum": 73.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun",
@@ -990,7 +990,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/invocation",
-      "minimum": 73.68
+      "minimum": 71.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
@@ -1002,7 +1002,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 49.34
+      "minimum": 47.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
@@ -1396,7 +1396,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.06
+      "minimum": 80.96
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",

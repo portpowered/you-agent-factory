@@ -224,6 +224,26 @@ func newProcessForTest(
 	return process
 }
 
+func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
+	t.Parallel()
+
+	if process, err := NewProcess(nil, nil, nil); err == nil || process != nil {
+		t.Fatalf("NewProcess(nil registry) = (%#v, %v), want construction failure", process, err)
+	}
+	if registry := (*Process)(nil).ProviderRegistry(); registry != nil {
+		t.Fatalf("nil Process.ProviderRegistry() = %#v, want nil", registry)
+	}
+
+	want := processTestProviderRegistry{}
+	process, err := NewProcess(nil, nil, want)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.ProviderRegistry(); got != want {
+		t.Fatalf("ProviderRegistry() = %#v, want %#v", got, want)
+	}
+}
+
 type processTestProviderRegistry struct{}
 
 func (processTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
