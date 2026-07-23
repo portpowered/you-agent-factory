@@ -65,6 +65,9 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 		{name: "live readiness", old: "  configurationKeys: []", new: "  configurationKeys: []\n  ready: true", wantErr: "schema validation failed"},
 		{name: "pricing", old: "  configurationKeys: []", new: "  configurationKeys: []\n  pricing: free", wantErr: "schema validation failed"},
 		{name: "machine local executable path", old: "    - agy", new: "    - C:\\\\Users\\\\local\\\\agy.exe", wantErr: "schema validation failed"},
+		{name: "machine local documentation URL", old: "https://agylabs.github.io/agy-demos/", new: "file:///C:/Users/example/private.html", wantErr: "schema validation failed"},
+		{name: "credential bearing documentation URL", old: "https://agylabs.github.io/agy-demos/", new: "https://user:secret@example.com/docs", wantErr: "schema validation failed"},
+		{name: "localhost documentation URL", old: "https://agylabs.github.io/agy-demos/", new: "https://localhost/docs", wantErr: "schema validation failed"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

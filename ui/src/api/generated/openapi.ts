@@ -4447,7 +4447,7 @@ export interface components {
       kind: components["schemas"]["ProviderDocumentationLinkKind"];
       /**
        * Format: uri
-       * @description Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.
+       * @description Public HTTPS documentation URL with a DNS hostname. Machine-local, IP-address, and credential-bearing URLs are invalid.
        */
       url: string;
     };

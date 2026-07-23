@@ -134,9 +134,10 @@
           "$ref": "#/$defs/ProviderDocumentationLinkKind"
         },
         "url": {
-          "description": "Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.",
+          "description": "Public HTTPS documentation URL with a DNS hostname. Machine-local, IP-address, and credential-bearing URLs are invalid.",
           "format": "uri",
           "minLength": 1,
+          "pattern": "^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#].*)?$",
           "type": "string"
         }
       },

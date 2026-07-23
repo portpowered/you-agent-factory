@@ -384,6 +384,66 @@ export async function verifyCleanConsumer(repositoryRoot, tarballPath) {
 			cwd: consumerRoot,
 		});
 
+		const runtimeExports = [
+			{
+				id: "catalog",
+				specifier: "@you-agent-factory/model-providers/catalog",
+				path: "generated/catalog.json",
+			},
+			{
+				id: "provider-manifest-schema",
+				specifier:
+					"@you-agent-factory/model-providers/schemas/provider-manifest",
+				path: "generated/provider-manifest.schema.json",
+			},
+			{
+				id: "provider-catalog-schema",
+				specifier:
+					"@you-agent-factory/model-providers/schemas/provider-catalog",
+				path: "generated/provider-catalog.schema.json",
+			},
+			{
+				id: "manifest",
+				specifier: "@you-agent-factory/model-providers/manifest",
+				path: "metadata/manifest.json",
+			},
+		];
+		const expectedRuntimeHashes = Object.fromEntries(
+			await Promise.all(
+				runtimeExports.map(async ({ id, path }) => [
+					id,
+					createHash("sha256")
+						.update(
+							await readFile(join(repositoryRoot, packageDirectory, path)),
+						)
+						.digest("hex"),
+				]),
+			),
+		);
+		const runtimeSource = [
+			'import assert from "node:assert/strict";',
+			'import { createHash } from "node:crypto";',
+			'import { readFile } from "node:fs/promises";',
+			'import catalog from "@you-agent-factory/model-providers/catalog" with { type: "json" };',
+			'import manifestSchema from "@you-agent-factory/model-providers/schemas/provider-manifest" with { type: "json" };',
+			'import catalogSchema from "@you-agent-factory/model-providers/schemas/provider-catalog" with { type: "json" };',
+			'import publication from "@you-agent-factory/model-providers/manifest" with { type: "json" };',
+			`const expectedHashes = ${JSON.stringify(expectedRuntimeHashes)};`,
+			`const runtimeExports = ${JSON.stringify(runtimeExports)};`,
+			'assert.equal(catalog.providers[0].id, "agy");',
+			'assert.equal(manifestSchema.$id, "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json");',
+			'assert.equal(catalogSchema.$id, "https://schemas.you.dev/model-providers/provider-catalog/1.0.0.schema.json");',
+			'assert.equal(publication.packageId, "you-agent-factory.model-providers");',
+			"for (const { id, specifier } of runtimeExports) {",
+			"  const payload = await readFile(new URL(import.meta.resolve(specifier)));",
+			'  assert.equal(createHash("sha256").update(payload).digest("hex"), expectedHashes[id], `${specifier} bytes`);',
+			"}",
+		].join("\n");
+		await writeFile(join(consumerRoot, "consumer.mjs"), runtimeSource);
+		await runCommand(process.execPath, ["consumer.mjs"], {
+			cwd: consumerRoot,
+		});
+
 		const installedRoot = await realpath(
 			join(
 				consumerRoot,

@@ -77,6 +77,97 @@ function assertSchemaCompatible(
   }
 }
 
+function semanticError(message: string): never {
+  throw new Error(
+    `[model-provider-reference-input] Provider Catalog is semantically invalid: ${message}`,
+  );
+}
+
+function assertCatalogSemantics(providers: readonly ProviderManifest[]): void {
+  const ids = new Set<string>();
+  for (const provider of providers) {
+    if (ids.has(provider.id)) {
+      semanticError(`duplicate canonical provider id "${provider.id}"`);
+    }
+    ids.add(provider.id);
+  }
+
+  const aliasOwners = new Map<string, string>();
+  for (const provider of providers) {
+    for (const alias of provider.aliases) {
+      if (alias === provider.id) {
+        semanticError(
+          `provider "${provider.id}" alias "${alias}" duplicates its canonical id`,
+        );
+      }
+      if (ids.has(alias)) {
+        semanticError(
+          `provider "${provider.id}" alias "${alias}" shadows a canonical provider id`,
+        );
+      }
+      const owner = aliasOwners.get(alias);
+      if (owner !== undefined) {
+        semanticError(
+          `provider alias "${alias}" is owned by both "${owner}" and "${provider.id}"`,
+        );
+      }
+      aliasOwners.set(alias, provider.id);
+    }
+  }
+
+  const deprecatedIds = new Set(
+    providers
+      .filter((provider) => provider.deprecation !== undefined)
+      .map((provider) => provider.id),
+  );
+  for (const provider of providers) {
+    assertProviderCapabilities(provider);
+    const replacement = provider.deprecation?.replacementProviderId;
+    if (replacement === undefined) continue;
+    if (replacement === provider.id) {
+      semanticError(
+        `provider "${provider.id}" replacementProviderId cannot identify itself`,
+      );
+    }
+    if (!ids.has(replacement)) {
+      semanticError(
+        `provider "${provider.id}" replacementProviderId "${replacement}" is not a canonical provider id`,
+      );
+    }
+    if (deprecatedIds.has(replacement)) {
+      semanticError(
+        `provider "${provider.id}" replacementProviderId "${replacement}" is also deprecated`,
+      );
+    }
+  }
+}
+
+function assertProviderCapabilities(provider: ProviderManifest): void {
+  const execution = provider.maximumExecutionCapabilities;
+  const fidelity = provider.maximumResponseFidelityCapabilities;
+  const impossible: string[] = [];
+  for (const field of [
+    "messageDeltas",
+    "toolOutputDeltas",
+    "providerReconnect",
+  ] as const) {
+    if (fidelity[field] && !fidelity.nativeStreaming) {
+      impossible.push(`${field} requires nativeStreaming`);
+    }
+  }
+  if (fidelity.toolLifecycle && !execution.toolExecution) {
+    impossible.push("toolLifecycle requires toolExecution");
+  }
+  if (fidelity.providerReconnect && !execution.sessionResume) {
+    impossible.push("providerReconnect requires sessionResume");
+  }
+  if (impossible.length !== 0) {
+    semanticError(
+      `provider "${provider.id}" has impossible capabilities: ${impossible.sort().join(", ")}`,
+    );
+  }
+}
+
 export function buildModelProviderReferenceInput(
   options: ModelProviderReferenceInputOptions = {},
 ): ModelProviderReferenceInput {
@@ -101,6 +192,7 @@ export function buildModelProviderReferenceInput(
       `Provider Manifest at providers[${index}]`,
     );
   }
+  assertCatalogSemantics(typedCatalog.providers);
 
   const providers = [...typedCatalog.providers].sort((left, right) => {
     if (left.id < right.id) return -1;

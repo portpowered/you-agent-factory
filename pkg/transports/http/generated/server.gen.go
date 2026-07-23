@@ -5124,7 +5124,7 @@ type ProviderDocumentationLink struct {
 	// Kind Purpose of one stable public provider documentation link.
 	Kind ProviderDocumentationLinkKind `json:"kind"`
 
-	// Url Absolute public documentation URL. Machine-local and credential-bearing URLs are invalid.
+	// Url Public HTTPS documentation URL with a DNS hostname. Machine-local, IP-address, and credential-bearing URLs are invalid.
 	Url string `json:"url"`
 }
 

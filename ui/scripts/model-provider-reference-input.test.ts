@@ -98,4 +98,52 @@ describe("buildModelProviderReferenceInput", () => {
       "[model-provider-reference-input] Provider Catalog is schema-incompatible: / must be object",
     );
   });
+
+  it("rejects duplicate identities and reference paths", () => {
+    const invalidCatalog = cloneCatalog();
+    invalidCatalog.providers.push(
+      structuredClone(invalidCatalog.providers[0]),
+    );
+
+    expect(() =>
+      buildModelProviderReferenceInput({ catalog: invalidCatalog }),
+    ).toThrow(/semantically invalid: duplicate canonical provider id "agy"/);
+  });
+
+  it("rejects canonical ID and alias shadowing", () => {
+    const invalidCatalog = cloneCatalog();
+    invalidCatalog.providers[0].aliases = ["codex"];
+
+    expect(() =>
+      buildModelProviderReferenceInput({ catalog: invalidCatalog }),
+    ).toThrow(/alias "codex" shadows a canonical provider id/);
+  });
+
+  it("rejects impossible capability combinations", () => {
+    const invalidCatalog = cloneCatalog();
+    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.messageDeltas =
+      true;
+    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.nativeStreaming =
+      false;
+
+    expect(() =>
+      buildModelProviderReferenceInput({ catalog: invalidCatalog }),
+    ).toThrow(/messageDeltas requires nativeStreaming/);
+  });
+
+  it("rejects incoherent replacement metadata", () => {
+    const invalidCatalog = cloneCatalog();
+    invalidCatalog.providers[0].deprecation = {
+      deprecatedSince: "2026-07-23",
+      reason: {
+        type: "LOCALIZABLE_ASSET",
+        value: "Use a replacement.",
+      },
+      replacementProviderId: "missing",
+    };
+
+    expect(() =>
+      buildModelProviderReferenceInput({ catalog: invalidCatalog }),
+    ).toThrow(/replacementProviderId "missing" is not a canonical provider id/);
+  });
 });
