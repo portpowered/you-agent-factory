@@ -1217,6 +1217,12 @@ response-stream output.
   authored Factory directories, and `you config init` materializes every
   validated manifest entry without separate Go registration. Customer-facing
   packaged invocation guidance belongs in `docs/reference/run.md`.
+- Website Packaged Factory discovery belongs behind
+  `ui/src/features/packaged-factories/lib/public-contract.ts`. Keep package data
+  unknown until that boundary validates manifest format 1, and resolve selected
+  schemas and artifacts only through the documented
+  `@you-agent-factory/packaged-factories` public export specifiers; manifest
+  locators are integrity metadata, not browser or filesystem lookup paths.
 - Invocation-interpolated worker `modelProvider` and `model` fields are resolved
   at dispatch time. A packaged factory that must be runnable without role flags
   should declare parameter `defaultValue`s in its invocation signature; operator
