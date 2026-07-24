@@ -172,50 +172,39 @@ func (f *rootServiceFake) ResolvePrimaryResult(
 
 var _ work.Service = (*rootServiceFake)(nil)
 
-func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
-	fake := &rootServiceFake{
+func newRootSeamExerciseFake() *rootServiceFake {
+	return &rootServiceFake{
 		submitResult: work.WorkRequestSubmitResult{
 			RequestID: "request-1",
 			TraceID:   "trace-1",
 			Accepted:  true,
 			Works: []work.WorkRequestSubmittedWork{{
-				Name:         "story-1",
-				WorkTypeName: "story",
-				WorkID:       "work-1",
+				Name: "story-1", WorkTypeName: "story", WorkID: "work-1",
 			}},
 		},
 		moveResult: work.OperatorMoveResult{
-			WorkID:     "work-1",
-			WorkTypeID: "story",
-			FromState:  "draft",
-			ToState:    "review",
+			WorkID: "work-1", WorkTypeID: "story", FromState: "draft", ToState: "review",
 		},
 		listResult: work.ListResult{
 			Results: []work.ReadModel{{
-				CursorID:     "work-1",
-				Name:         "story-1",
-				WorkID:       "work-1",
-				WorkTypeName: "story",
-				State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+				CursorID: "work-1", Name: "story-1", WorkID: "work-1",
+				WorkTypeName: "story", State: &work.State{Name: "review", Type: work.StateTypeProcessing},
 			}},
 			MaxResults: work.DefaultListMaxResults,
 		},
 		getResult: work.ReadModel{
-			CursorID:     "work-1",
-			Name:         "story-1",
-			WorkID:       "work-1",
-			WorkTypeName: "story",
-			State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+			CursorID: "work-1", Name: "story-1", WorkID: "work-1",
+			WorkTypeName: "story", State: &work.State{Name: "review", Type: work.StateTypeProcessing},
 		},
 		movedRead: work.ReadModel{
-			CursorID:     "work-1",
-			Name:         "story-1",
-			WorkID:       "work-1",
-			WorkTypeName: "story",
-			State:        &work.State{Name: "done", Type: work.StateTypeTerminal},
+			CursorID: "work-1", Name: "story-1", WorkID: "work-1",
+			WorkTypeName: "story", State: &work.State{Name: "done", Type: work.StateTypeTerminal},
 		},
 	}
+}
 
+func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
+	fake := newRootSeamExerciseFake()
 	// Peers consume only the singular root Service seam.
 	var service work.Service = fake
 	ctx := context.Background()
@@ -223,11 +212,7 @@ func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 	submit, err := service.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{
 		RequestID: "request-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name:       "story-1",
-			WorkTypeID: "story",
-			State:      "draft",
-		}},
+		Works:     []work.Work{{Name: "story-1", WorkTypeID: "story", State: "draft"}},
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkRequestForSession: %v", err)

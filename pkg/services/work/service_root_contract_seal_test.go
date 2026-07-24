@@ -89,17 +89,14 @@ func (c peerWorkRootConsumer) prepareAndSelectPrimary(
 	return prepared, selected, err
 }
 
-func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *testing.T) {
-	stdin := "peer seal stdin"
-	fake := &rootServiceFake{
+func newSealRootServiceFake(stdin string) *rootServiceFake {
+	return &rootServiceFake{
 		submitResult: work.WorkRequestSubmitResult{
 			RequestID: "seal-request-1",
 			TraceID:   "seal-trace-1",
 			Accepted:  true,
 			Works: []work.WorkRequestSubmittedWork{{
-				Name:         "seal-work",
-				WorkTypeName: "story",
-				WorkID:       "seal-work-1",
+				Name: "seal-work", WorkTypeName: "story", WorkID: "seal-work-1",
 			}},
 		},
 		stageResult: work.StageContentResult{
@@ -109,78 +106,49 @@ func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *tes
 			URL:           "file:///tmp/seal.png",
 		},
 		prepareResult: []work.WorkContentPart{{
-			Type:        work.WorkContentPartTypeImage,
-			URL:         "file:///tmp/seal.png",
-			ContentType: "image/png",
+			Type: work.WorkContentPartTypeImage, URL: "file:///tmp/seal.png", ContentType: "image/png",
 		}},
-		resolveResult: work.ResolvedStagedContent{
-			Path: "/tmp/seal.png",
-			URL:  "file:///tmp/seal.png",
-		},
+		resolveResult:   work.ResolvedStagedContent{Path: "/tmp/seal.png", URL: "file:///tmp/seal.png"},
 		materializePath: "/tmp/materialized/seal.png",
 		listResult: work.ListResult{
 			Results: []work.ReadModel{{
-				CursorID:     "seal-work-1",
-				Name:         "seal-work",
-				WorkID:       "seal-work-1",
-				WorkTypeName: "story",
-				State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+				CursorID: "seal-work-1", Name: "seal-work", WorkID: "seal-work-1",
+				WorkTypeName: "story", State: &work.State{Name: "review", Type: work.StateTypeProcessing},
 			}},
 			MaxResults: work.DefaultListMaxResults,
 		},
 		getResult: work.ReadModel{
-			CursorID:     "seal-work-1",
-			Name:         "seal-work",
-			WorkID:       "seal-work-1",
-			WorkTypeName: "story",
-			State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+			CursorID: "seal-work-1", Name: "seal-work", WorkID: "seal-work-1",
+			WorkTypeName: "story", State: &work.State{Name: "review", Type: work.StateTypeProcessing},
 		},
-		moveResult: work.OperatorMoveResult{
-			WorkID:    "seal-work-1",
-			FromState: "draft",
-			ToState:   "done",
-		},
+		moveResult: work.OperatorMoveResult{WorkID: "seal-work-1", FromState: "draft", ToState: "done"},
 		movedRead: work.ReadModel{
-			CursorID:     "seal-work-1",
-			Name:         "seal-work",
-			WorkID:       "seal-work-1",
-			WorkTypeName: "story",
-			State:        &work.State{Name: "done", Type: work.StateTypeTerminal},
+			CursorID: "seal-work-1", Name: "seal-work", WorkID: "seal-work-1",
+			WorkTypeName: "story", State: &work.State{Name: "done", Type: work.StateTypeTerminal},
 		},
 		prepareInvocationResult: work.PreparedInvocationInput{
-			Source: work.InputSourceStdinText,
-			ResolvedInput: &work.ResolvedInput{
-				Source: work.InputSourceStdinText,
-				Text:   stdin,
-			},
+			Source:        work.InputSourceStdinText,
+			ResolvedInput: &work.ResolvedInput{Source: work.InputSourceStdinText, Text: stdin},
 		},
 		primaryResult: work.PrimaryResultSelection{
-			RequestID:     "seal-request-1",
-			Policy:        work.ReturnPolicySubmittedWorkTerminal,
-			WorkID:        "seal-work-1",
-			WorkTypeName:  "story",
-			WorkName:      "seal-work",
+			RequestID: "seal-request-1", Policy: work.ReturnPolicySubmittedWorkTerminal,
+			WorkID: "seal-work-1", WorkTypeName: "story", WorkName: "seal-work",
 			TerminalState: "story:done",
-			PrimaryResult: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
-				Text: "sealed primary",
-			}},
+			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "sealed primary"}},
 		},
 	}
+}
 
-	// Singular root seam: one Service value for every published slice.
-	var root work.Service = fake
+func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *testing.T) {
+	stdin := "peer seal stdin"
+	var root work.Service = newSealRootServiceFake(stdin)
 	peer := peerWorkRootConsumer{root: root}
 	ctx := context.Background()
 
 	admitted, err := peer.admit(ctx, "session-seal", work.WorkRequest{
 		RequestID: "seal-request-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name:       "seal-work",
-			WorkTypeID: "story",
-			State:      "draft",
-		}},
+		Works:     []work.Work{{Name: "seal-work", WorkTypeID: "story", State: "draft"}},
 	})
 	if err != nil {
 		t.Fatalf("admission slice: %v", err)
@@ -189,13 +157,17 @@ func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *tes
 		t.Fatalf("admission result = %#v, want accepted seal-request-1", admitted)
 	}
 
+	assertSealContentSlice(t, peer, ctx)
+	assertSealStateAccessSlice(t, peer, ctx)
+	assertSealInvocationSlice(t, peer, ctx, stdin)
+}
+
+func assertSealContentSlice(t *testing.T, peer peerWorkRootConsumer, ctx context.Context) {
+	t.Helper()
 	staged, localPath, cleanup, err := peer.stageAndMaterialize(
 		ctx,
 		work.StageContentRequest{
-			ItemType:  "image",
-			FileName:  "seal.png",
-			MediaType: "image/png",
-			Content:   []byte("png"),
+			ItemType: "image", FileName: "seal.png", MediaType: "image/png", Content: []byte("png"),
 		},
 		"file:///fixtures/seal.png",
 	)
@@ -206,14 +178,12 @@ func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *tes
 		t.Fatalf("content outcomes = (%#v, %q, %v)", staged, localPath, cleanup)
 	}
 	cleanup()
+}
 
+func assertSealStateAccessSlice(t *testing.T, peer peerWorkRootConsumer, ctx context.Context) {
+	t.Helper()
 	listed, got, moved, readAfter, err := peer.inspectAndMove(
-		ctx,
-		"session-seal",
-		"seal-work-1",
-		work.ListOptions{WorkTypeName: "story"},
-		"done",
-		"seal-move-1",
+		ctx, "session-seal", "seal-work-1", work.ListOptions{WorkTypeName: "story"}, "done", "seal-move-1",
 	)
 	if err != nil {
 		t.Fatalf("state-access slice: %v", err)
@@ -224,13 +194,13 @@ func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *tes
 	if moved.ToState != "done" || readAfter.State == nil || readAfter.State.Type != work.StateTypeTerminal {
 		t.Fatalf("state-access move = (%#v, %#v)", moved, readAfter)
 	}
+}
 
+func assertSealInvocationSlice(t *testing.T, peer peerWorkRootConsumer, ctx context.Context, stdin string) {
+	t.Helper()
 	prepared, primary, err := peer.prepareAndSelectPrimary(
 		ctx,
-		work.InvocationInputPreparationRequest{
-			Arguments: []string{"-"},
-			StdinText: &stdin,
-		},
+		work.InvocationInputPreparationRequest{Arguments: []string{"-"}, StdinText: &stdin},
 		work.PrimaryResultSelectionInput{
 			RequestID: "seal-request-1",
 			InvocationReturn: &work.InvocationReturnConfig{
@@ -250,13 +220,19 @@ func TestServiceRootContract_SealAllPublishedSlicesThroughSingularService(t *tes
 	}
 }
 
-func TestServiceRootContract_SealTypedFailuresPerPublishedSlice(t *testing.T) {
-	ctx := context.Background()
-	cases := []struct {
-		name string
-		want error
-		call func(peerWorkRootConsumer) error
-	}{
+type sealTypedFailureCase struct {
+	name string
+	want error
+	call func(peerWorkRootConsumer) error
+}
+
+func sealTypedFailureCases(ctx context.Context) []sealTypedFailureCase {
+	cases := sealAdmissionAndContentFailureCases(ctx)
+	return append(cases, sealStateAndInvocationFailureCases(ctx)...)
+}
+
+func sealAdmissionAndContentFailureCases(ctx context.Context) []sealTypedFailureCase {
+	return []sealTypedFailureCase{
 		{
 			name: "admission invalid",
 			want: work.ErrInvalidWorkRequest,
@@ -313,6 +289,11 @@ func TestServiceRootContract_SealTypedFailuresPerPublishedSlice(t *testing.T) {
 				return err
 			},
 		},
+	}
+}
+
+func sealStateAndInvocationFailureCases(ctx context.Context) []sealTypedFailureCase {
+	return []sealTypedFailureCase{
 		{
 			name: "state-access missing work",
 			want: work.ErrWorkNotFound,
@@ -353,8 +334,11 @@ func TestServiceRootContract_SealTypedFailuresPerPublishedSlice(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tc := range cases {
+func TestServiceRootContract_SealTypedFailuresPerPublishedSlice(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range sealTypedFailureCases(ctx) {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &rootServiceFake{
 				submitErr:            tc.want,

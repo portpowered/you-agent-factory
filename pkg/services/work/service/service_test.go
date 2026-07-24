@@ -193,3 +193,115 @@ func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
 		t.Fatalf("ResolvePrimaryResult error = %v, want ErrUnsupportedReturnPolicy", err)
 	}
 }
+
+type recordingContentStaging struct {
+	stageReq   work.StageContentRequest
+	prepareIn  []work.StagedSubmissionItem
+	resolveRef string
+	cleanupRef string
+}
+
+func (s *recordingContentStaging) StageContent(
+	_ context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	s.stageReq = request
+	return work.StageContentResult{
+		StagedFileRef: "submit-work-stage:v1:svc",
+		FileName:      request.FileName,
+		MediaType:     request.MediaType,
+		URL:           "file:///tmp/svc.png",
+	}, nil
+}
+
+func (s *recordingContentStaging) PrepareContent(
+	_ context.Context,
+	items []work.StagedSubmissionItem,
+) ([]work.WorkContentPart, error) {
+	s.prepareIn = items
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeImage, URL: "file:///tmp/svc.png", ContentType: "image/png",
+	}}, nil
+}
+
+func (s *recordingContentStaging) ResolveContent(
+	_ context.Context,
+	ref string,
+) (work.ResolvedStagedContent, error) {
+	s.resolveRef = ref
+	return work.ResolvedStagedContent{Path: "/tmp/svc.png", URL: "file:///tmp/svc.png"}, nil
+}
+
+func (s *recordingContentStaging) CleanupContent(_ context.Context, ref string) error {
+	s.cleanupRef = ref
+	return nil
+}
+
+func TestNewServiceDelegatesContentStagingAndMaterializationSlice(t *testing.T) {
+	staging := &recordingContentStaging{}
+	materialized := ""
+	materializer := work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
+		materialized = rawURL
+		return "/tmp/materialized/svc.png", func() {}, nil
+	})
+	service := workservice.NewService(
+		workRuntimeResolver{runtime: &recordingFactory{}},
+		os.ReadFile,
+		staging,
+		materializer,
+	)
+	ctx := context.Background()
+
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
+		ItemType: "image", FileName: "svc.png", MediaType: "image/png", Content: []byte("png"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef != "submit-work-stage:v1:svc" || staging.stageReq.FileName != "svc.png" {
+		t.Fatalf("stage = (%#v, %#v)", staged, staging.stageReq)
+	}
+
+	parts, err := service.PrepareContent(ctx, []work.StagedSubmissionItem{{
+		ItemType: "image", StagedFileRef: staged.StagedFileRef, FileName: staged.FileName, MediaType: staged.MediaType,
+	}})
+	if err != nil || len(parts) != 1 || staging.prepareIn[0].StagedFileRef != staged.StagedFileRef {
+		t.Fatalf("PrepareContent = (%#v, %v, %#v)", parts, err, staging.prepareIn)
+	}
+
+	resolved, err := service.ResolveContent(ctx, staged.StagedFileRef)
+	if err != nil || resolved.Path == "" || staging.resolveRef != staged.StagedFileRef {
+		t.Fatalf("ResolveContent = (%#v, %v, %q)", resolved, err, staging.resolveRef)
+	}
+
+	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil || staging.cleanupRef != staged.StagedFileRef {
+		t.Fatalf("CleanupContent = (%v, %q)", err, staging.cleanupRef)
+	}
+
+	path, cleanup, err := service.MaterializeContentURL(ctx, "file:///fixtures/svc.png")
+	if err != nil || path == "" || cleanup == nil || materialized != "file:///fixtures/svc.png" {
+		t.Fatalf("MaterializeContentURL = (%q, %v, %v, %q)", path, cleanup, err, materialized)
+	}
+	cleanup()
+}
+
+func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
+	service := workservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	ctx := context.Background()
+
+	if _, err := service.StageContent(ctx, work.StageContentRequest{}); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("StageContent error = %v, want staging required", err)
+	}
+	if _, err := service.PrepareContent(ctx, nil); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("PrepareContent error = %v, want staging required", err)
+	}
+	if _, err := service.ResolveContent(ctx, "ref"); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("ResolveContent error = %v, want staging required", err)
+	}
+	if err := service.CleanupContent(ctx, "ref"); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("CleanupContent error = %v, want staging required", err)
+	}
+	if _, _, err := service.MaterializeContentURL(ctx, "file:///x"); err == nil || !strings.Contains(err.Error(), "content materializer is required") {
+		t.Fatalf("MaterializeContentURL error = %v, want materializer required", err)
+	}
+}
