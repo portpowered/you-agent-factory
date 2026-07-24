@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/admission"
 )
 
-func TestNewReturnsAdmissionServiceShell(t *testing.T) {
+func TestNewReturnsAdmissionService(t *testing.T) {
 	t.Parallel()
 
 	svc := New()
@@ -26,22 +26,25 @@ func TestNewReturnsAdmissionServiceShell(t *testing.T) {
 			WorkTypeID: "story",
 		}},
 	}
-
-	normalized, err := svc.Normalize(ctx, admission.NormalizeRequest{Request: request})
-	if err == nil {
-		t.Fatal("Normalize shell should not claim full admission behavior yet")
-	}
-	if normalized.RequestID != "" || len(normalized.Normalized) != 0 {
-		t.Fatalf("Normalize shell result = %#v, want empty outcome on stub failure", normalized)
+	opts := work.WorkRequestNormalizeOptions{
+		ValidWorkTypes: map[string]bool{"story": true},
 	}
 
-	if err := svc.Validate(ctx, admission.ValidateRequest{Request: request}); err == nil {
-		t.Fatal("Validate shell should not claim full admission behavior yet")
+	normalized, err := svc.Normalize(ctx, admission.NormalizeRequest{Request: request, Options: opts})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if normalized.RequestID != "shell-request-1" || len(normalized.Normalized) != 1 {
+		t.Fatalf("Normalize result = %#v, want shell-request-1 with one work", normalized)
+	}
+
+	if err := svc.Validate(ctx, admission.ValidateRequest{Request: request, Options: opts}); err != nil {
+		t.Fatalf("Validate: %v", err)
 	}
 
 	accepted, err := svc.Accept(ctx, admission.AcceptRequest{RequestID: request.RequestID})
 	if err == nil {
-		t.Fatal("Accept shell should not claim full admission behavior yet")
+		t.Fatal("Accept shell should not claim full admission accept behavior yet")
 	}
 	if accepted.Accepted || accepted.RequestID != "" {
 		t.Fatalf("Accept shell result = %#v, want empty outcome on stub failure", accepted)
