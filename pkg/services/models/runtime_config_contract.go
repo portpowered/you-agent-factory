@@ -2,7 +2,9 @@ package models
 
 import "strings"
 
-// RuntimeOpeningRequest contains Models-owned process input for one runtime.
+// RuntimeOpeningRequest contains Models-owned process input for one runtime
+// scope opening. Together with RuntimeBinding / RuntimeConfig it forms the
+// plain runtime-scope request vocabulary peers use without local-runtime types.
 type RuntimeOpeningRequest struct {
 	CacheDirectory string
 }

@@ -10,8 +10,10 @@ import "context"
 // handle an invocation; Models owns the local runtime lifecycle when it does.
 type Service interface {
 	// ForRuntime binds this already-constructed service to one Factory Session's
-	// runtime values. Construction dependencies remain owned by the injected
-	// service; Factory Sessions supplies only its runtime data.
+	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
+	// Construction and process-launcher ports remain owned by the injected
+	// service; Factory Sessions supplies only plain runtime-scope data.
+	// Invalid or missing binding inputs fail closed with ErrInvalidRuntimeBinding.
 	ForRuntime(RuntimeBinding) (Service, error)
 	ListModels(context.Context) (List, error)
 	GetModel(context.Context, string) (Detail, error)
@@ -20,9 +22,9 @@ type Service interface {
 	InvokeLocal(context.Context, LocalInvocationRequest) (LocalInvocationResult, error)
 }
 
-// RuntimeBinding contains the Models-owned runtime data selected while a
-// Factory Session is opened. It is data passed to the injected service, not a
-// deferred service constructor.
+// RuntimeBinding is the plain runtime-scope binding request passed to
+// ForRuntime. It carries session-selected Models data only; peers must not need
+// HostProcessLauncher or other local-runtime construction ports to supply it.
 type RuntimeBinding struct {
 	CacheDirectory string
 	RuntimeConfig  RuntimeConfigLoader
