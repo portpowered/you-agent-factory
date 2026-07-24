@@ -154,6 +154,73 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 	}
 }
 
+func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	live := make(chan factorydefinitions.FactoryEvent)
+	source := &sourceStub{
+		stream: &factorydefinitions.FactoryEventStream{Events: live},
+		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+	}
+	source.subscribeHook = func() { subscribeCalls++ }
+	presentCalls := 0
+	service, err := New(
+		source,
+		projectionStub{},
+		fixedClock{now: time.Unix(1, 0)},
+		SinkFunc(func(View) { presentCalls++ }),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	var root Root = service
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatalf("New() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
+	}
+
+	_, err = root.Join(context.Background(), JoinRequest{})
+	var lifeErr *LifecycleError
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorNotActivated {
+		t.Fatalf("Join before Activate: error = %v, want NotActivated", err)
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatal("Join before Activate must not subscribe or present")
+	}
+
+	_, err = root.Activate(context.Background(), ActivateRequest{})
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorMissingParameters {
+		t.Fatalf("Activate missing parameters: error = %v, want MissingParameters", err)
+	}
+	if subscribeCalls != 0 {
+		t.Fatal("missing-parameter Activate must not subscribe")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive})
+	if err != nil {
+		t.Fatalf("Activate: error = %v", err)
+	}
+	if result.State != LifecycleStateStarted {
+		t.Fatalf("Activate state = %q, want %q", result.State, LifecycleStateStarted)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls = %d, want 1 after explicit Activate", subscribeCalls)
+	}
+
+	_, err = root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive})
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorAlreadyActivated {
+		t.Fatalf("Activate already activated: error = %v, want AlreadyActivated", err)
+	}
+
+	cancel()
+	if _, err := root.StopDrain(context.Background(), StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+}
+
 func event(id string, sequence int) factorydefinitions.FactoryEvent {
 	return factorydefinitions.FactoryEvent{
 		Id: id,
@@ -165,10 +232,11 @@ func event(id string, sequence int) factorydefinitions.FactoryEvent {
 }
 
 type sourceStub struct {
-	stream       *factorydefinitions.FactoryEventStream
-	subscribeErr error
-	snapshot     *factoryruntime.StateSnapshot
-	snapshotErr  error
+	stream        *factorydefinitions.FactoryEventStream
+	subscribeErr  error
+	subscribeHook func()
+	snapshot      *factoryruntime.StateSnapshot
+	snapshotErr   error
 }
 
 func (s *sourceStub) SubscribeFactoryEvents(
@@ -176,6 +244,9 @@ func (s *sourceStub) SubscribeFactoryEvents(
 	*factorydefinitions.FactoryEventReconnectCursor,
 	factorydefinitions.FactoryEventReconnectScope,
 ) (*factorydefinitions.FactoryEventStream, error) {
+	if s.subscribeHook != nil {
+		s.subscribeHook()
+	}
 	return s.stream, s.subscribeErr
 }
 
