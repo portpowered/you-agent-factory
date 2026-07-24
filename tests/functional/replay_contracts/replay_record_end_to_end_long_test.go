@@ -208,15 +208,27 @@ Finish the input task.
 			ProviderOverride: provider,
 		},
 	})
-	support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
-		RequestID: "request-replay-external-batch",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{
-			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
-			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+		RequestId: "request-replay-external-batch",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{
+			{
+				Name:         "external-first",
+				WorkId:       strPtr("work-external-first"),
+				WorkTypeName: strPtr("task"),
+				TraceId:      strPtr("trace-replay-batch"),
+				Payload:      "external first",
+			},
+			{
+				Name:         "external-fanout",
+				WorkId:       strPtr("work-external-fanout"),
+				WorkTypeName: strPtr("task"),
+				TraceId:      strPtr("trace-replay-batch"),
+				Payload:      "external fanout",
+			},
 		},
-		Relations: []work.WorkRelation{{
-			Type:           work.WorkRelationDependsOn,
+		Relations: &[]factoryapi.Relation{{
+			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "external-fanout",
 			TargetWorkName: "external-first",
 		}},

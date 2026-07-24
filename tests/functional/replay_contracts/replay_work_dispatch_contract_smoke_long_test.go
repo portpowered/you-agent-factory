@@ -13,7 +13,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,17 +23,25 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
 		submit: func(server *support.FunctionalAPIServer) {
-			support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
-				RequestID: "request-dispatch-smoke-001",
-				Type:      work.WorkRequestTypeFactoryRequestBatch,
-				Works: []work.Work{{
-					Name:       "canonical-dispatch-smoke",
-					WorkID:     "work-dispatch-smoke-001",
-					WorkTypeID: "task",
-					TraceID:    "trace-dispatch-smoke-001",
-					Payload:    map[string]any{"title": "canonical dispatch contract"},
-					Tags:       map[string]string{"branch": "factory-struct-cleanup", "team": "agent-factory"},
-				}},
+			workID := "work-dispatch-smoke-001"
+			workType := "task"
+			traceID := "trace-dispatch-smoke-001"
+			tags := factoryapi.StringMap{
+				"branch": "factory-struct-cleanup",
+				"team":   "agent-factory",
+			}
+			works := []factoryapi.Work{{
+				Name:         "canonical-dispatch-smoke",
+				WorkId:       &workID,
+				WorkTypeName: &workType,
+				TraceId:      &traceID,
+				Payload:      map[string]any{"title": "canonical dispatch contract"},
+				Tags:         &tags,
+			}}
+			support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+				RequestId: "request-dispatch-smoke-001",
+				Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+				Works:     &works,
 			})
 		},
 	})
@@ -95,17 +102,25 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
 		submit: func(server *support.FunctionalAPIServer) {
-			support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
-				RequestID: "request-recorded-smoke-001",
-				Type:      work.WorkRequestTypeFactoryRequestBatch,
-				Works: []work.Work{{
-					Name:       "recorded-dispatch-smoke",
-					WorkID:     "work-recorded-smoke-001",
-					WorkTypeID: "task",
-					TraceID:    "trace-recorded-smoke-001",
-					Payload:    map[string]any{"title": "recorded dispatch contract"},
-					Tags:       map[string]string{"branch": "record-replay", "team": "agent-factory"},
-				}},
+			workID := "work-recorded-smoke-001"
+			workType := "task"
+			traceID := "trace-recorded-smoke-001"
+			tags := factoryapi.StringMap{
+				"branch": "record-replay",
+				"team":   "agent-factory",
+			}
+			works := []factoryapi.Work{{
+				Name:         "recorded-dispatch-smoke",
+				WorkId:       &workID,
+				WorkTypeName: &workType,
+				TraceId:      &traceID,
+				Payload:      map[string]any{"title": "recorded dispatch contract"},
+				Tags:         &tags,
+			}}
+			support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+				RequestId: "request-recorded-smoke-001",
+				Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+				Works:     &works,
 			})
 		},
 	})
