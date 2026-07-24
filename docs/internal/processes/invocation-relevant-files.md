@@ -867,7 +867,14 @@ response-stream output.
   (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
-  a concrete-provider switch in shared orchestration. Prove each migrated
+  a concrete-provider switch in shared orchestration. Process composition
+  passes the shared `ProviderCommandRunner` edge into
+  `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
+  Integrations and native executors share one command boundary; functional
+  provider packages under `tests/functional/providers/<name>` prove success and
+  safe native-failure postures through `root.BuildProcess` /
+  `support.RunFactoryToCompletionWithEdges` without importing provider package
+  internals. Prove each migrated
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:

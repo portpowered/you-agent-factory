@@ -6,18 +6,31 @@ import (
 	"fmt"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 const nativeRuntimePrerequisite = "provider-native-runtime"
 
+// BuiltInDependencies optionally supplies shared execution collaborators for
+// migrated catalog Integrations. Process composition injects the same
+// ProviderCommandRunner edge used by native executors so conductor-routed
+// built-ins and functional overrides share one command boundary.
+type BuiltInDependencies struct {
+	CommandRunner workerprocess.CommandRunner
+}
+
 // BuiltInRegistrations returns detached registrations for every selectable
 // bundled manifest. Unmigrated built-ins keep the native-runtime compatibility
 // stub; migrated providers bind their package-owned Integration so the neutral
 // conductor can invoke them without a concrete-provider switch in shared
 // orchestration.
-func BuiltInRegistrations() ([]Registration, error) {
+func BuiltInRegistrations(deps ...BuiltInDependencies) ([]Registration, error) {
+	var commandRunner workerprocess.CommandRunner
+	if len(deps) > 0 {
+		commandRunner = deps[0].CommandRunner
+	}
 	var catalog catalogDocument
 	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
 		return nil, fmt.Errorf("parse embedded provider catalog for built-in registrations: %w", err)
@@ -28,7 +41,7 @@ func BuiltInRegistrations() ([]Registration, error) {
 			continue
 		}
 		identity := inference.Identity(normalize(manifest.ID))
-		integration := migratedBuiltInIntegration(identity)
+		integration := migratedBuiltInIntegration(identity, commandRunner)
 		if integration == nil {
 			integration = nativeRuntimeIntegration{
 				identity: identity,
@@ -80,10 +93,13 @@ func ReplaceCatalogIntegration(
 	return replaced, nil
 }
 
-func migratedBuiltInIntegration(identity inference.Identity) inference.Integration {
+func migratedBuiltInIntegration(identity inference.Identity, runner workerprocess.CommandRunner) inference.Integration {
 	switch normalize(string(identity)) {
 	case "gemini":
-		return gemini.NewIntegration()
+		if runner == nil {
+			return gemini.NewIntegration()
+		}
+		return gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner})
 	default:
 		return nil
 	}
