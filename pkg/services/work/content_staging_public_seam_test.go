@@ -347,3 +347,61 @@ func TestPublicWorkRootStagingSeamPreservesPrepareAndValidation(t *testing.T) {
 		}
 	})
 }
+
+// TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOrRuntime
+// seals IMP-WORK-02: the nested content_staging capability remains a staging-only
+// ContentStagingService behind CTR-WORK, not the full Work root that owns
+// materialization and state-access.
+func TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOrRuntime(t *testing.T) {
+	ctx := context.Background()
+	staging := newPublicWorkRootStaging(t, nil)
+
+	if _, ok := any(staging).(work.Service); ok {
+		t.Fatal("content_staging must not satisfy work.Service (materialization/state-access stay out of this cut)")
+	}
+
+	staged, err := staging.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "seal.png",
+		MediaType: "image/png",
+		Content:   []byte("seal-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef == "" || staged.URL == "" {
+		t.Fatalf("stage result = %#v, want opaque staged reference", staged)
+	}
+
+	resolved, err := staging.ResolveContent(ctx, staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("ResolveContent: %v", err)
+	}
+	if resolved.URL != staged.URL {
+		t.Fatalf("resolved URL = %q, want %q", resolved.URL, staged.URL)
+	}
+
+	parts, err := staging.PrepareContent(ctx, []work.StagedSubmissionItem{{
+		ItemType: "text", Text: "seal prepare",
+	}, {
+		ItemType: "image", StagedFileRef: staged.StagedFileRef,
+		FileName: "seal.png", MediaType: "image/png",
+	}})
+	if err != nil {
+		t.Fatalf("PrepareContent: %v", err)
+	}
+	if len(parts) != 2 || parts[0].Text != "seal prepare" || parts[1].URL != staged.URL {
+		t.Fatalf("prepared parts = %#v", parts)
+	}
+
+	if _, err := staging.ResolveContent(ctx, staged.StagedFileRef+"tampered"); !errors.Is(err, work.ErrInvalidStagedContentRef) {
+		t.Fatalf("tampered resolve error = %v, want ErrInvalidStagedContentRef", err)
+	}
+
+	if err := staging.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+		t.Fatalf("CleanupContent: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(resolved.Path)); !os.IsNotExist(err) {
+		t.Fatalf("stage directory still present after cleanup: %v", err)
+	}
+}

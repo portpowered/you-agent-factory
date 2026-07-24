@@ -374,3 +374,35 @@ func validStageContentRequest() work.StageContentRequest {
 		Content:   []byte("pdf"),
 	}
 }
+
+// TestNestedContentStagingSealsStagingOnlySurface seals IMP-WORK-02 nested
+// ownership: content_staging remains a ContentStagingService and does not
+// grow into the full Work root that owns materialization and state-access.
+func TestNestedContentStagingSealsStagingOnlySurface(t *testing.T) {
+	service, _, _ := newNestedContentStagingForTest(t)
+	var _ contentstaging.Service = service
+	var _ work.ContentStagingService = service
+	if _, ok := any(service).(work.Service); ok {
+		t.Fatal("content_staging must not satisfy work.Service (materialization/state-access stay out of this cut)")
+	}
+
+	ctx := context.Background()
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "seal.png",
+		MediaType: "image/png",
+		Content:   []byte("seal-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef == "" {
+		t.Fatal("expected opaque staged reference")
+	}
+	if _, err := service.ResolveContent(ctx, staged.StagedFileRef+"tampered"); !errors.Is(err, work.ErrInvalidStagedContentRef) {
+		t.Fatalf("tampered resolve error = %v, want ErrInvalidStagedContentRef", err)
+	}
+	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+		t.Fatalf("CleanupContent: %v", err)
+	}
+}
