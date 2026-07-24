@@ -168,6 +168,109 @@ func TestPrivateCatalog_RootDeleteRemovesFromSubsequentListGet(t *testing.T) {
 	}
 }
 
+func TestPrivateCatalog_RootTypedInvalidNameFailures(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	_ = writeNamedFactory(t, rootDir, "alpha")
+	root := newRootCatalog(t)
+	invalidName := "../evil"
+
+	_, getErr := root.GetNamedFactory(
+		context.Background(),
+		factorydefinitions.GetNamedFactoryRequest{RootDir: rootDir, Name: invalidName},
+	)
+	assertTypedInvalidName(t, "GetNamedFactory", getErr)
+
+	_, resolveErr := root.ResolveNamedFactory(
+		context.Background(),
+		factorydefinitions.ResolveNamedFactoryRequest{
+			ProjectRoot: rootDir,
+			GlobalRoot:  t.TempDir(),
+			Name:        invalidName,
+		},
+	)
+	assertTypedInvalidName(t, "ResolveNamedFactory", resolveErr)
+
+	_, deleteErr := root.DeleteNamedFactory(
+		context.Background(),
+		factorydefinitions.DeleteNamedFactoryRequest{RootDir: rootDir, Name: invalidName},
+	)
+	assertTypedInvalidName(t, "DeleteNamedFactory", deleteErr)
+
+	_, setErr := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: invalidName},
+	)
+	assertTypedInvalidName(t, "SetCurrentFactoryPointer", setErr)
+}
+
+func TestPrivateCatalog_RootTypedMissingAndCurrentNotFound(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	_ = writeNamedFactory(t, rootDir, "alpha")
+	root := newRootCatalog(t)
+
+	_, missingErr := root.GetNamedFactory(
+		context.Background(),
+		factorydefinitions.GetNamedFactoryRequest{RootDir: rootDir, Name: "missing"},
+	)
+	if !errors.Is(missingErr, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf(
+			"GetNamedFactory missing error = %v, want %v",
+			missingErr,
+			factorydefinitions.ErrNamedFactoryNotFound,
+		)
+	}
+	if errors.Is(missingErr, factorydefinitions.ErrInvalidNamedFactoryName) {
+		t.Fatal("missing named Factory must not also match ErrInvalidNamedFactoryName")
+	}
+
+	_, resolveErr := root.ResolveNamedFactory(
+		context.Background(),
+		factorydefinitions.ResolveNamedFactoryRequest{
+			ProjectRoot: rootDir,
+			GlobalRoot:  t.TempDir(),
+			Name:        "missing",
+		},
+	)
+	if !errors.Is(resolveErr, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf(
+			"ResolveNamedFactory missing error = %v, want %v",
+			resolveErr,
+			factorydefinitions.ErrNamedFactoryNotFound,
+		)
+	}
+
+	_, deleteErr := root.DeleteNamedFactory(
+		context.Background(),
+		factorydefinitions.DeleteNamedFactoryRequest{RootDir: rootDir, Name: "missing"},
+	)
+	if !errors.Is(deleteErr, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf(
+			"DeleteNamedFactory missing error = %v, want %v",
+			deleteErr,
+			factorydefinitions.ErrNamedFactoryNotFound,
+		)
+	}
+
+	_, pointerErr := root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if !errors.Is(pointerErr, factorydefinitions.ErrCurrentFactoryNotFound) {
+		t.Fatalf(
+			"GetCurrentFactoryPointer missing error = %v, want %v",
+			pointerErr,
+			factorydefinitions.ErrCurrentFactoryNotFound,
+		)
+	}
+	if errors.Is(pointerErr, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatal("missing current pointer must not also match ErrNamedFactoryNotFound")
+	}
+}
+
 func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +285,16 @@ func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
 	}
 	if _, err := catalogwire.NewService(paths, nil); err == nil {
 		t.Fatal("NewService(paths, nil): expected catalog filesystem required error")
+	}
+}
+
+func assertTypedInvalidName(t *testing.T, op string, err error) {
+	t.Helper()
+	if !errors.Is(err, factorydefinitions.ErrInvalidNamedFactoryName) {
+		t.Fatalf("%s invalid-name error = %v, want %v", op, err, factorydefinitions.ErrInvalidNamedFactoryName)
+	}
+	if errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("%s invalid-name error also matched ErrNamedFactoryNotFound: %v", op, err)
 	}
 }
 
