@@ -543,12 +543,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/execution_owned_helpers.go#EvaluateLifecycleControl",
-      "owner": "backend-maintainers",
-      "removalReason": "split EvaluateLifecycleControl into per-operation classifiers and remove this exemption once root-owned lifecycle helpers stay under the cyclomatic limit."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/internal/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
@@ -756,6 +750,12 @@
       "target": "pkg/services/factory_sessions/transports/mcp/inspection_test.go#TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/types.go#EvaluateLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "split EvaluateLifecycleControl into per-operation classifiers and remove this exemption once root-owned lifecycle helpers stay under the cyclomatic limit."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
