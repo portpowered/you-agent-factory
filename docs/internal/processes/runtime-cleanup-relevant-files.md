@@ -334,8 +334,10 @@ The architecture checker encodes a Petri-public-surface prohibition in
 transitions/enabled-transition engine shapes, and engine snapshots are rejected
 outside `pkg/services/factory_runtime/internal/`. Authored Factory Definition
 `orchestrator.kind = PETRI` remains allowed as configuration. Focused fixtures
-live in `petri_public_surface_test.go`; wiring onto the live lint path and any
-deletion-only baseline remain a follow-on gate for IMP-RUN-01.
+in `petri_public_surface_test.go` cover vocabulary shapes and the required
+public-surface categories (public API, transport, integration contract, and
+functional test). Wiring onto the live lint path and any deletion-only baseline
+remain a follow-on gate for IMP-RUN-01.
 
 ## Focused Verification
 

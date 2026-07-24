@@ -156,6 +156,98 @@ func leak() {
 	}
 }
 
+func TestScanPetriPublicSurfaceRejectsRequiredPublicSurfaceCategories(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		filePath   string
+		source     string
+		symbol     string
+		shape      string
+		symbolLine string
+	}{
+		{
+			name:     "public API",
+			filePath: "pkg/api/public_petri_leak.go",
+			source: `package api
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+func leak(net runtime.Net) {}
+`,
+			symbol:     "Net",
+			shape:      "raw net",
+			symbolLine: "symbol: Net (raw net)",
+		},
+		{
+			name:     "transport",
+			filePath: "pkg/transports/http/petri_marking_leak.go",
+			source: `package http
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+func leak(marking runtime.PetriMarkingSnapshot) {}
+`,
+			symbol:     "PetriMarkingSnapshot",
+			shape:      "raw marking",
+			symbolLine: "symbol: PetriMarkingSnapshot (raw marking)",
+		},
+		{
+			name:     "integration contract",
+			filePath: "pkg/transports/http/contracttests/petri_token_contract_test.go",
+			source: `package contracttests
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+func leak(token runtime.RuntimeToken) {}
+`,
+			symbol:     "RuntimeToken",
+			shape:      "raw token",
+			symbolLine: "symbol: RuntimeToken (raw token)",
+		},
+		{
+			name:     "functional test",
+			filePath: "tests/functional/runtime_api/petri_engine_snapshot_test.go",
+			source: `package runtime_api
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+func assertEngineSnapshot(snapshot runtime.StateSnapshot) {}
+`,
+			symbol:     "StateSnapshot",
+			shape:      "engine snapshot",
+			symbolLine: "symbol: StateSnapshot (engine snapshot)",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, tc.filePath, tc.source)
+
+			findings, err := scanPetriPublicSurface(repoRoot)
+			if err != nil {
+				t.Fatalf("scanPetriPublicSurface() error = %v", err)
+			}
+			joined := petriPublicSurfaceFindingSummary(findings)
+			wantFinding := tc.filePath + "|" + tc.symbol + "|" + tc.shape + "|"
+			if !strings.Contains(joined, wantFinding) {
+				t.Fatalf("findings = %q, want %q", joined, wantFinding)
+			}
+
+			stderr := &bytes.Buffer{}
+			writePetriPublicSurfaceFindings(stderr, findings)
+			diagnostic := stderr.String()
+			for _, want := range []string{
+				"prohibited Petri public surface",
+				"surface: " + tc.filePath,
+				tc.symbolLine,
+				"required owner: Factory Runtime internals",
+				"pkg/services/factory_runtime/internal",
+			} {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("diagnostics = %q, want %q", diagnostic, want)
+				}
+			}
+		})
+	}
+}
+
 func TestScanPetriPublicSurfaceAllowsRuntimeInternalVocabulary(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
