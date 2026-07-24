@@ -60,7 +60,7 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 			Line:           42,
 			Description:    "verifies provider replay",
 			BuildTags:      []string{"functionallong"},
-			Golden:         "tests/functional/workers/inference/openai/goldens/invoke/manifest.json",
+			Golden:         "docs/temp/functional/provider-sessions/openai/invoke/manifest.json",
 			Classification: functionaltestmetadata.ClassificationCustomer,
 		},
 		{
@@ -79,6 +79,13 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 			Classification: functionaltestmetadata.ClassificationHarness,
 		},
 	})
+	records[0].Provenance = functionaltestviz.GoldenProvenance{
+		Provider:      "openai",
+		Case:          "invoke",
+		FidelityClass: "partial-stream",
+		ID:            "openai-invoke",
+		ManifestPath:  "docs/temp/functional/provider-sessions/openai/invoke/manifest.json",
+	}
 	catalog := functionaltestviz.BuildDetailCatalog(records)
 
 	first := functionaltestviz.RenderDetailCatalogMarkdown(catalog)
@@ -98,6 +105,21 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 	}
 	if !strings.Contains(first, "  - Labels: long-only, golden-backed\n") {
 		t.Fatalf("labels missing:\n%s", first)
+	}
+	if !strings.Contains(first, "  - Golden provenance:\n    - Provider: `openai`\n") {
+		t.Fatalf("golden provenance missing:\n%s", first)
+	}
+	if !strings.Contains(first, "    - Case: `invoke`\n") {
+		t.Fatalf("golden case missing:\n%s", first)
+	}
+	if !strings.Contains(first, "    - Fidelity class: `partial-stream`\n") {
+		t.Fatalf("golden fidelity class missing:\n%s", first)
+	}
+	if !strings.Contains(first, "    - Golden id: `openai-invoke`\n") {
+		t.Fatalf("golden id missing:\n%s", first)
+	}
+	if !strings.Contains(first, "    - Manifest: `docs/temp/functional/provider-sessions/openai/invoke/manifest.json`\n") {
+		t.Fatalf("golden manifest path missing:\n%s", first)
 	}
 	if !strings.Contains(first, "- **TestLoad** — (undocumented)\n") {
 		t.Fatalf("undocumented marker missing:\n%s", first)
@@ -119,12 +141,19 @@ func TestRenderCatalogMarkdownAppendsDetailAfterDomainSummaries(t *testing.T) {
 	records := functionaltestviz.ClassifyRecords([]functionaltestmetadata.Record{
 		customerRecord("transport/cli/process/help_test.go", "process", "TestHelp"),
 	})
-	catalog := functionaltestviz.RenderCatalogMarkdown(functionaltestviz.CatalogInputs{Records: records})
+	catalog, err := functionaltestviz.RenderCatalogMarkdown(functionaltestviz.CatalogInputs{Records: records})
+	if err != nil {
+		t.Fatalf("RenderCatalogMarkdown: %v", err)
+	}
 
 	summaryIdx := strings.Index(catalog, "## Domain summaries\n")
 	detailIdx := strings.Index(catalog, "## Test catalog\n")
+	debtIdx := strings.Index(catalog, "## Documentation debt\n")
 	if summaryIdx < 0 || detailIdx < 0 || detailIdx <= summaryIdx {
 		t.Fatalf("catalog must contain domain summaries before detail catalog:\n%s", catalog)
+	}
+	if debtIdx < 0 || debtIdx <= detailIdx {
+		t.Fatalf("catalog must append documentation debt after detail catalog:\n%s", catalog)
 	}
 	if !strings.Contains(catalog, "- **TestHelp** — scenario\n") {
 		t.Fatalf("customer detail row missing:\n%s", catalog)

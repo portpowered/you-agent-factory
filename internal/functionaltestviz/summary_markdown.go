@@ -6,14 +6,20 @@ import (
 )
 
 // RenderCatalogMarkdown renders the functional-test Markdown catalog.
-// Later stories append golden/debt sections and package coverage.
-func RenderCatalogMarkdown(inputs CatalogInputs) string {
+// Golden-backed records must already carry attached provenance; missing
+// provenance fails closed. Later stories append package coverage.
+func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
+	if err := RequireGoldenProvenance(inputs.Records); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	b.WriteString("# Functional tests\n\n")
 	b.WriteString(RenderDomainSummariesMarkdown(BuildDomainSummaries(inputs.Records)))
 	b.WriteString("\n")
 	b.WriteString(RenderDetailCatalogMarkdown(BuildDetailCatalog(inputs.Records)))
-	return b.String()
+	b.WriteString("\n")
+	b.WriteString(RenderDebtMarkdown(BuildDebtReport(inputs.Records)))
+	return b.String(), nil
 }
 
 // RenderDomainSummariesMarkdown renders prioritized domain summary sections in

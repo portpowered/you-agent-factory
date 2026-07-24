@@ -134,6 +134,33 @@ func renderDetailRecord(record ClassifiedRecord) string {
 		b.WriteString(strings.Join(labels, ", "))
 		b.WriteString("\n")
 	}
+	if record.GoldenBacked {
+		b.WriteString(renderGoldenProvenance(record.Provenance))
+	}
+	return b.String()
+}
+
+func renderGoldenProvenance(provenance GoldenProvenance) string {
+	if !provenance.Present() {
+		return "  - Golden provenance: ERROR: missing attached provenance\n"
+	}
+	var b strings.Builder
+	b.WriteString("  - Golden provenance:\n")
+	b.WriteString("    - Provider: `")
+	b.WriteString(provenance.Provider)
+	b.WriteString("`\n")
+	b.WriteString("    - Case: `")
+	b.WriteString(provenance.Case)
+	b.WriteString("`\n")
+	b.WriteString("    - Fidelity class: `")
+	b.WriteString(provenance.FidelityClass)
+	b.WriteString("`\n")
+	b.WriteString("    - Golden id: `")
+	b.WriteString(provenance.ID)
+	b.WriteString("`\n")
+	b.WriteString("    - Manifest: `")
+	b.WriteString(provenance.ManifestPath)
+	b.WriteString("`\n")
 	return b.String()
 }
 

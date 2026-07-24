@@ -29,6 +29,8 @@ type ClassifiedRecord struct {
 	GoldenBacked bool
 	Undocumented bool
 	Deprecated   bool
+	// Provenance is attached by AttachGoldenProvenance for golden-backed tests.
+	Provenance GoldenProvenance
 }
 
 // CatalogInputs is the assembled catalog input set: classified inventory plus

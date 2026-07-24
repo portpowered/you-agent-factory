@@ -99,7 +99,10 @@ func TestRenderDomainSummariesMarkdownIsStableAndIncludesZeros(t *testing.T) {
 		t.Fatalf("repeated renders diverged:\nfirst:\n%s\nsecond:\n%s", first, second)
 	}
 
-	catalog := functionaltestviz.RenderCatalogMarkdown(functionaltestviz.CatalogInputs{Records: records})
+	catalog, err := functionaltestviz.RenderCatalogMarkdown(functionaltestviz.CatalogInputs{Records: records})
+	if err != nil {
+		t.Fatalf("RenderCatalogMarkdown: %v", err)
+	}
 	if !strings.HasPrefix(catalog, "# Functional tests\n\n## Domain summaries\n") {
 		t.Fatalf("catalog does not begin with title + domain summaries:\n%s", catalog)
 	}

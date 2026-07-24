@@ -3,4 +3,7 @@
 //
 // Coverage input is the gocoveragecheck coverage-summary JSON artifact only.
 // This package does not parse coverage profiles (.out).
+//
+// Golden-backed rows require AttachGoldenProvenance (or equivalent fixture
+// setup) before RenderCatalogMarkdown; missing manifests fail closed.
 package functionaltestviz
