@@ -75,6 +75,28 @@ func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
 	}
 }
 
+func TestEncode_RoundTripsExtensionProviderDefaultsAndPresets(t *testing.T) {
+	const identity = "customer.provider-v2"
+	want := operatorsettings.Config{
+		Defaults: operatorsettings.Defaults{WorkerModelProvider: identity},
+		WorkerPresets: []operatorsettings.WorkerPreset{{
+			ID: "extension", ModelProvider: identity,
+		}},
+	}
+
+	payload, err := globalconfig.Encode(want)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	got, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if got.Defaults.WorkerModelProvider != identity || len(got.WorkerPresets) != 1 || got.WorkerPresets[0].ModelProvider != identity {
+		t.Fatalf("extension provider round trip = %#v, want %q in defaults and presets", got, identity)
+	}
+}
+
 func TestDecode_EmptyObjectReturnsEmptyConfig(t *testing.T) {
 	config, err := globalconfig.Decode([]byte(`{}`))
 	if err != nil {

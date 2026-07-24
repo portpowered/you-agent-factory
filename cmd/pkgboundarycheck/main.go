@@ -194,7 +194,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/platform/defaultpaths", canonicalOwner: "the defining service owner, or pkg/platform/internal/runtimeartifact for policy-free artifact mechanics"},
 	{packagePath: "pkg/wire/runtimeproviders", canonicalOwner: "focused provider files in pkg/wire"},
 	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
-	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/services/workers/hosted"},
+	{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
 	{packagePath: "pkg/internal/cursorstorage", canonicalOwner: "pkg/services/provider_sessions/cursor"},
 	{packagePath: "pkg/internal/metrics", canonicalOwner: "pkg/services/factory_runtime/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
 	{packagePath: "pkg/platform/runtimeinput", canonicalOwner: "bounded owner requests assembled by pkg/wire"},
@@ -369,6 +369,7 @@ type scanResult struct {
 	staleTransportBehaviorEntries      []transportBehaviorBaselineEntry
 	transportBehaviorBaselineCount     int
 	functionalProcessEdgeFindings      []functionalProcessEdgeFinding
+	constructedServiceEdgesFindings    []constructedServiceEdgesFinding
 	testWorkNormalizationFindings      []testWorkNormalizationFinding
 	productionDefaultFindings          []productionDefaultFinding
 	staleProductionDefaultEntries      []productionDefaultBaselineEntry
@@ -611,6 +612,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.functionalProcessEdgeFindings) +
+		len(findings.constructedServiceEdgesFindings) +
 		len(findings.testWorkNormalizationFindings) +
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
@@ -660,6 +662,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeTransportBehaviorFindings(stderr, findings.transportBehaviorFindings)
 	writeStaleTransportBehaviorBaselineEntries(stderr, findings.staleTransportBehaviorEntries)
 	writeFunctionalProcessEdgeFindings(stderr, findings.functionalProcessEdgeFindings)
+	writeConstructedServiceEdgesFindings(stderr, findings.constructedServiceEdgesFindings)
 	writeTestWorkNormalizationFindings(stderr, findings.testWorkNormalizationFindings)
 	writeTransportBehaviorBaselineSummary(stderr, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultFindings(stderr, findings.productionDefaultFindings)
@@ -838,6 +841,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 	result.transportBehaviorBaselineCount = len(transportBehaviorBaseline.Entries)
 	result.functionalProcessEdgeFindings, err = scanFunctionalProcessEdges(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.constructedServiceEdgesFindings, err = scanConstructedServiceEdges(repoRoot)
 	if err != nil {
 		return scanResult{}, err
 	}

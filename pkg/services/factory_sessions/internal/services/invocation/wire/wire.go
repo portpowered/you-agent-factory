@@ -4,7 +4,6 @@ package wire
 
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -21,7 +20,7 @@ import (
 // Sessions and root Wire depends only on this service-local constructor.
 func NewOperation(
 	openRuntime *runtimeopening.Factory,
-	edges serviceedges.Edges,
+	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter models.InvocationArtifactExporter,
@@ -31,7 +30,7 @@ func NewOperation(
 ) (roles.InvocationOperation, error) {
 	return legacyopening.NewOperation(
 		openRuntime,
-		edges,
+		effects,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,

@@ -131,12 +131,29 @@ func aliasesGeneratedAPI(expr ast.Expr, generatedImportNames map[string]struct{}
 	_, ok = generatedImportNames[ident.Name]
 	return ok
 }
-func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders(t *testing.T) {
+func TestOpenAPIContract_WorkerModelProviderConvenienceConstantsMatchBuiltIns(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	schemas := componentSchemas(t, doc)
 	schema := schemaObject(t, schemas, "WorkerModelProvider")
 
 	assertEnumValues(t, schema, "WorkerModelProvider", publicWorkerModelProviderValues())
+}
+
+func TestOpenAPIContract_ProviderIdentityIsOpenAndSyntaxConstrained(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	schema := schemaObject(t, schemas, "ProviderIdentity")
+
+	if _, closed := schema["enum"]; closed {
+		t.Fatal("ProviderIdentity must not define a closed enum")
+	}
+	if schema["minLength"] != 1 || schema["maxLength"] != 128 {
+		t.Fatalf("ProviderIdentity length bounds = %v/%v, want 1/128", schema["minLength"], schema["maxLength"])
+	}
+	pattern, _ := schema["pattern"].(string)
+	if pattern == "" || !strings.Contains(pattern, "[a-z][a-z0-9]*") {
+		t.Fatalf("ProviderIdentity.pattern = %q, want standardized lowercase identity syntax", pattern)
+	}
 }
 
 func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t *testing.T) {

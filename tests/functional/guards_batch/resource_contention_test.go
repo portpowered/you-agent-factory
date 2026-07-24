@@ -8,6 +8,8 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestConfigDriven_ResourceContention(t *testing.T) {
@@ -21,18 +23,18 @@ func TestConfigDriven_ResourceContention(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 2})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 2})
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected provider called 2 times total, got %d", provider.CallCount())
 	}
 }
 
-func assertGuardSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+func assertGuardSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

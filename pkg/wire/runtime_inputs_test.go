@@ -420,7 +420,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	}
 }
 
-func TestRuntimeInputResolverMergesEdgesAndDetachesAggregate(t *testing.T) {
+func TestRuntimeInputResolverMergesEdgesAndProjectsExactExternalEffects(t *testing.T) {
 	t.Parallel()
 	defaultClock := platformclock.Real{}
 	defaultMetrics := &runtimeInputMetricsRecorder{}
@@ -446,11 +446,34 @@ func TestRuntimeInputResolverMergesEdgesAndDetachesAggregate(t *testing.T) {
 	if resolved.Request.FactoryDefinition.Directory != "factory" {
 		t.Fatal("resolved request retained caller mutation")
 	}
-	if resolved.Edges.Clock == nil || resolved.Logger == nil {
-		t.Fatalf("resolved edges/logger = %#v / %#v", resolved.Edges, resolved.Logger)
+	if resolved.Effects.Clock == nil || resolved.Logger == nil {
+		t.Fatalf("resolved effects/logger = %#v / %#v", resolved.Effects, resolved.Logger)
 	}
-	if resolved.Edges.InvocationMetricsRecorder != invocationMetrics || resolved.Edges.RuntimeHostObserver == nil {
-		t.Fatalf("resolved invocation ports = %#v, want exact invocation replacements", resolved.Edges)
+	if resolved.Effects.InvocationMetricsRecorder != invocationMetrics || resolved.Effects.RuntimeHostObserver == nil {
+		t.Fatalf("resolved invocation ports = %#v, want exact invocation replacements", resolved.Effects)
+	}
+}
+
+func TestProjectRuntimeOpeningExternalEffectsSelectsExactPortsFromProcessEdges(t *testing.T) {
+	t.Parallel()
+
+	clock := platformclock.Real{}
+	metrics := &runtimeInputMetricsRecorder{}
+	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
+	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
+		Clock:                     clock,
+		InvocationMetricsRecorder: metrics,
+		RuntimeHostObserver:       observer,
+		HostedLinearEndpoint:      "https://example.test",
+	})
+	if effects.Clock != clock {
+		t.Fatalf("Clock = %v, want process-edge override", effects.Clock)
+	}
+	if effects.InvocationMetricsRecorder != metrics || effects.RuntimeHostObserver == nil {
+		t.Fatalf("invocation ports = %#v, want projected replacements", effects)
+	}
+	if effects.HostedLinearEndpoint != "https://example.test" {
+		t.Fatalf("HostedLinearEndpoint = %q, want process-edge override", effects.HostedLinearEndpoint)
 	}
 }
 

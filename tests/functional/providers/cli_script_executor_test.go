@@ -19,8 +19,8 @@ func TestScriptExecutor_Success(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertDispatchOutput(t, server.GetFactoryEvents(t), "script-output-ok")
 	server.Stop(t)
 }
@@ -29,8 +29,8 @@ func TestScriptExecutor_Failure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	server, session := runScriptFactory(t, dir, failureRunner("script broke"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	server, listed := runScriptFactory(t, dir, failureRunner("script broke"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 	server.Stop(t)
 }
 
@@ -38,8 +38,8 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("original-payload"))
 
-	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("new-payload"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0})
+	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("new-payload"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0})
 	assertDispatchOutput(t, server.GetFactoryEvents(t), "new-payload")
 	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "", "task", "", nil)
 	server.Stop(t)
@@ -55,8 +55,8 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 		Tags:       map[string]string{"env": "test", "team": "platform"},
 	})
 
-	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("success-output"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("success-output"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertDispatchOutput(t, server.GetFactoryEvents(t), "success-output")
 	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-seed-001", "task", "trace-seed-001", map[string]string{
 		"env": "test", "team": "platform",
@@ -68,8 +68,8 @@ func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	server, session := runScriptFactory(t, dir, failureRunner("script-error-output"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	server, listed := runScriptFactory(t, dir, failureRunner("script-error-output"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "script-error-output")
 	server.Stop(t)
 }
@@ -91,8 +91,8 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 		Payload:    []byte("template-test-payload"),
 	})
 
-	server, session := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertDispatchOutput(t, server.GetFactoryEvents(t), "prd-my-feature\nwork-abc-123")
 	server.Stop(t)
 }
@@ -107,8 +107,8 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 		Payload:    []byte("payload"),
 	})
 
-	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("output"), 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1})
+	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("output"), 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1})
 	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-type-stamp", "task", "trace-type-stamp", nil)
 	server.Stop(t)
 }
@@ -130,8 +130,8 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 		Tags:       map[string]string{"env": "staging", "team": "infra"},
 	})
 
-	server, session := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1})
+	server, listed := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1})
 	assertDispatchOutput(t, server.GetFactoryEvents(t), "staging\ninfra")
 	server.Stop(t)
 }
@@ -161,8 +161,8 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 	})
 
 	runner := &captureCommandRunner{}
-	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:failed": 0})
 
 	if got := runner.LastWorkDir(); got != support.ResolvedRuntimePath(dir, "/tmp/feature-script") {
 		t.Fatalf("expected script runner work dir %q, got %q", support.ResolvedRuntimePath(dir, "/tmp/feature-script"), got)
@@ -228,8 +228,8 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 	})
 
 	runner := &templateCaptureCommandRunner{}
-	server, session := runScriptFactory(t, dir, runner, 10*time.Second)
-	assertSessionPlaces(t, session, map[string]int{
+	server, listed := runScriptFactory(t, dir, runner, 10*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{
 		"task:runtime-done":   1,
 		"task:init":           0,
 		"task:canonical-done": 0,
@@ -262,8 +262,8 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	runner := newTimeoutThenSuccessCommandRunner()
-	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() < 2 {
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
@@ -284,8 +284,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 		writeWorkstationPromptTemplate(t, dir, "payload: {{ (index .Inputs 0).Payload }}")
 		testutil.WriteSeedFile(t, dir, "task", []byte("template-input"))
 
-		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("template-case-ok"), 10*time.Second)
-		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("template-case-ok"), 10*time.Second)
+		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 		assertDispatchOutput(t, server.GetFactoryEvents(t), "template-case-ok")
 		server.Stop(t)
 	})
@@ -294,8 +294,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 		testutil.WriteSeedFile(t, dir, "task", []byte("payload-only"))
 
-		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("payload-only-ok"), 10*time.Second)
-		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("payload-only-ok"), 10*time.Second)
+		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 		assertDispatchOutput(t, server.GetFactoryEvents(t), "payload-only-ok")
 		server.Stop(t)
 	})
@@ -308,8 +308,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 			TraceID:    "trace-no-template-no-payload",
 			Payload:    nil,
 		})
-		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("empty-input-ok"), 10*time.Second)
-		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("empty-input-ok"), 10*time.Second)
+		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 		assertDispatchOutput(t, server.GetFactoryEvents(t), "empty-input-ok")
 		server.Stop(t)
 	})
@@ -320,7 +320,7 @@ func runScriptFactory(
 	dir string,
 	runner platformprocess.CommandRunner,
 	timeout time.Duration,
-) (*support.FunctionalAPIServer, factoryapi.FactorySession) {
+) (*support.FunctionalAPIServer, factoryapi.ListWorkResponse) {
 	t.Helper()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir,
@@ -329,7 +329,7 @@ func runScriptFactory(
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), timeout)
-	return server, support.GetDefaultSession(t, server.URL())
+	return server, support.ListDefaultSessionWork(t, server.URL())
 }
 
 func assertListedWorkIdentity(

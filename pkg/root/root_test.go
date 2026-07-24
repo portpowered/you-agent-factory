@@ -16,6 +16,7 @@ import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	"github.com/spf13/cobra"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -132,6 +133,81 @@ func TestBuildProcessReportsCanonicalRegistryValidationFailure(t *testing.T) {
 		!strings.Contains(buildErr.Error(), "provider registry validation failed") ||
 		!strings.Contains(buildErr.Error(), `"claude": identity collision`) {
 		t.Fatalf("BuildProcess() error = %v, want canonical identity-collision diagnostic", buildErr)
+	}
+}
+
+func TestBuildProcessOpensFactoryWithRegisteredExternalProviderWithoutProviderIO(t *testing.T) {
+	t.Parallel()
+
+	manifest := rootExternalManifest(t, "customer.provider", "customer")
+	integration := &rootRecordingIntegration{identity: "customer.provider"}
+	factoryDir := rootFactoryWithProvider(t, "customer")
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{{
+			Manifest:    manifest,
+			Integration: integration,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	err = process.Execute(Input{
+		Args: []string{
+			"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+		},
+		Env:              homeEnvironment(t.TempDir()),
+		Context:          context.Background(),
+		WorkingDirectory: factoryDir,
+	})
+	if err != nil {
+		t.Fatalf("Process.Execute(run) error = %v", err)
+	}
+	if integration.discoverCalls != 0 ||
+		integration.capabilityCalls != 0 ||
+		integration.invokeCalls != 0 {
+		t.Fatalf(
+			"Factory opening provider I/O = discover:%d capabilities:%d invoke:%d, want zero",
+			integration.discoverCalls,
+			integration.capabilityCalls,
+			integration.invokeCalls,
+		)
+	}
+}
+
+func TestBuildProcessRejectsUnknownAndNonSelectableFactoryProvidersWithoutFallback(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{name: "unknown", provider: "unknown.provider", want: `provider "unknown.provider" is unknown`},
+		{name: "not supported", provider: "agy", want: `provider "agy" is not selectable (not-supported)`},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+			if err != nil {
+				t.Fatalf("BuildProcess() error = %v", err)
+			}
+			factoryDir := rootFactoryWithProvider(t, test.provider)
+			err = process.Execute(Input{
+				Args: []string{
+					"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+				},
+				Env:              homeEnvironment(t.TempDir()),
+				Context:          context.Background(),
+				WorkingDirectory: factoryDir,
+			})
+			if err == nil ||
+				!strings.Contains(err.Error(), "workers[0].modelProvider") ||
+				!strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Process.Execute(run) error = %v, want field-local %s", err, test.want)
+			}
+		})
 	}
 }
 
@@ -453,6 +529,30 @@ func rootExternalManifest(t *testing.T, identity, alias string) inference.Manife
 	}
 	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
 	return manifest
+}
+
+func rootFactoryWithProvider(t *testing.T, provider string) string {
+	t.Helper()
+	factoryDir := testutil.CopyFixtureDir(
+		t,
+		testutil.MustRepoPath(t, filepath.Join("tests", "functional_test", "testdata", "executor_success")),
+	)
+	workerPath := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
+	worker := strings.Join([]string{
+		"---",
+		"model: test-model",
+		"modelProvider: " + provider,
+		"stopToken: COMPLETE",
+		"type: MODEL_WORKER",
+		"---",
+		"",
+		"Test worker.",
+		"",
+	}, "\n")
+	if err := os.WriteFile(workerPath, []byte(worker), 0o600); err != nil {
+		t.Fatalf("write provider worker: %v", err)
+	}
+	return factoryDir
 }
 
 func assertProviderLookup(

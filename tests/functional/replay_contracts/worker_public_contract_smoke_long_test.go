@@ -59,7 +59,7 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertReplaySessionPlaces(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	assertWorkerPublicContractProviderRequest(t, runner)

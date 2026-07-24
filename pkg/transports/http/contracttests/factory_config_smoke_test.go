@@ -585,7 +585,7 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 		schemas,
 		"Worker",
 		"modelProvider",
-		"#/components/schemas/WorkerModelProvider",
+		"#/components/schemas/ProviderIdentity",
 		`^\$\{[A-Za-z0-9_.-]+\}$`,
 	)
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")

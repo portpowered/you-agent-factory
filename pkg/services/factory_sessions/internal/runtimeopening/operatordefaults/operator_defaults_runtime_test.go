@@ -2,6 +2,7 @@ package operatordefaults_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,7 +107,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *test
 	}
 }
 
-func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testing.T) {
+func TestResolveConcreteProviderSelectionsRejectsUnknownProviderAtWorkerField(t *testing.T) {
 	factoryDir := t.TempDir()
 	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &interfaces.FactoryConfig{
 		Workers: []interfaces.FactoryWorkerConfig{{
@@ -120,16 +121,84 @@ func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testi
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	err = operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
+	err = operatordefaultsruntime.ResolveConcreteProviderSelections(
+		loaded,
+		providerResolverStub{errors: map[string]error{
+			"not-a-provider": errors.New(`provider "not-a-provider" is unknown`),
+		}}.CanonicalIdentity,
+	)
 	if err == nil {
-		t.Fatal("expected unsupported provider validation error")
+		t.Fatal("expected unknown provider validation error")
 	}
-	if !strings.Contains(err.Error(), "unsupported model provider") {
-		t.Fatalf("error = %q, want unsupported provider guidance", err.Error())
+	if !strings.Contains(err.Error(), "workers[0].modelProvider") ||
+		!strings.Contains(err.Error(), `provider "not-a-provider" is unknown`) {
+		t.Fatalf("error = %q, want field-local unknown-provider diagnostic", err.Error())
 	}
 }
 
-func TestValidateModelWorkerRuntimeProviders_AllowsInvocationInterpolationProvider(t *testing.T) {
+func TestResolveConcreteProviderSelectionsCanonicalizesWorkersAndGuards(t *testing.T) {
+	factoryDir := t.TempDir()
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &interfaces.FactoryConfig{
+		Workers: []interfaces.FactoryWorkerConfig{{
+			Name:          "executor",
+			Type:          interfaces.WorkerTypeModel,
+			ModelProvider: "customer",
+			Body:          "You are the executor.",
+		}},
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "agent",
+		}},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	resolver := providerResolverStub{canonical: map[string]string{
+		"customer": "customer.provider",
+		"agent":    "cursor",
+	}}
+	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
+		loaded,
+		resolver.CanonicalIdentity,
+	); err != nil {
+		t.Fatalf("ResolveConcreteProviderSelections: %v", err)
+	}
+	worker, ok := loaded.Worker("executor")
+	if !ok || worker.ModelProvider != "customer.provider" {
+		t.Fatalf("worker = %#v, want canonical extension provider", worker)
+	}
+	if got := loaded.FactoryConfig().Guards[0].ModelProvider; got != "cursor" {
+		t.Fatalf("guard modelProvider = %q, want canonical cursor identity", got)
+	}
+}
+
+func TestResolveConcreteProviderSelectionsRejectsNonSelectableGuardAtGuardField(t *testing.T) {
+	factoryDir := t.TempDir()
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "agy",
+		}},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	err = operatordefaultsruntime.ResolveConcreteProviderSelections(
+		loaded,
+		providerResolverStub{errors: map[string]error{
+			"agy": errors.New(`provider "agy" is not selectable (catalog-only)`),
+		}}.CanonicalIdentity,
+	)
+	if err == nil ||
+		!strings.Contains(err.Error(), "guards[0].modelProvider") ||
+		!strings.Contains(err.Error(), `provider "agy" is not selectable (catalog-only)`) {
+		t.Fatalf("error = %v, want field-local catalog-only diagnostic", err)
+	}
+}
+
+func TestResolveConcreteProviderSelectionsAllowsInvocationInterpolationProvider(t *testing.T) {
 	factoryDir := t.TempDir()
 	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &interfaces.FactoryConfig{
 		InvocationSignature: &interfaces.InvocationSignatureConfig{
@@ -148,9 +217,60 @@ func TestValidateModelWorkerRuntimeProviders_AllowsInvocationInterpolationProvid
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	if err := operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded); err != nil {
-		t.Fatalf("ValidateModelWorkerRuntimeProviders: %v", err)
+	resolver := &recordingProviderResolver{}
+	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
+		loaded,
+		resolver.CanonicalIdentity,
+	); err != nil {
+		t.Fatalf("ResolveConcreteProviderSelections: %v", err)
 	}
+	if len(resolver.identities) != 0 {
+		t.Fatalf("registry lookups = %v, want none for unresolved invocation provider", resolver.identities)
+	}
+}
+
+func TestApplyOperatorDefaultsToLoadedConfigPreservesExtensionProvider(t *testing.T) {
+	loaded := newOperatorDefaultsRuntimeFixture(t, map[string]any{
+		"workers": []map[string]any{{
+			"name": "executor",
+			"type": "MODEL_WORKER",
+			"body": "You are the executor.",
+		}},
+	})
+
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "customer.provider",
+	}); err != nil {
+		t.Fatalf("ApplyToLoadedConfig: %v", err)
+	}
+	worker, ok := loaded.Worker("executor")
+	if !ok || worker.ModelProvider != "customer.provider" {
+		t.Fatalf("worker = %#v, want preserved extension default", worker)
+	}
+}
+
+type providerResolverStub struct {
+	canonical map[string]string
+	errors    map[string]error
+}
+
+func (r providerResolverStub) CanonicalIdentity(identity string) (string, error) {
+	if err := r.errors[identity]; err != nil {
+		return "", err
+	}
+	if canonical := r.canonical[identity]; canonical != "" {
+		return canonical, nil
+	}
+	return identity, nil
+}
+
+type recordingProviderResolver struct {
+	identities []string
+}
+
+func (r *recordingProviderResolver) CanonicalIdentity(identity string) (string, error) {
+	r.identities = append(r.identities, identity)
+	return identity, nil
 }
 
 func newOperatorDefaultsRuntimeFixture(t *testing.T, factory map[string]any) interfaces.MutableLoadedFactorySource {

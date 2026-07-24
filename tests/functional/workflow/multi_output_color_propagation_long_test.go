@@ -27,10 +27,10 @@ func TestMultiOutputColorPropagation(t *testing.T) {
 		Tags:       map[string]string{"priority": "high"},
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("split-output"),
 	}, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"idea:complete": 1, "task:complete": 1, "idea:init": 0, "task:init": 0,
 	})
 	assertCrossTypeTerminalWork(t, listedWork, "my-feature-plan", "work-idea-001", "trace-multi-out")
@@ -49,10 +49,10 @@ func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
 		Payload:    []byte("idea about logging"),
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("downstream-ok"),
 	}, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"task:complete": 1})
 	assertCrossTypeTerminalWork(t, listedWork, "prd-factory-log-levels", "work-idea-002", "trace-name-downstream")
 }
 

@@ -18,6 +18,13 @@ import (
 // low-cardinality dimensions.
 type InvocationMetric = internalcontracts.InvocationMetric
 
+// SessionIDGenerator supplies opaque identities for live sessions, durable
+// sessions, and session-owned invocation requests.
+type SessionIDGenerator = internalcontracts.SessionIDGenerator
+
+// Effect-port contracts are published from the Sessions root as aliases so
+// peers and Wire bind through factorysessions names while pkg-structure keeps
+// the root InterfaceType count limited to Service + ExecutionService.
 type (
 	ExecutionOpeningFileSystem           = internalcontracts.ExecutionOpeningFileSystem
 	DirectoryInspection                  = internalcontracts.DirectoryInspection

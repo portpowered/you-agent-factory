@@ -23,12 +23,12 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if provider.CallCount("exec-worker") != 3 {
 		t.Errorf("expected exec-worker called 3 times, got %d", provider.CallCount("exec-worker"))
 	}
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
 func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
@@ -52,8 +52,8 @@ func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "executor-loop-breaker", "task:failed")
 	server.Stop(t)
 }
@@ -72,8 +72,8 @@ func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) 
 		workerexecution.InferenceResponse{Content: "Finalized. COMPLETE"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if provider.CallCount() != 4 {
 		t.Errorf("expected provider called 4 times, got %d", provider.CallCount())

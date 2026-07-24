@@ -1690,7 +1690,7 @@ type FactoryGuard struct {
 	Model *string `json:"model,omitempty"`
 
 	// ModelProvider Provider whose inference-throttle history controls this factory-level guard.
-	ModelProvider WorkerModelProvider `json:"modelProvider"`
+	ModelProvider ProviderIdentity `json:"modelProvider"`
 
 	// RefreshWindow Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.
 	RefreshWindow string `json:"refreshWindow"`
@@ -4115,14 +4115,14 @@ type GlobalConfigWorkerPreset struct {
 	// Model Optional model name, trimmed when present.
 	Model *string `json:"model,omitempty"`
 
-	// ModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+	// ModelProvider Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
 	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
 
 	// ReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
 	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
 }
 
-// GlobalConfigWorkerPresetModelProvider Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+// GlobalConfigWorkerPresetModelProvider Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
 type GlobalConfigWorkerPresetModelProvider = string
 
 // GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
@@ -4561,7 +4561,7 @@ type ManagedRuntimeSourceDiagnostics struct {
 
 // ModelCapability defines model for ModelCapability.
 type ModelCapability struct {
-	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	// ModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Operations Operations declared by this worker for the selected model.
@@ -5163,6 +5163,9 @@ type ProviderFailureMetadata struct {
 	// Type Stable machine-readable failure type used to classify failed work across providers and runtimes.
 	Type *WorkFailureType `json:"type,omitempty"`
 }
+
+// ProviderIdentity Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.
+type ProviderIdentity = WorkerModelProvider
 
 // ProviderImplementationAvailability How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
 type ProviderImplementationAvailability string
@@ -6436,7 +6439,7 @@ type Worker struct {
 	// ModelLocality Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
 	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
 
-	// ModelProvider Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+	// ModelProvider Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
@@ -6470,7 +6473,7 @@ type Worker struct {
 // WorkerModelLocality Provider locality for a model worker capability declaration.
 type WorkerModelLocality string
 
-// WorkerModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+// WorkerModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
 type WorkerModelProvider string
 
 // WorkerProvider Concrete worker-provider wrappers supported by the public factory-config contract.

@@ -101,32 +101,3 @@ func runFactoryToCompletion(
 	daemon.Stop(t)
 	return session, work, events
 }
-
-// SessionPlaceTokenCount reads one authored place from the public Petri
-// projection. It deliberately does not inspect an internal runtime marking.
-func SessionPlaceTokenCount(session factoryapi.FactorySession, placeID string) int {
-	if session.Runtime.Petri == nil {
-		return 0
-	}
-	count := 0
-	for _, token := range session.Runtime.Petri.Marking {
-		if token.PlaceId == placeID {
-			count++
-		}
-	}
-	return count
-}
-
-// SessionHasWorkAtPlace reads one Work location from the generated public
-// Factory Session projection.
-func SessionHasWorkAtPlace(session factoryapi.FactorySession, workID, placeID string) bool {
-	if session.Runtime.Petri == nil {
-		return false
-	}
-	for _, token := range session.Runtime.Petri.Marking {
-		if token.WorkId == workID && token.PlaceId == placeID {
-			return true
-		}
-	}
-	return false
-}

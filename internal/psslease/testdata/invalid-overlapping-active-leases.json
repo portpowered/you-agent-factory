@@ -1,0 +1,19 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "PKT-A",
+      "exclusivePaths": [
+        "pkg/services/factory_runtime/"
+      ],
+      "state": "active"
+    },
+    {
+      "packetId": "PKT-B",
+      "exclusivePaths": [
+        "pkg/services/factory_runtime/internal/orchestrators/"
+      ],
+      "state": "active"
+    }
+  ]
+}

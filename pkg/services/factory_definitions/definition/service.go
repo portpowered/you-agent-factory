@@ -24,8 +24,10 @@ const (
 )
 
 // Service owns current and named factory definition reads, persistence, and
-// activation policy.
+// activation policy. UnimplementedService keeps the CTR-DEF root slice methods
+// assignable until nested IMP-DEF collaborators are wired.
 type Service struct {
+	factoryroot.UnimplementedService
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
 }

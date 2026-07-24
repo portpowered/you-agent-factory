@@ -53,10 +53,10 @@ Process the input task.
 		)},
 	)
 
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 15*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 
 	// Verify the subprocess runner was called exactly once and the real
 	// ScriptWrapProvider built the expected Claude CLI command.

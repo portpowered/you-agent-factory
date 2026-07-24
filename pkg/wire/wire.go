@@ -48,6 +48,7 @@ var apiSet = wire.NewSet(
 var servicesSet = wire.NewSet(
 	provideProviderRegistry,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
+	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
@@ -294,7 +295,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	factorysessionwire.NewInvocationOperation,
+	provideInvocationOperation,
 	initializerapplication.NewStdioRunnerBuilder,
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,

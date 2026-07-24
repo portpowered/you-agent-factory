@@ -265,6 +265,86 @@ func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.
 	assertMarkingTokenIDs(t, markingSnap.TokensInPlace("task:complete"), []string{"work-review"}, "task:complete")
 }
 
+func TestSubmissionHook_AppliesMarkingMutationsAndRecordsSubmissionID(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	token := newMoveTestToken("tok-hook-move", "work-hook-move", "task:failed")
+	token.History = factorytoken.History{
+		TotalVisits:         map[string]int{"transition-build": 1},
+		ConsecutiveFailures: map[string]int{"transition-build": 2},
+		PlaceVisits:         map[string]int{"task:failed": 1},
+		LastError:           "provider timeout",
+		FailureLog:          []factorytoken.Failure{{Error: "provider timeout"}},
+	}
+	marking.AddToken(token)
+
+	var submissions []work.FactorySubmissionRecord
+	hook := &testSubmissionHook{
+		name:     "marking-mutator",
+		priority: 1,
+		onTick: func(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+			if _, ok := input.Snapshot.Marking.Tokens["tok-hook-move"]; !ok {
+				t.Fatalf("expected seeded token visible to submission hook")
+			}
+			return interfaces.SubmissionHookResult{
+				MarkingMutations: []interfaces.MarkingMutation{{
+					Type:      interfaces.MutationMove,
+					TokenID:   "tok-hook-move",
+					FromPlace: "task:failed",
+					ToPlace:   "task:init",
+					Reason:    "submission hook relocate",
+				}},
+				GeneratedBatches: []work.GeneratedSubmissionBatch{{
+					Request: work.WorkRequest{
+						Type: work.WorkRequestTypeFactoryRequestBatch,
+						Works: []work.Work{{
+							Name:       "hook-recorded",
+							WorkID:     "work-hook-recorded",
+							WorkTypeID: "task",
+							TraceID:    "trace-hook-recorded",
+						}},
+					},
+					// Empty Metadata.Source exercises generatedSubmissionSource defaulting to hook name.
+				}},
+			}, nil
+		},
+	}
+
+	eng := newTestFactoryEngine(n, marking, nil,
+		WithSubmissionHook(hook),
+		WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
+			submissions = append(submissions, record)
+		}),
+	)
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+
+	if marking.Tokens["tok-hook-move"].PlaceID != "task:init" {
+		t.Fatalf("token place = %q, want task:init after hook marking mutation", marking.Tokens["tok-hook-move"].PlaceID)
+	}
+	if marking.Tokens["tok-hook-move"].History.LastError != "provider timeout" {
+		t.Fatalf("failure history LastError = %q, want preserved provider timeout", marking.Tokens["tok-hook-move"].History.LastError)
+	}
+	if len(marking.Tokens["tok-hook-move"].History.ConsecutiveFailures) != 0 {
+		t.Fatalf("guard consecutive failures = %#v, want cleared when leaving failed place", marking.Tokens["tok-hook-move"].History.ConsecutiveFailures)
+	}
+	if len(submissions) != 1 {
+		t.Fatalf("submission records = %d, want 1", len(submissions))
+	}
+	wantSubmissionID := submissionRecordID(1, "marking-mutator", 0)
+	if submissions[0].SubmissionID != wantSubmissionID {
+		t.Fatalf("submission ID = %q, want %q", submissions[0].SubmissionID, wantSubmissionID)
+	}
+	if submissions[0].Source != "marking-mutator" || submissions[0].Request.WorkID != "work-hook-recorded" {
+		t.Fatalf("submission record = %#v, want marking-mutator / work-hook-recorded", submissions[0])
+	}
+	markingSnap := eng.GetMarking()
+	if tokens := markingSnap.TokensInPlace("task:init"); len(tokens) != 2 {
+		t.Fatalf("task:init tokens = %d, want relocated seed + generated submission", len(tokens))
+	}
+}
+
 func assertStringSequence(t *testing.T, got, want []string, label string) {
 	t.Helper()
 	if len(got) != len(want) {
