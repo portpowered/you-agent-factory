@@ -1424,6 +1424,12 @@ response-stream output.
   relationships against the authored manifest. Generated commands with no
   declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
   grouped commands appear variadic to the observable input inventory.
+- When a migrated command starts projecting authored Examples into Cobra help,
+  refresh the matching intentional help fixture under
+  `pkg/transports/cli/baseline/testdata/` (for docs:
+  `docs_help.txt` / `TestDocsHelpBaseline_MatchesFixture`) to the normalized
+  production `--help` output. That ledger path is separate from
+  `intentional_changes.json`, which only tracks planned removals and moves.
 - Dashboard feature routes must account for the production `/dashboard/ui/` SPA
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;
