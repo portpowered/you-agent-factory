@@ -19,11 +19,14 @@ that were not lowered or removed when the corresponding package shrank.
 It maps every production `pkg` package to one committed owner, approved family,
 Process Edges exception, or deletion/move successor. It also freezes owner and
 nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
-transaction boundary, failure/recovery), large responsibility clusters, and a
+transaction boundary, failure/recovery), large responsibility clusters, a
 cross-service edge table that classifies each distinct-owner production import
 as command, query, event, protocol composition, construction, lifecycle, or
-external effect. Process Edges edges are marked as the architecture exception
-and restricted to construction or external effect. When
+external effect, and named-owner confirmations for Providers, Provider Sessions,
+Operator Settings, System Bootstrap, Factory Visualization, and Recordings with
+reviewed nested-subservice maps (no alternate top-level owners or further
+discovery). Process Edges edges are marked as the architecture exception and
+restricted to construction or external effect. When
 `package-target-manifest.json` (FND-01) is present, validators reuse that seed
 for package rows instead of inventing a second destination catalog. Regenerate
 with `go run ./cmd/ownershipinventoryfreeze` and prove with

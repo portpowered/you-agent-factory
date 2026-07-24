@@ -1717,6 +1717,101 @@
       "evidence": "pkg/services/workers -\u003e pkg/services/work"
     }
   ],
+  "namedOwnerConfirmations": [
+    {
+      "owner": "factory_visualization",
+      "displayName": "Factory Visualization",
+      "targetPath": "pkg/services/factory_visualization",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "factory_visualization/activation_lifecycle",
+        "factory_visualization/live_view_projection",
+        "factory_visualization/response_event_presentation"
+      ],
+      "note": "Retain top-level visualization; nested activation, live view, and presentation maps are committed. Sink/codec adapters stay as responsibility clusters, not alternate owners."
+    },
+    {
+      "owner": "operator_settings",
+      "displayName": "Operator Settings",
+      "targetPath": "pkg/services/operator_settings",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "operator_settings/document",
+        "operator_settings/resolution"
+      ],
+      "note": "Retain one Operator Settings owner; provider settings remain Document/Resolution content, not a competing top-level Provider Settings or Providers catalog service."
+    },
+    {
+      "owner": "provider_sessions",
+      "displayName": "Provider Sessions",
+      "targetPath": "pkg/services/provider_sessions",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "provider_sessions/codex_reader",
+        "provider_sessions/cursor_reader"
+      ],
+      "note": "Retain read-only Provider Sessions with Codex/Cursor reader nested maps. Does not enumerate or execute providers."
+    },
+    {
+      "owner": "providers",
+      "displayName": "Providers",
+      "targetPath": "pkg/services/providers",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "providers/catalog",
+        "providers/execution"
+      ],
+      "residualPackageRules": [
+        {
+          "packagePrefix": "pkg/services/workers/agypty",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/cliprovider",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "CLI provider registry/enumeration packages move into Providers Catalog; no CLI-specific competing registry remains."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/provider",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/provider_test",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Provider test/support packages follow the Providers extraction successor."
+        }
+      ],
+      "note": "Add Providers as the singular catalog+execution owner. Capabilities remain Catalog queries; native adapters remain responsibility clusters—not competing provider catalog/execution top-level abstractions."
+    },
+    {
+      "owner": "recordings",
+      "displayName": "Recordings",
+      "targetPath": "pkg/services/recordings",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "recordings/artifacts_export",
+        "recordings/canonical_ledger",
+        "recordings/projection_query",
+        "recordings/recording_lifecycle",
+        "recordings/replay"
+      ],
+      "note": "Retain one Recordings family. Projection/Replay/Artifacts stay nested; they are not promoted to competing top-level owners in this program."
+    },
+    {
+      "owner": "system_initialization",
+      "displayName": "System Bootstrap",
+      "targetPath": "pkg/services/system_initialization",
+      "status": "confirmed",
+      "nestedSubservices": [],
+      "note": "Retain System Bootstrap with no nested subservice. Legacy migration remains a deletion-only responsibility cluster, not a discovery-open nested service."
+    }
+  ],
   "packages": [
     {
       "packagePath": "pkg/initializer",

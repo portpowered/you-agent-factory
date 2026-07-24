@@ -28,6 +28,9 @@ const (
 	OwnerRationaleSortKeyDescription         = "serviceID ascending byte order"
 	ResponsibilityClusterSortKeyDescription  = "owner then clusterID ascending byte order"
 	CrossServiceEdgeSortKeyDescription       = "fromOwner then toOwner ascending byte order"
+	NamedOwnerSortKeyDescription             = "owner ascending byte order"
+
+	NamedOwnerStatusConfirmed = "confirmed"
 
 	EdgeClassCommand              = "command"
 	EdgeClassQuery                = "query"
@@ -62,7 +65,29 @@ type Inventory struct {
 	OwnerRationales          []OwnerRationaleCard    `json:"ownerRationales"`
 	ResponsibilityClusters   []ResponsibilityCluster `json:"responsibilityClusters"`
 	CrossServiceEdges        []CrossServiceEdge      `json:"crossServiceEdges"`
+	NamedOwnerConfirmations  []NamedOwnerConfirmation `json:"namedOwnerConfirmations"`
 	Packages                 []PackageRow            `json:"packages"`
+}
+
+// NamedOwnerConfirmation freezes one PRD-named owner onto the committed tree
+// with its reviewed nested-subservice map so PSS-F02 does not reopen discovery.
+type NamedOwnerConfirmation struct {
+	Owner                 string                `json:"owner"`
+	DisplayName           string                `json:"displayName"`
+	TargetPath            string                `json:"targetPath"`
+	Status                string                `json:"status"`
+	NestedSubservices     []string              `json:"nestedSubservices"`
+	ResidualPackageRules  []ResidualPackageRule `json:"residualPackageRules,omitempty"`
+	Note                  string                `json:"note"`
+}
+
+// ResidualPackageRule records how packages that currently sit near a named
+// owner map to the closest committed destination or deletion queue.
+type ResidualPackageRule struct {
+	PackagePrefix string `json:"packagePrefix"`
+	Destination   string `json:"destination"`
+	Disposition   string `json:"disposition"`
+	Note          string `json:"note"`
 }
 
 // CrossServiceEdge records one distinct-owner production dependency edge and
@@ -161,12 +186,16 @@ type Report struct {
 	MissingCrossServiceEdges       []string
 	UnexpectedCrossServiceEdges    []string
 	InvalidEdgeClassifications     []string
+	MissingNamedOwners             []string
+	UnconfirmedNamedOwners         []string
+	InvalidNamedOwnerMaps          []string
 	MissingCrossServiceEdgeTable   bool
 	MissingProcessEdgesException   bool
 	UnstableSort                   bool
 	UnstableRationaleSort          bool
 	UnstableResponsibilitySort     bool
 	UnstableEdgeSort               bool
+	UnstableNamedOwnerSort         bool
 	ReusedFND01Seed                bool
 }
 
@@ -185,10 +214,14 @@ func (r Report) OK() bool {
 		len(r.MissingCrossServiceEdges) == 0 &&
 		len(r.UnexpectedCrossServiceEdges) == 0 &&
 		len(r.InvalidEdgeClassifications) == 0 &&
+		len(r.MissingNamedOwners) == 0 &&
+		len(r.UnconfirmedNamedOwners) == 0 &&
+		len(r.InvalidNamedOwnerMaps) == 0 &&
 		!r.MissingCrossServiceEdgeTable &&
 		!r.MissingProcessEdgesException &&
 		!r.UnstableSort &&
 		!r.UnstableRationaleSort &&
 		!r.UnstableResponsibilitySort &&
-		!r.UnstableEdgeSort
+		!r.UnstableEdgeSort &&
+		!r.UnstableNamedOwnerSort
 }

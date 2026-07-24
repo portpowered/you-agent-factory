@@ -101,8 +101,125 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	validateRationales(inventory, &report)
 	validateResponsibilityClusters(inventory, &report)
 	validateCrossServiceEdges(inventory, &report)
+	validateNamedOwners(inventory, &report)
 
 	return report
+}
+
+func validateNamedOwners(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.NamedOwnerConfirmations, compareNamedOwnerConfirmations) {
+		report.UnstableNamedOwnerSort = true
+	}
+
+	byOwner := map[string]NamedOwnerConfirmation{}
+	for _, confirmation := range inventory.NamedOwnerConfirmations {
+		byOwner[confirmation.Owner] = confirmation
+		if msg := validateNamedOwnerConfirmation(confirmation, inventory.Packages); msg != "" {
+			report.InvalidNamedOwnerMaps = append(report.InvalidNamedOwnerMaps, msg)
+		}
+		if confirmation.Status != NamedOwnerStatusConfirmed ||
+			strings.Contains(strings.ToLower(confirmation.Status), "discovery") ||
+			strings.Contains(strings.ToLower(confirmation.Status), "decomposition") {
+			report.UnconfirmedNamedOwners = append(report.UnconfirmedNamedOwners, confirmation.Owner)
+		}
+		if !slices.Contains(ProductOwners, confirmation.Owner) {
+			report.InvalidNamedOwnerMaps = append(
+				report.InvalidNamedOwnerMaps,
+				confirmation.Owner+": introduces alternate top-level owner outside the committed 13-owner tree",
+			)
+		}
+	}
+
+	for _, owner := range RequiredNamedOwners {
+		confirmation, ok := byOwner[owner]
+		if !ok {
+			report.MissingNamedOwners = append(report.MissingNamedOwners, owner)
+			continue
+		}
+		wantNested := NamedOwnerNestedSubservices[owner]
+		if !slices.Equal(confirmation.NestedSubservices, wantNested) {
+			report.InvalidNamedOwnerMaps = append(
+				report.InvalidNamedOwnerMaps,
+				owner+": nested-subservice map does not match committed target tree",
+			)
+		}
+		if strings.TrimSpace(confirmation.TargetPath) == "" {
+			report.InvalidNamedOwnerMaps = append(report.InvalidNamedOwnerMaps, owner+": missing targetPath")
+		}
+	}
+
+	slices.Sort(report.MissingNamedOwners)
+	slices.Sort(report.UnconfirmedNamedOwners)
+	slices.Sort(report.InvalidNamedOwnerMaps)
+	report.InvalidNamedOwnerMaps = slices.Compact(report.InvalidNamedOwnerMaps)
+}
+
+func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, packages []PackageRow) string {
+	if strings.TrimSpace(confirmation.Owner) == "" {
+		return "named owner confirmation missing owner"
+	}
+	if strings.TrimSpace(confirmation.DisplayName) == "" {
+		return confirmation.Owner + ": missing displayName"
+	}
+	if strings.TrimSpace(confirmation.TargetPath) == "" {
+		return confirmation.Owner + ": missing targetPath"
+	}
+	if strings.TrimSpace(confirmation.Status) == "" {
+		return confirmation.Owner + ": missing status"
+	}
+	if confirmation.NestedSubservices == nil {
+		return confirmation.Owner + ": nestedSubservices must be present (use empty list when none)"
+	}
+	if !slices.IsSorted(confirmation.NestedSubservices) {
+		return confirmation.Owner + ": nestedSubservices must be stable-sorted"
+	}
+	for _, serviceID := range confirmation.NestedSubservices {
+		if !strings.HasPrefix(serviceID, confirmation.Owner+"/") {
+			return confirmation.Owner + ": nested subservice " + serviceID + " is outside owner"
+		}
+	}
+	if strings.TrimSpace(confirmation.Note) == "" {
+		return confirmation.Owner + ": missing note"
+	}
+	for _, rule := range confirmation.ResidualPackageRules {
+		if msg := validateResidualPackageRule(confirmation.Owner, rule, packages); msg != "" {
+			return msg
+		}
+	}
+	return ""
+}
+
+func validateResidualPackageRule(owner string, rule ResidualPackageRule, packages []PackageRow) string {
+	if strings.TrimSpace(rule.PackagePrefix) == "" {
+		return owner + ": residual rule missing packagePrefix"
+	}
+	if strings.TrimSpace(rule.Destination) == "" {
+		return owner + ": residual rule " + rule.PackagePrefix + " missing destination"
+	}
+	if !isKnownDestination(rule.Destination) {
+		return owner + ": residual rule " + rule.PackagePrefix + " destination outside closed vocabulary"
+	}
+	if rule.Disposition != DispositionRetain && rule.Disposition != DispositionMove && rule.Disposition != DispositionDelete {
+		return owner + ": residual rule " + rule.PackagePrefix + " has unknown disposition"
+	}
+	if strings.TrimSpace(rule.Note) == "" {
+		return owner + ": residual rule " + rule.PackagePrefix + " missing note"
+	}
+
+	matched := 0
+	for _, row := range packages {
+		if !packageMatchesResidualPrefix(row.PackagePath, rule.PackagePrefix) {
+			continue
+		}
+		matched++
+		if row.Destination != rule.Destination || row.Disposition != rule.Disposition {
+			return owner + ": residual rule " + rule.PackagePrefix + " mismatches package " + row.PackagePath
+		}
+	}
+	if matched == 0 {
+		return owner + ": residual rule " + rule.PackagePrefix + " matches no inventoried packages"
+	}
+	return ""
 }
 
 func validateCrossServiceEdges(inventory Inventory, report *Report) {
