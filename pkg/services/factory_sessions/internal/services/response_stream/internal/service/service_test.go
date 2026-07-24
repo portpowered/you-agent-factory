@@ -90,6 +90,55 @@ func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, 
 	return event
 }
 
+func publishRetentionThroughService(
+	t *testing.T,
+	service responsestreamservice.Service,
+	store *responseeventstore.SessionResponseEventStore,
+	kind responseevents.Kind,
+	phase responseevents.Phase,
+	dispatchID string,
+	label string,
+) responseevents.FactoryResponseEvent {
+	t.Helper()
+	draft := responseevents.FactoryResponseEvent{
+		DispatchID: dispatchID,
+		RunID:      "run-1",
+		Kind:       kind,
+		Phase:      phase,
+		ItemID:     label,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: string(phase),
+			Delivery:       responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta,
+			Fidelity:       responseevents.FidelityLossless,
+		},
+	}
+	switch kind {
+	case responseevents.KindMessage:
+		if phase == responseevents.PhaseDelta {
+			draft.Payload = json.RawMessage(fmt.Sprintf(
+				`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":%q}`, label,
+			))
+		} else {
+			draft.Payload = json.RawMessage(fmt.Sprintf(
+				`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":%q}]}`, label,
+			))
+		}
+	case responseevents.KindTool:
+		draft.Payload = json.RawMessage(fmt.Sprintf(
+			`{"toolCallId":%q,"toolName":"shell","status":%q}`, label, phase,
+		))
+	case responseevents.KindProgress:
+		draft.Payload = json.RawMessage(fmt.Sprintf(`{"label":%q}`, label))
+	default:
+		t.Fatalf("unsupported retention event kind %s", kind)
+	}
+	event, err := service.Publish(store, draft)
+	if err != nil {
+		t.Fatalf("service.Publish: %v", err)
+	}
+	return event
+}
 func publishThroughService(
 	t *testing.T,
 	service responsestreamservice.Service,
@@ -268,6 +317,24 @@ func TestService_SubscribeRejectsInvalidCursorAndUnsupportedKindFilter(t *testin
 	}
 }
 
+func decodeRetentionGap(t *testing.T, event responseevents.FactoryResponseEvent) responseevents.StreamGapPayload {
+	t.Helper()
+	if event.Kind != responseevents.KindStreamGap || event.Phase != responseevents.PhaseUpdated {
+		t.Fatalf("gap event = %s/%s, want STREAM_GAP/UPDATED", event.Kind, event.Phase)
+	}
+	if event.Sequence != 0 {
+		t.Fatalf("gap sequence = %d, want out-of-band sequence 0", event.Sequence)
+	}
+	var payload responseevents.StreamGapPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatalf("decode gap payload: %v", err)
+	}
+	if payload.Reason != "retention_window" {
+		t.Fatalf("gap reason = %q, want retention_window", payload.Reason)
+	}
+	return payload
+}
+
 func TestService_StaleCursorSignalsGapAndPreservesFirstAvailableEvent(t *testing.T) {
 	t.Parallel()
 	service := newService(t)
@@ -275,8 +342,8 @@ func TestService_StaleCursorSignalsGapAndPreservesFirstAvailableEvent(t *testing
 	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 1, MaxBytes: 1 << 20}); err != nil {
 		t.Fatalf("SetRetentionLimits: %v", err)
 	}
-	publish(t, store, responseevents.KindMessage, "dispatch-1")
-	retained := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	dropped := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	retained := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -289,18 +356,70 @@ func TestService_StaleCursorSignalsGapAndPreservesFirstAvailableEvent(t *testing
 	if len(events) != 2 || events[0].Kind != responseevents.KindStreamGap || events[1].Sequence != retained.Sequence {
 		t.Fatalf("events = %#v, want gap followed by sequence %d", events, retained.Sequence)
 	}
+	gap := decodeRetentionGap(t, events[0])
+	if gap.FromSequence != dropped.Sequence || gap.ToSequence != dropped.Sequence {
+		t.Fatalf("gap bounds = [%d,%d], want dropped sequence %d", gap.FromSequence, gap.ToSequence, dropped.Sequence)
+	}
+	if gap.FirstAvailableSequence != retained.Sequence {
+		t.Fatalf("gap first available sequence = %d, want retained sequence %d", gap.FirstAvailableSequence, retained.Sequence)
+	}
+}
+
+func TestService_SubscribeReconnectBehindRetentionWindowDeliversGapThenCatchUp(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20}); err != nil {
+		t.Fatalf("SetRetentionLimits: %v", err)
+	}
+	publishRetentionThroughService(t, service, store, responseevents.KindMessage, responseevents.PhaseDelta, "dispatch-1", "dropped-1")
+	firstRetained := publishRetentionThroughService(t, service, store, responseevents.KindMessage, responseevents.PhaseCompleted, "dispatch-1", "final-2")
+	publishRetentionThroughService(t, service, store, responseevents.KindProgress, responseevents.PhaseUpdated, "dispatch-1", "dropped-3")
+	lastRetained := publishRetentionThroughService(t, service, store, responseevents.KindTool, responseevents.PhaseFailed, "dispatch-1", "failure-4")
+	publishRetentionThroughService(t, service, store, responseevents.KindMessage, responseevents.PhaseDelta, "dispatch-1", "dropped-5")
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		AfterSequence: 1,
+	})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 3 || events[0].Kind != responseevents.KindStreamGap {
+		t.Fatalf("events = %#v, want gap followed by retained catch-up", events)
+	}
+	gap := decodeRetentionGap(t, events[0])
+	if gap.FromSequence != 3 || gap.ToSequence != 5 {
+		t.Fatalf("gap bounds = [%d,%d], want stale reconnect window [3,5]", gap.FromSequence, gap.ToSequence)
+	}
+	if gap.FirstAvailableSequence != firstRetained.Sequence {
+		t.Fatalf("gap first available sequence = %d, want first retained sequence %d", gap.FirstAvailableSequence, firstRetained.Sequence)
+	}
+	if events[1].Sequence != firstRetained.Sequence || events[2].Sequence != lastRetained.Sequence {
+		t.Fatalf("catch-up = sequences %d,%d; want retained sequences %d,%d", events[1].Sequence, events[2].Sequence, firstRetained.Sequence, lastRetained.Sequence)
+	}
 }
 
 func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 	t.Parallel()
 	service := newService(t)
 	store := newStore(t, service)
+	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 8, MaxBytes: 1 << 20}); err != nil {
+		t.Fatalf("SetRetentionLimits: %v", err)
+	}
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
 	for range 100 {
-		publish(t, store, responseevents.KindMessage, "dispatch-1")
+		publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+		if accounting := store.RetentionAccounting(); accounting.EventCount > store.RetentionLimits().MaxEvents {
+			t.Fatalf("retention accounting during slow subscribe = %#v, exceeds limits %#v", accounting, store.RetentionLimits())
+		}
 	}
 	if got := store.SubscriberCount(); got != 1 {
 		t.Fatalf("SubscriberCount = %d, want 1", got)
