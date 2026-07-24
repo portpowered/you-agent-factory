@@ -7,6 +7,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestConflictResolution_ReviewFailResolveReReview(t *testing.T) {
@@ -27,8 +29,8 @@ func TestConflictResolution_ReviewFailResolveReReview(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:complete":            1,
 		"code-change:failed":              0,
 		"code-change:resolving-conflicts": 0,
@@ -60,8 +62,8 @@ func TestConflictResolution_ResolverFails(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:failed":              1,
 		"code-change:complete":            0,
 		"code-change:resolving-conflicts": 0,
@@ -85,8 +87,8 @@ func TestConflictResolution_ReviewApproveFirstTry(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:complete":            1,
 		"code-change:resolving-conflicts": 0,
 	})

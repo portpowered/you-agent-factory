@@ -164,6 +164,9 @@ actions:
     - target: $.components.schemas.Worker.properties.modelProvider
       update:
         x-go-type: WorkerModelProvider
+    - target: $.components.schemas.ProviderIdentity
+      update:
+        x-go-type: WorkerModelProvider
     - target: $.components.schemas.WorkerProvider
       update:
         x-enum-varnames:

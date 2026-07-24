@@ -34,13 +34,13 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{
 		"task:complete": 1,
 		"task:init":     0,
 		"task:failed":   0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
@@ -70,13 +70,13 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{
 		"task:failed":   1,
 		"task:init":     0,
 		"task:complete": 0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

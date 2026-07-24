@@ -23,8 +23,9 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		fixture.server,
 		10*time.Second,
 		func(session factoryapi.FactorySession) bool {
+			listed := support.ListDefaultSessionWork(t, fixture.server.URL())
 			return fixture.runner.CallCount() >= 3 &&
-				support.SessionHasWorkAtPlace(session, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init")
+				support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init")
 		},
 	)
 	fixture.unaffectedWork.WorkID = submitThrottlePauseWork(t, fixture.server, fixture.unaffectedWork)
@@ -34,8 +35,9 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		fixture.server,
 		5*time.Second,
 		func(session factoryapi.FactorySession) bool {
-			return support.SessionHasWorkAtPlace(session, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init") &&
-				support.SessionHasWorkAtPlace(session, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
+			listed := support.ListDefaultSessionWork(t, fixture.server.URL())
+			return support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init") &&
+				support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
 		},
 	)
 
@@ -197,8 +199,9 @@ func waitForThrottlePausePublicSession(
 	}
 
 	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	if session.Runtime.Petri != nil {
-		t.Fatalf("timed out waiting for public Factory Session within %s: progress=%#v marking=%#v", timeout, session.Runtime.Progress, session.Runtime.Petri.Marking)
+		t.Fatalf("timed out waiting for public Factory Session within %s: progress=%#v work=%#v", timeout, session.Runtime.Progress, listed.Results)
 	}
 	t.Fatalf("timed out waiting for public Factory Session within %s: %#v", timeout, session.Runtime)
 	return session

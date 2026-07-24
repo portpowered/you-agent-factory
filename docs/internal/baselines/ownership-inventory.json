@@ -1211,13 +1211,6 @@
     },
     {
       "fromOwner": "factory_sessions",
-      "toOwner": "edges",
-      "class": "construction",
-      "architectureException": true,
-      "evidence": "pkg/services/factory_sessions/internal/applicationopening -\u003e pkg/services/edges"
-    },
-    {
-      "fromOwner": "factory_sessions",
       "toOwner": "factory_definitions",
       "class": "query",
       "evidence": "pkg/services/factory_sessions -\u003e pkg/services/factory_definitions"

@@ -8,6 +8,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestDependencyTerminal_BlockedUntilArchived(t *testing.T) {
@@ -32,8 +34,8 @@ func TestDependencyTerminal_BlockedUntilArchived(t *testing.T) {
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"prd:archived": 2, "prd:init": 0, "prd:in-review": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"prd:archived": 2, "prd:init": 0, "prd:in-review": 0})
 
 	if provider.CallCount("executor") != 2 {
 		t.Errorf("expected executor called 2 times (A+B), got %d", provider.CallCount("executor"))
@@ -62,8 +64,8 @@ func TestDependencyTerminal_BlockedDuringProcessing(t *testing.T) {
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"prd:archived": 2, "prd:init": 0, "prd:in-review": 0, "prd:failed": 0,
 	})
 }
@@ -90,8 +92,8 @@ func TestDependencyTerminal_BothComplete(t *testing.T) {
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"prd:archived": 2, "prd:init": 0, "prd:in-review": 0, "prd:failed": 0,
 	})
 }

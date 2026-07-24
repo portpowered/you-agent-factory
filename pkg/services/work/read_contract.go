@@ -4,10 +4,14 @@ import "errors"
 
 const DefaultListMaxResults = 50
 
+// ErrWorkNotFound is the typed state-access failure returned when list/get /
+// move-and-read cannot resolve the requested Work. Peers branch with errors.Is.
 var ErrWorkNotFound = errors.New("Work not found")
 
 // ReadModel is the detached customer-facing Work projection returned by the
-// Work owner. It deliberately contains no token, place, marking, or topology.
+// root Service state-access slice (ListWork, GetWork, MoveWorkAndRead). It
+// deliberately contains no token, place, marking, or topology fields and no
+// Factory Runtime or peer implementation types.
 type ReadModel struct {
 	CursorID                 string
 	Name                     string
@@ -32,6 +36,9 @@ type ReadRelation struct {
 	RequiredState  string
 }
 
+// ListResult is the plain Work-owned state-access list contract. Peers consume
+// detached ReadModel projections and pagination facts without importing Work
+// implementation packages.
 type ListResult struct {
 	Results    []ReadModel
 	MaxResults int

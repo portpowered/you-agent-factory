@@ -42,7 +42,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		t.Errorf("expected reviewer called 3 times, got %d", got)
 	}
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:failed": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
 	})
 	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "code-change:failed")
@@ -69,8 +69,8 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertWorkflowSessionPlaces(t, session, map[string]int{"code-change:failed": 1})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"code-change:failed": 1})
 
 	var rejectedOutputs []string
 	for _, event := range server.GetFactoryEvents(t) {
@@ -103,7 +103,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 2 {
 		t.Errorf("expected swe called 2 times, got %d", got)
@@ -112,7 +112,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		t.Errorf("expected reviewer called 2 times, got %d", got)
 	}
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:complete": 1, "code-change:failed": 0, "code-change:init": 0,
 	})
 }

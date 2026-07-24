@@ -72,6 +72,26 @@
   `go list ./tests/functional/...` result, the shared-support exclusion, and
   required provider-destination validation in both callers. Required package
   validation protects topology but must not become an execution allowlist.
+  Durable top-level `Test*` inventory for functional-test visualization lives in
+  `internal/functionaltestmetadata`: walk `*_test.go` with `go/parser` /
+  `go/ast`, emit slash-normalized file/package/name/line metadata, take the
+  first Go-doc sentence through `go/doc.Synopsis`, attach file-level
+  `//go:build` (preferring it over legacy `// +build`) expressions as
+  `BuildTags`, and capture explicit golden fixture/manifest paths from a
+  `//golden: <path>` doc directive or a test-owned `golden` /
+  `goldenManifest` / `goldenFixture` string declaration. Classify
+  `internal/**` and `*helpers*_test.go` paths as harness verification
+  (`ClassificationHarness`); all other inventoried `Test*` records are
+  `ClassificationCustomer`. `CustomerScenarioCount` equals the customer
+  record count only. Fail closed with a file-scoped error on malformed
+  source. Undocumented customer identities are enforced against the exact
+  deletion-only ledger
+  `docs/internal/baselines/functional-undocumented-tests.json` via
+  `CheckAgainstBaseline` / `ValidateBaselineUpdate` (subset or identical
+  match succeeds; new undocumented customer tests and baseline expansions
+  fail; harness/internal helpers stay out of the ledger). Later FND cells
+  wire that check into Make/CI; do not reintroduce regex or line-scraping
+  inventories.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
@@ -80,6 +100,29 @@
   rejects all service implementation and composition subpackage imports from
   dedicated provider packages, while retaining service-root contracts and the
   exact public external-effect ports used by typed `edges.Edges` replacements.
+Wave 0 functional-tests-expansion planning authority lives under
+  `docs/temp/functional-tests-expansion/` and is durable via a narrow
+  `.gitignore` exception for that directory. Existing-scenario source→destination
+  mapping is owned by `migration-ledger.md` (planning-only; later move batches
+  consume its rows and deletion-only batch ids). The Inventory companion
+  `migration-ledger-inventory.json` mirrors the same required row fields for
+  tooling. Destination topology remains `test-file-checklist.md`; ownership
+  rules remain `plan.md`. `cmd/migrationledgercheck` validates live
+  `tests/functional` inventory coverage, checklist destination validity, and
+  lane preservation against the companion JSON.
+  `make pkg-structure` enforces the domain-mirrored functional layout
+  `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
+  unclassified scenario packages are blocking, while existing nonconforming
+  paths and `runtime_api` remain exact deletion-only debt in
+  `docs/internal/baselines/package-structure-baseline.json`.
+  `tests/functional/internal/support` is the only shared harness exception;
+  other `tests/functional/internal/*` roots (for example `restclient`) are
+  unclassified deletion-only debt, and new `runtime_api` files or top-level
+  `Test*` scenarios fail immediately. Prove accept/reject outcomes with
+  focused `cmd/pkgstructurecheck` tests (see
+  `TestDomainLayoutEnforcementProof`) plus `make pkg-structure` and
+  `make verify-fast`. When enabling a new layout rule, baseline the current
+  repository debt in the same change so `make pkg-structure` stays green.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
@@ -176,6 +219,15 @@
   package-specific minimum to the matching
   `docs/internal/baselines/go-*-coverage-package-minimums.json` manifest in
   the same change; the coverage gate rejects unowned measured packages.
+  Optional machine-readable coverage summaries for CI/visualizer consumers come
+  from `gocoveragecheck -json-output <path>` after a completed measurement run.
+  The JSON includes overall totals plus per-package covered/measurable counts,
+  percentage, package floor, and measurement exception from the same gate
+  policy the checker already enforces; do not invent a second coverage-profile
+  parser for those summaries. When floors fail after measurement completes, the
+  JSON file is still written before the process returns the floor failure so
+  uploaded artifacts keep diagnostics; incomplete runs that never produce
+  measured results do not invent coverage JSON.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
@@ -184,3 +236,52 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
+
+- Provider-session golden fixtures live under
+  `docs/temp/functional/provider-sessions/**`. Keep that path narrowly
+  un-ignored after the general `docs/temp/**` rule by re-including each parent
+  directory (`!docs/temp/functional/`, `!docs/temp/functional/provider-sessions/`,
+  then `!docs/temp/functional/provider-sessions/**`). Prove the exception with
+  `git check-ignore -q` (exit 1 = not ignored, exit 0 = ignored) plus a sibling
+  `docs/temp/...` path that remains ignored. Shared helpers and fixture-root
+  constants belong in `tests/functional/internal/support`.
+- Provider-session golden `manifest.json` validation lives in
+  `tests/functional/internal/support` (`LoadProviderSessionCaseManifest` /
+  `ValidateProviderSessionGoldenManifest`). Require schema version 1, identity
+  (`id`, `provider`, `providerVersion`, `case`), `fidelityClass` in
+  `{full-stream, partial-stream, snapshot-only, final-only}`, sanitizer/source,
+  `normalizedFields`, and relative file pointers for request/process/stdout/
+  stderr plus the three expected outputs. Diagnostics must name the case id and
+  failing field or rule; pointer resolution must stay inside the case directory.
+- Provider-session golden sanitization (`ValidateProviderSessionCaseSanitization`
+  / `ValidateProviderSessionFixtureContent`) rejects unsanitized fixture material
+  with named categories: `credential`, `host-path`, `private-repo-url`,
+  `env-dump`, `unbounded-content`, and `account-identifier`. Diagnostics must
+  name the category plus fixture path or JSON field. Retain sanitized structural
+  values (fake session/tool/item IDs, usage counts, finish reasons, error codes,
+  `@example.com` emails). Run the gate after manifest validation and before
+  golden comparison.
+- Provider-session golden loading (`LoadProviderSessionCase`) runs
+  manifest → sanitization → request/process/stdout/stderr → expected goldens.
+  `process.json` must expose argv (no secrets), provider/model, exitCode and/or
+  signal, stdout/stderr stream flags, `workingDirectoryRole`,
+  `timeoutCancelClass`, and `terminalErrorClass` without an env dump. Stdout
+  media type follows the declared filename (`*.jsonl`/`*.ndjson`, `*.json`, or
+  text). Expected response events decode as NDJSON records. Load failures use
+  `ProviderSessionLoadError` naming case id, role, and path/field.
+- Provider-session golden comparison (`CompareProviderSessionGoldens`) normalizes
+  only field names listed in `manifest.normalizedFields` (any depth) to
+  `<normalized>`, then structurally compares Provider Session JSON, response-
+  event NDJSON records, and invocation-result JSON. Whitespace-only differences
+  do not fail. Callers supply observed public metadata; comparison must never
+  synthesize expected output by calling the mapper/adapter under test.
+  Mismatches use `ProviderSessionCompareError` naming case id, artifact role,
+  and JSON path.
+- Provider-session golden update gating (`CompareOrUpdateProviderSessionGoldens`)
+  fails on drift without rewriting unless `UPDATE_FUNCTIONAL_GOLDENS=1`. With that
+  env set, the helper may rewrite the three expected golden files from observed
+  values and returns `ProviderSessionGoldensUpdatedError` so CI still fails until
+  a non-update re-run passes. Missing required fixtures fail with
+  `ProviderSessionLoadError` naming case id, role (`request`, `process`, `stdout`,
+  `stderr`, `expected-provider-session`, `expected-response-events`,
+  `expected-invocation-result`), and path—never silent skip.

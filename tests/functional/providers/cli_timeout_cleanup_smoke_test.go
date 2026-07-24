@@ -72,8 +72,8 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 		t.Fatalf("spawned descendant process %d is still running after factory timeout", childPID)
 	}
 
-	session := support.GetDefaultSession(t, server.URL())
-	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 	}, "execution timeout")
@@ -111,8 +111,8 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-timeout-requeue-smoke", "task", "trace-timeout-requeue-smoke", nil)
 	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,

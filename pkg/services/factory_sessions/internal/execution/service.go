@@ -3,9 +3,9 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -73,36 +73,6 @@ func cloneRawMessages(events []json.RawMessage) []json.RawMessage {
 		cloned[index] = append(json.RawMessage(nil), event...)
 	}
 	return cloned
-}
-
-// ErrServiceNotConfigured reports an application composition graph that did
-// not supply its required durable Factory Session execution collaborator.
-var ErrServiceNotConfigured = errors.New("durable factory session execution service is not configured")
-
-// Service is the shared durable factory-session execution contract consumed by
-// API, CLI, MCP, and UI transports. Live-session open and invocation remain on
-// the separate factorysessions compatibility surface. All methods are
-// cancellation-aware; transports must not mutate runtime state directly.
-type Service interface {
-	StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error)
-	StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error)
-	ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error)
-	GetSession(ctx context.Context, sessionID string) (SessionReadResult, error)
-	Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error)
-	RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error)
-	InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error)
-	GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error)
-	ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error)
-	QueryDispatches(ctx context.Context, request DispatchQueryRequest) (ListDispatchesResult, error)
-	GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error)
-	ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error)
-	GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error)
-	ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error)
-	ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error)
 }
 
 // SyncWaitScheduler owns the blocking primitive used while a synchronous
@@ -217,45 +187,8 @@ func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
 	state.result.SessionStatus = state.session.Status
 }
 
-// InspectionLinksForSession builds API-relative inspection links for one durable session.
 func InspectionLinksForSession(sessionID string, includeEvents bool) InspectionLinks {
-	base := fmt.Sprintf("/factory-sessions/%s", sessionID)
-	links := InspectionLinks{
-		Session:    base,
-		Status:     base,
-		Results:    base + "/results",
-		Dispatches: base + "/dispatches",
-		Artifacts:  base + "/artifacts",
-	}
-	if includeEvents {
-		links.Events = base + "/events"
-	}
-	return links
-}
-
-// LifecycleControlLinksForSession builds post-control inspection links for one durable session.
-func LifecycleControlLinksForSession(sessionID string, includeEvents bool) LifecycleControlLinks {
-	inspection := InspectionLinksForSession(sessionID, includeEvents)
-	return LifecycleControlLinks{
-		Session:    inspection.Session,
-		Status:     inspection.Status,
-		Results:    inspection.Results,
-		Dispatches: inspection.Dispatches,
-		Artifacts:  inspection.Artifacts,
-		Events:     inspection.Events,
-	}
-}
-
-// LiveLifecycleControlLinksForSession builds post-control inspection links for
-// one live workspace Factory Session.
-func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
-	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
-	return LifecycleControlLinks{
-		Session: base,
-		Status:  base,
-		Results: base + "/result",
-		Events:  base + "/events",
-	}
+	return factorysessions.InspectionLinksForSession(sessionID, includeEvents)
 }
 
 // StartSourceContext supplies filesystem roots for durable start source resolution.
@@ -317,28 +250,12 @@ func resolutionOrderForLookupStage(stage factory.WorkflowSourceLookupStage) stri
 	}
 }
 
-// ExecutionProvider selects which durable Factory Session execution backend serves
-// start and inspection calls at the shared service boundary.
-type ExecutionProvider string
-
-const (
-	// ExecutionProviderFake selects the deterministic in-memory fake session path.
-	ExecutionProviderFake ExecutionProvider = "fake"
-	// ExecutionProviderJavaScriptRuntime selects the real simple JavaScript runtime path.
-	ExecutionProviderJavaScriptRuntime ExecutionProvider = "javascript-runtime"
-)
-
 // PersistenceChoice makes durable snapshot ownership explicit at composition.
 // Construct it with EnabledPersistence or DisabledPersistence.
 type PersistenceChoice struct {
 	store    runtimepersist.Store
 	disabled bool
 }
-
-// PersistencePolicy is the application-level durable snapshot policy. The
-// zero value preserves production persistence; callers must select Disabled
-// explicitly when durable snapshots are not wanted.
-type PersistencePolicy string
 
 const (
 	PersistencePolicyEnabled  PersistencePolicy = "enabled"
@@ -881,4 +798,12 @@ func indexOfString(values []string, target string) (int, bool) {
 		}
 	}
 	return -1, false
+}
+
+func LifecycleControlLinksForSession(sessionID string, includeEvents bool) LifecycleControlLinks {
+	return factorysessions.LifecycleControlLinksForSession(sessionID, includeEvents)
+}
+
+func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
+	return factorysessions.LiveLifecycleControlLinksForSession(sessionID)
 }

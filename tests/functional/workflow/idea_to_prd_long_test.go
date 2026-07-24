@@ -32,7 +32,7 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 		"prd-processor": {{Content: "Done. COMPLETE"}},
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
 
@@ -40,7 +40,7 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 		t.Errorf("expected planner called 1 time, got %d", provider.CallCount("planner"))
 	}
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:init": 0, "prd:complete": 1})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"idea:init": 0, "prd:complete": 1})
 	assertListedWorkStateTrace(t, listedWork, "prd", "complete", originTraceID)
 }
 
@@ -56,10 +56,10 @@ func TestIdeaToPRD_PlannerFailure(t *testing.T) {
 		Stderr:   []byte("LLM timeout"),
 		ExitCode: 1,
 	})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:failed": 1, "prd:init": 0, "prd:complete": 0})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"idea:failed": 1, "prd:init": 0, "prd:complete": 0})
 }
 
 // TestIdeaToPRD_MultipleIdeas verifies that multiple idea tokens each produce
@@ -86,9 +86,9 @@ func TestIdeaToPRD_MultipleIdeas(t *testing.T) {
 		"prd-processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:init": 0, "prd:complete": 2})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"idea:init": 0, "prd:complete": 2})
 	assertCompletedWorkTraces(t, listedWork, "prd", "complete", []string{trace1, trace2})
 }

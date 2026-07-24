@@ -12,6 +12,8 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 const defaultInitFactoryWorkType = "task"
@@ -97,8 +99,8 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-	assertInitSessionPlaces(t, session, "complete")
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertInitSessionPlaces(t, session, listed, "complete")
 
 	// Verify the mock provider was called exactly once (one workstation in the pipeline).
 	if provider.CallCount("processor") != 1 {
@@ -133,8 +135,8 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-	assertInitSessionPlaces(t, session, "complete")
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertInitSessionPlaces(t, session, listed, "complete")
 
 	if provider.CallCount("processor") != 1 {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount("processor"))
@@ -164,11 +166,11 @@ func TestInitFactory_FailureRouting(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-	assertInitSessionPlaces(t, session, "failed")
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertInitSessionPlaces(t, session, listed, "failed")
 }
 
-func assertInitSessionPlaces(t *testing.T, session factoryapi.FactorySession, terminalState string) {
+func assertInitSessionPlaces(t *testing.T, session factoryapi.FactorySession, listed factoryapi.ListWorkResponse, terminalState string) {
 	t.Helper()
 	for _, state := range []string{"init", "complete", "failed"} {
 		want := 0
@@ -176,13 +178,19 @@ func assertInitSessionPlaces(t *testing.T, session factoryapi.FactorySession, te
 			want = 1
 		}
 		placeID := defaultInitFactoryWorkType + ":" + state
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	if got := support.SessionPlaceTokenCount(session, "agent-slot:available"); got != 1 {
-		t.Errorf("agent-slot:available token count = %d, want 1", got)
+	for _, usage := range session.Runtime.Usage.Resources {
+		if usage.Name == "agent-slot" {
+			if usage.Available != 1 || usage.Total != 1 {
+				t.Errorf("agent-slot resource usage = %#v, want 1 available and total", usage)
+			}
+			return
+		}
 	}
+	t.Errorf("session usage missing agent-slot resource")
 }
 
 // TestInitFactory_Idempotent verifies that running Init twice on the same

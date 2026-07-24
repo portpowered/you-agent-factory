@@ -25,8 +25,9 @@ type PreparedInvocationInput struct {
 	NormalizedArguments *NormalizedArguments
 }
 
-// InvocationInputPreparation is the exact Work-owned role used by transports
-// to turn raw invocation-edge values into canonical Work input.
+// InvocationInputPreparation is the focused Work-owned role used by transports
+// that inject preparation alone. Cross-service peers that depend on the
+// singular Work root should call Service.PrepareInvocationInput instead.
 type InvocationInputPreparation interface {
 	PrepareInvocationInput(context.Context, InvocationInputPreparationRequest) (PreparedInvocationInput, error)
 }

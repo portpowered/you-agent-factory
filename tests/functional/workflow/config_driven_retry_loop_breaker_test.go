@@ -32,8 +32,8 @@ func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"task:failed": 1, "task:init": 0, "task:in-review": 0, "task:complete": 0,
 	})
 
@@ -57,8 +57,8 @@ func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
 func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, transitionID, toPlaceID string) {

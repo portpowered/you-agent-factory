@@ -12,6 +12,36 @@ import (
 	"testing"
 )
 
+func TestPackageDocumentsProcessEdgeArchitectureException(t *testing.T) {
+	t.Parallel()
+
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "definition.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse definition.go: %v", err)
+	}
+	if file.Doc == nil {
+		t.Fatal("package edges is missing package documentation")
+	}
+	doc := file.Doc.Text()
+	requiredPhrases := []string{
+		"process-edge aggregator",
+		"root.BuildProcess",
+		"pkg/wire",
+		"functional",
+		"not a service locator",
+		"Initializer",
+	}
+	for _, phrase := range requiredPhrases {
+		if !strings.Contains(doc, phrase) {
+			t.Errorf("package documentation must state the process-edge architecture exception; missing %q", phrase)
+		}
+	}
+	if !strings.Contains(doc, "exact") || !strings.Contains(strings.ToLower(doc), "port") {
+		t.Error("package documentation must tell constructed services to take exact ports rather than the broad Edges bag")
+	}
+}
+
 func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 	t.Parallel()
 

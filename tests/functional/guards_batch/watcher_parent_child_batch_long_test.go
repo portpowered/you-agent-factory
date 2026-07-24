@@ -118,7 +118,7 @@ func assertSubmittedParentChildRuntimeOutcome(
 ) {
 	t.Helper()
 
-	assertGuardSessionPlaces(t, session, map[string]int{
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"story:complete": 1, "story:failed": 1, "story-set:failed": 1,
 		"story:init": 0, "story-set:waiting": 0, "story-set:complete": 0,
 	})

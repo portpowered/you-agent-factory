@@ -50,3 +50,10 @@ portfolio holds. Regenerate with the same freeze command; prove with
 required rationale fields, edge classifications, named-owner coverage, Process
 Edges exception presence, and non-overlapping active leases together. That
 check is part of `make lint`.
+
+`functional-undocumented-tests.json` is an exact deletion-only ledger of
+customer-facing `tests/functional` `Test*` identities that lack a conventional
+Go-doc description. `internal/functionaltestmetadata` compares the current
+undocumented customer set against that baseline: removals succeed, newly
+undocumented customer tests and baseline expansions fail. Harness/internal
+helpers are excluded from the ledger.

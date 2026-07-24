@@ -275,6 +275,7 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"Worker":                 "./components/schemas/data-models/Worker.yaml",
 		"WorkerType":             "./components/schemas/data-models/WorkerType.yaml",
 		"WorkerModelProvider":    "./components/schemas/data-models/WorkerModelProvider.yaml",
+		"ProviderIdentity":       "./components/schemas/data-models/ProviderIdentity.yaml",
 		"WorkerProvider":         "./components/schemas/data-models/WorkerProvider.yaml",
 		"Workstation":            "./components/schemas/data-models/Workstation.yaml",
 		"WorkstationLimits":      "./components/schemas/data-models/WorkstationLimits.yaml",

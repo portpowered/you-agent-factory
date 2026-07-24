@@ -109,7 +109,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertThinEventSessionPlaces(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+	assertThinEventSessionPlaces(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, dualDispatchSmokeScriptWorkType + ":done": 1,
 		"task:failed": 0, dualDispatchSmokeScriptWorkType + ":failed": 0,
 	})
@@ -131,10 +131,10 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 	return smoke
 }
 
-func assertThinEventSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+func assertThinEventSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

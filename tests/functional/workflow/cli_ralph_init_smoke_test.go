@@ -71,12 +71,12 @@ func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing
 	writeRalphSmokeRequest(t, dir, "release-planning-loop.md")
 
 	runner := newRalphInitSmokeRunner(dir, ralphInitSmokeModeComplete)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 15*time.Second)
 	runner.Assert(t)
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"request:planned": 1, "story:complete": 1, "request:failed": 0,
 		"story:init": 0, "story:failed": 0,
 	})
@@ -153,10 +153,10 @@ func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
 	runner.Assert(t)
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"request:planned": 1, "story:failed": 1, "request:failed": 0,
 		"story:init": 0, "story:complete": 0,
 	})

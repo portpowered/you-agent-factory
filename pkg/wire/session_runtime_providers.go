@@ -74,6 +74,12 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 	return providerregistry.New(registrations...)
 }
 
+func provideFactorySessionProviderIdentityResolver(
+	providers *providerregistry.Registry,
+) factorysessions.ProviderIdentityResolver {
+	return providers.CanonicalIdentity
+}
+
 func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service, error) {
 	files := edges.ProviderSessionFileSystem
 	if files == nil {
@@ -833,6 +839,28 @@ func provideSessionExecutionOpeningFactory(
 	)
 }
 
+func provideInvocationOperation(
+	openRuntime *factorysessionwire.RuntimeOpeningFactory,
+	edges serviceedges.Edges,
+	workingDirectory platformfilesystem.WorkingDirectory,
+	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
+	artifactExporter models.InvocationArtifactExporter,
+	modelTimeout factorysessions.ModelInvocationTimeout,
+	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
+	generateSessionID factorysessions.SessionIDGenerator,
+) (factorysessionwire.InvocationOperation, error) {
+	return factorysessionwire.NewInvocationOperation(
+		openRuntime,
+		projectRuntimeOpeningExternalEffects(edges),
+		workingDirectory,
+		resolveCurrentDir,
+		artifactExporter,
+		modelTimeout,
+		artifactRoots,
+		generateSessionID,
+	)
+}
+
 // projectRuntimeOpeningExternalEffects is the sole selection from the process
 // edge aggregate into the effects consumed by Factory Session runtime opening.
 func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
@@ -915,8 +943,12 @@ func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFile
 	return os.ReadFile
 }
 
-func provideWorkFactory(readFile work.SubmittedFileReader) factorysessionwire.WorkFactory {
+func provideWorkFactory(
+	readFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
-		return workservice.NewService(runtimes, readFile)
+		return workservice.NewService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }
