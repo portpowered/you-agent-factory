@@ -219,19 +219,9 @@ func ClaimedPublicFactoryEventKindInventoryPaths() []string {
 	return paths
 }
 
-// ValidateSolePublicFactoryEventKindInventoryOwnership proves producers and
-// consumers resolve to exactly one Recordings-owned public Factory Event kind
-// inventory. Competing claimed inventory paths either fail closed or must be
-// listed as deletion-only debt with the Recordings successor.
-func ValidateSolePublicFactoryEventKindInventoryOwnership(
-	rows []EventContractOwnershipRow,
-	claimedPaths []string,
+func validatePublicFactoryEventKindInventoryConsumerAPI(
 	consumerAPI PublicFactoryEventKindInventoryConsumerAPI,
 ) error {
-	if err := ValidateEventContractOwnershipInventory(rows); err != nil {
-		return fmt.Errorf("event-contract ownership inventory: %w", err)
-	}
-
 	if strings.TrimSpace(consumerAPI.PackagePath) == "" {
 		return fmt.Errorf("public Factory Event kind inventory consumer API is missing package path")
 	}
@@ -267,7 +257,10 @@ func ValidateSolePublicFactoryEventKindInventoryOwnership(
 			)
 		}
 	}
+	return nil
+}
 
+func validateClaimedPublicFactoryEventKindInventoryPaths(claimedPaths []string) error {
 	if len(claimedPaths) == 0 {
 		return fmt.Errorf("claimed public Factory Event kind inventory paths are empty")
 	}
@@ -294,12 +287,13 @@ func ValidateSolePublicFactoryEventKindInventoryOwnership(
 			PublicFactoryEventKindInventoryPath,
 		)
 	}
+	return nil
+}
 
-	byPath := make(map[string]EventContractOwnershipRow, len(rows))
-	for _, row := range rows {
-		byPath[row.Path] = row
-	}
-
+func validateClaimedInventoryOwnershipAgainstLedger(
+	claimedPaths []string,
+	byPath map[string]EventContractOwnershipRow,
+) error {
 	retainCount := 0
 	for _, path := range claimedPaths {
 		row, ok := byPath[path]
@@ -351,7 +345,6 @@ func ValidateSolePublicFactoryEventKindInventoryOwnership(
 			)
 		}
 	}
-
 	if retainCount != 1 {
 		return fmt.Errorf(
 			"expected exactly one retained public Factory Event kind inventory path (%q), found %d",
@@ -359,8 +352,33 @@ func ValidateSolePublicFactoryEventKindInventoryOwnership(
 			retainCount,
 		)
 	}
-
 	return nil
+}
+
+// ValidateSolePublicFactoryEventKindInventoryOwnership proves producers and
+// consumers resolve to exactly one Recordings-owned public Factory Event kind
+// inventory. Competing claimed inventory paths either fail closed or must be
+// listed as deletion-only debt with the Recordings successor.
+func ValidateSolePublicFactoryEventKindInventoryOwnership(
+	rows []EventContractOwnershipRow,
+	claimedPaths []string,
+	consumerAPI PublicFactoryEventKindInventoryConsumerAPI,
+) error {
+	if err := ValidateEventContractOwnershipInventory(rows); err != nil {
+		return fmt.Errorf("event-contract ownership inventory: %w", err)
+	}
+	if err := validatePublicFactoryEventKindInventoryConsumerAPI(consumerAPI); err != nil {
+		return err
+	}
+	if err := validateClaimedPublicFactoryEventKindInventoryPaths(claimedPaths); err != nil {
+		return err
+	}
+
+	byPath := make(map[string]EventContractOwnershipRow, len(rows))
+	for _, row := range rows {
+		byPath[row.Path] = row
+	}
+	return validateClaimedInventoryOwnershipAgainstLedger(claimedPaths, byPath)
 }
 
 // ValidateCurrentSolePublicFactoryEventKindInventoryOwnership validates the
