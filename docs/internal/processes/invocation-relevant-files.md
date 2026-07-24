@@ -39,6 +39,11 @@ primary-result behavior.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.
+- Manifest-owned relationship validation may retain a legacy customer
+  diagnostic through a narrow constructor presentation mapping after the
+  generic validator rejects the invocation. Keep the relationship as the sole
+  validation authority and prove the resolved handler or operation is not
+  invoked for the conflicting input.
 - An inherited generic flag reuses its ancestor's persistent Cobra record, so
   its projected metadata must match the declaration after normalizing only the
   stable input ID, scope, inheritance reference, and lifecycle item ID.

@@ -1,8 +1,10 @@
 package climanifestcobra_test
 
 import (
+	"bytes"
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -369,5 +371,138 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 	}
 	if err := invoke.ParseFlags([]string{"--operation", "INVALID"}); err == nil {
 		t.Fatal("invalid manifest operation choice was accepted")
+	}
+}
+
+func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
+	mcp, err := climanifestcobra.NewMCPCommand(
+		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mcp.Name() != "mcp" || mcp.Parent() != nil {
+		t.Fatalf("MCP command = name %q parent %v, want detached mcp", mcp.Name(), mcp.Parent())
+	}
+	serve, _, err := mcp.Find([]string{"serve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"fixture-catalog", "runtime", "project-root"} {
+		if serve.Flags().Lookup(name) == nil {
+			t.Fatalf("manifest flag %q was not registered", name)
+		}
+	}
+	var output bytes.Buffer
+	serve.SetOut(&output)
+	if err := serve.Help(); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if got := output.String(); !strings.Contains(got, "you docs mcp") ||
+		!strings.Contains(got, "durable-session-contract-fixtures.json") {
+		t.Fatalf("manifest help missing canonical details:\n%s", got)
+	}
+}
+
+func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
+	var local resolvedinput.Inputs
+	root := newMCPRoot(t,
+		func(_ *cobra.Command, inputs, _ resolvedinput.Inputs) error {
+			local = inputs
+			return nil
+		},
+	)
+	root.SetArgs([]string{"mcp", "serve", "--fixture-catalog", "  fixtures.json  ", "--project-root", "  project  "})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	for inputID, want := range map[string]string{
+		"you.mcp.serve.flag.fixture-catalog": "fixtures.json",
+		"you.mcp.serve.flag.project-root":    "project",
+	} {
+		got, valueErr := local.String(inputID)
+		if valueErr != nil || got != want {
+			t.Fatalf("resolved %s = %q, %v; want %q", inputID, got, valueErr, want)
+		}
+		assertMCPResolvedState(t, local, inputID, resolvedinput.State{
+			Provenance: resolvedinput.SourceCLIFlag, Changed: true,
+		})
+	}
+	runtimeBacked, err := local.Bool("you.mcp.serve.flag.runtime")
+	if err != nil || runtimeBacked {
+		t.Fatalf("resolved runtime = %t, %v; want false", runtimeBacked, err)
+	}
+	assertMCPResolvedState(t, local, "you.mcp.serve.flag.runtime", resolvedinput.State{
+		Provenance: resolvedinput.SourceManifestDefault, Default: true,
+	})
+}
+
+func newMCPRoot(
+	t *testing.T,
+	handler climanifestcobra.ResolvedCobraHandler,
+) *cobra.Command {
+	t.Helper()
+	manifest, err := generated.MCPFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			serveRecord.Handler.ID: handler,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestMCPManifestRelationshipRejectsConflictingSourcesBeforeHandler(t *testing.T) {
+	calls := 0
+	mcp, err := climanifestcobra.NewMCPCommand(
+		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+			calls++
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcp.SetArgs([]string{"serve", "--runtime", "--fixture-catalog", "fixtures.json"})
+	err = mcp.Execute()
+	if err == nil || err.Error() != "cannot combine --runtime with --fixture-catalog" {
+		t.Fatalf("execute error = %v, want manifest relationship rejection", err)
+	}
+	if calls != 0 {
+		t.Fatalf("handler calls = %d, want zero", calls)
+	}
+}
+
+func assertMCPResolvedState(
+	t *testing.T,
+	inputs resolvedinput.Inputs,
+	inputID string,
+	want resolvedinput.State,
+) {
+	t.Helper()
+	got, found := inputs.State(inputID)
+	if !found || !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolved %s state = %#v, %t; want %#v", inputID, got, found, want)
 	}
 }
