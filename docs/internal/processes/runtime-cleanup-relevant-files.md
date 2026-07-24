@@ -727,3 +727,12 @@ result-owner values. The outer service/runtime-host compatibility adapter maps
 generated open input before calling the gateway and assembles generated open,
 list, detail, reconnect, terminal-result, and partial-result responses only
 after the domain call returns.
+
+Work Request normalize/validate/idempotent-accept ownership for the CTR-WORK
+admission slice is the parent-private nested subservice rooted at
+`pkg/services/work/internal/services/admission`. Implementation lives under
+`admission/internal/service` and is constructed through `admission/wire`.
+Cross-service peers continue to call the Work root `Service` admission slice
+(`SubmitWorkRequestForSession`); they must not import the nested admission
+package. Keep Session/Runtime/Petri types, filesystem/SQL/OS effect types, and
+Wire/root construction ownership off the admission public surface.
