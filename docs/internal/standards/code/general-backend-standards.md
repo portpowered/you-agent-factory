@@ -213,15 +213,21 @@ Repository package-boundary policy:
   subpackage exemption for Providers implementations. Workers consumes the
   Providers root for provider execution capability and **MUST NOT** redeclare
   or alias the leaf effect port as a peer-owned contract. Catalog enumeration
-  and one-attempt execution absorb the accepted Standardized Providers
-  protocol, registry, open-config, and testkit source of truth; maintainers
-  **MUST NOT** introduce a second Providers catalog, registry, conductor, or
-  execution-contract family beside that model. Code still living under
-  `pkg/services/workers/provider/inferencecontract` is migration debt until
-  later Providers packets land; that Workers path is not the durable normative
-  owner. The package-boundary guard permits only the exact Providers leaf
-  effect contract packages across peer services as injection ports; it does
-  not exempt Providers implementations or other peer subpackages.
+  and one-attempt execution share one Providers-owned source of truth: they
+  absorb the accepted Standardized Providers protocol, registry, open-config,
+  and testkit model rather than defining a competing ownership path.
+  Maintainers **MUST NOT** introduce a second Providers catalog, registry,
+  conductor, or execution-contract family beside that absorbed model while the
+  neutral-conductor lane remains live. Code still living under
+  `pkg/services/workers/provider/` (including `inferencecontract` and
+  `registry`) is migration debt that hosts the absorbed Standardized Providers
+  surfaces until later Providers packets land; those Workers paths are not a
+  license to fork a parallel catalog or execution abstraction. The
+  package-boundary guard permits only the exact Providers leaf effect contract
+  packages across peer services as injection ports; it does not exempt
+  Providers implementations or other peer subpackages, and it rejects competing
+  provider catalog/registry/conductor/execution abstractions outside Providers
+  and the absorbed Workers provider migration-debt surfaces.
 - Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
 - Run `make pkg-boundary` for dependency and ownership boundaries and
   `make pkg-structure` for recursive service and functional-test package shape;

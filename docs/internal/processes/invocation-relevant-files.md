@@ -82,7 +82,12 @@ primary-result behavior.
   ownership belongs to the Providers Execution leaf
   (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
   encodes that ownership with deliberate fixtures, while Workers continues to
-  host the live declaration until later Providers packets land. `pkg/services/edges`
+  host the live declaration until later Providers packets land. Catalog
+  enumeration and one-attempt execution share one Providers-owned source of
+  truth that absorbs Standardized Providers protocol/registry/open-config/testkit;
+  the checker rejects competing provider catalog, registry, conductor, or
+  execution-contract abstractions outside Providers and the absorbed Workers
+  `provider/` migration-debt surfaces. `pkg/services/edges`
   may aggregate the exact leaf effect contract unchanged and must not redefine
   or alias it. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for

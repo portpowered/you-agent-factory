@@ -25,10 +25,31 @@ const (
 	// site until Providers packets land. It is not the durable normative owner.
 	workersProviderEffectMigrationDebtPackage = "pkg/services/workers/provider/inferencecontract"
 
+	// workersProviderMigrationDebtPrefix hosts the absorbed Standardized
+	// Providers catalog/registry/execution surfaces until Providers packets
+	// land. Competing forks outside this prefix and Providers are rejected.
+	workersProviderMigrationDebtPrefix = "pkg/services/workers/provider/"
+
 	edgesPackagePath = "pkg/services/edges"
 
 	providerEffectPortTypeName = "Provider"
+
+	providerEffectSharedSourceOfTruthRemediation = "enumeration and one-attempt execution share one Providers-owned source of truth; absorb the Standardized Providers protocol, registry, open-config, and testkit model and do not invent a second Providers catalog, registry, conductor, or execution-contract family."
 )
+
+var competingProviderAbstractionPathMarkers = []string{
+	"/providercatalog",
+	"/providerregistry",
+	"/providerconductor",
+	"/providerexecution",
+}
+
+var competingProviderAbstractionTypeNames = map[string]struct{}{
+	"Catalog":   {},
+	"Registry":  {},
+	"Conductor": {},
+	"Provider":  {},
+}
 
 type providerEffectOwnershipFinding struct {
 	kind        string
@@ -87,6 +108,10 @@ func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFind
 					if finding, hit := edgesProviderEffectRedefinition(packagePath, relative, typed); hit {
 						findings = append(findings, finding)
 					}
+					continue
+				}
+				if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, relative, typed); hit {
+					findings = append(findings, finding)
 					continue
 				}
 				if !isProviderEffectPortDeclaration(typed) {
@@ -175,6 +200,59 @@ func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec) bool {
 	return selector.Sel != nil && selector.Sel.Name == providerEffectPortTypeName
 }
 
+func competingProviderCatalogOrExecutionAbstraction(
+	packagePath string,
+	filePath string,
+	typed *ast.TypeSpec,
+) (providerEffectOwnershipFinding, bool) {
+	if typed.Name == nil {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if isDurableProvidersLeafOwner(packagePath) || isAbsorbedWorkersProviderSurface(packagePath) {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if !isCompetingProviderAbstractionPackage(packagePath) {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if _, named := competingProviderAbstractionTypeNames[typed.Name.Name]; !named {
+		return providerEffectOwnershipFinding{}, false
+	}
+	switch typed.Type.(type) {
+	case *ast.InterfaceType, *ast.StructType:
+		return providerEffectOwnershipFinding{
+			kind:        "competing-catalog-or-execution",
+			packagePath: packagePath,
+			filePath:    filePath,
+			typeName:    typed.Name.Name,
+		}, true
+	default:
+		if typed.Assign.IsValid() {
+			return providerEffectOwnershipFinding{
+				kind:        "competing-catalog-or-execution",
+				packagePath: packagePath,
+				filePath:    filePath,
+				typeName:    typed.Name.Name,
+			}, true
+		}
+		return providerEffectOwnershipFinding{}, false
+	}
+}
+
+func isAbsorbedWorkersProviderSurface(packagePath string) bool {
+	return packagePath == strings.TrimSuffix(workersProviderMigrationDebtPrefix, "/") ||
+		strings.HasPrefix(packagePath, workersProviderMigrationDebtPrefix)
+}
+
+func isCompetingProviderAbstractionPackage(packagePath string) bool {
+	normalized := "/" + strings.Trim(packagePath, "/")
+	for _, marker := range competingProviderAbstractionPathMarkers {
+		if strings.Contains(normalized, marker+"/") || strings.HasSuffix(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerEffectOwnershipFinding) {
 	for _, finding := range findings {
 		switch finding.kind {
@@ -196,9 +274,10 @@ func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerE
 				"  canonical owner: %s\n",
 				providersLeafEffectContractPackage,
 			)
-			fmt.Fprintln(
+			fmt.Fprintf(
 				writer,
-				"  remediation: declare the leaf effect contract in the Providers Execution leaf and keep Workers consuming the Providers root; do not redeclare or alias the port as a peer-owned contract.",
+				"  remediation: declare the leaf effect contract in the Providers Execution leaf and keep Workers consuming the Providers root; do not redeclare or alias the port as a peer-owned contract. %s\n",
+				providerEffectSharedSourceOfTruthRemediation,
 			)
 		case "edges-redefinition":
 			fmt.Fprintf(
@@ -217,9 +296,33 @@ func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerE
 				"  canonical owner: %s\n",
 				providersLeafEffectContractPackage,
 			)
-			fmt.Fprintln(
+			fmt.Fprintf(
 				writer,
-				"  remediation: aggregate the exact Providers leaf effect contract unchanged as the root/test override bag; do not own, redefine, or alias it in edges.",
+				"  remediation: aggregate the exact Providers leaf effect contract unchanged as the root/test override bag; do not own, redefine, or alias it in edges. %s\n",
+				providerEffectSharedSourceOfTruthRemediation,
+			)
+		case "competing-catalog-or-execution":
+			fmt.Fprintf(
+				writer,
+				"[agent-factory:pkg-boundary] prohibited competing provider catalog or execution abstraction: %s (%s)\n",
+				finding.packagePath,
+				finding.filePath,
+			)
+			fmt.Fprintf(
+				writer,
+				"  reason: %s declares %s as a parallel provider catalog, registry, conductor, or execution-contract family beside the absorbed Standardized Providers model.\n",
+				finding.packagePath,
+				finding.typeName,
+			)
+			fmt.Fprintf(
+				writer,
+				"  canonical owner: Providers-owned Standardized Providers catalog/execution truth (leaf effects at %s)\n",
+				providersLeafEffectContractPackage,
+			)
+			fmt.Fprintf(
+				writer,
+				"  remediation: %s\n",
+				providerEffectSharedSourceOfTruthRemediation,
 			)
 		default:
 			fmt.Fprintf(
