@@ -66,6 +66,12 @@ type RuntimeBinding struct {
 // ExecutionService methods embedded in Service; peers must not import nested
 // durable-execution or internal/execution implementation packages as the
 // peer-facing source of truth.
+// The published invocation slice uses InvocationRequest,
+// ResolvedInvocationInput, InvocationResult, InvocationTimeout,
+// InvocationTerminalStatus, InvocationErrorCode, and *InvocationValidationError
+// as plain root vocabulary on the singular Service aggregate; peers must not
+// import private invocation subservice types and must not depend on a separately
+// published peer-facing invoker interface.
 // The process-scoped root uses ForRuntime to create an isolated runtime view; a
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.
