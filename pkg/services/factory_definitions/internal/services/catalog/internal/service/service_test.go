@@ -168,6 +168,136 @@ func TestPrivateCatalog_RootDeleteRemovesFromSubsequentListGet(t *testing.T) {
 	}
 }
 
+func TestPrivateCatalog_RootCurrentPointerUpdatePersistsAtomically(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactory(t, rootDir, "alpha")
+	betaDir := writeNamedFactory(t, rootDir, "beta")
+	root := newRootCatalog(t)
+
+	set, err := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "alpha"},
+	)
+	if err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(alpha): %v", err)
+	}
+	if set.Name != "alpha" {
+		t.Fatalf("SetCurrentFactoryPointer(alpha) result = %#v, want alpha", set)
+	}
+
+	pointer, err := root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer after set alpha: %v", err)
+	}
+	if pointer.Name != "alpha" || pointer.FactoryDir != alphaDir {
+		t.Fatalf("GetCurrentFactoryPointer after set alpha = %#v, want alpha at %q", pointer, alphaDir)
+	}
+
+	if _, err := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "beta"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(beta): %v", err)
+	}
+
+	pointer, err = root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer after set beta: %v", err)
+	}
+	if pointer.Name != "beta" || pointer.FactoryDir != betaDir {
+		t.Fatalf("GetCurrentFactoryPointer after set beta = %#v, want beta at %q", pointer, betaDir)
+	}
+
+	listed, err := root.ListNamedFactories(
+		context.Background(),
+		factorydefinitions.ListNamedFactoriesRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("ListNamedFactories after pointer update: %v", err)
+	}
+	byName := map[string]factorydefinitions.NamedFactoryListEntry{}
+	for _, entry := range listed.Entries {
+		byName[entry.Name] = entry
+	}
+	if alpha := byName["alpha"]; alpha.Current {
+		t.Fatalf("alpha list entry still marked current after switch to beta: %#v", alpha)
+	}
+	if beta := byName["beta"]; !beta.Current || beta.FactoryDir != betaDir {
+		t.Fatalf("beta list entry = %#v, want current at %q", beta, betaDir)
+	}
+}
+
+func TestPrivateCatalog_RootFailedCurrentPointerUpdatePreservesPrior(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactory(t, rootDir, "alpha")
+	root := newRootCatalog(t)
+
+	if _, err := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "alpha"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	_, missingErr := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "missing"},
+	)
+	if !errors.Is(missingErr, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf(
+			"SetCurrentFactoryPointer(missing) error = %v, want %v",
+			missingErr,
+			factorydefinitions.ErrNamedFactoryNotFound,
+		)
+	}
+
+	pointer, err := root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer after missing set: %v", err)
+	}
+	if pointer.Name != "alpha" || pointer.FactoryDir != alphaDir {
+		t.Fatalf(
+			"GetCurrentFactoryPointer after missing set = %#v, want preserved alpha at %q",
+			pointer,
+			alphaDir,
+		)
+	}
+
+	_, invalidErr := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "../evil"},
+	)
+	assertTypedInvalidName(t, "SetCurrentFactoryPointer", invalidErr)
+
+	pointer, err = root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer after invalid-name set: %v", err)
+	}
+	if pointer.Name != "alpha" || pointer.FactoryDir != alphaDir {
+		t.Fatalf(
+			"GetCurrentFactoryPointer after invalid-name set = %#v, want preserved alpha at %q",
+			pointer,
+			alphaDir,
+		)
+	}
+}
+
 func TestPrivateCatalog_RootTypedInvalidNameFailures(t *testing.T) {
 	t.Parallel()
 
