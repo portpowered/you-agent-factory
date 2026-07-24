@@ -11,38 +11,69 @@ import (
 	"time"
 )
 
-// FileSystem is the exact provider-session storage boundary. Storage layout
-// policy remains in Provider Sessions; Wire selects the concrete filesystem.
+// FileSystem is a construction/process-edge storage port used when Wire or
+// owner-local constructors assemble a production Service. It is not part of the
+// peer-facing Provider Sessions root contract; cross-service callers invoke
+// Service methods without supplying filesystem effect ports.
 type FileSystem interface {
 	Open(string) (io.ReadCloser, error)
 	Stat(string) (fs.FileInfo, error)
 }
 
-// ResolveHomeDirectory supplies the process home used to derive provider-owned
-// default storage roots.
+// ResolveHomeDirectory is a construction/process-edge port that supplies the
+// process home used to derive provider-owned default storage roots. Peers do
+// not pass this through Service method signatures.
 type ResolveHomeDirectory func() (string, error)
 
-// CodexWalkDirectory traverses the configured Codex session tree.
+// CodexWalkDirectory is a construction/process-edge port that traverses the
+// configured Codex session tree. It is not part of the peer-facing root
+// contract surface.
 type CodexWalkDirectory func(string, fs.WalkDirFunc) error
 
-// CodexResolveSymlinks resolves Codex session paths before containment checks.
+// CodexResolveSymlinks is a construction/process-edge port that resolves Codex
+// session paths before containment checks. It is not part of the peer-facing
+// root contract surface.
 type CodexResolveSymlinks func(string) (string, error)
 
-// CursorWalkDirectory traverses the configured Cursor session storage tree.
+// CursorWalkDirectory is a construction/process-edge port that traverses the
+// configured Cursor session storage tree. It is not part of the peer-facing
+// root contract surface.
 type CursorWalkDirectory func(string, fs.WalkDirFunc) error
 
-// CursorResolveSymlinks resolves Cursor storage paths before containment checks.
+// CursorResolveSymlinks is a construction/process-edge port that resolves
+// Cursor storage paths before containment checks. It is not part of the
+// peer-facing root contract surface.
 type CursorResolveSymlinks func(string) (string, error)
 
-// CursorOpenSQLDatabase opens a Cursor database driver connection.
+// CursorOpenSQLDatabase is a construction/process-edge port that opens a Cursor
+// database driver connection. It is not part of the peer-facing root contract
+// surface.
 type CursorOpenSQLDatabase func(driverName, dataSourceName string) (*sql.DB, error)
 
-// OperatingSystem identifies the platform whose provider storage convention
-// should be selected.
+// OperatingSystem is a construction/process-edge value identifying the platform
+// whose provider storage convention should be selected. It is not part of the
+// peer-facing root contract surface.
 type OperatingSystem string
 
-// Service is the provider-independent session inspection contract.
+// Service is the singular Provider Sessions root contract for cross-service
+// peers. Published slices (detached-ref validation/inspection and normalized
+// transcript/detail projection) are additive methods on this one named
+// interface and use plain Provider Sessions-owned request, result, value, and
+// typed-error contracts. Peers depend on Service rather than mixed string-keyed
+// helpers, construction effect ports, or private Codex/Cursor reader types.
+// Nested IMP-PSES reader cuts, CTR-PROV/IMP-PROV, Standardized Providers
+// conductor/migration, CLI-manifest, workers construction, and OpenAPI
+// package-motion edits remain out of scope for the root-contract packet.
 type Service interface {
+	// Details is the published provider-independent session inspection entry on
+	// the singular root. Peers supply provider/kind/id identity strings and
+	// receive a detached Detail value (transcript, parse, usage, and related
+	// normalized facts) or a typed Provider Sessions failure such as
+	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
+	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
+	// invoke this peer API. Later additive slices may accept typed SessionRef
+	// identity without replacing this singular root.
 	Details(provider, kind, id string) (Detail, error)
 }
 
