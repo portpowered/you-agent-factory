@@ -17,7 +17,15 @@
 // Harness records remain in the inventory so later report rendering can mention
 // them without mixing them into customer totals.
 //
-// Later foundation cells consume this package for catalog generation and the
-// undocumented-test baseline. This package stays side-effect free aside from
-// reading source files.
+// Undocumented customer Test* identities are frozen in an exact deletion-only
+// baseline (see Baseline, CheckAgainstBaseline, and ValidateBaselineUpdate).
+// Helper-only and internal/** undocumented helpers never enter that ledger.
+// CheckAgainstBaseline succeeds when the current undocumented customer set is
+// identical to or a strict subset of the baseline; newly undocumented customer
+// tests absent from the baseline fail closed with an actionable identity.
+// ValidateBaselineUpdate rejects baseline expansions.
+//
+// Later foundation cells consume this package for catalog generation and CI
+// enforcement. This package stays side-effect free aside from reading source
+// and baseline files.
 package functionaltestmetadata

@@ -84,8 +84,14 @@
   (`ClassificationHarness`); all other inventoried `Test*` records are
   `ClassificationCustomer`. `CustomerScenarioCount` equals the customer
   record count only. Fail closed with a file-scoped error on malformed
-  source. Later FND cells consume that package for the undocumented
-  baseline; do not reintroduce regex or line-scraping inventories.
+  source. Undocumented customer identities are enforced against the exact
+  deletion-only ledger
+  `docs/internal/baselines/functional-undocumented-tests.json` via
+  `CheckAgainstBaseline` / `ValidateBaselineUpdate` (subset or identical
+  match succeeds; new undocumented customer tests and baseline expansions
+  fail; harness/internal helpers stay out of the ledger). Later FND cells
+  wire that check into Make/CI; do not reintroduce regex or line-scraping
+  inventories.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
