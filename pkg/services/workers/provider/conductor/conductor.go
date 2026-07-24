@@ -21,7 +21,8 @@ const (
 )
 
 // Conductor is the shared orchestration entry for registry-selected
-// integrations. Story 001 owns capability preflight before provider I/O.
+// integrations. It owns capability preflight before provider I/O and the
+// structured response writer/closer that stamps conductor correlation.
 type Conductor struct {
 	providers *registry.Registry
 }
@@ -79,7 +80,8 @@ func (c *Conductor) Capabilities(
 }
 
 // Invoke validates requested capabilities against the selected integration's
-// registry/manifest maximum before any provider Invoke I/O.
+// registry/manifest maximum before any provider Invoke I/O, then invokes
+// through the structured response writer composed with ExecuteInvocation.
 func (c *Conductor) Invoke(
 	ctx context.Context,
 	identity string,
@@ -93,7 +95,7 @@ func (c *Conductor) Invoke(
 	if err != nil {
 		return err
 	}
-	return inference.ExecuteInvocation(ctx, integration, request, destination)
+	return inference.ExecuteInvocation(ctx, correlatingIntegration{Integration: integration}, request, destination)
 }
 
 func (c *Conductor) preflight(identity string, required inference.CapabilitySet) error {

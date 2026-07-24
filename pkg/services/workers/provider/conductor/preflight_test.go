@@ -174,6 +174,7 @@ type recordingIntegration struct {
 	discoveryCalls  int
 	capabilityCalls int
 	invocationCalls int
+	invoke          func(context.Context, inference.InvocationRequest, inference.ResponseWriter) error
 }
 
 func (r *recordingIntegration) Identity() inference.Identity { return r.identity }
@@ -193,10 +194,13 @@ func (r *recordingIntegration) Capabilities(
 }
 func (r *recordingIntegration) Invoke(
 	ctx context.Context,
-	_ inference.InvocationRequest,
+	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
 	r.invocationCalls++
+	if r.invoke != nil {
+		return r.invoke(ctx, request, writer)
+	}
 	return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
 		Kind:    inference.FailureDependency,
 		Message: "fixture completed without provider-native work",
