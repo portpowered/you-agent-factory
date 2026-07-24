@@ -74,11 +74,8 @@ func (s *Service) InstallPackagedFactory(
 	}
 	installed := results[0]
 	return factorydefinitions.InstallPackagedFactoryResult{
-		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
-			Name:       installed.Name,
-			FactoryDir: installed.FactoryDir,
-		},
-		Outcome: installed.Outcome,
+		Definition: distributedDefinitionFacts(installed.Name, installed.FactoryDir),
+		Outcome:    installed.Outcome,
 	}, nil
 }
 
@@ -93,12 +90,16 @@ func (s *Service) CreateFactoryScaffold(
 	if targetDir == "" {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, factorydefinitions.ErrFactoryDistributeFailed
 	}
+	facts := distributedDefinitionFacts("", targetDir)
+	if facts.FactoryDir == "" || facts.FactoryDir == "." {
+		return factorydefinitions.CreateFactoryScaffoldResult{}, factorydefinitions.ErrFactoryDistributeFailed
+	}
 	scaffoldType := strings.TrimSpace(request.Type)
 	if scaffoldType == "" {
 		scaffoldType = string(factorydefinitions.DefaultScaffoldType)
 	}
 	err := s.scaffold(factorydefinitions.ScaffoldConfig{
-		Dir:      targetDir,
+		Dir:      facts.FactoryDir,
 		Type:     scaffoldType,
 		Executor: request.Executor,
 		JSON:     true,
@@ -107,15 +108,13 @@ func (s *Service) CreateFactoryScaffold(
 	if err != nil {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, fmt.Errorf("%w: %v", factorydefinitions.ErrFactoryDistributeFailed, err)
 	}
-	name := filepath.Base(filepath.Clean(targetDir))
+	name := filepath.Base(facts.FactoryDir)
 	if name == "" || name == "." || name == string(filepath.Separator) {
 		name = scaffoldType
 	}
+	facts.Name = name
 	return factorydefinitions.CreateFactoryScaffoldResult{
-		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
-			Name:       name,
-			FactoryDir: targetDir,
-		},
+		Definition:   facts,
 		ScaffoldType: scaffoldType,
 	}, nil
 }
@@ -127,4 +126,17 @@ func (s *Service) lookup(name string) (factorydefinitions.PackagedDefinition, bo
 		}
 	}
 	return factorydefinitions.PackagedDefinition{}, false
+}
+
+// distributedDefinitionFacts builds the shared CTR-DEF aggregate identity shape
+// for install and scaffold success paths so FactoryDir identity stays aligned.
+func distributedDefinitionFacts(name, factoryDir string) factorydefinitions.DistributedFactoryDefinitionFacts {
+	cleanedDir := strings.TrimSpace(factoryDir)
+	if cleanedDir != "" {
+		cleanedDir = filepath.Clean(cleanedDir)
+	}
+	return factorydefinitions.DistributedFactoryDefinitionFacts{
+		Name:       strings.TrimSpace(name),
+		FactoryDir: cleanedDir,
+	}
 }

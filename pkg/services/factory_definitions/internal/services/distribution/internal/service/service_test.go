@@ -38,7 +38,7 @@ func TestDistributionService_OwnsBuiltInInstallAndScaffoldSuccess(t *testing.T) 
 	installer := &stubInstaller{
 		result: []factorydefinitions.PackagedFactoryInstallResult{{
 			Name:       "@you/goal",
-			FactoryDir: filepath.ToSlash(filepath.Join("/factories", "goal")),
+			FactoryDir: filepath.Join("/factories", "goal"),
 			Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
 		}},
 	}
@@ -107,7 +107,7 @@ func TestDistributionService_OwnsBuiltInInstallAndScaffoldSuccess(t *testing.T) 
 	scaffolded, err := svc.CreateFactoryScaffold(
 		ctx,
 		factorydefinitions.CreateFactoryScaffoldRequest{
-			TargetDir: "/factories/goal",
+			TargetDir: filepath.Join("/factories", "goal"),
 			Type:      string(factorydefinitions.DefaultScaffoldType),
 			Executor:  factorydefinitions.DefaultStarterExecutor,
 		},
@@ -118,9 +118,94 @@ func TestDistributionService_OwnsBuiltInInstallAndScaffoldSuccess(t *testing.T) 
 	if scaffoldCalls != 1 {
 		t.Fatalf("scaffold calls = %d, want 1", scaffoldCalls)
 	}
-	if scaffolded.Definition.FactoryDir != "/factories/goal" ||
+	wantFactoryDir := filepath.Clean(filepath.Join("/factories", "goal"))
+	if scaffolded.Definition.FactoryDir != wantFactoryDir ||
 		scaffolded.Definition.Name == "" ||
 		scaffolded.ScaffoldType == "" {
-		t.Fatalf("CreateFactoryScaffold = %#v, want aggregate identity facts", scaffolded)
+		t.Fatalf("CreateFactoryScaffold = %#v, want aggregate identity facts at %q", scaffolded, wantFactoryDir)
+	}
+}
+
+func TestDistributionService_InstallAndScaffoldShareAggregateFacts(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := filepath.Join("/factories", "@you", "goal")
+	installer := &stubInstaller{
+		result: []factorydefinitions.PackagedFactoryInstallResult{{
+			Name:       "@you/goal",
+			FactoryDir: factoryDir,
+			Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
+		}},
+	}
+	svc, err := distributionwire.NewService(
+		[]factorydefinitions.PackagedDefinition{{
+			Name:    "@you/goal",
+			Project: "builtin-goal",
+			JSON:    []byte(`{"name":"goal"}`),
+		}},
+		installer,
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	installed, err := svc.InstallPackagedFactory(
+		ctx,
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/factories",
+			Name:    "@you/goal",
+		},
+	)
+	if err != nil {
+		t.Fatalf("InstallPackagedFactory: %v", err)
+	}
+	installedFacts := installed.Definition
+	if installedFacts.Name == "" || installedFacts.FactoryDir == "" {
+		t.Fatalf("InstallPackagedFactory Definition = %#v, want non-empty Name and FactoryDir", installedFacts)
+	}
+	if installedFacts != (factorydefinitions.DistributedFactoryDefinitionFacts{
+		Name:       "@you/goal",
+		FactoryDir: filepath.Clean(factoryDir),
+	}) {
+		t.Fatalf(
+			"InstallPackagedFactory Definition = %#v, want CTR-DEF DistributedFactoryDefinitionFacts",
+			installedFacts,
+		)
+	}
+
+	// Equivalent location with unclean path separators must not diverge on FactoryDir identity.
+	uncleanTarget := factoryDir + string(filepath.Separator) + "."
+	scaffolded, err := svc.CreateFactoryScaffold(
+		ctx,
+		factorydefinitions.CreateFactoryScaffoldRequest{
+			TargetDir: uncleanTarget,
+			Type:      string(factorydefinitions.DefaultScaffoldType),
+			Executor:  factorydefinitions.DefaultStarterExecutor,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateFactoryScaffold: %v", err)
+	}
+	scaffoldedFacts := scaffolded.Definition
+	if scaffoldedFacts.Name == "" || scaffolded.ScaffoldType == "" {
+		t.Fatalf("CreateFactoryScaffold = %#v, want Name plus ScaffoldType identity", scaffolded)
+	}
+	if scaffoldedFacts.FactoryDir != installedFacts.FactoryDir {
+		t.Fatalf(
+			"install and scaffold FactoryDir diverge for equivalent location: install=%q scaffold=%q",
+			installedFacts.FactoryDir,
+			scaffoldedFacts.FactoryDir,
+		)
+	}
+	if scaffoldedFacts != (factorydefinitions.DistributedFactoryDefinitionFacts{
+		Name:       scaffoldedFacts.Name,
+		FactoryDir: installedFacts.FactoryDir,
+	}) {
+		t.Fatalf(
+			"CreateFactoryScaffold Definition = %#v, want CTR-DEF DistributedFactoryDefinitionFacts shape",
+			scaffoldedFacts,
+		)
 	}
 }

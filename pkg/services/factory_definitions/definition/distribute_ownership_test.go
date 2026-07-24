@@ -24,7 +24,7 @@ func (s distributeOwnershipInstaller) EnsurePackagedFactories(
 func TestRootService_DistributeSuccessThroughPrivateDistribution(t *testing.T) {
 	t.Parallel()
 
-	factoryDir := filepath.ToSlash(filepath.Join("/factories", "goal"))
+	factoryDir := filepath.Join("/factories", "goal")
 	distributionService, err := distributionwire.NewService(
 		[]factoryroot.PackagedDefinition{{
 			Name:    "@you/goal",
@@ -63,7 +63,7 @@ func TestRootService_DistributeSuccessThroughPrivateDistribution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InstallPackagedFactory: %v", err)
 	}
-	if installed.Definition.Name != "@you/goal" || installed.Definition.FactoryDir != factoryDir {
+	if installed.Definition.Name != "@you/goal" || installed.Definition.FactoryDir != filepath.Clean(factoryDir) {
 		t.Fatalf("InstallPackagedFactory = %#v, want private distribution aggregate facts", installed)
 	}
 
@@ -78,7 +78,7 @@ func TestRootService_DistributeSuccessThroughPrivateDistribution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateFactoryScaffold: %v", err)
 	}
-	if scaffolded.Definition.FactoryDir != factoryDir || scaffolded.ScaffoldType == "" {
+	if scaffolded.Definition.FactoryDir != filepath.Clean(factoryDir) || scaffolded.ScaffoldType == "" {
 		t.Fatalf("CreateFactoryScaffold = %#v, want private distribution scaffold facts", scaffolded)
 	}
 }
