@@ -84,6 +84,26 @@ This inventory **does not transfer** or redefine the live **Schema CLI**
 manifest/generation ownership. It only names the PSS serial lane that must later
 integrate through that ownership after portfolio holds clear.
 
+## PSS-I04 MCP shared surfaces
+
+`mcp` surfaces serialize exclusively under **PSS-I04**. Required shared surfaces
+cover:
+
+- top-level MCP server composition (`pkg/transports/mcp/server`,
+  `pkg/transports/mcp/stdio` SDK registration and stdio serve wiring)
+- shared tool registry / discovery catalog composition (`contracts/mcp/**`,
+  `pkg/transports/mcp/discoverygen`, `pkg/transports/mcp/generated`)
+
+Accepted `MCP-*` / service-owned adapter cutovers queue on those surfaces; this
+inventory does not perform any MCP cutover by itself.
+
+Owner-local **service-owned** MCP adapters remain **concurrent-safe** relative
+to PSS-I04 as long as they do not edit the exclusive shared registry/server
+composition paths above.
+
+Top-level MCP owns **server and registration only**. Tools continue to depend on
+**injected root contracts** rather than service implementations.
+
 ## Scope boundary
 
 This model is **integration metadata only**. Publishing or updating the

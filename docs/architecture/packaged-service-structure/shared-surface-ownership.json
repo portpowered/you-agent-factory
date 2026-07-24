@@ -82,6 +82,24 @@
       "activeHolder": null,
       "ownerRequestQueue": [],
       "holdConditionRefs": []
+    },
+    "mcp.toplevel.server-composition": {
+      "surfaceId": "mcp.toplevel.server-composition",
+      "protocolFamily": "mcp",
+      "exclusiveChangedPathSummary": "pkg/transports/mcp/server and pkg/transports/mcp/stdio top-level MCP server composition (SDK registration and stdio serve wiring; excludes service-owned MCP adapters)",
+      "serialIntegratorLaneId": "PSS-I04",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "mcp.registry.tool-discovery-catalog-composition": {
+      "surfaceId": "mcp.registry.tool-discovery-catalog-composition",
+      "protocolFamily": "mcp",
+      "exclusiveChangedPathSummary": "contracts/mcp/** authored tool catalog and protocol schemas, pkg/transports/mcp/discoverygen, and pkg/transports/mcp/generated discovery/registry composition (excludes service-owned MCP adapters)",
+      "serialIntegratorLaneId": "PSS-I04",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
     }
   },
   "holds": {}

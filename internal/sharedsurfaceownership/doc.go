@@ -27,6 +27,13 @@ var RequiredPSSI03SurfaceIDs = []string{
 	"cli.global.help-and-completion-composition",
 }
 
+// RequiredPSSI04SurfaceIDs are the shared MCP composition surfaces that must be
+// inventoried under serial integrator lane PSS-I04.
+var RequiredPSSI04SurfaceIDs = []string{
+	"mcp.toplevel.server-composition",
+	"mcp.registry.tool-discovery-catalog-composition",
+}
+
 // Diagnostic is one maintainer-readable validation finding.
 type Diagnostic struct {
 	Rule     string
