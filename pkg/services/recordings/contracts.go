@@ -21,6 +21,10 @@ var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event
 // carries a malformed scope (for example a whitespace-only SessionID).
 var ErrInvalidSubscribeScope = errors.New("invalid subscribe reconnect scope")
 
+// ErrInvalidProjectionInput reports that a projection-query request carries
+// empty or malformed inputs (for example a negative selected tick).
+var ErrInvalidProjectionInput = errors.New("invalid projection query input")
+
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -64,6 +68,49 @@ type SubscribeResult struct {
 	Stream EventStream
 }
 
+// ReconstructWorldStateRequest is the plain world-state reconstruction request
+// peers send through the Recordings root projection-query slice.
+type ReconstructWorldStateRequest struct {
+	Events       []interfaces.FactoryEvent
+	SelectedTick int
+}
+
+// ReconstructWorldStateResult is the plain detached world-state success outcome.
+type ReconstructWorldStateResult struct {
+	WorldState interfaces.FactoryWorldState
+}
+
+// SimpleDashboardQueryRequest is the plain simple-dashboard projection request
+// peers send through the Recordings root projection-query slice.
+type SimpleDashboardQueryRequest struct {
+	WorldState interfaces.FactoryWorldState
+}
+
+// SimpleDashboardQueryResult is the plain simple-dashboard projection outcome.
+type SimpleDashboardQueryResult struct {
+	Data SimpleDashboardRenderData
+}
+
+// WorkstationRequestsQueryRequest is the plain workstation-request projection
+// request peers send through the Recordings root projection-query slice.
+type WorkstationRequestsQueryRequest struct {
+	WorldState interfaces.FactoryWorldState
+}
+
+// WorkstationRequestsQueryResult is the plain workstation-request projection
+// outcome.
+type WorkstationRequestsQueryResult struct {
+	Projection WorkstationFactoryWorldWorkstationRequestProjectionSlice
+}
+
+// ValidateReconnectReplayRequest is the plain reconnect-replay validation
+// request peers send through the Recordings root projection-query slice.
+type ValidateReconnectReplayRequest struct {
+	Events []interfaces.FactoryEvent
+	Cursor EventReconnectCursor
+	Scope  EventReconnectScope
+}
+
 // Ledger is the append/subscribe capability surface embedded in the singular
 // Recordings root Service. Peers should depend on Service rather than treating
 // Ledger as a second peer-facing Recordings authority. Nested ledger storage
@@ -102,6 +149,19 @@ type Service interface {
 	// SubscribeFrom opens a reconnect-aware event stream through the plain
 	// append/subscribe root-contract slice.
 	SubscribeFrom(context.Context, SubscribeRequest) (SubscribeResult, error)
+
+	// ReconstructWorldState reconstructs a detached world-state/read-model
+	// through the plain projection-query root-contract slice.
+	ReconstructWorldState(ReconstructWorldStateRequest) (ReconstructWorldStateResult, error)
+	// QuerySimpleDashboard returns simple dashboard render data through the
+	// plain projection-query root-contract slice.
+	QuerySimpleDashboard(SimpleDashboardQueryRequest) SimpleDashboardQueryResult
+	// QueryWorkstationRequests returns workstation-request projection values
+	// through the plain projection-query root-contract slice.
+	QueryWorkstationRequests(WorkstationRequestsQueryRequest) WorkstationRequestsQueryResult
+	// ValidateReconnectReplayFrom validates reconnect-replay inputs through
+	// the plain projection-query root-contract slice.
+	ValidateReconnectReplayFrom(ValidateReconnectReplayRequest) error
 }
 
 // ProjectionService is the projection-query capability surface embedded in the

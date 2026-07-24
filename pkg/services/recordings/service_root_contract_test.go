@@ -148,6 +148,45 @@ func (fake *peerRootServiceFake) ValidateReconnectReplay(
 	return fake.validateReplayErr
 }
 
+func (fake *peerRootServiceFake) ReconstructWorldState(
+	request recordings.ReconstructWorldStateRequest,
+) (recordings.ReconstructWorldStateResult, error) {
+	if request.SelectedTick < 0 {
+		return recordings.ReconstructWorldStateResult{}, recordings.ErrInvalidProjectionInput
+	}
+	state, err := fake.ReconstructFactoryWorldState(request.Events, request.SelectedTick)
+	if err != nil {
+		return recordings.ReconstructWorldStateResult{}, err
+	}
+	return recordings.ReconstructWorldStateResult{WorldState: state}, nil
+}
+
+func (fake *peerRootServiceFake) QuerySimpleDashboard(
+	request recordings.SimpleDashboardQueryRequest,
+) recordings.SimpleDashboardQueryResult {
+	return recordings.SimpleDashboardQueryResult{
+		Data: fake.SimpleDashboardRenderData(request.WorldState),
+	}
+}
+
+func (fake *peerRootServiceFake) QueryWorkstationRequests(
+	request recordings.WorkstationRequestsQueryRequest,
+) recordings.WorkstationRequestsQueryResult {
+	return recordings.WorkstationRequestsQueryResult{
+		Projection: fake.ProjectWorkstationRequests(request.WorldState),
+	}
+}
+
+func (fake *peerRootServiceFake) ValidateReconnectReplayFrom(
+	request recordings.ValidateReconnectReplayRequest,
+) error {
+	return fake.ValidateReconnectReplay(
+		request.Events,
+		interfaces.FactoryEventReconnectCursor(request.Cursor),
+		interfaces.FactoryEventReconnectScope(request.Scope),
+	)
+}
+
 func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 	t.Parallel()
 
@@ -253,5 +292,68 @@ func TestAppendSubscribeRootContract_SuccessAndTypedFailures(t *testing.T) {
 	}
 	if errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 		t.Fatalf("invalid scope must remain distinct from ErrReconnectCursorNotFound")
+	}
+}
+
+func TestProjectionQueryRootContract_SuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	fake := &peerRootServiceFake{
+		reconstructState: interfaces.FactoryWorldState{Tick: 7},
+		dashboardData: recordings.SimpleDashboardRenderData{
+			InFlightDispatchCount: 2,
+		},
+		workstationRequests: recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{},
+		validateReplayErr:   recordings.ErrReconnectCursorNotFound,
+	}
+	var service recordings.Service = fake
+
+	events := []interfaces.FactoryEvent{
+		{Id: "event-1", Type: "WORK_REQUEST", Context: interfaces.FactoryEventContext{Tick: 7}},
+		{Id: "event-2", Type: "WORK_STATE_CHANGE", Context: interfaces.FactoryEventContext{Tick: 7}},
+	}
+	world, err := service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
+		Events:       events,
+		SelectedTick: 7,
+	})
+	if err != nil {
+		t.Fatalf("ReconstructWorldState success path: %v", err)
+	}
+	if world.WorldState.Tick != 7 {
+		t.Fatalf("ReconstructWorldState tick = %d, want 7", world.WorldState.Tick)
+	}
+
+	dashboard := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
+		WorldState: world.WorldState,
+	})
+	if dashboard.Data.InFlightDispatchCount != 2 {
+		t.Fatalf("QuerySimpleDashboard = %#v, want InFlightDispatchCount 2", dashboard.Data)
+	}
+
+	workstation := service.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{
+		WorldState: world.WorldState,
+	})
+	if workstation.Projection.WorkstationRequestsByDispatchId != nil &&
+		len(*workstation.Projection.WorkstationRequestsByDispatchId) != 0 {
+		t.Fatalf("QueryWorkstationRequests = %#v, want empty detached projection", workstation.Projection)
+	}
+
+	if err := service.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
+		Events: nil,
+		Cursor: recordings.EventReconnectCursor{AfterEventID: "missing-cursor"},
+		Scope:  recordings.EventReconnectScope{SessionID: "session-1"},
+	}); !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		t.Fatalf("invalid reconnect validation error = %v, want ErrReconnectCursorNotFound", err)
+	}
+
+	_, err = service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
+		Events:       events,
+		SelectedTick: -1,
+	})
+	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+		t.Fatalf("malformed projection input error = %v, want ErrInvalidProjectionInput", err)
+	}
+	if errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		t.Fatalf("malformed projection input must remain distinct from ErrReconnectCursorNotFound")
 	}
 }

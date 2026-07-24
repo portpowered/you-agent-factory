@@ -81,6 +81,41 @@ func (service *combinedService) SubscribeFrom(
 	return recordings.SubscribeResult{Stream: stream}, nil
 }
 
+func (service *combinedService) ReconstructWorldState(
+	request recordings.ReconstructWorldStateRequest,
+) (recordings.ReconstructWorldStateResult, error) {
+	if request.SelectedTick < 0 {
+		return recordings.ReconstructWorldStateResult{}, recordings.ErrInvalidProjectionInput
+	}
+	state, err := service.ReconstructFactoryWorldState(request.Events, request.SelectedTick)
+	if err != nil {
+		return recordings.ReconstructWorldStateResult{}, err
+	}
+	return recordings.ReconstructWorldStateResult{WorldState: state}, nil
+}
+
+func (service *combinedService) QuerySimpleDashboard(
+	request recordings.SimpleDashboardQueryRequest,
+) recordings.SimpleDashboardQueryResult {
+	return recordings.SimpleDashboardQueryResult{
+		Data: service.SimpleDashboardRenderData(request.WorldState),
+	}
+}
+
+func (service *combinedService) QueryWorkstationRequests(
+	request recordings.WorkstationRequestsQueryRequest,
+) recordings.WorkstationRequestsQueryResult {
+	return recordings.WorkstationRequestsQueryResult{
+		Projection: service.ProjectWorkstationRequests(request.WorldState),
+	}
+}
+
+func (service *combinedService) ValidateReconnectReplayFrom(
+	request recordings.ValidateReconnectReplayRequest,
+) error {
+	return service.ValidateReconnectReplay(request.Events, request.Cursor, request.Scope)
+}
+
 func NewService(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,
