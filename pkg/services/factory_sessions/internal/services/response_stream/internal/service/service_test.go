@@ -58,9 +58,8 @@ func newStore(t *testing.T, service responsestreamservice.Service) *responseeven
 	return store
 }
 
-func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
-	t.Helper()
-	event, err := store.Publish(responseevents.FactoryResponseEvent{
+func publishDraft(kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
+	return responseevents.FactoryResponseEvent{
 		DispatchID: dispatchID,
 		RunID:      "run-1",
 		Kind:       kind,
@@ -72,20 +71,94 @@ func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, 
 			Fidelity:       responseevents.FidelityLossless,
 		},
 		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
-	})
+	}
+}
+
+func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
+	t.Helper()
+	event, err := store.Publish(publishDraft(kind, dispatchID))
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 	return event
 }
 
+func publishThroughService(
+	t *testing.T,
+	service responsestreamservice.Service,
+	store *responseeventstore.SessionResponseEventStore,
+	kind responseevents.Kind,
+	dispatchID string,
+) responseevents.FactoryResponseEvent {
+	t.Helper()
+	event, err := service.Publish(store, publishDraft(kind, dispatchID))
+	if err != nil {
+		t.Fatalf("service.Publish: %v", err)
+	}
+	return event
+}
+
+func TestService_PublishRetainsMonotonicSequences(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	second := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	third := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-2")
+
+	if first.Sequence <= 0 || second.Sequence <= first.Sequence || third.Sequence <= second.Sequence {
+		t.Fatalf("sequences = %d, %d, %d; want strictly increasing positive values", first.Sequence, second.Sequence, third.Sequence)
+	}
+	if first.EventID == "" || second.EventID == "" || third.EventID == "" {
+		t.Fatalf("retained events missing IDs: %#v %#v %#v", first, second, third)
+	}
+	if first.EventID == second.EventID || second.EventID == third.EventID {
+		t.Fatalf("event IDs must be unique across retained publishes")
+	}
+}
+
+func TestService_SubscribeFromZeroDeliversRetainedThenLiveInOrder(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	second := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		AfterSequence: 0,
+	})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+
+	retained, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next retained: %v", err)
+	}
+	if len(retained) != 2 || retained[0].Sequence != first.Sequence || retained[1].Sequence != second.Sequence {
+		t.Fatalf("retained events = %#v, want sequences %d then %d", retained, first.Sequence, second.Sequence)
+	}
+
+	live := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	gotLive, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next live: %v", err)
+	}
+	if len(gotLive) != 1 || gotLive[0].Sequence != live.Sequence {
+		t.Fatalf("live events = %#v, want sequence %d", gotLive, live.Sequence)
+	}
+}
+
 func TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents(t *testing.T) {
 	t.Parallel()
 	service := newService(t)
 	store := newStore(t, service)
-	first := publish(t, store, responseevents.KindMessage, "dispatch-1")
-	publish(t, store, responseevents.KindMessage, "dispatch-2")
-	third := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-2")
+	third := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
 		AfterSequence: first.Sequence,
