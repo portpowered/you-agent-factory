@@ -110,7 +110,10 @@ const (
 	HostFailureClassCapacityExhausted  HostFailureClass = "capacity_exhausted"
 )
 
-// LocalRuntimeHooks observes model resource and load lifecycle activity.
+// LocalRuntimeHooks observes model resource and load lifecycle activity for
+// Wire/construction-time ProcessDependencies. It is not a peer-facing host/lease
+// or infer contract; peers use Service.InspectRuntime, AcquireLease,
+// ReleaseLease, and InvokeLocal with plain request/result vocabulary instead.
 type LocalRuntimeHooks struct {
 	MarkResourceWaitStarted  func(context.Context, time.Time)
 	MarkResourceWaitFinished func(context.Context, time.Time, bool)
