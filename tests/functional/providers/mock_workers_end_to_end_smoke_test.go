@@ -81,12 +81,12 @@ args:
 		Args:       []string{"--replay", artifactPath},
 	})
 	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, replayServer.URL())
+	listed := support.ListDefaultSessionWork(t, replayServer.URL())
 	for placeID, want := range map[string]int{
 		"accept-task:done": 1, "reject-task:failed": 1, "script-task:done": 1,
 		"accept-task:init": 0, "reject-task:init": 0, "script-task:init": 0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

@@ -131,7 +131,7 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	assertScriptEventsRecordedInArtifact(t, run.events, recordedEvents)
 
 	replay := observeReplayThroughRoot(t, run.artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 }

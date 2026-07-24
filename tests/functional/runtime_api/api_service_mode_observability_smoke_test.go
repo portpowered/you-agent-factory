@@ -28,8 +28,9 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 
 	close(dispatchRelease)
 	completed := waitForPublicFactorySession(t, server, 10*time.Second, func(session factoryapi.FactorySession) bool {
+		listed := server.ListWork(t)
 		return serviceModeSessionIdle(session) &&
-			support.SessionHasWorkAtPlace(session, activeWorkID, "task:complete")
+			support.HasWorkAtCustomerState(listed, activeWorkID, "task:complete")
 	})
 	if completed.Runtime.Progress.Categories.Terminal != 1 {
 		t.Fatalf("completed terminal count = %d, want 1", completed.Runtime.Progress.Categories.Terminal)
@@ -57,8 +58,9 @@ func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTr
 
 	close(dispatchRelease)
 	completed := waitForPublicFactorySession(t, server, 10*time.Second, func(session factoryapi.FactorySession) bool {
+		listed := server.ListWork(t)
 		return serviceModeSessionIdle(session) &&
-			support.SessionHasWorkAtPlace(session, activeWorkID, "task:complete")
+			support.HasWorkAtCustomerState(listed, activeWorkID, "task:complete")
 	})
 	assertPublicStatusMatchesSession(t, server, completed)
 	assertCompletedServiceModeWork(t, server, traceID, activeWorkID)

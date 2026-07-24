@@ -26,7 +26,7 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "done")
+	assertScriptMockPlaces(t, support.ListDefaultSessionWork(t, server.URL()), "done")
 	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "done", "mock worker accepted")
 }
 
@@ -102,7 +102,7 @@ func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "done")
+	assertScriptMockPlaces(t, support.ListDefaultSessionWork(t, server.URL()), "done")
 
 	raw, err := os.ReadFile(sideEffectPath)
 	if err != nil {
@@ -124,14 +124,14 @@ func rejectedScriptMockConfig(exitCode int) *workers.MockWorkersConfig {
 	}}}
 }
 
-func assertScriptMockPlaces(t *testing.T, session factoryapi.FactorySession, terminalState string) {
+func assertScriptMockPlaces(t *testing.T, listed factoryapi.ListWorkResponse, terminalState string) {
 	t.Helper()
 	for _, state := range []string{"init", "done", "failed"} {
 		want := 0
 		if state == terminalState {
 			want = 1
 		}
-		if got := support.SessionPlaceTokenCount(session, "task:"+state); got != want {
+		if got := support.CountWorkAtCustomerState(listed, "task:"+state); got != want {
 			t.Errorf("task:%s token count = %d, want %d", state, got, want)
 		}
 	}
@@ -139,7 +139,7 @@ func assertScriptMockPlaces(t *testing.T, session factoryapi.FactorySession, ter
 
 func assertScriptMockRejected(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Helper()
-	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "failed")
+	assertScriptMockPlaces(t, support.ListDefaultSessionWork(t, server.URL()), "failed")
 	for _, event := range server.GetFactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue

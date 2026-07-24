@@ -97,7 +97,7 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 }
@@ -160,7 +160,7 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 }
@@ -246,7 +246,7 @@ Finish the input task.
 	)
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:complete": 3, "task:init": 0, "task:failed": 0,
 	})
 	if !replayWorkIncludesID(replay.Work, "work-generated-alpha") ||

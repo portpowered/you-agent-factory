@@ -60,11 +60,11 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	})
 	waitForPublicWorkInPlace(t, server.URL(), "task:failed", "world-view-failed", time.Second)
 
-	session := support.GetDefaultSession(t, server.URL())
-	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("task:complete token count = %d, want 1", got)
 	}
-	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 1 {
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("task:failed token count = %d, want 1", got)
 	}
 	assertFunctionalProviderSessionsInEvents(t, server.GetFactoryEvents(t))

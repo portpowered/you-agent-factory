@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestLogicalMove_Success(t *testing.T) {
@@ -19,8 +21,8 @@ func TestLogicalMove_Success(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_dir"))
 	configureLogicalMoveWorkstation(t, dir, "router")
 	testutil.WriteSeedFile(t, dir, "task", []byte("my-payload"))
-	session := support.RunFactoryToCompletion(t, dir, testutil.NewMockProvider(), 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: testutil.NewMockProvider()}, 5*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0})
 }
 
 func TestLogicalMove_PreservesTokenColor(t *testing.T) {
@@ -29,8 +31,8 @@ func TestLogicalMove_PreservesTokenColor(t *testing.T) {
 	configureLogicalMoveWorkstation(t, dir, "router")
 	testutil.WriteSeedFile(t, dir, "task", []byte("preserved-payload"))
 	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "done COMPLETE"})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:staging": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:staging": 0})
 	calls := provider.Calls()
 	if len(calls) != 1 || len(calls[0].Dispatch.InputTokens) == 0 ||
 		string(firstInputToken(calls[0].Dispatch.InputTokens).Color.Payload) != "preserved-payload" {

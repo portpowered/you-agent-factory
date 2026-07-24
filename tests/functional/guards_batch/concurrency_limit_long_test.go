@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
@@ -25,8 +27,8 @@ func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "item 2 done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "item 3 done. COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 3, "task:init": 0, "task:failed": 0})
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 3, "task:init": 0, "task:failed": 0})
 
 	if provider.CallCount() != 3 {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())
@@ -48,8 +50,8 @@ func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "B done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "C done. COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 30*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 3})
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 30*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 3})
 	assertGuardResourceAvailability(t, session, "executor-slot", 2)
 }
 
@@ -62,8 +64,8 @@ func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
 		[]workerexecution.InferenceResponse{{Content: ""}},
 		[]error{errors.New("processor failed")},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0})
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0})
 
 	if provider.CallCount() != 1 {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount())
@@ -85,8 +87,8 @@ func TestConcurrencyLimit_ReducedCapacityStillCompletes(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Y done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Z done. COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 3, "task:init": 0})
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 3, "task:init": 0})
 
 	if provider.CallCount() != 3 {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())
