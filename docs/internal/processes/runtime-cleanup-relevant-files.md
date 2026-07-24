@@ -272,8 +272,10 @@ cross-owner import decisions. Do not grow a hand-maintained private-subpackage
 catalog for the generic owner-derived rule. The same inventory drives the
 cross-owner peer rule: importing an inventoried peer root
 (`pkg/services/<peer>`) is allowed, and same-owner non-root imports do not fire
-the peer rule. Exact documented leaf-effect ports remain pairwise exceptions,
-not a private-root allowlist.
+the peer rule. Peer implementation and nested-subservice imports fail with a
+diagnostic that names the importer owner and peer owner and directs remediation
+to the peer root contract. Exact documented leaf-effect ports remain pairwise
+exceptions, not a private-root allowlist.
 
 The guard rejects new production imports from `pkg/factory/**`, `pkg/work/**`,
 `pkg/workers/**`, and `pkg/models/**` into `pkg/transports/**`. Generated OpenAPI

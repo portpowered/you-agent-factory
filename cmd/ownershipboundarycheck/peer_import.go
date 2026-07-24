@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
@@ -33,6 +34,32 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 func isApprovedPeerServiceContractImport(packagePath, importPath string) bool {
 	_, approved := approvedPeerServiceContractImports[packagePath+"\x00"+importPath]
 	return approved
+}
+
+// peerOwnerFromImport returns the inventoried owner segment for a services import.
+func peerOwnerFromImport(importPath string) string {
+	if !strings.HasPrefix(importPath, servicesImport) {
+		return ""
+	}
+	remainder := strings.TrimPrefix(importPath, servicesImport)
+	owner, _, _ := strings.Cut(remainder, "/")
+	return owner
+}
+
+// peerViolationMessage names the importer and peer owners and directs
+// remediation to the peer root contract.
+func peerViolationMessage(item finding) string {
+	importer := serviceOwnerForFile(item.FilePath)
+	peer := peerOwnerFromImport(item.Target)
+	if importer == "" || peer == "" {
+		return deletionGates[rulePeerServiceImplementation]
+	}
+	return fmt.Sprintf(
+		`importer owner %q must not import peer owner %q non-root path; import only the peer service root contract (pkg/services/%s)`,
+		importer,
+		peer,
+		peer,
+	)
 }
 
 // crossOwnerPeerImplementationImport reports whether importPath is a prohibited

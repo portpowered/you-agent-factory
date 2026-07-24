@@ -613,6 +613,10 @@ func validateEntry(item baselineEntry) error {
 }
 
 func writeFinding(writer io.Writer, label string, item finding) {
+	remediation := deletionGates[item.Rule]
+	if item.Rule == rulePeerServiceImplementation {
+		remediation = peerViolationMessage(item)
+	}
 	fmt.Fprintf(
 		writer,
 		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s; %s\n",
@@ -621,6 +625,6 @@ func writeFinding(writer io.Writer, label string, item finding) {
 		item.Line,
 		item.Rule,
 		item.Target,
-		deletionGates[item.Rule],
+		remediation,
 	)
 }
