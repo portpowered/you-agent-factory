@@ -236,6 +236,7 @@ func ResolveProviderSessionManifestPaths(caseDir string, manifest ProviderSessio
 	caseDir = filepath.Clean(caseDir)
 
 	resolve := func(field, relative string) (string, error) {
+		role := providerSessionRoleForManifestField(field)
 		abs, err := resolveRelativeFixturePath(caseDir, relative)
 		if err != nil {
 			return "", &ProviderSessionManifestError{
@@ -247,6 +248,14 @@ func ResolveProviderSessionManifestPaths(caseDir string, manifest ProviderSessio
 		}
 		info, err := os.Stat(abs)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return "", &ProviderSessionLoadError{
+					CaseID: caseID,
+					Role:   role,
+					Path:   abs,
+					Detail: fmt.Sprintf("required %s fixture is missing", role),
+				}
+			}
 			return "", &ProviderSessionManifestError{
 				CaseID: caseID,
 				Field:  field,
@@ -361,4 +370,27 @@ func resolveRelativeFixturePath(caseDir, relative string) (string, error) {
 		return "", fmt.Errorf("%q escapes case directory %s", relative, caseDir)
 	}
 	return joined, nil
+}
+
+// providerSessionRoleForManifestField maps manifest file-pointer fields to the
+// fixture roles used in missing-file and load diagnostics.
+func providerSessionRoleForManifestField(field string) string {
+	switch field {
+	case "requestFile":
+		return "request"
+	case "processFile":
+		return "process"
+	case "stdoutFile":
+		return "stdout"
+	case "stderrFile":
+		return "stderr"
+	case "expectedProviderSessionFile":
+		return "expected-provider-session"
+	case "expectedResponseEventsFile":
+		return "expected-response-events"
+	case "expectedInvocationResultFile":
+		return "expected-invocation-result"
+	default:
+		return field
+	}
 }

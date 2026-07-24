@@ -155,12 +155,19 @@ func TestLoadProviderSessionCaseManifest_RejectsAbsoluteAndEscapingPointers(t *t
 
 func TestLoadProviderSessionCaseManifest_RejectsMissingResolvedFixture(t *testing.T) {
 	caseDir := writeProviderSessionManifestCase(t, validProviderSessionManifest())
-	if err := os.Remove(filepath.Join(caseDir, "expected-invocation-result.json")); err != nil {
+	missingPath := filepath.Join(caseDir, "expected-invocation-result.json")
+	if err := os.Remove(missingPath); err != nil {
 		t.Fatalf("remove expected-invocation-result.json: %v", err)
 	}
 
 	_, _, err := LoadProviderSessionCaseManifest(caseDir)
-	assertProviderSessionManifestError(t, err, "codex-message-tool-success", "expectedInvocationResultFile", "file-resolve")
+	assertProviderSessionMissingFixtureError(
+		t,
+		err,
+		"codex-message-tool-success",
+		"expected-invocation-result",
+		missingPath,
+	)
 }
 
 func TestLoadProviderSessionCaseManifest_RejectsMalformedJSON(t *testing.T) {

@@ -217,3 +217,11 @@
   synthesize expected output by calling the mapper/adapter under test.
   Mismatches use `ProviderSessionCompareError` naming case id, artifact role,
   and JSON path.
+- Provider-session golden update gating (`CompareOrUpdateProviderSessionGoldens`)
+  fails on drift without rewriting unless `UPDATE_FUNCTIONAL_GOLDENS=1`. With that
+  env set, the helper may rewrite the three expected golden files from observed
+  values and returns `ProviderSessionGoldensUpdatedError` so CI still fails until
+  a non-update re-run passes. Missing required fixtures fail with
+  `ProviderSessionLoadError` naming case id, role (`request`, `process`, `stdout`,
+  `stderr`, `expected-provider-session`, `expected-response-events`,
+  `expected-invocation-result`), and path—never silent skip.
