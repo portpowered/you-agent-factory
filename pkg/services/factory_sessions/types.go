@@ -28,7 +28,7 @@ type RuntimeInstanceIDGenerator func() string
 // SessionIDGenerator supplies opaque identities for live sessions, durable
 // sessions, and session-owned invocation requests. Wire selects the process
 // implementation and tests replace it only at the external edge.
-type SessionIDGenerator func() string
+// Alias is declared in contracts.go next to the other internal/contracts ports.
 
 // ResponseEventIDGenerator supplies opaque identities for response events.
 type ResponseEventIDGenerator func() string
@@ -322,9 +322,29 @@ type SyncPreflightResult struct {
 
 // --- merged from execution_owned_helpers.go ---
 
+// Root-owned lifecycle helpers are published as function values so the Sessions
+// service root keeps exactly the Service/ExecutionService InterfaceType surface
+// required by pkg-structure (no package-level FuncDecl exports).
+var (
+	IsTerminalLifecycleStatus              = isTerminalLifecycleStatus
+	AllowsRetryDispatchOnTerminal          = allowsRetryDispatchOnTerminal
+	AllowsInterruptDispatchOnSession       = allowsInterruptDispatchOnSession
+	InspectionLinksForSession              = inspectionLinksForSession
+	EmptySessionUsage                      = emptySessionUsage
+	EvaluateLifecycleControl               = evaluateLifecycleControl
+	LifecycleControlLinksForSession        = lifecycleControlLinksForSession
+	LifecycleControlOutcomeClass           = lifecycleControlOutcomeClass
+	LifecycleStatusFromFactoryRuntimeState = lifecycleStatusFromFactoryRuntimeState
+	LiveLifecycleControlLinksForSession    = liveLifecycleControlLinksForSession
+	LiveLifecycleControlLogFields          = liveLifecycleControlLogFields
+	MaterializeEventReadStream             = materializeEventReadStream
+	NewValidationError                     = newValidationError
+)
+
+
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
-func IsTerminalLifecycleStatus(status LifecycleStatus) bool {
+func isTerminalLifecycleStatus(status LifecycleStatus) bool {
 	switch status {
 	case LifecycleStatusSucceeded,
 		LifecycleStatusFailed,
@@ -341,13 +361,13 @@ func IsTerminalLifecycleStatus(status LifecycleStatus) bool {
 // AllowsRetryDispatchOnTerminal reports whether retry-dispatch remains permitted
 // after the session reaches a terminal status. Failed sessions may still accept
 // retry-dispatch for failed child dispatches.
-func AllowsRetryDispatchOnTerminal(status LifecycleStatus) bool {
+func allowsRetryDispatchOnTerminal(status LifecycleStatus) bool {
 	return status == LifecycleStatusFailed
 }
 
 // AllowsInterruptDispatchOnSession reports whether interrupt-dispatch remains
 // permitted while the session is actively running goal work.
-func AllowsInterruptDispatchOnSession(status LifecycleStatus) bool {
+func allowsInterruptDispatchOnSession(status LifecycleStatus) bool {
 	switch status {
 	case LifecycleStatusRunning, LifecycleStatusPaused, LifecycleStatusResuming:
 		return true
@@ -357,7 +377,7 @@ func AllowsInterruptDispatchOnSession(status LifecycleStatus) bool {
 }
 
 // InspectionLinksForSession builds API-relative inspection links for one durable session.
-func InspectionLinksForSession(sessionID string, includeEvents bool) InspectionLinks {
+func inspectionLinksForSession(sessionID string, includeEvents bool) InspectionLinks {
 	base := fmt.Sprintf("/factory-sessions/%s", sessionID)
 	links := InspectionLinks{
 		Session:    base,
@@ -374,7 +394,7 @@ func InspectionLinksForSession(sessionID string, includeEvents bool) InspectionL
 
 // EmptySessionUsage returns the stable zero usage projection for sessions without
 // runtime consumption data.
-func EmptySessionUsage() SessionUsage {
+func emptySessionUsage() SessionUsage {
 	return SessionUsage{Resources: []ResourceUsage{}}
 }
 
@@ -382,14 +402,14 @@ func EmptySessionUsage() SessionUsage {
 // current durable session status without runtime-specific dispatch context.
 //
 // pkgmaintcheck:ignore-cyclomatic-complexity this transition classifier keeps durable lifecycle control outcomes explicit across terminal and active states.
-func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleStatus) LifecycleControlOutcome {
+func evaluateLifecycleControl(operation LifecycleControlKind, status LifecycleStatus) LifecycleControlOutcome {
 	if status == "" {
 		return LifecycleControlOutcomeInvalidState
 	}
 	if status == LifecycleStatusInterrupted && operation == LifecycleControlResume {
 		return LifecycleControlOutcomeAccepted
 	}
-	if IsTerminalLifecycleStatus(status) {
+	if isTerminalLifecycleStatus(status) {
 		switch operation {
 		case LifecycleControlRetryDispatch:
 			if status == LifecycleStatusFailed {
@@ -471,8 +491,8 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 }
 
 // LifecycleControlLinksForSession builds post-control inspection links for one durable session.
-func LifecycleControlLinksForSession(sessionID string, includeEvents bool) LifecycleControlLinks {
-	inspection := InspectionLinksForSession(sessionID, includeEvents)
+func lifecycleControlLinksForSession(sessionID string, includeEvents bool) LifecycleControlLinks {
+	inspection := inspectionLinksForSession(sessionID, includeEvents)
 	return LifecycleControlLinks{
 		Session:    inspection.Session,
 		Status:     inspection.Status,
@@ -485,7 +505,7 @@ func LifecycleControlLinksForSession(sessionID string, includeEvents bool) Lifec
 
 // LifecycleControlOutcomeClass normalizes lifecycle outcomes and errors into
 // the stable low-cardinality class used by logs and metrics.
-func LifecycleControlOutcomeClass(outcome LifecycleControlOutcome, err error) string {
+func lifecycleControlOutcomeClass(outcome LifecycleControlOutcome, err error) string {
 	if err != nil {
 		if errors.Is(err, ErrDurableSessionNotFound) {
 			return LifecycleControlOutcomeClassNotFound
@@ -504,7 +524,7 @@ func LifecycleControlOutcomeClass(outcome LifecycleControlOutcome, err error) st
 
 // LifecycleStatusFromFactoryRuntimeState maps one live Petri factory runtime state
 // into the shared Factory Session lifecycle vocabulary used by control surfaces.
-func LifecycleStatusFromFactoryRuntimeState(factoryState string) LifecycleStatus {
+func lifecycleStatusFromFactoryRuntimeState(factoryState string) LifecycleStatus {
 	switch strings.ToUpper(strings.TrimSpace(factoryState)) {
 	case "RUNNING", "IDLE":
 		return LifecycleStatusRunning
@@ -521,7 +541,7 @@ func LifecycleStatusFromFactoryRuntimeState(factoryState string) LifecycleStatus
 
 // LiveLifecycleControlLinksForSession builds post-control inspection links for
 // one live workspace Factory Session.
-func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
+func liveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
 	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
 	return LifecycleControlLinks{
 		Session: base,
@@ -533,7 +553,7 @@ func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks
 
 // LiveLifecycleControlLogFields returns the canonical structured fields for a
 // live-session lifecycle control observation.
-func LiveLifecycleControlLogFields(sessionID string, operation LifecycleControlKind, outcomeClass string, status LifecycleStatus, control ControlRequest) []zap.Field {
+func liveLifecycleControlLogFields(sessionID string, operation LifecycleControlKind, outcomeClass string, status LifecycleStatus, control ControlRequest) []zap.Field {
 	fields := []zap.Field{
 		zap.String("session_id", sessionID),
 		zap.String("operation", string(operation)),
@@ -551,7 +571,7 @@ func LiveLifecycleControlLogFields(sessionID string, operation LifecycleControlK
 // MaterializeEventReadStream owns the finite stream lifecycle for one durable
 // event read. Transports receive an already-closed live channel plus detached
 // canonical history and do not manufacture channel-backed streams.
-func MaterializeEventReadStream(result EventReadResult) *interfaces.FactoryEventStream {
+func materializeEventReadStream(result EventReadResult) *interfaces.FactoryEventStream {
 	closed := make(chan interfaces.FactoryEvent)
 	close(closed)
 	stream := &interfaces.FactoryEventStream{Events: closed}
@@ -567,7 +587,7 @@ func MaterializeEventReadStream(result EventReadResult) *interfaces.FactoryEvent
 }
 
 // NewValidationError constructs one field-scoped validation error.
-func NewValidationError(field, message string) *ValidationError {
+func newValidationError(field, message string) *ValidationError {
 	return &ValidationError{
 		Field:   field,
 		Message: message,

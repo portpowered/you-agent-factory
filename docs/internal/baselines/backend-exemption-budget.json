@@ -753,7 +753,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/types.go#EvaluateLifecycleControl",
+      "target": "pkg/services/factory_sessions/types.go#evaluateLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "split EvaluateLifecycleControl into per-operation classifiers and remove this exemption once root-owned lifecycle helpers stay under the cyclomatic limit."
     },

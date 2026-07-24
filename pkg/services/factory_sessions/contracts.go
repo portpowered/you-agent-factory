@@ -2,11 +2,10 @@ package factorysessions
 
 import (
 	"context"
-	"io"
-	"io/fs"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -17,49 +16,24 @@ import (
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
-type InvocationMetric struct {
-	Name   string
-	Labels map[string]string
-}
+type InvocationMetric = internalcontracts.InvocationMetric
 
-// Effect-port contracts owned by the Sessions root. Nested internal/contracts
-// aliases these symbols for private implementation packages.
-type ExecutionOpeningFileSystem interface {
-	Getwd() (string, error)
-	Stat(string) (fs.FileInfo, error)
-}
+// SessionIDGenerator supplies opaque identities for live sessions, durable
+// sessions, and session-owned invocation requests.
+type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
-type DirectoryInspection interface {
-	Stat(string) (fs.FileInfo, error)
-	ReadDir(string) ([]fs.DirEntry, error)
-}
-
-type CursorPersistenceFileSystem interface {
-	MkdirAll(string, fs.FileMode) error
-	ReadFile(string) ([]byte, error)
-	Remove(string) error
-	Rename(string, string) error
-}
-
-type CursorPersistenceTemporaryFile interface {
-	io.Writer
-	Name() string
-	Chmod(fs.FileMode) error
-	Sync() error
-	Close() error
-}
-
-type CursorPersistenceCreateTemporaryFile func(string, string) (CursorPersistenceTemporaryFile, error)
-
-type RuntimePersistenceFileSystem interface {
-	MkdirAll(string, fs.FileMode) error
-	ReadFile(string) ([]byte, error)
-	WriteFile(string, []byte, fs.FileMode) error
-}
-
-type InvocationMetricsRecorder interface {
-	RecordInvocationMetric(InvocationMetric)
-}
+// Effect-port contracts are published from the Sessions root as aliases so
+// peers and Wire bind through factorysessions names while pkg-structure keeps
+// the root InterfaceType count limited to Service + ExecutionService.
+type (
+	ExecutionOpeningFileSystem           = internalcontracts.ExecutionOpeningFileSystem
+	DirectoryInspection                  = internalcontracts.DirectoryInspection
+	CursorPersistenceFileSystem          = internalcontracts.CursorPersistenceFileSystem
+	CursorPersistenceTemporaryFile       = internalcontracts.CursorPersistenceTemporaryFile
+	CursorPersistenceCreateTemporaryFile = internalcontracts.CursorPersistenceCreateTemporaryFile
+	RuntimePersistenceFileSystem         = internalcontracts.RuntimePersistenceFileSystem
+	InvocationMetricsRecorder            = internalcontracts.InvocationMetricsRecorder
+)
 
 // InvocationTarget contains the detached configuration selected for one
 // invocation. Operations remain consumer-owned interfaces.

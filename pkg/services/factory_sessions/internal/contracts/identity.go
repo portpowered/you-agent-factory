@@ -1,13 +1,13 @@
 // Package contracts owns implementation-facing Factory Sessions capability
-// aliases shared across private implementation packages. Type ownership lives
-// on the Factory Sessions root.
+// types that must be shared across private implementation packages.
 package contracts
 
-import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-
 // SessionIDGenerator supplies one opaque Factory Session identity.
-type SessionIDGenerator = factorysessions.SessionIDGenerator
+type SessionIDGenerator func() string
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
-type InvocationMetric = factorysessions.InvocationMetric
+type InvocationMetric struct {
+	Name   string
+	Labels map[string]string
+}
