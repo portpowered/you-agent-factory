@@ -19,7 +19,8 @@ type Response struct { ID string }
 	writeTestFile(t, repoRoot, "pkg/services/orders/internal/service.go", "package internal\nfunc run() {}\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/wire/providers.go", "package wire\nfunc provide() {}\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/transports/http/handler.go", "package http\ntype Handler struct{}\n")
-	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/service.go", "package history\ntype Service interface { List() []Result }\ntype Result struct { ID string }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() []Result }\ntype Result struct { ID string }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/service.go", "package internal\nfunc run() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/orders/http/create_test.go", "package http_test\nfunc TestCreate() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/internal/support/process.go", "package support\n")
 
@@ -32,6 +33,48 @@ type Response struct { ID string }
 	}
 }
 
+func TestScanRejectsPublicSiblingServicesContainer(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/service.go", "package history\ntype Service interface { List() }\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleServiceUnexpectedDir + "|pkg/services/orders/services|pkg/services/orders",
+	})
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err = run(config{root: repoRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want public sibling services/ violation")
+	}
+	if !strings.Contains(stderr.String(), ruleServiceUnexpectedDir) ||
+		!strings.Contains(stderr.String(), "pkg/services/orders/services") {
+		t.Fatalf("run() stderr = %q, want reviewer-visible rule and path for public sibling services/", stderr.String())
+	}
+}
+
+func TestScanAcceptsParentPrivateInternalServicesContainer(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("scan() findings = %#v, want none for parent-private internal/services nesting", findings)
+	}
+}
+
 func TestScanFindsServiceRootContractAndDirectoryViolations(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -41,14 +84,14 @@ type Writer interface { Write() }
 func New() Reader { return nil }
 `)
 	writeTestFile(t, repoRoot, "pkg/services/orders/legacy/implementation.go", "package legacy\n")
-	writeTestFile(t, repoRoot, "pkg/services/orders/services/helpers.go", "package services\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/helpers.go", "package services\n")
 
 	findings, err := scan(repoRoot)
 	if err != nil {
 		t.Fatalf("scan() error = %v", err)
 	}
 	want := []string{
-		ruleServiceContainerGoFile + "|pkg/services/orders/services/helpers.go|pkg/services/orders",
+		ruleServiceContainerGoFile + "|pkg/services/orders/internal/services/helpers.go|pkg/services/orders",
 		ruleServiceExportedFunction + "|pkg/services/orders/api.go|New",
 		ruleServiceInterfaceCount + "|pkg/services/orders|pkg/services/orders/api.go:Reader,pkg/services/orders/api.go:Writer",
 		ruleServiceUnexpectedDir + "|pkg/services/orders/legacy|pkg/services/orders",
@@ -60,13 +103,13 @@ func TestScanRequiresOneInterfaceForNestedSubservice(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
 	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
-	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/result.go", "package history\ntype Result struct { ID string }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/result.go", "package history\ntype Result struct { ID string }\n")
 
 	findings, err := scan(repoRoot)
 	if err != nil {
 		t.Fatalf("scan() error = %v", err)
 	}
-	assertFindingKeys(t, findings, []string{ruleServiceInterfaceCount + "|pkg/services/orders/services/history|<none>"})
+	assertFindingKeys(t, findings, []string{ruleServiceInterfaceCount + "|pkg/services/orders/internal/services/history|<none>"})
 }
 
 func TestScanFindsShallowFunctionalSourcesAndRuntimeAPIDebt(t *testing.T) {

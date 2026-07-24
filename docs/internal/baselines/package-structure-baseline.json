@@ -2894,6 +2894,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/services",
+      "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/services/hosted_logic/linear",
       "target": "pkg/services/workers/services/hosted_logic"
     },
