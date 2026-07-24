@@ -1051,6 +1051,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor",
+      "minimum": 49.64
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
       "minimum": 14.16
     },

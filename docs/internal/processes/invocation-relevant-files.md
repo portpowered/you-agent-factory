@@ -131,6 +131,10 @@ primary-result behavior.
   shared-conductor dispatch keeps per-invocation correlation/order/terminals
   isolated, and sink backpressure remains the sole terminal for the affected
   invocation without leaking unsafe provider detail into sibling successes.
+  New measured conductor packages must be registered in both
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`;
+  unit-only registration leaves `make test-functional-coverage` red.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
