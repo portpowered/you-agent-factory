@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Service is the sole private implementation of prepare, command-Work, and
@@ -28,8 +29,8 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.FactoryConfig == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: Factory config reader is required")
 	}
-	if deps.SubmitWork == nil {
-		return nil, fmt.Errorf("construct Factory Session invocation: Work submitter is required")
+	if deps.Work == nil {
+		return nil, fmt.Errorf("construct Factory Session invocation: Work peer root is required")
 	}
 	if deps.Observe == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: result observer is required")
@@ -45,7 +46,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	}
 	return &Service{owner: legacyinvocation.NewSessionOwner(
 		deps.FactoryConfig,
-		deps.SubmitWork,
+		commandWorkThroughPeerRoot(deps.Work),
 		deps.Observe,
 		deps.WaitNext,
 		deps.Telemetry,
@@ -54,6 +55,22 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.WorkTypes,
 		deps.InputFiles,
 	)}, nil
+}
+
+// commandWorkThroughPeerRoot projects one prepared SubmitRequest into the
+// CTR-WORK admission vocabulary and issues exactly one peer-root command.
+// Admission, staging, and materialization stay on the Work peer; invocation
+// only consumes SubmitWorkRequestForSession.
+func commandWorkThroughPeerRoot(
+	peer invocationservice.WorkAdmission,
+) func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+	return func(ctx context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+		return peer.SubmitWorkRequestForSession(
+			ctx,
+			sessionID,
+			work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}),
+		)
+	}
 }
 
 // InvokeFactorySession delegates the complete invocation lifecycle to the

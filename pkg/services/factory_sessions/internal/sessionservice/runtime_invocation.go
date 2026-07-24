@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -33,7 +31,9 @@ func NewInvocationOwner(
 		FactoryConfig: func(sessionID string) (*interfaces.FactoryConfig, error) {
 			return invocationruntime.FactoryConfig(fs.sessionState, sessionID)
 		},
-		SubmitWork: fs.submitOwnedSessionInvocationWork,
+		// SessionRuntime exposes the CTR-WORK admission method signature used as
+		// the exact injected peer-root port for private invocation command.
+		Work: fs,
 		Observe: func(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
 			return invocationruntime.Observe(ctx, fs.sessionState, sessionID, input, fs.worldStateProjector)
 		},
@@ -51,10 +51,6 @@ func NewInvocationOwner(
 		WorkTypes:     invocationWorkTypes,
 		InputFiles:    inputFiles,
 	})
-}
-
-func (fs *SessionRuntime) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-	return fs.SubmitWorkRequestForSession(ctx, sessionID, work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}))
 }
 
 func (fs *SessionRuntime) recordInvocationMetric(name string, labels map[string]string) {

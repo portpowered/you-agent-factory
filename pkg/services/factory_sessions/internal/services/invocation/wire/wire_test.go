@@ -16,7 +16,10 @@ func TestNewExposesSinglePrivateInvocationAuthority(t *testing.T) {
 	t.Parallel()
 
 	const sessionID = "session-wire-1"
-	configCalls, submitCalls, observeCalls := 0, 0, 0
+	configCalls, observeCalls := 0, 0
+	peer := &fakeWorkPeer{
+		submitResult: work.WorkRequestSubmitResult{RequestID: "request-wire-1", TraceID: "trace-wire-1", Accepted: true},
+	}
 
 	var service invocationservice.Service
 	var err error
@@ -30,13 +33,7 @@ func TestNewExposesSinglePrivateInvocationAuthority(t *testing.T) {
 				Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
 			}}}, nil
 		},
-		SubmitWork: func(_ context.Context, gotSessionID string, _ work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-			submitCalls++
-			if gotSessionID != sessionID {
-				t.Fatalf("SubmitWork session ID = %q, want %q", gotSessionID, sessionID)
-			}
-			return work.WorkRequestSubmitResult{RequestID: "request-wire-1", TraceID: "trace-wire-1"}, nil
-		},
+		Work: peer,
 		Observe: func(_ context.Context, gotSessionID string, _ legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
 			observeCalls++
 			if gotSessionID != sessionID {
@@ -81,8 +78,18 @@ func TestNewExposesSinglePrivateInvocationAuthority(t *testing.T) {
 	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "ok" {
 		t.Fatalf("primary result = %#v, want ok through wire-constructed Service", result.PrimaryResult)
 	}
-	if configCalls != 1 || submitCalls != 1 || observeCalls != 1 {
-		t.Fatalf("prepare/command/observe calls = config:%d submit:%d observe:%d, want 1 each through wire", configCalls, submitCalls, observeCalls)
+	if configCalls != 1 || peer.submitCalls != 1 || observeCalls != 1 {
+		t.Fatalf("prepare/command/observe calls = config:%d submit:%d observe:%d, want 1 each through wire", configCalls, peer.submitCalls, observeCalls)
+	}
+	if peer.lastSessionID != sessionID {
+		t.Fatalf("commanded session ID = %q, want %q", peer.lastSessionID, sessionID)
+	}
+	if peer.lastRequest.Type != work.WorkRequestTypeFactoryRequestBatch ||
+		len(peer.lastRequest.Works) != 1 ||
+		peer.lastRequest.Works[0].WorkTypeID != "task" ||
+		len(peer.lastRequest.Works[0].Content) != 1 ||
+		peer.lastRequest.Works[0].Content[0].Text != "hello" {
+		t.Fatalf("commanded WorkRequest = %#v, want prepared task content through CTR-WORK peer root", peer.lastRequest)
 	}
 }
 
@@ -90,4 +97,22 @@ type staticWorkType string
 
 func (workType staticWorkType) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
 	return string(workType), nil
+}
+
+type fakeWorkPeer struct {
+	submitResult  work.WorkRequestSubmitResult
+	submitCalls   int
+	lastSessionID string
+	lastRequest   work.WorkRequest
+}
+
+func (f *fakeWorkPeer) SubmitWorkRequestForSession(
+	_ context.Context,
+	sessionID string,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	f.submitCalls++
+	f.lastSessionID = sessionID
+	f.lastRequest = request
+	return f.submitResult, nil
 }

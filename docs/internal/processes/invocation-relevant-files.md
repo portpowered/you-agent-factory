@@ -10,7 +10,11 @@ primary-result behavior.
   `invocation/internal/service`, and construction only through
   `invocation/wire`. Outer Sessions composition binds that contract via
   `NewInvocationOwner` / `invocationwire.New` and must not introduce a second
-  competing invocation authority. Compatibility-content prepare currently
+  competing invocation authority. Work is commanded only through the injected
+  CTR-WORK peer-root admission port (`WorkAdmission` /
+  `SubmitWorkRequestForSession` with `work.WorkRequest`); the private path
+  projects prepared input into that vocabulary and does not implement Work
+  admission, staging, or materialization. Compatibility-content prepare currently
   resolves to `work.ArgumentSourceKindCompatibilityContent`
   (`COMPATIBILITY_CONTENT`); completed success outcomes keep request/trace
   identity on the result while session scoping is proven by the session ID

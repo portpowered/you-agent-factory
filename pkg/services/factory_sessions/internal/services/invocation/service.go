@@ -25,13 +25,21 @@ type Service interface {
 	roles.InvocationInputResolver
 }
 
+// WorkAdmission is the exact CTR-WORK peer-root admission port used to command
+// Work. Callers inject work.Service or another exact port wrapping
+// SubmitWorkRequestForSession; this package does not select Work
+// implementation packages or own admission/staging/materialization.
+type WorkAdmission interface {
+	SubmitWorkRequestForSession(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
 // Dependencies are the exact runtime and effect ports needed by invocation.
 // They contain no process-wide service bag and are safe to bind independently
-// for each opened Factory Sessions runtime. Work command ports are injected
-// here; this package does not select Work implementation packages.
+// for each opened Factory Sessions runtime. Work is commanded only through the
+// injected CTR-WORK peer-root admission port.
 type Dependencies struct {
 	FactoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Work          WorkAdmission
 	Observe       func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
 	Telemetry     legacyinvocation.SessionInvocationTelemetry
