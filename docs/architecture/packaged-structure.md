@@ -213,14 +213,18 @@ pkg/services/<factorysessions>
     -> service.go (an interface declaration)
     /internal
         -> internal implementation content that goes to implementing that service
+        /services
+            /<subservice> -> parent-private nested service root (interface at root; implementation under its own internal)
     /wire
         -> service-local providers/injector that may import the service's internal implementation
     /transports
         /http -> service-owned HTTP adapter contract and transformation
         /mcp -> service-owned MCP adapter contract and transformation
         /cli -> service-owned CLI adapter contract and transformation
-    /services
-        /<subservice> -> another subservice root with the same wire/internal/transports/services shape
+
+A public sibling `pkg/services/<service>/services/` container is non-canonical.
+Nested services live only under the owning service or subservice
+`internal/services/<subservice>` tree.
 
 ## root package (services/factorysessions)
 
@@ -244,10 +248,10 @@ injector required by the root `pkg/wire` composition graph.
 | Invariant | Current enforcement | Status | Missing or required closure |
 | --- | --- | --- | --- |
 | Every durable product service is a direct child of `pkg/services`. | Root-family and retired-root rules in `make pkg-boundary`. | **Enforced** | Add an explicit approved service-owner inventory so arbitrary new service names require ownership review. |
-| Every service and nested subservice root declares exactly one named interface. | `make pkg-structure` scans direct service roots and recursively scans `services/<subservice>` roots; current interface sets are exact deletion-only debt. | **Enforced** | Burn the baseline down until every root has exactly one interface. |
+| Every service and nested subservice root declares exactly one named interface. | `make pkg-structure` scans direct service roots and recursively scans `internal/services/<subservice>` roots; current interface sets are exact deletion-only debt. | **Enforced** | Burn the baseline down until every root has exactly one interface. |
 | A service root exposes the singular interface and mostly plain request/result structs without loose exported functions. | `make pkg-structure` rejects every new exported package-level function and ratchets existing functions by exact file/symbol. | **Partial** | Add a later plain-struct check for function/interface fields, mutable implementation state, and non-contract declarations; those are intentionally outside the first light gate. |
 | Service-root production files do not contain implementation logic. | `make pkg-structure` covers exported package-level functions; selected construction, transport-behavior, size, and complexity checks cover other portions. | **Partial** | Extend the AST rule later to concrete methods, IO, goroutines, lifecycle behavior, and domain workflow bodies after the root-function debt is reduced. |
-| Direct service-root directories are limited to `wire`, `internal`, `transports`, and `services`; the same rule applies recursively to subservices. | `make pkg-structure` applies the path rule recursively and records every current unexpected directory as exact deletion-only debt. | **Enforced** | Burn down the current directory inventory; new directory names are immediately blocking. |
+| Direct service-root directories are limited to `wire`, `internal`, and `transports`; nested services live under `internal/services/<subservice>`, and the same root shape applies recursively to each subservice. | `make pkg-structure` applies the path rule recursively and records every current unexpected directory (including public sibling `services/` containers) as exact deletion-only debt. | **Enforced** | Burn down the current directory inventory; new directory names are immediately blocking. |
 | Service-root imports are limited to the standard library, neutral contract packages, and explicitly approved peer service-root contracts. | Peer-service implementation import rules and domain-transport rules. | **Partial** | Add an explicit import policy for service roots. Current enforcement allows many imports as long as they are not on an enumerated private list. |
 | Cross-service consumers use only the peer service root, never its implementation or subservices. | `pkgboundarycheck` peer-service, external-implementation, test-service, and support-service scans. | **Partial** | Convert `convergedServiceSubpackageRoots` and other explicit maps into a generic owner-boundary rule. |
 | Product service constructors are selected only by Wire; other packages receive an already-constructed role. | `pkgboundarycheck` scans construction-shaped calls outside the owner and Wire, with exact value-constructor exceptions. | **Partial** | Constructor detection is name-prefix based (`New`, `Build`, `Create`, and similar); resolved return types or explicit constructor metadata would be safer. |
@@ -332,16 +336,46 @@ do similar thigns
 
 ## subservices
 
-a service may have subservices under `services/<subservice>`. They follow the
-same root, `wire`, `internal`, `transports`, and `services` rules recursively, with the
-additional constraint that other programs cannot call subservices directly.
+Nested services are parent-private. A service or subservice may declare nested
+services only under `internal/services/<subservice>`:
+
+```
+pkg/services/<service>
+    /internal
+        /services
+            /<subservice>
+                -> <subservice>.go (exactly one named interface at the subservice root)
+                /wire
+                /transports
+                /internal
+                    -> private implementation of that subservice
+                    /services
+                        /<child>
+                            -> child interface at root
+                            /wire
+                            /transports
+                            /internal
+                                -> private implementation of the child
+```
+
+Canonical rules:
+
+- Nested services live at `<service-or-subservice>/internal/services/<subservice>`.
+- Each subservice declares its interface at the subservice root.
+- Implementations live under that subservice's own `internal` directory.
+- A public sibling `<service>/services/` (or `<subservice>/services/`) container
+  is non-canonical and must not be treated as the durable nesting shape.
+- Deeper nesting continues under `<subservice>/internal/services/<child>` with
+  the same root/`wire`/`internal`/`transports` shape recursively.
+- Other programs cannot call subservices directly; cross-service consumers use
+  the owning service root only.
 
 ## Subservice conformance checklist
 
 | Invariant | Current enforcement | Status | Missing or required closure |
 | --- | --- | --- | --- |
-| A subservice root has only `wire`, `internal`, `transports`, and `services` child directories and exactly one interface. | `make pkg-structure` discovers subservices recursively from `services/<subservice>`. | **Enforced** | Existing nonconforming subservice roots remain exact deletion-only debt. |
-| A subservice is private to its owning service. | Peer-service and converged-subpackage checks cover registered paths. | **Partial** | Classify subservices from their path and reject every external import by default. |
+| A subservice root has only `wire`, `internal`, and `transports` child directories and exactly one interface; further nesting continues under that subservice's `internal/services/<child>`. | `make pkg-structure` discovers subservices recursively from `internal/services/<subservice>`. | **Enforced** | Existing public sibling `services/` containers and other nonconforming subservice roots remain exact deletion-only debt. |
+| A subservice is private to its owning service. | Peer-service and converged-subpackage checks cover registered paths; parent-private `internal/services` placement reinforces the boundary. | **Partial** | Classify subservices from their path and reject every external import by default. |
 | A subservice does not import or construct peer service implementations. | Peer-service and product-service construction scans. | **Partial** | Replace constructor-name and registered-path heuristics with resolved owner/dependency checks. |
 | Cross-service behavior is exposed through the owning service root. | Normative standard plus registered cross-owner import checks. | **Partial** | Add an API reachability/ownership review check or required owner-level contract test for each externally consumed capability. |
 
