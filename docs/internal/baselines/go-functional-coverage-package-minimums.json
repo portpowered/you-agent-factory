@@ -906,7 +906,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 11.10
+      "minimum": 11.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
