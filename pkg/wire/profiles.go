@@ -21,6 +21,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -416,7 +417,7 @@ func provideWorkContentStagingService(
 	if clock == nil {
 		clock = platformclock.Real{}
 	}
-	return work.NewContentStagingService(filesystem, random, clock, 0)
+	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }
 
 type runtimeArtifactClock func() time.Time

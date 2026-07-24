@@ -1,4 +1,4 @@
-package work
+package service_test
 
 import (
 	"context"
@@ -9,9 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	contentstaging "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging"
+	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
 )
 
-type contentStagingTestFileSystem struct {
+type testFileSystem struct {
 	root        string
 	mkdirErr    error
 	writeErr    error
@@ -22,18 +26,14 @@ type contentStagingTestFileSystem struct {
 	writtenMode fs.FileMode
 }
 
-func (f *contentStagingTestFileSystem) MkdirTemp(_ string, pattern string) (string, error) {
+func (f *testFileSystem) MkdirTemp(_ string, pattern string) (string, error) {
 	if f.mkdirErr != nil {
 		return "", f.mkdirErr
 	}
 	return os.MkdirTemp(f.root, pattern)
 }
 
-func (f *contentStagingTestFileSystem) WriteFile(
-	path string,
-	data []byte,
-	mode fs.FileMode,
-) error {
+func (f *testFileSystem) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	if f.writeErr != nil {
 		return f.writeErr
 	}
@@ -45,14 +45,14 @@ func (f *contentStagingTestFileSystem) WriteFile(
 	return os.WriteFile(path, data, mode)
 }
 
-func (f *contentStagingTestFileSystem) Stat(path string) (fs.FileInfo, error) {
+func (f *testFileSystem) Stat(path string) (fs.FileInfo, error) {
 	if f.statErr != nil {
 		return nil, f.statErr
 	}
 	return os.Stat(path)
 }
 
-func (f *contentStagingTestFileSystem) RemoveAll(path string) error {
+func (f *testFileSystem) RemoveAll(path string) error {
 	f.removed = append(f.removed, path)
 	if f.removeErr != nil {
 		return f.removeErr
@@ -60,12 +60,12 @@ func (f *contentStagingTestFileSystem) RemoveAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-type contentStagingTestRandom struct {
+type testRandom struct {
 	err   error
 	value byte
 }
 
-func (r contentStagingTestRandom) Read(buffer []byte) (int, error) {
+func (r testRandom) Read(buffer []byte) (int, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
@@ -75,38 +75,77 @@ func (r contentStagingTestRandom) Read(buffer []byte) (int, error) {
 	return len(buffer), nil
 }
 
-type contentStagingTestClock struct {
+type testClock struct {
 	now time.Time
 }
 
-func (c *contentStagingTestClock) Now() time.Time {
+func (c *testClock) Now() time.Time {
 	return c.now
 }
 
-func newContentStagingServiceForTest(
+func newNestedContentStagingForTest(
 	t *testing.T,
-) (ContentStagingService, *contentStagingTestFileSystem, *contentStagingTestClock) {
+) (contentstaging.Service, *testFileSystem, *testClock) {
 	t.Helper()
-	filesystem := &contentStagingTestFileSystem{root: t.TempDir()}
-	clock := &contentStagingTestClock{now: time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)}
-	service, err := NewContentStagingService(
+	filesystem := &testFileSystem{root: t.TempDir()}
+	clock := &testClock{now: time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)}
+	service, err := contentstagingwire.NewService(
 		filesystem,
-		contentStagingTestRandom{value: 0x2a},
+		testRandom{value: 0x2a},
 		clock,
 		time.Minute,
 	)
 	if err != nil {
-		t.Fatalf("NewContentStagingService: %v", err)
+		t.Fatalf("content_staging wire.NewService: %v", err)
 	}
 	return service, filesystem, clock
 }
 
+func TestNestedContentStagingIssuesSecureStagedReference(t *testing.T) {
+	service, filesystem, _ := newNestedContentStagingForTest(t)
+	var _ contentstaging.Service = service
+	var _ work.ContentStagingService = service
+
+	staged, err := service.StageContent(context.Background(), work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "../ui.png",
+		MediaType: "image/png",
+		Content:   []byte("png-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef == "" || staged.URL == "" {
+		t.Fatalf("stage result = %#v, want opaque staged reference and URL", staged)
+	}
+	if staged.FileName != "../ui.png" || staged.MediaType != "image/png" {
+		t.Fatalf("stage identity fields = %#v", staged)
+	}
+
+	resolved, err := service.ResolveContent(context.Background(), staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("ResolveContent: %v", err)
+	}
+	if filepath.Base(resolved.Path) != "ui.png" {
+		t.Fatalf("resolved path = %q, want detached base filename", resolved.Path)
+	}
+	if resolved.URL != staged.URL {
+		t.Fatalf("resolved URL = %q, want stage URL %q", resolved.URL, staged.URL)
+	}
+	if got := string(filesystem.written[resolved.Path]); got != "png-bytes" {
+		t.Fatalf("written content = %q, want png-bytes", got)
+	}
+	if filesystem.writtenMode != 0o600 {
+		t.Fatalf("write mode = %#o, want 0600", filesystem.writtenMode)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
-	service, filesystem, _ := newContentStagingServiceForTest(t)
+	service, filesystem, _ := newNestedContentStagingForTest(t)
 	ctx := context.Background()
 
-	staged, err := service.StageContent(ctx, StageContentRequest{
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
 		ItemType:  "image",
 		FileName:  "../ui.png",
 		MediaType: "image/png",
@@ -135,7 +174,7 @@ func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
 		t.Fatalf("write mode = %#o, want 0600", filesystem.writtenMode)
 	}
 
-	parts, err := service.PrepareContent(ctx, []StagedSubmissionItem{
+	parts, err := service.PrepareContent(ctx, []work.StagedSubmissionItem{
 		{ItemType: "text", Text: "Review this UI."},
 		{
 			ItemType: "image", StagedFileRef: staged.StagedFileRef,
@@ -145,11 +184,11 @@ func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareContent: %v", err)
 	}
-	if len(parts) != 2 || parts[0].Type != WorkContentPartTypeText ||
+	if len(parts) != 2 || parts[0].Type != work.WorkContentPartTypeText ||
 		parts[0].Text != "Review this UI." {
 		t.Fatalf("prepared text = %#v", parts)
 	}
-	if parts[1].Type != WorkContentPartTypeImage || parts[1].URL != staged.URL ||
+	if parts[1].Type != work.WorkContentPartTypeImage || parts[1].URL != staged.URL ||
 		parts[1].ContentType != "image/png" {
 		t.Fatalf("prepared staged content = %#v", parts[1])
 	}
@@ -170,19 +209,19 @@ func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) 
 	ctx := context.Background()
 
 	t.Run("tampered", func(t *testing.T) {
-		service, _, _ := newContentStagingServiceForTest(t)
+		service, _, _ := newNestedContentStagingForTest(t)
 		staged, err := service.StageContent(ctx, validStageContentRequest())
 		if err != nil {
 			t.Fatalf("StageContent: %v", err)
 		}
 		_, err = service.ResolveContent(ctx, staged.StagedFileRef+"tampered")
-		if !errors.Is(err, ErrInvalidStagedContentRef) {
+		if !errors.Is(err, work.ErrInvalidStagedContentRef) {
 			t.Fatalf("ResolveContent error = %v, want invalid reference", err)
 		}
 	})
 
 	t.Run("expired removes directory", func(t *testing.T) {
-		service, filesystem, clock := newContentStagingServiceForTest(t)
+		service, filesystem, clock := newNestedContentStagingForTest(t)
 		staged, err := service.StageContent(ctx, validStageContentRequest())
 		if err != nil {
 			t.Fatalf("StageContent: %v", err)
@@ -193,7 +232,7 @@ func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) 
 		}
 		clock.now = clock.now.Add(2 * time.Minute)
 		_, err = service.ResolveContent(ctx, staged.StagedFileRef)
-		if !errors.Is(err, ErrStagedContentExpired) {
+		if !errors.Is(err, work.ErrStagedContentExpired) {
 			t.Fatalf("expired ResolveContent error = %v", err)
 		}
 		if len(filesystem.removed) == 0 ||
@@ -203,7 +242,7 @@ func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) 
 	})
 
 	t.Run("missing", func(t *testing.T) {
-		service, _, _ := newContentStagingServiceForTest(t)
+		service, _, _ := newNestedContentStagingForTest(t)
 		staged, err := service.StageContent(ctx, validStageContentRequest())
 		if err != nil {
 			t.Fatalf("StageContent: %v", err)
@@ -216,7 +255,7 @@ func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) 
 			t.Fatalf("remove staged file: %v", err)
 		}
 		_, err = service.ResolveContent(ctx, staged.StagedFileRef)
-		if !errors.Is(err, ErrStagedContentNotFound) {
+		if !errors.Is(err, work.ErrStagedContentNotFound) {
 			t.Fatalf("missing ResolveContent error = %v", err)
 		}
 	})
@@ -225,36 +264,36 @@ func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) 
 func TestContentStagingValidatesOwnedFilePolicy(t *testing.T) {
 	tests := []struct {
 		name    string
-		request StageContentRequest
+		request work.StageContentRequest
 		message string
 	}{
-		{name: "text type", request: StageContentRequest{
+		{name: "text type", request: work.StageContentRequest{
 			ItemType: "text", FileName: "notes.txt", MediaType: "text/plain", Content: []byte("x"),
 		}, message: "itemType must be one of"},
-		{name: "blank filename", request: StageContentRequest{
+		{name: "blank filename", request: work.StageContentRequest{
 			ItemType: "document", FileName: "", MediaType: "application/pdf", Content: []byte("x"),
 		}, message: "fileName must identify a file"},
-		{name: "blank media", request: StageContentRequest{
+		{name: "blank media", request: work.StageContentRequest{
 			ItemType: "document", FileName: "spec.pdf", Content: []byte("x"),
 		}, message: "mediaType must be a non-empty string"},
-		{name: "image media", request: StageContentRequest{
+		{name: "image media", request: work.StageContentRequest{
 			ItemType: "image", FileName: "ui.png", MediaType: "application/octet-stream", Content: []byte("x"),
 		}, message: "mediaType must start with image/"},
-		{name: "video media", request: StageContentRequest{
+		{name: "video media", request: work.StageContentRequest{
 			ItemType: "video", FileName: "ui.mp4", MediaType: "application/octet-stream", Content: []byte("x"),
 		}, message: "mediaType must start with video/"},
-		{name: "audio media", request: StageContentRequest{
+		{name: "audio media", request: work.StageContentRequest{
 			ItemType: "audio", FileName: "ui.wav", MediaType: "application/octet-stream", Content: []byte("x"),
 		}, message: "mediaType must start with audio/"},
-		{name: "empty payload", request: StageContentRequest{
+		{name: "empty payload", request: work.StageContentRequest{
 			ItemType: "document", FileName: "spec.pdf", MediaType: "application/pdf",
 		}, message: "non-empty file payload"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, _, _ := newContentStagingServiceForTest(t)
+			service, _, _ := newNestedContentStagingForTest(t)
 			_, err := service.StageContent(context.Background(), test.request)
-			var validation *ContentStagingError
+			var validation *work.ContentStagingError
 			if !errors.As(err, &validation) || !strings.Contains(validation.Message, test.message) {
 				t.Fatalf("StageContent error = %v, want ContentStagingError containing %q", err, test.message)
 			}
@@ -263,8 +302,8 @@ func TestContentStagingValidatesOwnedFilePolicy(t *testing.T) {
 }
 
 func TestContentStagingPrepareOwnsSubmissionMediaPolicy(t *testing.T) {
-	service, _, _ := newContentStagingServiceForTest(t)
-	staged, err := service.StageContent(context.Background(), StageContentRequest{
+	service, _, _ := newNestedContentStagingForTest(t)
+	staged, err := service.StageContent(context.Background(), work.StageContentRequest{
 		ItemType:  "image",
 		FileName:  "ui.png",
 		MediaType: "image/png",
@@ -273,13 +312,13 @@ func TestContentStagingPrepareOwnsSubmissionMediaPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StageContent: %v", err)
 	}
-	_, err = service.PrepareContent(context.Background(), []StagedSubmissionItem{{
+	_, err = service.PrepareContent(context.Background(), []work.StagedSubmissionItem{{
 		ItemType:      "image",
 		StagedFileRef: staged.StagedFileRef,
 		FileName:      "ui.png",
 		MediaType:     "audio/wav",
 	}})
-	var validation *ContentStagingError
+	var validation *work.ContentStagingError
 	if !errors.As(err, &validation) ||
 		!strings.Contains(validation.Message, "mediaType must start with image/") {
 		t.Fatalf("PrepareContent error = %v, want typed image media validation", err)
@@ -288,25 +327,25 @@ func TestContentStagingPrepareOwnsSubmissionMediaPolicy(t *testing.T) {
 
 func TestContentStagingReportsInjectedEffectFailuresAndCleansPartialStage(t *testing.T) {
 	entropyErr := errors.New("entropy unavailable")
-	if _, err := NewContentStagingService(
-		&contentStagingTestFileSystem{root: t.TempDir()},
-		contentStagingTestRandom{err: entropyErr},
-		&contentStagingTestClock{now: time.Now()},
+	if _, err := contentstagingwire.NewService(
+		&testFileSystem{root: t.TempDir()},
+		testRandom{err: entropyErr},
+		&testClock{now: time.Now()},
 		time.Minute,
 	); !errors.Is(err, entropyErr) {
 		t.Fatalf("constructor error = %v, want entropy failure", err)
 	}
 
 	writeErr := errors.New("disk full")
-	filesystem := &contentStagingTestFileSystem{root: t.TempDir(), writeErr: writeErr}
-	service, err := NewContentStagingService(
+	filesystem := &testFileSystem{root: t.TempDir(), writeErr: writeErr}
+	service, err := contentstagingwire.NewService(
 		filesystem,
-		contentStagingTestRandom{value: 1},
-		&contentStagingTestClock{now: time.Now()},
+		testRandom{value: 1},
+		&testClock{now: time.Now()},
 		time.Minute,
 	)
 	if err != nil {
-		t.Fatalf("NewContentStagingService: %v", err)
+		t.Fatalf("content_staging wire.NewService: %v", err)
 	}
 	if _, err := service.StageContent(context.Background(), validStageContentRequest()); !errors.Is(err, writeErr) {
 		t.Fatalf("StageContent error = %v, want write failure", err)
@@ -322,13 +361,13 @@ func TestContentStagingReportsInjectedEffectFailuresAndCleansPartialStage(t *tes
 	if err != nil {
 		t.Fatalf("StageContent after write recovery: %v", err)
 	}
-	if _, err := service.ResolveContent(context.Background(), staged.StagedFileRef); !errors.Is(err, ErrStagedContentNotFound) {
+	if _, err := service.ResolveContent(context.Background(), staged.StagedFileRef); !errors.Is(err, work.ErrStagedContentNotFound) {
 		t.Fatalf("ResolveContent stat error = %v, want customer-safe missing result", err)
 	}
 }
 
-func validStageContentRequest() StageContentRequest {
-	return StageContentRequest{
+func validStageContentRequest() work.StageContentRequest {
+	return work.StageContentRequest{
 		ItemType:  "document",
 		FileName:  "spec.pdf",
 		MediaType: "application/pdf",

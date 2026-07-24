@@ -2019,11 +2019,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_staging.go",
-      "target": "NewContentStagingService"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/content_url.go",
       "target": "ContentURLAndFileConflictError"
     },
