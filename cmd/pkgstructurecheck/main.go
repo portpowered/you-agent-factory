@@ -333,7 +333,17 @@ func scanFunctionalTests(repoRoot string) ([]finding, error) {
 			return nil
 		}
 		domain := parts[0]
+		// Only tests/functional/internal/support/... is the shared harness exception.
+		// Other internal/* roots (for example restclient) are structure debt.
 		if domain == "internal" {
+			if len(parts) >= 3 && parts[1] == "support" {
+				return nil
+			}
+			if len(parts) < 3 {
+				findings = append(findings, finding{Rule: ruleFunctionalShallowFile, FilePath: relative, Target: domain})
+				return nil
+			}
+			findings = append(findings, finding{Rule: ruleFunctionalUnclassifiedDomain, FilePath: relative, Target: domain})
 			return nil
 		}
 		if domain == "runtime_api" {

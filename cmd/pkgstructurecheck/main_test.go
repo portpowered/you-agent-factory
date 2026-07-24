@@ -207,6 +207,78 @@ func TestScanFindsShallowFunctionalSourcesAndRuntimeAPIDebt(t *testing.T) {
 	assertFindingKeys(t, findings, want)
 }
 
+func TestScanPreservesInternalSupportExceptionOnly(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/internal/support/process.go", "package support\n")
+	writeTestFile(t, repoRoot, "tests/functional/internal/support/cmd/harness/main.go", "package main\nfunc main() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/internal/restclient/adapter.go", "package restclient\n")
+	writeTestFile(t, repoRoot, "tests/functional/internal/restclient/adapter_test.go", "package restclient\nfunc TestAdapter() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/internal/orphan.go", "package internal\n")
+	writeTestFile(t, repoRoot, "tests/functional/shared/helpers/util.go", "package helpers\n")
+	writeTestFile(t, repoRoot, "tests/functional/support/helpers/util.go", "package helpers\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleFunctionalShallowFile + "|tests/functional/internal/orphan.go|internal",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/internal/restclient/adapter.go|internal",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/internal/restclient/adapter_test.go|internal",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/shared/helpers/util.go|shared",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/support/helpers/util.go|support",
+	})
+}
+
+func TestRunRejectsNewRuntimeAPIDebtAndStaleBaseline(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/session_test.go", "package runtime_api\nfunc TestStart() {}\n")
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	writeBaseline(t, repoRoot, findings)
+
+	if err := run(config{root: repoRoot}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() with baselined runtime_api debt error = %v", err)
+	}
+
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/extra_file_test.go", "package runtime_api\nfunc TestExtraFile() {}\n")
+	stderr := &bytes.Buffer{}
+	err = run(config{root: repoRoot}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "new violation") || !strings.Contains(stderr.String(), ruleRuntimeAPIFile) {
+		t.Fatalf("run() with new runtime_api file error = %v, stderr = %q", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), ruleRuntimeAPITest) || !strings.Contains(stderr.String(), "TestExtraFile") {
+		t.Fatalf("run() with new runtime_api file missing scenario debt: %q", stderr.String())
+	}
+
+	if err := os.Remove(filepath.Join(repoRoot, "tests", "functional", "runtime_api", "extra_file_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/session_test.go", "package runtime_api\nfunc TestStart() {}\nfunc TestExtraScenario() {}\n")
+	stderr.Reset()
+	err = run(config{root: repoRoot}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "new violation") || !strings.Contains(stderr.String(), "TestExtraScenario") {
+		t.Fatalf("run() with new runtime_api Test* error = %v, stderr = %q", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), ruleRuntimeAPITest) {
+		t.Fatalf("run() with new runtime_api Test* missing rule: %q", stderr.String())
+	}
+
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/session_test.go", "package runtime_api\nfunc TestStart() {}\n")
+	if err := os.Remove(filepath.Join(repoRoot, "tests", "functional", "runtime_api", "session_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	err = run(config{root: repoRoot}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "stale baseline") {
+		t.Fatalf("run() with stale runtime_api debt error = %v, stderr = %q", err, stderr.String())
+	}
+}
+
 func TestRunUsesDeletionOnlyBaseline(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()

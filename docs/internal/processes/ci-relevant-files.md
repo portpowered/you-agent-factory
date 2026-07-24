@@ -94,7 +94,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
   paths and `runtime_api` remain exact deletion-only debt in
-  `docs/internal/baselines/package-structure-baseline.json`. When enabling a
+  `docs/internal/baselines/package-structure-baseline.json`.
+  `tests/functional/internal/support` is the only shared harness exception;
+  other `tests/functional/internal/*` roots (for example `restclient`) are
+  unclassified deletion-only debt, and new `runtime_api` files or top-level
+  `Test*` scenarios fail immediately. When enabling a
   new layout rule, baseline the current repository debt in the same change so
   `make pkg-structure` stays green.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum

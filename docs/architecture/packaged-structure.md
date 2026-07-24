@@ -473,8 +473,8 @@ tests/functional/
     platform/
   internal/
     support/             # only shared harness exception
+    # other internal/* roots (e.g. restclient) are deletion-only debt
 ```
-
 Examples:
 
 ```text
