@@ -1,13 +1,27 @@
-// Package factoryeventkinds publishes the runtime-facing inventory of public
-// FactoryEvent kinds emitted on the canonical factory event history path, plus
-// explicit exclusions for internal or non-public event vocabularies.
+// Package factoryeventkinds publishes the Recordings-owned compile-time
+// inventory of public FactoryEvent kinds emitted on the canonical factory event
+// history path, plus explicit exclusions for internal or non-public event
+// vocabularies and classified contract-only OpenAPI kinds. Ownership/parity
+// consumers in this packet must use PublicEmittableFactoryEventKinds,
+// ExcludedNonPublicFactoryEventKinds, and ContractOnlyFactoryEventKinds as the
+// sole public Factory Event kind inventory API surface.
 package factoryeventkinds
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+// FactoryEventKindInventory is the Recordings-owned compile-time vocabulary
+// surface for public emittable, excluded non-public, and contract-only kinds.
+type FactoryEventKindInventory struct {
+	PublicEmittable []PublicEmittableKind
+	Excluded        []ExcludedNonPublicKind
+	ContractOnly    []ContractOnlyKind
+}
 
 // PublicEmittableKind names one public FactoryEvent kind the runtime can append
 // to canonical factory event history today.
@@ -144,15 +158,134 @@ func ContractOnlyFactoryEventKinds() []ContractOnlyKind {
 	kinds := []ContractOnlyKind{
 		{
 			Kind:     factorycontracts.FactoryEventTypeJavaScriptCheckpointRef,
-			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow checkpoint refs. Canonical durable runtime emission uses ORCHESTRATOR_CHECKPOINT_WRITTEN via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten; projection_consistency.go accepts JAVASCRIPT_CHECKPOINT_REF for replay compatibility only.",
+			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow checkpoint refs. Canonical durable runtime emission uses ORCHESTRATOR_CHECKPOINT_WRITTEN via pkg/services/recordings/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten; projection_consistency.go accepts JAVASCRIPT_CHECKPOINT_REF for replay compatibility only.",
 		},
 		{
 			Kind:     factorycontracts.FactoryEventTypeJavaScriptPhaseChange,
-			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow phase transitions. Canonical durable runtime emission uses ORCHESTRATOR_PHASE_CHANGED via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged; projection_consistency.go accepts JAVASCRIPT_PHASE_CHANGE for replay compatibility only.",
+			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow phase transitions. Canonical durable runtime emission uses ORCHESTRATOR_PHASE_CHANGED via pkg/services/recordings/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged; projection_consistency.go accepts JAVASCRIPT_PHASE_CHANGE for replay compatibility only.",
 		},
 	}
 	sort.Slice(kinds, func(i, j int) bool {
 		return kinds[i].Kind < kinds[j].Kind
 	})
 	return kinds
+}
+
+// RequiredExcludedNonPublicKinds returns the exclusion identities that must
+// never be silently omitted from the Recordings-owned inventory: Factory Session
+// response-stream vocabulary and retired public FactoryEvent aliases.
+func RequiredExcludedNonPublicKinds() []ExcludedNonPublicKind {
+	required := []ExcludedNonPublicKind{
+		{Name: "FactoryResponseEvent", Category: "response-stream"},
+		{Name: "responsestream.EventKind", Category: "internal-response-stream"},
+		{Name: "responsestream.EventType", Category: "internal-response-stream"},
+		{Name: "RUN_STARTED", Category: "retired-factory-event-vocabulary"},
+		{Name: "INITIAL_STRUCTURE", Category: "retired-factory-event-vocabulary"},
+		{Name: "RELATIONSHIP_CHANGE", Category: "retired-factory-event-vocabulary"},
+		{Name: "DISPATCH_CREATED", Category: "retired-factory-event-vocabulary"},
+		{Name: "DISPATCH_COMPLETED", Category: "retired-factory-event-vocabulary"},
+		{Name: "FACTORY_STATE_CHANGE", Category: "retired-factory-event-vocabulary"},
+		{Name: "RUN_FINISHED", Category: "retired-factory-event-vocabulary"},
+	}
+	sort.Slice(required, func(i, j int) bool {
+		if required[i].Category == required[j].Category {
+			return required[i].Name < required[j].Name
+		}
+		return required[i].Category < required[j].Category
+	})
+	return required
+}
+
+// ValidateFactoryEventKindInventory fails closed when the Recordings-owned
+// vocabulary inventory is missing evidence, contains duplicates, is unsorted,
+// silently omits a required exclusion, or overlaps public and contract-only kinds.
+func ValidateFactoryEventKindInventory(inventory FactoryEventKindInventory) error {
+	publicSeen := make(map[factorycontracts.FactoryEventType]struct{}, len(inventory.PublicEmittable))
+	for i, entry := range inventory.PublicEmittable {
+		if strings.TrimSpace(string(entry.Kind)) == "" {
+			return fmt.Errorf("public emittable inventory entry %d has an empty kind", i)
+		}
+		if strings.TrimSpace(entry.EmissionEvidence) == "" {
+			return fmt.Errorf("public emittable kind %q missing emission evidence", entry.Kind)
+		}
+		if _, ok := publicSeen[entry.Kind]; ok {
+			return fmt.Errorf("public emittable inventory contains duplicate kind %q", entry.Kind)
+		}
+		publicSeen[entry.Kind] = struct{}{}
+		if i > 0 && inventory.PublicEmittable[i-1].Kind >= entry.Kind {
+			return fmt.Errorf(
+				"public emittable inventory is not strictly sorted by kind: %q then %q",
+				inventory.PublicEmittable[i-1].Kind,
+				entry.Kind,
+			)
+		}
+	}
+
+	excludedSeen := make(map[string]struct{}, len(inventory.Excluded))
+	for i, entry := range inventory.Excluded {
+		if strings.TrimSpace(entry.Name) == "" {
+			return fmt.Errorf("excluded inventory entry %d has an empty name", i)
+		}
+		if strings.TrimSpace(entry.Category) == "" {
+			return fmt.Errorf("excluded kind %q missing category", entry.Name)
+		}
+		if strings.TrimSpace(entry.Evidence) == "" {
+			return fmt.Errorf("excluded kind %q missing exclusion evidence", entry.Name)
+		}
+		key := entry.Category + "\x00" + entry.Name
+		if _, ok := excludedSeen[key]; ok {
+			return fmt.Errorf("excluded inventory contains duplicate entry %q in category %q", entry.Name, entry.Category)
+		}
+		excludedSeen[key] = struct{}{}
+		if i > 0 {
+			prev := inventory.Excluded[i-1]
+			if prev.Category > entry.Category ||
+				(prev.Category == entry.Category && prev.Name >= entry.Name) {
+				return fmt.Errorf(
+					"excluded inventory is not strictly sorted by category then name: %q/%q then %q/%q",
+					prev.Category,
+					prev.Name,
+					entry.Category,
+					entry.Name,
+				)
+			}
+		}
+	}
+
+	for _, required := range RequiredExcludedNonPublicKinds() {
+		key := required.Category + "\x00" + required.Name
+		if _, ok := excludedSeen[key]; !ok {
+			return fmt.Errorf(
+				"required exclusion %q in category %q silently omitted from excluded inventory",
+				required.Name,
+				required.Category,
+			)
+		}
+	}
+
+	contractSeen := make(map[factorycontracts.FactoryEventType]struct{}, len(inventory.ContractOnly))
+	for i, entry := range inventory.ContractOnly {
+		if strings.TrimSpace(string(entry.Kind)) == "" {
+			return fmt.Errorf("contract-only inventory entry %d has an empty kind", i)
+		}
+		if strings.TrimSpace(entry.Evidence) == "" {
+			return fmt.Errorf("contract-only kind %q missing evidence", entry.Kind)
+		}
+		if _, ok := contractSeen[entry.Kind]; ok {
+			return fmt.Errorf("contract-only inventory contains duplicate kind %q", entry.Kind)
+		}
+		if _, ok := publicSeen[entry.Kind]; ok {
+			return fmt.Errorf("contract-only kind %q also appears in the public emittable inventory", entry.Kind)
+		}
+		contractSeen[entry.Kind] = struct{}{}
+		if i > 0 && inventory.ContractOnly[i-1].Kind >= entry.Kind {
+			return fmt.Errorf(
+				"contract-only inventory is not strictly sorted by kind: %q then %q",
+				inventory.ContractOnly[i-1].Kind,
+				entry.Kind,
+			)
+		}
+	}
+
+	return nil
 }

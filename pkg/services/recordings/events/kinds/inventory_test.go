@@ -117,3 +117,162 @@ func TestExcludedNonPublicFactoryEventKinds_HasEvidenceForEveryEntry(t *testing.
 		seen[key] = struct{}{}
 	}
 }
+
+func TestExcludedNonPublicFactoryEventKinds_IncludesRequiredExclusions(t *testing.T) {
+	excluded := ExcludedNonPublicFactoryEventKinds()
+	byKey := make(map[string]ExcludedNonPublicKind, len(excluded))
+	for _, entry := range excluded {
+		byKey[entry.Category+"\x00"+entry.Name] = entry
+	}
+
+	for _, required := range RequiredExcludedNonPublicKinds() {
+		key := required.Category + "\x00" + required.Name
+		if _, ok := byKey[key]; !ok {
+			t.Fatalf(
+				"required exclusion %q in category %q silently omitted from ExcludedNonPublicFactoryEventKinds",
+				required.Name,
+				required.Category,
+			)
+		}
+	}
+}
+
+func TestExcludedNonPublicFactoryEventKinds_IsSortedAndStable(t *testing.T) {
+	excluded := ExcludedNonPublicFactoryEventKinds()
+	if !slices.IsSortedFunc(excluded, compareExcludedNonPublicKind) {
+		t.Fatal("ExcludedNonPublicFactoryEventKinds must return entries sorted by category then name")
+	}
+
+	second := ExcludedNonPublicFactoryEventKinds()
+	if !slices.Equal(excluded, second) {
+		t.Fatal("ExcludedNonPublicFactoryEventKinds must return an identical ordered list on repeated calls")
+	}
+}
+
+func TestContractOnlyFactoryEventKinds_IsSortedAndStable(t *testing.T) {
+	kinds := ContractOnlyFactoryEventKinds()
+	if !slices.IsSortedFunc(kinds, func(a, b ContractOnlyKind) int {
+		switch {
+		case a.Kind < b.Kind:
+			return -1
+		case a.Kind > b.Kind:
+			return 1
+		default:
+			return 0
+		}
+	}) {
+		t.Fatal("ContractOnlyFactoryEventKinds must return kinds sorted by FactoryEventType")
+	}
+
+	second := ContractOnlyFactoryEventKinds()
+	if !slices.Equal(kinds, second) {
+		t.Fatal("ContractOnlyFactoryEventKinds must return an identical ordered list on repeated calls")
+	}
+}
+
+func TestValidateFactoryEventKindInventory_CanonicalInventoriesPass(t *testing.T) {
+	if err := ValidateFactoryEventKindInventory(FactoryEventKindInventory{
+		PublicEmittable: PublicEmittableFactoryEventKinds(),
+		Excluded:        ExcludedNonPublicFactoryEventKinds(),
+		ContractOnly:    ContractOnlyFactoryEventKinds(),
+	}); err != nil {
+		t.Fatalf("canonical Recordings-owned inventories must validate: %v", err)
+	}
+}
+
+func TestValidateFactoryEventKindInventory_FailsClosed(t *testing.T) {
+	canonical := FactoryEventKindInventory{
+		PublicEmittable: PublicEmittableFactoryEventKinds(),
+		Excluded:        ExcludedNonPublicFactoryEventKinds(),
+		ContractOnly:    ContractOnlyFactoryEventKinds(),
+	}
+
+	t.Run("empty_public_evidence", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		input.PublicEmittable[0].EmissionEvidence = "   "
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected empty public emission evidence to fail validation")
+		}
+	})
+
+	t.Run("duplicate_public_kind", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		input.PublicEmittable = append(input.PublicEmittable, input.PublicEmittable[0])
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected duplicate public kind to fail validation")
+		}
+	})
+
+	t.Run("unsorted_public_kinds", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		if len(input.PublicEmittable) < 2 {
+			t.Fatal("need at least two public kinds to prove sort validation")
+		}
+		input.PublicEmittable[0], input.PublicEmittable[len(input.PublicEmittable)-1] =
+			input.PublicEmittable[len(input.PublicEmittable)-1], input.PublicEmittable[0]
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected unsorted public inventory to fail validation")
+		}
+	})
+
+	t.Run("silently_omitted_required_exclusion", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		filtered := make([]ExcludedNonPublicKind, 0, len(input.Excluded))
+		for _, entry := range input.Excluded {
+			if entry.Name == "FactoryResponseEvent" {
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+		input.Excluded = filtered
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected silently omitted FactoryResponseEvent exclusion to fail validation")
+		}
+	})
+
+	t.Run("empty_contract_only_evidence", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		if len(input.ContractOnly) == 0 {
+			t.Fatal("need at least one contract-only kind to prove evidence validation")
+		}
+		input.ContractOnly[0].Evidence = ""
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected empty contract-only evidence to fail validation")
+		}
+	})
+
+	t.Run("unsorted_contract_only_kinds", func(t *testing.T) {
+		input := cloneFactoryEventKindInventory(canonical)
+		if len(input.ContractOnly) < 2 {
+			t.Fatal("need at least two contract-only kinds to prove sort validation")
+		}
+		input.ContractOnly[0], input.ContractOnly[len(input.ContractOnly)-1] =
+			input.ContractOnly[len(input.ContractOnly)-1], input.ContractOnly[0]
+		if err := ValidateFactoryEventKindInventory(input); err == nil {
+			t.Fatal("expected unsorted contract-only inventory to fail validation")
+		}
+	})
+}
+
+func cloneFactoryEventKindInventory(input FactoryEventKindInventory) FactoryEventKindInventory {
+	return FactoryEventKindInventory{
+		PublicEmittable: append([]PublicEmittableKind{}, input.PublicEmittable...),
+		Excluded:        append([]ExcludedNonPublicKind{}, input.Excluded...),
+		ContractOnly:    append([]ContractOnlyKind{}, input.ContractOnly...),
+	}
+}
+
+func compareExcludedNonPublicKind(a, b ExcludedNonPublicKind) int {
+	switch {
+	case a.Category < b.Category:
+		return -1
+	case a.Category > b.Category:
+		return 1
+	case a.Name < b.Name:
+		return -1
+	case a.Name > b.Name:
+		return 1
+	default:
+		return 0
+	}
+}
