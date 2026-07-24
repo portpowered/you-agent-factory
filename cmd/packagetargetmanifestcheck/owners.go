@@ -182,143 +182,82 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionRetain,
-				Destination: owner + "/internal/services/" + subservice,
-			}, true
+			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
 		}
 	}
 
-	switch owner {
-	case "factory_sessions":
-		if rest == "internal/runtimeopening" || strings.HasPrefix(rest, "internal/runtimeopening/") {
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "factory_sessions/internal/services/runtime_opening",
-			}, true
-		}
-	case "factory_runtime":
-		if rest == "javascript" ||
-			strings.HasPrefix(rest, "javascript/") ||
-			strings.HasPrefix(rest, "internal/orchestrators/") ||
-			strings.HasPrefix(rest, "tooling/javascript/") {
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "factory_runtime/internal/services/orchestration",
-			}, true
-		}
-	case "work":
-		if rest == "materialize" || strings.HasPrefix(rest, "materialize/") {
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "work/internal/services/content_materialization",
-			}, true
-		}
-	case "workers":
-		switch {
-		case rest == "services/hosted_logic" || strings.HasPrefix(rest, "services/hosted_logic/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			}, true
-		case rest == "services/inference" || strings.HasPrefix(rest, "services/inference/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			}, true
-		case rest == "services/testing" || strings.HasPrefix(rest, "services/testing/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			}, true
-		}
-	case "provider_sessions":
-		switch {
-		case rest == "codex" || strings.HasPrefix(rest, "codex/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "provider_sessions/internal/services/codex_reader",
-			}, true
-		case rest == "cursor" || strings.HasPrefix(rest, "cursor/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "provider_sessions/internal/services/cursor_reader",
-			}, true
-		}
-	case "models":
-		switch {
-		case rest == "internal/catalog" || strings.HasPrefix(rest, "internal/catalog/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "models/internal/services/catalog",
-			}, true
-		case rest == "internal/assets" || strings.HasPrefix(rest, "internal/assets/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "models/internal/services/assets",
-			}, true
-		case rest == "internal/host" || strings.HasPrefix(rest, "internal/host/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "models/internal/services/runtime_host",
-			}, true
-		case rest == "internal/inference" || strings.HasPrefix(rest, "internal/inference/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "models/internal/services/inference",
-			}, true
-		}
-	case "recordings":
-		switch {
-		case rest == "events" || strings.HasPrefix(rest, "events/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "recordings/internal/services/canonical_ledger",
-			}, true
-		case rest == "projections" || strings.HasPrefix(rest, "projections/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "recordings/internal/services/projection_query",
-			}, true
-		case rest == "replay" || strings.HasPrefix(rest, "replay/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "recordings/internal/services/replay",
-			}, true
-		case rest == "artifacts" || strings.HasPrefix(rest, "artifacts/"):
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "recordings/internal/services/artifacts_export",
-			}, true
-		}
-	case "automations":
-		if rest == "timework" || strings.HasPrefix(rest, "timework/") {
-			return PackageMapping{
-				PackagePath: packagePath,
-				Disposition: DispositionMove,
-				Destination: "automations/internal/services/cron",
-			}, true
+	destination, ok := nestedOwnerMoveDestination(owner, rest)
+	if !ok {
+		return PackageMapping{}, false
+	}
+	return moveOrRetainMapping(packagePath, destination, DispositionMove), true
+}
+
+func moveOrRetainMapping(packagePath, destination, disposition string) PackageMapping {
+	return PackageMapping{
+		PackagePath: packagePath,
+		Disposition: disposition,
+		Destination: destination,
+	}
+}
+
+type nestedPathRule struct {
+	exact  string
+	prefix string
+	dest   string
+}
+
+func nestedOwnerMoveDestination(owner, rest string) (destination string, ok bool) {
+	rules, exists := nestedOwnerMoveRules[owner]
+	if !exists {
+		return "", false
+	}
+	for _, rule := range rules {
+		if rest == rule.exact || (rule.prefix != "" && strings.HasPrefix(rest, rule.prefix)) {
+			return rule.dest, true
 		}
 	}
+	return "", false
+}
 
-	return PackageMapping{}, false
+// nestedOwnerMoveRules encodes plan-tree move destinations for packages that
+// are not yet under <owner>/internal/services/<subservice>.
+var nestedOwnerMoveRules = map[string][]nestedPathRule{
+	"factory_sessions": {
+		{exact: "internal/runtimeopening", prefix: "internal/runtimeopening/", dest: "factory_sessions/internal/services/runtime_opening"},
+	},
+	"factory_runtime": {
+		{exact: "javascript", prefix: "javascript/", dest: "factory_runtime/internal/services/orchestration"},
+		{prefix: "internal/orchestrators/", dest: "factory_runtime/internal/services/orchestration"},
+		{prefix: "tooling/javascript/", dest: "factory_runtime/internal/services/orchestration"},
+	},
+	"work": {
+		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
+	},
+	"workers": {
+		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
+		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},
+		{exact: "services/testing", prefix: "services/testing/", dest: "workers/internal/services/runners"},
+	},
+	"provider_sessions": {
+		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
+		{exact: "cursor", prefix: "cursor/", dest: "provider_sessions/internal/services/cursor_reader"},
+	},
+	"models": {
+		{exact: "internal/catalog", prefix: "internal/catalog/", dest: "models/internal/services/catalog"},
+		{exact: "internal/assets", prefix: "internal/assets/", dest: "models/internal/services/assets"},
+		{exact: "internal/host", prefix: "internal/host/", dest: "models/internal/services/runtime_host"},
+		{exact: "internal/inference", prefix: "internal/inference/", dest: "models/internal/services/inference"},
+	},
+	"recordings": {
+		{exact: "events", prefix: "events/", dest: "recordings/internal/services/canonical_ledger"},
+		{exact: "projections", prefix: "projections/", dest: "recordings/internal/services/projection_query"},
+		{exact: "replay", prefix: "replay/", dest: "recordings/internal/services/replay"},
+		{exact: "artifacts", prefix: "artifacts/", dest: "recordings/internal/services/artifacts_export"},
+	},
+	"automations": {
+		{exact: "timework", prefix: "timework/", dest: "automations/internal/services/cron"},
+	},
 }
 
 func buildCommittedOwnerPackages(inventory []string) ([]PackageMapping, error) {

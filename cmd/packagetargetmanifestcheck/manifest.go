@@ -147,6 +147,13 @@ func validateManifestSchema(manifest Manifest) error {
 	if err := validateResidualCoverage(manifest); err != nil {
 		return err
 	}
+	// Complete one-destination coverage is required once the inventory ledger
+	// seed is present; schema-only fixtures may omit inventory.
+	if len(manifest.Inventory) > 0 {
+		if err := validatePackageCoverage(manifest); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

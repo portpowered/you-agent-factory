@@ -164,9 +164,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   rows (`initializer`, `root`, `wire`, `platform`, `transports`) and any
   remaining residual deletion-queue mappings regenerate with
   `-write-residual-packages`; unknown residuals must not invent top-level
-  owners. Keep validators beside this checker rather than inventing alternate
-  destination trees; later FND stories fill coverage gates without reopening
-  that vocabulary.
+  owners. Focused validation requires exact one-destination coverage: every
+  `inventory[]` path has exactly one stable-sorted `packages[]` row, and the
+  checker fails on missing, duplicate, unsorted, closed-vocabulary, or incomplete
+  delete-row mappings. Keep `make package-target-manifest-check` in default
+  `make lint`. Keep validators beside this checker rather than inventing
+  alternate destination trees.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`

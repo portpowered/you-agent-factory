@@ -1,6 +1,7 @@
 // Command packagetargetmanifestcheck validates the Packaged Service Structure
 // package-to-target and deletion manifest schema, closed destination vocabulary,
-// and stable-sorted production pkg inventory ledger seed.
+// stable-sorted production pkg inventory ledger seed, and exact one-destination
+// package coverage.
 package main
 
 import (
@@ -99,7 +100,7 @@ func run(cfg config, stdout, _ io.Writer) error {
 	}
 	fmt.Fprintf(
 		stdout,
-		"[agent-factory:package-target-manifest] inventory and destination vocabulary hold (%d inventory rows, %d package rows)\n",
+		"[agent-factory:package-target-manifest] inventory, destination vocabulary, and one-destination coverage hold (%d inventory rows, %d package rows)\n",
 		len(manifest.Inventory),
 		len(manifest.Packages),
 	)
