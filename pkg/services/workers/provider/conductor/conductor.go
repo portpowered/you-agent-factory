@@ -82,8 +82,10 @@ func (c *Conductor) Capabilities(
 // Invoke validates requested capabilities against the selected integration's
 // registry/manifest maximum before any provider Invoke I/O, then invokes
 // through the structured response writer composed with ExecuteInvocation.
-// The destination receives exactly one terminal success or safe normalized
-// failure, unless a destination write failure is preserved as the sole signal.
+// Cancellation, deadlines/timeouts, diagnostics emission, and retry handoff
+// are owned here as provider-neutral shared orchestration. The destination
+// receives exactly one terminal success or safe normalized failure, unless a
+// destination write failure is preserved as the sole signal.
 func (c *Conductor) Invoke(
 	ctx context.Context,
 	identity string,

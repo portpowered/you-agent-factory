@@ -110,8 +110,13 @@ primary-result behavior.
   Invoke wraps the orchestration destination in a terminal guard that sanitizes
   normalized failures before publication, collapses missing/contradictory
   terminals into exactly one safe failure close, and preserves destination
-  write failures without publishing a competing close. Keep cancel/timeout and
-  Factory Session routing follow-on work in later conductor stories.
+  write failures without publishing a competing close. Cancellation and
+  deadline expiry normalize to conductor-owned canceled/timeout terminals with
+  symbolic diagnostics (`invariant=canceled|timeout`) and provider-neutral
+  retryability (timeout retryable, canceled not). Shared orchestration reads
+  retry handoff only through `conductor.RetryHandoffFromFailure` rather than
+  concrete provider switches. Keep Factory Session and worker-executor routing
+  through the conductor for the next story.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached

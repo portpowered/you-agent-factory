@@ -88,7 +88,7 @@ func sanitizeCompletion(completion inference.Completion) inference.Completion {
 	if failure == nil {
 		return completion
 	}
-	return inference.FailedCompletion(sanitizeFailure(*failure))
+	return inference.FailedCompletion(normalizeConductorFailure(*failure))
 }
 
 func sanitizeFailure(failure inference.Failure) inference.Failure {
