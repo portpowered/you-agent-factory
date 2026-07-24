@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -72,5 +73,40 @@ func TestCompilation_CompileEquivalentInputsSameEffectiveIdentity(t *testing.T) 
 			first.Effective,
 			second.Effective,
 		)
+	}
+}
+
+func TestCompilation_CompileTypedInvalidSourceAndUnresolvedReference(t *testing.T) {
+	t.Parallel()
+
+	var service compilation.Service = compilationwire.NewService()
+
+	_, invalidErr := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{Canonical: []byte("{")},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource invalid-source error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidAuthoredFactorySource,
+		)
+	}
+
+	_, unresolvedErr := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical: []byte(`{"worker":"$unresolved"}`),
+		},
+	)
+	if !errors.Is(unresolvedErr, factorydefinitions.ErrUnresolvedDefinitionReference) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource unresolved error = %v, want %v",
+			unresolvedErr,
+			factorydefinitions.ErrUnresolvedDefinitionReference,
+		)
+	}
+	if errors.Is(unresolvedErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatal("unresolved definition reference must not also match ErrInvalidAuthoredFactorySource")
 	}
 }

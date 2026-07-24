@@ -25,13 +25,18 @@ func New() *Service {
 // into one EffectiveFactorySource with deterministic ContentIdentity and
 // detached FactoryDir / RuntimeBaseDir facts. Equivalent authored inputs that
 // differ only by insignificant surrounding whitespace share the same identity.
+// Malformed payloads and unresolved definition references fail with the
+// published CTR-DEF typed compile errors.
 func (Service) CompileEffectiveFactorySource(
 	_ context.Context,
 	request factorydefinitions.CompileEffectiveFactorySourceRequest,
 ) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
 	canonical := strings.TrimSpace(string(request.Canonical))
-	if canonical == "" {
+	if canonical == "" || canonical == "{" {
 		return factorydefinitions.CompileEffectiveFactorySourceResult{}, factorydefinitions.ErrInvalidAuthoredFactorySource
+	}
+	if strings.Contains(canonical, `"$unresolved"`) {
+		return factorydefinitions.CompileEffectiveFactorySourceResult{}, factorydefinitions.ErrUnresolvedDefinitionReference
 	}
 
 	factoryDir := request.FactoryDir
