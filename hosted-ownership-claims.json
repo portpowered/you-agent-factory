@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "claims": [
+    {
+      "responsibility": "hosted-source-polling",
+      "owner": "Automation Hosted Sources"
+    },
+    {
+      "responsibility": "hosted-source-reconciliation",
+      "owner": "Automation Hosted Sources"
+    },
+    {
+      "responsibility": "hosted-runner-execution",
+      "owner": "Workers Hosted Runner"
+    }
+  ]
+}
