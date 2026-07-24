@@ -13,12 +13,12 @@ import (
 )
 
 type peerRecordingSession struct {
-	recordPath string
-	started    bool
-	finished   bool
-	stopped    bool
-	flushFail  bool
-	events     []interfaces.FactoryEvent
+	recordPath  string
+	started     bool
+	finished    bool
+	stopped     bool
+	flushFail   bool
+	events      []interfaces.FactoryEvent
 	retainedErr error
 }
 
@@ -39,6 +39,9 @@ type peerRootServiceFake struct {
 	validateReplayErr   error
 	recordings          map[string]*peerRecordingSession
 	nextRecordingID     int
+	replayByKey         map[string]*interfaces.ReplayArtifact
+	replayCorruptKeys   map[string]bool
+	replayBindingHooks  []recordings.ReplayHook
 }
 
 var _ recordings.Service = (*peerRootServiceFake)(nil)
@@ -334,6 +337,49 @@ func (fake *peerRootServiceFake) QueryRecordingStatus(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) replayKey(request recordings.LoadReplayArtifactRequest) string {
+	if id := strings.TrimSpace(request.ArtifactID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(request.Path)
+}
+
+func (fake *peerRootServiceFake) LoadReplayArtifact(
+	request recordings.LoadReplayArtifactRequest,
+) (recordings.LoadReplayArtifactResult, error) {
+	key := fake.replayKey(request)
+	if key == "" {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrMissingReplayArtifact
+	}
+	if fake.replayCorruptKeys[key] {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	}
+	artifact, ok := fake.replayByKey[key]
+	if !ok || artifact == nil {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	}
+	detached := *artifact
+	return recordings.LoadReplayArtifactResult{Artifact: &detached}, nil
+}
+
+func (fake *peerRootServiceFake) BindReplayExecution(
+	request recordings.BindReplayExecutionRequest,
+) (recordings.BindReplayExecutionResult, error) {
+	if request.Artifact == nil {
+		return recordings.BindReplayExecutionResult{}, recordings.ErrUnsupportedReplayBinding
+	}
+	if strings.TrimSpace(request.Artifact.SchemaVersion) == "" {
+		return recordings.BindReplayExecutionResult{}, recordings.ErrUnsupportedReplayBinding
+	}
+	hooks := append([]recordings.ReplayHook{}, fake.replayBindingHooks...)
+	return recordings.BindReplayExecutionResult{
+		Provider:           nil,
+		CommandRunner:      nil,
+		Hooks:              hooks,
+		CompletionDelivery: nil,
+	}, nil
+}
+
 func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 	t.Parallel()
 
@@ -612,5 +658,96 @@ func TestRecordingLifecycleRootContract_SuccessAndTypedFailures(t *testing.T) {
 		RecordingID: bound.RecordingID,
 	}); err != nil {
 		t.Fatalf("StopRecording: %v", err)
+	}
+}
+
+func TestReplayRootContract_SuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	seed := &interfaces.ReplayArtifact{
+		SchemaVersion: "factory-event-log/v1",
+		RecordedAt:    time.Unix(1_700_000_000, 0).UTC(),
+		Events: []interfaces.FactoryEvent{
+			{Id: "event-1", Type: "WORK_REQUEST"},
+		},
+	}
+	fake := &peerRootServiceFake{
+		replayByKey: map[string]*interfaces.ReplayArtifact{
+			"session.replay.json": seed,
+			"artifact-42":         seed,
+		},
+		replayCorruptKeys: map[string]bool{
+			"corrupt.replay.json": true,
+		},
+		replayBindingHooks: []recordings.ReplayHook{},
+	}
+	var service recordings.Service = fake
+
+	loaded, err := service.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{
+		Path: "session.replay.json",
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayArtifact success path: %v", err)
+	}
+	if loaded.Artifact == nil {
+		t.Fatal("LoadReplayArtifact Artifact nil, want detached replay artifact")
+	}
+	if loaded.Artifact.SchemaVersion != seed.SchemaVersion {
+		t.Fatalf("LoadReplayArtifact SchemaVersion = %q, want %q", loaded.Artifact.SchemaVersion, seed.SchemaVersion)
+	}
+	if loaded.Artifact == seed {
+		t.Fatal("LoadReplayArtifact must return a detached artifact, not the seeded pointer")
+	}
+
+	byID, err := service.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{
+		ArtifactID: "artifact-42",
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayArtifact by id: %v", err)
+	}
+	if byID.Artifact == nil || byID.Artifact.SchemaVersion != seed.SchemaVersion {
+		t.Fatalf("LoadReplayArtifact by id = %#v, want seeded schema", byID.Artifact)
+	}
+
+	bound, err := service.BindReplayExecution(recordings.BindReplayExecutionRequest{
+		Artifact: loaded.Artifact,
+	})
+	if err != nil {
+		t.Fatalf("BindReplayExecution success path: %v", err)
+	}
+	if bound.Hooks == nil {
+		t.Fatal("BindReplayExecution Hooks nil, want published success shape with non-nil hooks slice")
+	}
+
+	_, err = service.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{})
+	if !errors.Is(err, recordings.ErrMissingReplayArtifact) {
+		t.Fatalf("missing artifact path/id error = %v, want ErrMissingReplayArtifact", err)
+	}
+
+	_, err = service.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{
+		Path: "corrupt.replay.json",
+	})
+	if !errors.Is(err, recordings.ErrInvalidReplayArtifact) {
+		t.Fatalf("corrupt artifact error = %v, want ErrInvalidReplayArtifact", err)
+	}
+	if errors.Is(err, recordings.ErrMissingReplayArtifact) {
+		t.Fatalf("corrupt artifact must remain distinct from ErrMissingReplayArtifact")
+	}
+
+	_, err = service.BindReplayExecution(recordings.BindReplayExecutionRequest{
+		Artifact: nil,
+	})
+	if !errors.Is(err, recordings.ErrUnsupportedReplayBinding) {
+		t.Fatalf("unsupported binding error = %v, want ErrUnsupportedReplayBinding", err)
+	}
+	if errors.Is(err, recordings.ErrMissingReplayArtifact) || errors.Is(err, recordings.ErrInvalidReplayArtifact) {
+		t.Fatalf("unsupported binding must remain distinct from load typed errors")
+	}
+
+	_, err = service.BindReplayExecution(recordings.BindReplayExecutionRequest{
+		Artifact: &interfaces.ReplayArtifact{},
+	})
+	if !errors.Is(err, recordings.ErrUnsupportedReplayBinding) {
+		t.Fatalf("empty-schema binding error = %v, want ErrUnsupportedReplayBinding", err)
 	}
 }

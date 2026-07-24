@@ -72,6 +72,7 @@ type combinedService struct {
 	lifecycleMu     sync.Mutex
 	lifecycleByID   map[string]*lifecycleRecordingSession
 	nextRecordingID int
+	replayByKey     map[string]*factorydefinitions.ReplayArtifact
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -278,6 +279,47 @@ func (service *combinedService) QueryRecordingStatus(
 	}, nil
 }
 
+func (service *combinedService) replayArtifactKey(request recordings.LoadReplayArtifactRequest) string {
+	if id := strings.TrimSpace(request.ArtifactID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(request.Path)
+}
+
+func (service *combinedService) LoadReplayArtifact(
+	request recordings.LoadReplayArtifactRequest,
+) (recordings.LoadReplayArtifactResult, error) {
+	key := service.replayArtifactKey(request)
+	if key == "" {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrMissingReplayArtifact
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if service.replayByKey == nil {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	}
+	artifact, ok := service.replayByKey[key]
+	if !ok || artifact == nil {
+		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	}
+	detached := *artifact
+	return recordings.LoadReplayArtifactResult{Artifact: &detached}, nil
+}
+
+func (service *combinedService) BindReplayExecution(
+	request recordings.BindReplayExecutionRequest,
+) (recordings.BindReplayExecutionResult, error) {
+	if request.Artifact == nil || strings.TrimSpace(request.Artifact.SchemaVersion) == "" {
+		return recordings.BindReplayExecutionResult{}, recordings.ErrUnsupportedReplayBinding
+	}
+	// Additive root publication returns the published success shape without
+	// completing nested IMP-REC replay-execution wiring. Nested packets still
+	// own binding real provider/command-runner/hooks behind this contract.
+	return recordings.BindReplayExecutionResult{
+		Hooks: []recordings.ReplayHook{},
+	}, nil
+}
+
 func NewService(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,
@@ -285,7 +327,11 @@ func NewService(
 	if ledger == nil || projection == nil {
 		return nil
 	}
-	return &combinedService{Ledger: ledger, ProjectionService: projection}
+	return &combinedService{
+		Ledger:            ledger,
+		ProjectionService: projection,
+		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
+	}
 }
 
 func NewRuntimeLedger(

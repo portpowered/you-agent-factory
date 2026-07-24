@@ -36,6 +36,18 @@ var ErrRecordingFlushFailed = errors.New("recording flush failed")
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
 
+// ErrMissingReplayArtifact reports that a replay-load request lacks a usable
+// artifact path or id.
+var ErrMissingReplayArtifact = errors.New("missing replay artifact path or id")
+
+// ErrInvalidReplayArtifact reports that a replay artifact path/id could not be
+// loaded as a valid (non-corrupt) detached replay artifact.
+var ErrInvalidReplayArtifact = errors.New("invalid or corrupt replay artifact")
+
+// ErrUnsupportedReplayBinding reports that a replay-binding request carries
+// unsupported inputs (for example a missing artifact or empty schema version).
+var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
+
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -202,6 +214,40 @@ type RecordingStatusResult struct {
 	Err      error
 }
 
+// LoadReplayArtifactRequest is the plain replay-load request peers send through
+// the Recordings root replay slice. Cross-service callers supply a path and/or
+// artifact id only; nested implementation types and filesystem effect
+// interfaces are not part of this request shape.
+type LoadReplayArtifactRequest struct {
+	Path       string
+	ArtifactID string
+}
+
+// LoadReplayArtifactResult is the plain detached replay-artifact success
+// outcome.
+type LoadReplayArtifactResult struct {
+	Artifact *interfaces.ReplayArtifact
+}
+
+// BindReplayExecutionRequest is the plain replay-binding request peers send
+// through the Recordings root replay slice. Callers supply a detached replay
+// artifact value; nested Recordings implementation types and public filesystem
+// effect interfaces are not part of this request shape.
+type BindReplayExecutionRequest struct {
+	Artifact *interfaces.ReplayArtifact
+}
+
+// BindReplayExecutionResult is the plain replay execution-binding success
+// outcome. Provider, command-runner, hooks, and completion planner facts are
+// represented as Recordings-owned contract values or approved peer root
+// contracts already published at this boundary.
+type BindReplayExecutionResult struct {
+	Provider           providercontract.Provider
+	CommandRunner      workerexecution.CommandRunner
+	Hooks              []ReplayHook
+	CompletionDelivery CompletionDeliveryPlanner
+}
+
 // Ledger is the append/subscribe capability surface embedded in the singular
 // Recordings root Service. Peers should depend on Service rather than treating
 // Ledger as a second peer-facing Recordings authority. Nested ledger storage
@@ -272,6 +318,13 @@ type Service interface {
 	// QueryRecordingStatus returns start/finish/stop/error status for one
 	// bound recording.
 	QueryRecordingStatus(RecordingStatusRequest) (RecordingStatusResult, error)
+
+	// LoadReplayArtifact loads one detached replay artifact through the plain
+	// replay root-contract slice.
+	LoadReplayArtifact(LoadReplayArtifactRequest) (LoadReplayArtifactResult, error)
+	// BindReplayExecution obtains the replay execution binding peers consume
+	// through the plain replay root-contract slice.
+	BindReplayExecution(BindReplayExecutionRequest) (BindReplayExecutionResult, error)
 }
 
 // ProjectionService is the projection-query capability surface embedded in the
@@ -316,7 +369,10 @@ type WorldStateReconstructor func(
 ) (interfaces.FactoryWorldState, error)
 
 // ReplayArtifactLoader loads one canonical Factory-event replay artifact.
-// Wire supplies the concrete persistence implementation.
+// Wire may still supply this construction helper for existing Runtime opening
+// callers; peers should prefer LoadReplayArtifact on Service as the
+// cross-service source of truth rather than treating loader injection as the
+// peer seam.
 type ReplayArtifactLoader func(string) (*interfaces.ReplayArtifact, error)
 
 // InitialStructureSource is the only topology capability Recordings consumes.
@@ -407,7 +463,10 @@ type RuntimeRecorderFactory func(
 ) (RuntimeRecorder, error)
 
 // ReplayExecutionFactory constructs the replay-specific provider, command
-// runner, hooks, and completion policy consumed by Factory Runtime.
+// runner, hooks, and completion policy consumed by Factory Runtime. Existing
+// Runtime callers may still consume this construction helper; peers should
+// prefer BindReplayExecution on Service as the cross-service source of truth
+// rather than treating factory injection as the peer seam.
 type ReplayExecutionFactory func(
 	*interfaces.ReplayArtifact,
 ) (
