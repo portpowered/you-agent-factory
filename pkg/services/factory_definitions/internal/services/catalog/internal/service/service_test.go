@@ -10,6 +10,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
@@ -410,11 +411,17 @@ func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
 
-	if _, err := catalogwire.NewService(nil, fileSystem); err == nil {
-		t.Fatal("NewService(nil, filesystem): expected path resolver required error")
+	if _, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      nil,
+		FileSystem: fileSystem,
+	}); err == nil {
+		t.Fatal("NewService(nil paths): expected path resolver required error")
 	}
-	if _, err := catalogwire.NewService(paths, nil); err == nil {
-		t.Fatal("NewService(paths, nil): expected catalog filesystem required error")
+	if _, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      paths,
+		FileSystem: nil,
+	}); err == nil {
+		t.Fatal("NewService(nil filesystem): expected catalog filesystem required error")
 	}
 }
 
@@ -436,11 +443,14 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
-	catalog, err := catalogwire.NewService(paths, fileSystem)
+	catalogService, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      paths,
+		FileSystem: fileSystem,
+	})
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithCatalog(nil, catalog)
+	return factorydefinition.NewWithCatalog(nil, catalogService)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {
