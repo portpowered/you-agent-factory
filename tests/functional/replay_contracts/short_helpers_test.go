@@ -52,6 +52,10 @@ func stringPointerValue[T ~string](value *T) string {
 	return string(*value)
 }
 
+func strPtr(value string) *string {
+	return &value
+}
+
 func stringSlicePointerValue(value *[]string) []string {
 	if value == nil {
 		return nil

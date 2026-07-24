@@ -119,7 +119,6 @@ pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithLogge
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithPetriMutationRecorder
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBuffer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBufferDrainObserver
-pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithSubmissionRecorder
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithTokenTransformer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithWorkstationResponseRecorder
 pkg/services/factory_runtime/runtime/factory.go: unreachable func: WorkflowContext
@@ -344,13 +343,15 @@ tests/functional/internal/support/events.go: unreachable func: LastFactoryEventT
 tests/functional/internal/support/http_observation.go: unreachable func: SubmitDefaultSessionWork
 tests/functional/internal/support/process.go: unreachable func: ProcessCommand.AcceptError
 tests/functional/internal/support/process_api_server.go: unreachable func: ProcessAPIServer.Ready
+tests/functional/internal/support/process_factory.go: unreachable func: RunFactoryToCompletion
+tests/functional/internal/support/process_factory.go: unreachable func: RunFactoryToCompletionWithEdges
 tests/functional/internal/support/provider.go: unreachable func: ProviderErrorCommandResult
-tests/functional/internal/support/tokens.go: unreachable func: FirstInputToken
 tests/functional/internal/support/workdir.go: unreachable func: WithWorkingDirectory
 tests/functional/providers/helpers_test.go: unreachable func: requireRuntimeLogPath
 tests/functional/replay_contracts/replay_process_test.go: unreachable func: assertReplayPlaceCounts
 tests/functional/replay_contracts/replay_process_test.go: unreachable func: observeReplayThroughRoot
 tests/functional/replay_contracts/replay_process_test.go: unreachable func: replayWorkIncludesID
+tests/functional/replay_contracts/short_helpers_test.go: unreachable func: strPtr
 tests/functional/runtime_api/api_inference_events_test.go: unreachable func: assertRuntimeAPIProjectionOmitsInferenceFields
 tests/functional/runtime_api/api_runtime_config_alignment_smoke_support_test.go: unreachable func: assertRuntimeConfigAlignmentResourceManifest
 tests/functional/runtime_api/api_runtime_config_alignment_support_test.go: unreachable func: runtimeConfigAlignmentComparableFactory

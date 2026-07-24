@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
@@ -37,8 +39,8 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"story:complete": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"story:complete": 1})
 
 	if provider.CallCount("executor-worker") != 2 {
 		t.Fatalf("expected at least 2 executor dispatches, got %d", provider.CallCount("executor-worker"))

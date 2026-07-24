@@ -64,12 +64,16 @@ Implement new package-shape enforcement in this order:
    generated OpenAPI contracts, but does not implement service-specific
    transformation or service behavior. Apply the same ownership model to CLI
    and MCP adapters as those migrations are prioritized.
-4. **Functional tests use the feature-oriented customer-boundary layout.** New
-   functional tests live under `tests/functional/<feature-set>/<protocol>` and
-   use `root.BuildProcess`, `Process.Execute`, public HTTP, or public MCP. The
-   catch-all `tests/functional/runtime_api` package is deprecated: prohibit new
-   files and scenarios there, record its current files as deletion-only debt,
-   and migrate each scenario to the owning feature/protocol package.
+4. **Functional tests use the domain-mirrored customer-boundary layout.** New
+   functional tests live under `tests/functional/<domain>/<subsection>/...` and
+   use `root.BuildProcess`, `Process.Execute`, public HTTP, or public MCP.
+   Domain nouns own domain proofs; `transport` owns transport mechanics only.
+   There is no durable `features/` wrapper and no transport-first ownership for
+   domain behavior. The catch-all `tests/functional/runtime_api` package is
+   migration-only deletion debt: prohibit new files and scenarios there, record
+   its current files as deletion-only debt, and migrate each scenario to its
+   owning domain/subsection package. `tests/functional/internal/support` remains
+   the only shared harness exception.
 
 Each new check should initially compare findings with an exact, deletion-only
 nonconformance ledger. New findings, increased occurrences, and stale ledger
@@ -209,14 +213,18 @@ pkg/services/<factorysessions>
     -> service.go (an interface declaration)
     /internal
         -> internal implementation content that goes to implementing that service
+        /services
+            /<subservice> -> parent-private nested service root (interface at root; implementation under its own internal)
     /wire
         -> service-local providers/injector that may import the service's internal implementation
     /transports
         /http -> service-owned HTTP adapter contract and transformation
         /mcp -> service-owned MCP adapter contract and transformation
         /cli -> service-owned CLI adapter contract and transformation
-    /services
-        /<subservice> -> another subservice root with the same wire/internal/transports/services shape
+
+A public sibling `pkg/services/<service>/services/` container is non-canonical.
+Nested services live only under the owning service or subservice
+`internal/services/<subservice>` tree.
 
 ## root package (services/factorysessions)
 
@@ -240,10 +248,10 @@ injector required by the root `pkg/wire` composition graph.
 | Invariant | Current enforcement | Status | Missing or required closure |
 | --- | --- | --- | --- |
 | Every durable product service is a direct child of `pkg/services`. | Root-family and retired-root rules in `make pkg-boundary`. | **Enforced** | Add an explicit approved service-owner inventory so arbitrary new service names require ownership review. |
-| Every service and nested subservice root declares exactly one named interface. | `make pkg-structure` scans direct service roots and recursively scans `services/<subservice>` roots; current interface sets are exact deletion-only debt. | **Enforced** | Burn the baseline down until every root has exactly one interface. |
+| Every service and nested subservice root declares exactly one named interface. | `make pkg-structure` scans direct service roots and recursively scans `internal/services/<subservice>` roots; current interface sets are exact deletion-only debt. | **Enforced** | Burn the baseline down until every root has exactly one interface. |
 | A service root exposes the singular interface and mostly plain request/result structs without loose exported functions. | `make pkg-structure` rejects every new exported package-level function and ratchets existing functions by exact file/symbol. | **Partial** | Add a later plain-struct check for function/interface fields, mutable implementation state, and non-contract declarations; those are intentionally outside the first light gate. |
 | Service-root production files do not contain implementation logic. | `make pkg-structure` covers exported package-level functions; selected construction, transport-behavior, size, and complexity checks cover other portions. | **Partial** | Extend the AST rule later to concrete methods, IO, goroutines, lifecycle behavior, and domain workflow bodies after the root-function debt is reduced. |
-| Direct service-root directories are limited to `wire`, `internal`, `transports`, and `services`; the same rule applies recursively to subservices. | `make pkg-structure` applies the path rule recursively and records every current unexpected directory as exact deletion-only debt. | **Enforced** | Burn down the current directory inventory; new directory names are immediately blocking. |
+| Direct service-root directories are limited to `wire`, `internal`, and `transports`; nested services live under `internal/services/<subservice>`, and the same root shape applies recursively to each subservice. | `make pkg-structure` applies the path rule recursively and records every current unexpected directory (including public sibling `services/` containers) as exact deletion-only debt. | **Enforced** | Burn down the current directory inventory; new directory names are immediately blocking. |
 | Service-root imports are limited to the standard library, neutral contract packages, and explicitly approved peer service-root contracts. | Peer-service implementation import rules and domain-transport rules. | **Partial** | Add an explicit import policy for service roots. Current enforcement allows many imports as long as they are not on an enumerated private list. |
 | Cross-service consumers use only the peer service root, never its implementation or subservices. | `pkgboundarycheck` peer-service, external-implementation, test-service, and support-service scans. | **Partial** | Convert `convergedServiceSubpackageRoots` and other explicit maps into a generic owner-boundary rule. |
 | Product service constructors are selected only by Wire; other packages receive an already-constructed role. | `pkgboundarycheck` scans construction-shaped calls outside the owner and Wire, with exact value-constructor exceptions. | **Partial** | Constructor detection is name-prefix based (`New`, `Build`, `Create`, and similar); resolved return types or explicit constructor metadata would be safer. |
@@ -328,16 +336,46 @@ do similar thigns
 
 ## subservices
 
-a service may have subservices under `services/<subservice>`. They follow the
-same root, `wire`, `internal`, `transports`, and `services` rules recursively, with the
-additional constraint that other programs cannot call subservices directly.
+Nested services are parent-private. A service or subservice may declare nested
+services only under `internal/services/<subservice>`:
+
+```
+pkg/services/<service>
+    /internal
+        /services
+            /<subservice>
+                -> <subservice>.go (exactly one named interface at the subservice root)
+                /wire
+                /transports
+                /internal
+                    -> private implementation of that subservice
+                    /services
+                        /<child>
+                            -> child interface at root
+                            /wire
+                            /transports
+                            /internal
+                                -> private implementation of the child
+```
+
+Canonical rules:
+
+- Nested services live at `<service-or-subservice>/internal/services/<subservice>`.
+- Each subservice declares its interface at the subservice root.
+- Implementations live under that subservice's own `internal` directory.
+- A public sibling `<service>/services/` (or `<subservice>/services/`) container
+  is non-canonical and must not be treated as the durable nesting shape.
+- Deeper nesting continues under `<subservice>/internal/services/<child>` with
+  the same root/`wire`/`internal`/`transports` shape recursively.
+- Other programs cannot call subservices directly; cross-service consumers use
+  the owning service root only.
 
 ## Subservice conformance checklist
 
 | Invariant | Current enforcement | Status | Missing or required closure |
 | --- | --- | --- | --- |
-| A subservice root has only `wire`, `internal`, `transports`, and `services` child directories and exactly one interface. | `make pkg-structure` discovers subservices recursively from `services/<subservice>`. | **Enforced** | Existing nonconforming subservice roots remain exact deletion-only debt. |
-| A subservice is private to its owning service. | Peer-service and converged-subpackage checks cover registered paths. | **Partial** | Classify subservices from their path and reject every external import by default. |
+| A subservice root has only `wire`, `internal`, and `transports` child directories and exactly one interface; further nesting continues under that subservice's `internal/services/<child>`. | `make pkg-structure` discovers subservices recursively from `internal/services/<subservice>`. | **Enforced** | Existing public sibling `services/` containers and other nonconforming subservice roots remain exact deletion-only debt. |
+| A subservice is private to its owning service. | Peer-service and converged-subpackage checks cover registered paths; parent-private `internal/services` placement reinforces the boundary. | **Partial** | Classify subservices from their path and reject every external import by default. |
 | A subservice does not import or construct peer service implementations. | Peer-service and product-service construction scans. | **Partial** | Replace constructor-name and registered-path heuristics with resolved owner/dependency checks. |
 | Cross-service behavior is exposed through the owning service root. | Normative standard plus registered cross-owner import checks. | **Partial** | Add an API reachability/ownership review check or required owner-level contract test for each externally consumed capability. |
 
@@ -397,40 +435,115 @@ the functioanl tests call nito the root.go and instantiate the entire internal b
 
 ## structure
 
-tests/functional/<feature-set>/my_test.go
+Functional scenario sources **MUST** live under domain nouns that match the
+product and code:
 
-i.e.
-we want to implement dynamic workflows
+```text
+tests/functional/<domain>/<subsection>/...
+```
 
-tests/functional/dynamic_workflows/http/start_test.go
-tests/functional/dynamic_workflows/http/stop_test.go
-tests/functional/dynamic_workflows/http/measures_and_operations_test.go
-tests/functional/dynamic_workflows/cli/run_command.go
-tests/functional/dynamic_workflows/mcp/create_session.go
-tests/functional/dynamic_workflows/cross/build.go
+There is no durable `features/` wrapper and no transport-first ownership for
+domain behavior. `transport` owns transport mechanics only (CLI/HTTP/MCP
+process, routing, content types, protocol errors, and thin wiring). Domain
+proofs live under their domain nouns even when the scenario enters through a
+transport surface.
 
-and so on and so forth
+Intended domain tree:
+
+```text
+tests/functional/
+  transport/
+    cli/
+    http/
+    mcp/
+  workers/
+    script/
+    inference/
+      <provider>/
+    mock/
+  orchestration/
+    javascript/
+    petri/
+  workstations/
+    execution/
+    cron/
+    repeater/
+    poller/
+    watcher/
+  work/
+    submission/
+    relationships/
+    routing/
+    recovery/
+    visualization/
+  sessions/
+    lifecycle/
+    controls/
+    execution/
+    restart/
+  factory/
+    definitions/
+    packaged/
+    current/
+  provider_sessions/
+    details/
+    association/
+  events/
+    factory_events/
+    response_events/
+    replay/
+  models/
+  guards/
+  resources/
+  observability/
+    logging/
+    metrics/
+  product/
+    docs/
+    dashboard/
+  resilience/
+    process/
+    batch/
+    platform/
+  internal/
+    support/             # only shared harness exception
+    # other internal/* roots (e.g. restclient) are deletion-only debt
+```
+Examples:
+
+```text
+tests/functional/workers/script/execution_failure_test.go
+tests/functional/orchestration/javascript/composition_run_test.go
+tests/functional/sessions/controls/pause_resume_test.go
+tests/functional/transport/cli/parameters/flag_parsing_test.go
+```
+
+Historical catch-alls such as `smoke`, `workflow`, and other non-domain roots
+are not durable owners for new scenarios. Place new coverage under an approved
+domain/subsection path instead.
 
 ### deprecated `runtime_api` layout
 
-`tests/functional/runtime_api` is a migration-only catch-all and is not a
-durable feature owner. Do not add new test files, helpers, or scenarios there.
+`tests/functional/runtime_api` is migration-only deletion debt and is not a
+durable domain owner. Do not add new test files, helpers, or scenarios there.
 Move each existing scenario to:
 
 ```text
-tests/functional/<feature-set>/<protocol>/<behavior>_test.go
+tests/functional/<domain>/<subsection>/<behavior>_test.go
 ```
 
-Use `cross` when one customer scenario intentionally spans multiple public
-protocols. Shared functional process/edge helpers remain under the approved
-`tests/functional/internal/support` boundary and must not construct product
-services.
+When a scenario truly spans domains and has no primary owner, place it under
+the smallest primary domain and name the file for the secondary concern, or use
+a local `cross/` subsection only when necessary. Do not create a generic parity
+bucket. Shared functional process/edge helpers remain under the approved
+`tests/functional/internal/support` boundary—the only shared harness
+exception—and must not construct product services.
 
 The enforcement check must record the current `runtime_api` file/scenario set
 as exact deletion-only debt. A new path or scenario is blocking; removed or
 moved entries are stale and must be deleted from the ledger. Renaming a test
 inside `runtime_api` is not conformance—the destination must have a durable
-feature owner.
+domain/subsection owner.
 
 ## density
 
@@ -444,8 +557,8 @@ we have these as many as possible since they test system flows the best.
 | Functional actions enter through `Process.Execute`, public HTTP, or public MCP. | Selected forbidden imports, calls, fields, and handwritten transport-construction rules. | **Partial** | Add a generic rule preventing direct service method calls in functional test files, except exact edge fakes and generated public clients. |
 | Functional tests override external effects only through `edges.Edges`. | Functional process-edge scans and forbidden configuration-field checks. | **Partial** | Maintain a complete typed edge inventory and reject newly added internal service/factory overrides. |
 | Functional tests do not import service implementations, Wire, Initializer, runtime scopes, replay projections, or internal orchestration. | `functionalboundarycheck` plus `pkgboundarycheck` test/import rules. | **Partial** | The forbidden import lists are explicit. Apply the generic service-owner rule and permit only root contracts, edges, and generated public clients. |
-| Functional tests use `tests/functional/<feature-set>/<subsection>` and have a durable feature owner. | `make pkg-structure` rejects new shallow Go sources and records the current shallow paths as exact deletion-only debt. | **Enforced** | Burn down the baseline by moving each source to its owning subsection; `internal` support is the explicit non-scenario exception. |
-| `tests/functional/runtime_api` receives no new files or scenarios and converges to deletion. | `make pkg-structure` records both the exact Go-file inventory and exact `Test*` scenario inventory. | **Enforced** | Move files and scenarios to feature/subsection owners and delete stale baseline entries. |
+| Functional tests use `tests/functional/<domain>/<subsection>/...` under approved domain nouns and have a durable domain owner. | `make pkg-structure` rejects new shallow, catch-all, and unclassified Go sources and records existing nonconforming paths as exact deletion-only debt. | **Enforced** | Burn down the baseline by moving each source to its owning domain/subsection; `internal/support` is the only shared harness exception. |
+| `tests/functional/runtime_api` receives no new files or scenarios and converges to deletion. | `make pkg-structure` records both the exact Go-file inventory and exact `Test*` scenario inventory. | **Enforced** | Move files and scenarios to domain/subsection owners and delete stale baseline entries. |
 | `functional-boundary-check` is merge-blocking. | `make test-functional` runs it. The CI functional coverage lane does not call that Make target directly. | **Missing** | Add it to `make verify-lint` or invoke it from the required CI functional coverage path. |
 
 # integration tests

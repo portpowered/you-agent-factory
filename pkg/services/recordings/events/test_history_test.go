@@ -18,6 +18,19 @@ func TestNewFactoryEventHistoryRejectsMissingClockAndStreamGenerationID(t *testi
 	}
 }
 
+func TestNewRuntimeLedgerRejectsMissingClockAndStreamGenerationID(t *testing.T) {
+	t.Parallel()
+	if ledger := NewRuntimeLedger(nil, nil, "stream", nil); ledger != nil {
+		t.Fatal("ledger constructed without a clock")
+	}
+	if ledger := NewRuntimeLedger(nil, time.Now, "", nil); ledger != nil {
+		t.Fatal("ledger constructed without a stream generation ID")
+	}
+	if ledger := NewRuntimeLedger(nil, time.Now, "stream", nil); ledger == nil {
+		t.Fatal("ledger not constructed with clock and stream generation ID")
+	}
+}
+
 func newTestFactoryEventHistory(
 	topology recordings.InitialStructureSource,
 	now func() time.Time,

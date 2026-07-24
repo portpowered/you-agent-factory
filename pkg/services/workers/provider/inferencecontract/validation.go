@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
-	maxIdentityLength        = 128
 	maxPrerequisiteCount     = 32
 	maxPrerequisiteName      = 80
 	maxPrerequisiteDetail    = 256
@@ -33,15 +34,8 @@ func invalid(field, message string) error {
 
 // ValidateIdentity checks that an opaque identity uses its canonical form.
 func ValidateIdentity(identity Identity) error {
-	value := string(identity)
-	if value == "" {
-		return invalid("identity", "must not be empty")
-	}
-	if len(value) > maxIdentityLength {
-		return invalid("identity", fmt.Sprintf("must not exceed %d bytes", maxIdentityLength))
-	}
-	if !canonicalIdentifier(value) {
-		return invalid("identity", "must start with a lowercase letter and contain only lowercase letters, digits, dots, or hyphens")
+	if err := workers.ProviderIdentity(identity).Validate(); err != nil {
+		return invalid("identity", err.Error())
 	}
 	return nil
 }

@@ -66,6 +66,28 @@ You are a software engineer. Write tests for all new code.
 	}
 }
 
+func TestLoadWorkerConfig_PreservesExtensionModelProviderFromYAMLFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKER
+modelProvider: customer.provider-v2
+---
+
+Use the registered extension provider.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadWorkerConfig: %v", err)
+	}
+	if got := cfg.ModelProvider; got != "customer.provider-v2" {
+		t.Fatalf("modelProvider = %q, want preserved extension identity", got)
+	}
+}
+
 func TestLoadWorkerConfig_ScriptWorker(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---

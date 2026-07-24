@@ -379,8 +379,15 @@ func modelProviderForExecution(workerModelProvider string, selection workerexecu
 		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
 			return provider
 		}
+		if strings.TrimSpace(selection.RunnerID) != "" {
+			// Open / externally supplied conductor identities keep their canonical ID.
+			return selection.RunnerID
+		}
 	}
 	if workerModelProvider != "" {
+		if provider := modelProviderForRunnerID(workerModelProvider); provider != "" {
+			return provider
+		}
 		return workerModelProvider
 	}
 	return modelProviderForRunnerID(selection.RunnerID)
@@ -396,7 +403,7 @@ func modelProviderForRunnerID(runnerID string) string {
 		return string(modelprovider.ProviderGemini)
 	case workerexecution.RunnerIDKiro:
 		return string(modelprovider.ProviderKiro)
-	case workerexecution.RunnerIDCursorCLI:
+	case "cursor", workerexecution.RunnerIDCursorCLI:
 		return string(modelprovider.ProviderCursor)
 	case workerexecution.RunnerIDOpenCode:
 		return string(modelprovider.ProviderOpenCode)

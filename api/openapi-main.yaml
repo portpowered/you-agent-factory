@@ -2194,6 +2194,8 @@ components:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
+    ProviderIdentity:
+      $ref: './components/schemas/data-models/ProviderIdentity.yaml'
     ProviderCatalog:
       $ref: './components/schemas/model-providers/ProviderCatalog.yaml'
     ProviderManifest:

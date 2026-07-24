@@ -13,7 +13,7 @@ import (
 
 // New constructs the public Factory Definitions service.
 func New(
-	sessionHost factorydefinitions.SessionHost,
+	sessionHost factoryroot.SessionHost,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factorydefinitions.Validator,
@@ -28,7 +28,7 @@ func New(
 	namedPaths interface {
 		ResolveExistingDir(string, string) (string, error)
 	},
-) factorydefinitions.Service {
+) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil {
 		return nil
 	}

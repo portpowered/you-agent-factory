@@ -33,10 +33,10 @@ func TestFullIdeationPipeline_HappyPath(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
 	})
 	assertListedWorkStateTrace(t, listedWork, "story", "complete", originTraceID)
@@ -69,10 +69,10 @@ func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
 	)
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 30*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
 	})
 	assertListedWorkStateTrace(t, listedWork, "story", "complete", originTraceID)
@@ -102,10 +102,10 @@ func TestFullIdeationPipeline_CrossWorkTypeLineage(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
 		"idea:failed": 0, "prd:failed": 0, "story:failed": 0,
 	})

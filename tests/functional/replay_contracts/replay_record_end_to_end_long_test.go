@@ -97,7 +97,7 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 }
@@ -160,7 +160,7 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 }
@@ -208,19 +208,7 @@ Finish the input task.
 			ProviderOverride: provider,
 		},
 	})
-	support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
-		RequestID: "request-replay-external-batch",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{
-			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
-			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
-		},
-		Relations: []work.WorkRelation{{
-			Type:           work.WorkRelationDependsOn,
-			SourceWorkName: "external-fanout",
-			TargetWorkName: "external-first",
-		}},
-	})
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), recordReplayExternalBatchWorkRequest())
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 	server.Stop(t)
 
@@ -246,7 +234,7 @@ Finish the input task.
 	)
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:complete": 3, "task:init": 0, "task:failed": 0,
 	})
 	if !replayWorkIncludesID(replay.Work, "work-generated-alpha") ||
@@ -254,6 +242,34 @@ Finish the input task.
 		t.Fatalf("replay Work listing missing generated alpha/beta: %#v", replay.Work.Results)
 	}
 	assertGeneratedReplayRequestMetadata(t, replay.Events, "")
+}
+
+func recordReplayExternalBatchWorkRequest() factoryapi.WorkRequest {
+	return factoryapi.WorkRequest{
+		RequestId: "request-replay-external-batch",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{
+			{
+				Name:         "external-first",
+				WorkId:       strPtr("work-external-first"),
+				WorkTypeName: strPtr("task"),
+				TraceId:      strPtr("trace-replay-batch"),
+				Payload:      "external first",
+			},
+			{
+				Name:         "external-fanout",
+				WorkId:       strPtr("work-external-fanout"),
+				WorkTypeName: strPtr("task"),
+				TraceId:      strPtr("trace-replay-batch"),
+				Payload:      "external fanout",
+			},
+		},
+		Relations: &[]factoryapi.Relation{{
+			Type:           factoryapi.RelationTypeDependsOn,
+			SourceWorkName: "external-fanout",
+			TargetWorkName: "external-first",
+		}},
+	}
 }
 
 func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {

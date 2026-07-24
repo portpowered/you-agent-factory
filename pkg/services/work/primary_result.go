@@ -80,7 +80,8 @@ func invocationWorldState(input PrimaryResultSelectionInput) InvocationWorldStat
 }
 
 // ResolvePrimaryResult applies the canonical invocation primary-result rules
-// against one selected-tick factory world state.
+// against one selected-tick factory world state. The singular Work root Service
+// publishes this capability as Service.ResolvePrimaryResult.
 func ResolvePrimaryResult(input PrimaryResultSelectionInput) (PrimaryResultSelection, error) {
 	requestID := strings.TrimSpace(input.RequestID)
 	if requestID == "" {
@@ -102,7 +103,7 @@ func ResolvePrimaryResult(input PrimaryResultSelectionInput) (PrimaryResultSelec
 	case invocationReturnPolicyExplicit:
 		return resolveExplicitPrimaryResult(requestID, invocationWorldState(input), request.WorkItems, input.InvocationReturn)
 	default:
-		return PrimaryResultSelection{}, fmt.Errorf("unsupported invocation return policy %q", policy)
+		return PrimaryResultSelection{}, fmt.Errorf("%w: %q", ErrUnsupportedReturnPolicy, policy)
 	}
 }
 

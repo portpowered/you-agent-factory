@@ -1,6 +1,12 @@
-// Package edges defines the replaceable process boundaries shared by service
-// constructors. Transports consume services built with these edges; they do not
-// own the process dependency contract.
+// Package edges is the process-edge aggregator architecture exception for
+// root.BuildProcess and pkg/wire construction.
+//
+// Edges aggregates replaceable external-effect ports so production can supply
+// empty defaults and functional tests can supply typed replacements through the
+// same BuildProcess bag. Merge overlays non-zero replacements onto those
+// defaults. This package is not a service locator or Initializer dependency
+// bag: constructed services must receive exact projected ports at the Wire /
+// root composition boundary rather than importing or holding Edges.
 package edges
 
 import (
@@ -27,8 +33,10 @@ import (
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 )
 
-// Edges is the canonical set of replaceable external dependencies used by
-// service constructors. It is configuration, not a transport-owned graph.
+// Edges aggregates replaceable external-effect ports for process construction
+// and functional overrides. Only the process-edge boundary (pkg/services/edges,
+// pkg/root, pkg/wire, and BuildProcess override tests) consumes this bag;
+// constructed services take exact ports instead. It is not a service locator.
 type Edges struct {
 	CLIObserver                                     platformprocess.CLIObserver
 	PlatformProcessClock                            platformprocess.Clock

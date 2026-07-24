@@ -332,8 +332,18 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		clock factoryruntime.Clock,
 		provider workerprovider.Provider,
 		factory factorysessionwire.FactorySessionExecutionFactory,
+		providerIdentities factorysessions.ProviderIdentityResolver,
 	) (factorysessions.ExecutionService, error) {
-		return factorysessionwire.NewDurableExecutionRuntime(loadOperatorConfig, definition, session, root, clock, provider, factory)
+		return factorysessionwire.NewDurableExecutionRuntime(
+			loadOperatorConfig,
+			definition,
+			session,
+			root,
+			clock,
+			provider,
+			factory,
+			providerIdentities,
+		)
 	}
 }
 
@@ -544,7 +554,7 @@ func provideApplicationRuntimeAdapter(
 	}
 	return func(
 		opened factorysessionwire.OpenedApplicationRuntime,
-		edges serviceedges.Edges,
+		effects factorysessionwire.RuntimeOpeningExternalEffects,
 		sink factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
 		var visualization lifecycle.Component
@@ -555,7 +565,7 @@ func provideApplicationRuntimeAdapter(
 				logger = zap.NewNop()
 			}
 			visualization, err = visualizationFactory(
-				opened.Visualization.Reader, opened.Visualization.Projections, edges.Clock, sink,
+				opened.Visualization.Reader, opened.Visualization.Projections, effects.Clock, sink,
 				func(err error) {
 					logger.Error("Factory visualization failed", zap.Error(err))
 				},

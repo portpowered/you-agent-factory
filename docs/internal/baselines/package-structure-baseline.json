@@ -1568,6 +1568,186 @@
       "target": "workflow"
     },
     {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
+      "target": "bootstrap_portability"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/events/javascript_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/output/failure_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/output/output_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_helpers_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/serve_runtime_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/stdio_client_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/named_invocation/named_invocation_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/root_discovery/root_discovery_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session/session_enumeration_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session_resume/resume_non_regression_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session_resume/resume_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/internal/restclient/adapter.go",
+      "target": "internal"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/internal/restclient/adapter_test.go",
+      "target": "internal"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
+      "target": "operator_settings"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/agy/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/claude/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/codex/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/codex/process_harness_test.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/contract/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/cursor/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/gemini/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/kiro/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/mock_workers/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/observability/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/opencode/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/pi/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/script/doc.go",
+      "target": "providers"
+    },
+    {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/edges/definition.go",
       "target": "Merge"
@@ -2460,12 +2640,17 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_definitions",
-      "target": "pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
+      "target": "pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime",
       "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_sessions",
+      "target": "pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/service_contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2531,6 +2716,31 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
       "target": "<none>"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/agents/internal",
+      "target": "pkg/services/workers/services/agents"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/hosted_logic/internal",
+      "target": "pkg/services/workers/services/hosted_logic"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/inference/internal",
+      "target": "pkg/services/workers/services/inference"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/scripts/internal",
+      "target": "pkg/services/workers/services/scripts"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/testing/internal",
+      "target": "pkg/services/workers/services/testing"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2945,6 +3155,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/service",
+      "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/services",
       "target": "pkg/services/workers"
     },
     {

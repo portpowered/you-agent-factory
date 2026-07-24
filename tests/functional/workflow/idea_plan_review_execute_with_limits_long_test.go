@@ -32,7 +32,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
 	session := runIdeaPlanReviewWithLimits(t, dir, provider)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
 	})
 
@@ -58,7 +58,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
 	session := runIdeaPlanReviewWithLimits(t, dir, provider)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
 	})
 
@@ -87,7 +87,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
 	session := runIdeaPlanReviewWithLimits(t, dir, provider)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
 		"executor-slot:available": 5,
 	})
@@ -119,7 +119,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
 	session := runIdeaPlanReviewWithLimits(t, dir, provider)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:complete": 1, "plan:complete": 1, "task:complete": 1,
 	})
 
@@ -173,7 +173,7 @@ func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
 		}
 	}
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:complete": 1, "plan:complete": 1, "task:failed": 1,
 		"idea:init": 0, "plan:init": 0, "task:init": 0,
 		"task:in-review": 0, "task:complete": 0,

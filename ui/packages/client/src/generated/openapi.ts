@@ -4219,7 +4219,7 @@ export interface components {
       /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
       type: components["schemas"]["FactoryGuardType"];
       /** @description Provider whose inference-throttle history controls this factory-level guard. */
-      modelProvider: components["schemas"]["WorkerModelProvider"];
+      modelProvider: components["schemas"]["ProviderIdentity"];
       /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
       model?: string;
       /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
@@ -4342,8 +4342,8 @@ export interface components {
       provider?: components["schemas"]["HostedWorkerProvider"];
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
-      /** @description Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
-      modelProvider?: components["schemas"]["WorkerModelProvider"] | string;
+      /** @description Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
+      modelProvider?: components["schemas"]["ProviderIdentity"] | string;
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
       /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
@@ -4389,10 +4389,12 @@ export interface components {
      */
     WorkerType: WorkerType;
     /**
-     * @description Canonical model-provider identifiers supported by model workers in factory config.
+     * @description Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
      * @enum {string}
      */
     WorkerModelProvider: WorkerModelProvider;
+    /** @description Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity. */
+    ProviderIdentity: string;
     /** @description Versioned public collection of provider manifests. */
     ProviderCatalog: {
       /**
@@ -5017,7 +5019,7 @@ export interface components {
       model?: string;
       reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
     };
-    /** @description Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
+    /** @description Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
     GlobalConfigWorkerPresetModelProvider: string;
     /** @description Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified. */
     GlobalConfigWorkerPresetReasoningEffort: string;

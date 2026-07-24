@@ -28,8 +28,8 @@ func TestFileWatcherFlowSingle(t *testing.T) {
 		},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:processing": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:processing": 0})
 }
 
 // TestFileWatcherFlowSequential drops 3 seed files and verifies all 3
@@ -50,8 +50,8 @@ func TestFileWatcherFlowSequential(t *testing.T) {
 		},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 3})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 3})
 }
 
 // TestFileWatcherFlowConcurrent drops 5 seed files simultaneously and verifies
@@ -74,8 +74,8 @@ func TestFileWatcherFlowConcurrent(t *testing.T) {
 		},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 5})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 5})
 }
 
 // TestFileWatcherFlowNoTokenLeaks verifies that after processing a mix
@@ -97,10 +97,10 @@ func TestFileWatcherFlowNoTokenLeaks(t *testing.T) {
 		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
 	)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"task:complete": 3, "task:failed": 2, "task:init": 0, "task:processing": 0,
 	})
 }
