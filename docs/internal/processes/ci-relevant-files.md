@@ -80,8 +80,8 @@
   and the uploaded artifact matches the totals enforced by the lane. Prove the
   functional boundary-before-coverage composition with stubbed Make wrapper
   smoke under
-  `tests/functional/smoke/functional_coverage_boundary_smoke_test.go` rather
-  than the full functional suite.
+  `tests/functional/observability/coverage/functional_coverage_boundary_test.go`
+  rather than the full functional suite.
   The default functional and functional-coverage lanes share dynamic package
   selection through `internal/testlanes`: retain execution of the complete
   `go list ./tests/functional/...` result, the shared-support exclusion, and
@@ -124,7 +124,7 @@
   failure, so already-written diagnostics remain (for example profile/JSON
   after a floor fail, or those files before a render fail). Prove fail-closed
   preservation with stubbed Make wrapper smoke under
-  `tests/functional/smoke/functional_test_viz_fail_closed_smoke_test.go`
+  `tests/functional/observability/coverage/functional_test_viz_fail_closed_test.go`
   rather than the full functional suite. Prove rendering with focused
   package/cmd golden fixtures under `internal/functionaltestviz/testdata/`.
   Required CI Backend Functional Coverage runs `make functional-test-viz`
@@ -135,7 +135,7 @@
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
   dry-run / stubbed Make wrapper smoke under
-  `tests/functional/smoke/functional_test_viz_contract_smoke_test.go`
+  `tests/functional/observability/coverage/functional_test_viz_contract_test.go`
   rather than the full functional suite.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries

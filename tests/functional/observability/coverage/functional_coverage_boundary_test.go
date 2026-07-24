@@ -1,6 +1,6 @@
 //go:build !windows
 
-package smoke
+package coverage
 
 import (
 	"strings"

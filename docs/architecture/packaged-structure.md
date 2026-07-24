@@ -464,6 +464,7 @@ tests/functional/
   observability/
     logging/
     metrics/
+    coverage/            # Make/CI functional coverage + viz contract smokes
   product/
     docs/
     dashboard/
