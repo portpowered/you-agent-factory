@@ -144,6 +144,15 @@ primary-result behavior.
   default-selection path.
   Other unknown, catalog-only, and not-supported identities fail before
   dispatch instead of falling through to the default Codex runner.
+  After invocation interpolation, the Workers workstation executor resolves
+  the concrete `modelProvider` independently through the registry-backed
+  `ProviderIdentityResolver` before applying runner precedence. Do not rely on
+  `ResolveRunnerSelection` alone for this check: an explicit workstation or
+  Factory runner wins precedence and would otherwise mask a malformed,
+  unknown, or non-selectable interpolated provider value. The identity
+  resolver also carries the registry's canonical identity into the execution
+  request before worktree preparation, capability checks, discovery, or
+  provider invocation.
   Provider-native command construction and `ProviderOverride` execution remain
   unchanged; the manifest-backed capability guard is bypassed for an explicit
   replacement provider because that edge owns its own test/runtime contract.
