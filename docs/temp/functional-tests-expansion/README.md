@@ -15,6 +15,10 @@ the repository's customer-level functional tests.
   checklist destination cell or an approved wrong-layer rationale, preserves
   short/long membership and specialty Make bindings, and names deletion-only
   batches for later move work. Planning-only: it does not move tests.
+- [`migration-ledger-inventory.json`](migration-ledger-inventory.json) is the
+  machine-readable companion to the ledger Inventory section (same required
+  row fields). Use it for later batch tooling; keep it in sync with the
+  Markdown inventory when mapping stories update rows.
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.
