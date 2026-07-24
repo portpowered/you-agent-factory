@@ -50,13 +50,8 @@ func recordingsRootDigest(character byte) string {
 	return "sha256:" + strings.Repeat(string(character), 64)
 }
 
-func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
-	ledger := &recordingsRootLedgerStub{}
-	svc := recordingservice.NewService(ledger, recordingservice.NewProjectionService())
-	if svc == nil {
-		t.Fatal("NewService returned nil")
-	}
-
+func exerciseRecordingsRootAppendSubscribe(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	_ = svc.Append(recordings.AppendRecordedEventRequest{
 		Event: factorydefinitions.FactoryEvent{Id: "functional-evt-1"},
 	})
@@ -70,7 +65,10 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SubscribeFrom success: %v", err)
 	}
+}
 
+func exerciseRecordingsRootProjection(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	if _, err := svc.ReconstructWorldState(recordings.ReconstructWorldStateRequest{SelectedTick: -1}); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("ReconstructWorldState negative tick = %v", err)
 	}
@@ -83,7 +81,10 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{}); err != nil {
 		t.Fatalf("ValidateReconnectReplayFrom: %v", err)
 	}
+}
 
+func exerciseRecordingsRootLifecycle(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{RecordPath: "functional.json"})
 	if err != nil {
 		t.Fatalf("BindRecording: %v", err)
@@ -134,7 +135,10 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	if _, err := svc.FlushRecording(recordings.FlushRecordingRequest{RecordingID: failBound.RecordingID}); !errors.Is(err, recordings.ErrRecordingFlushFailed) {
 		t.Fatalf("FlushRecording after error = %v", err)
 	}
+}
 
+func exerciseRecordingsRootReplay(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("LoadReplayArtifact missing = %v", err)
 	}
@@ -146,9 +150,11 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("BindReplayExecution: %v", err)
 	}
+}
 
+func functionalPortableFacts() recordings.PortableRecordingCanonicalFacts {
 	createdAt := time.Unix(1_700_000_000, 0).UTC()
-	facts := recordings.PortableRecordingCanonicalFacts{
+	return recordings.PortableRecordingCanonicalFacts{
 		SessionID:        "session-functional-export",
 		Status:           "COMPLETED",
 		OrchestratorKind: "JAVASCRIPT",
@@ -165,6 +171,11 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 			ArtifactIDs:   []string{"artifact-result"},
 		},
 	}
+}
+
+func exerciseRecordingsRootArtifactExport(t *testing.T, svc recordings.Service) {
+	t.Helper()
+	facts := functionalPortableFacts()
 	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{Facts: facts})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact: %v", err)
@@ -186,7 +197,10 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	if _, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{Facts: badFacts}); !errors.Is(err, recordings.ErrInvalidRecordingDigest) {
 		t.Fatalf("BuildPortableArtifact bad digest = %v", err)
 	}
+}
 
+func exerciseRecordingsServiceLegacyConstructors(t *testing.T) {
+	t.Helper()
 	if recordingservice.NewService(nil, recordingservice.NewProjectionService()) != nil {
 		t.Fatal("NewService(nil, projection) should be nil")
 	}
@@ -203,4 +217,18 @@ func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
 	if _, err := recordingservice.NewRuntimeRecorder(nil, 0, nil, nil, "recording.json", nil); err == nil {
 		t.Fatal("NewRuntimeRecorder enabled without clock should error")
 	}
+}
+
+func TestRecordingsServiceRootPlainContract_FunctionalCoverage(t *testing.T) {
+	ledger := &recordingsRootLedgerStub{}
+	svc := recordingservice.NewService(ledger, recordingservice.NewProjectionService())
+	if svc == nil {
+		t.Fatal("NewService returned nil")
+	}
+	exerciseRecordingsRootAppendSubscribe(t, svc)
+	exerciseRecordingsRootProjection(t, svc)
+	exerciseRecordingsRootLifecycle(t, svc)
+	exerciseRecordingsRootReplay(t, svc)
+	exerciseRecordingsRootArtifactExport(t, svc)
+	exerciseRecordingsServiceLegacyConstructors(t)
 }
