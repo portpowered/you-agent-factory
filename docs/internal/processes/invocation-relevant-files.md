@@ -1430,6 +1430,15 @@ response-stream output.
   `docs_help.txt` / `TestDocsHelpBaseline_MatchesFixture`) to the normalized
   production `--help` output. That ledger path is separate from
   `intentional_changes.json`, which only tracks planned removals and moves.
+- When migrated construction intentionally changes observable command identity
+  (Examples, Long text, or related inventory fields), refresh
+  `contracts/testdata/baseline/cli-commands.json` with
+  `UPDATE_CLI_BASELINES=1 go test ./pkg/transports/cli/commandidentity -run TestWriteProductionInventoryBaseline`,
+  then restage the packaged projection with `make contracts-generate` /
+  `make contracts-check` so `packages/api/generated/cli/commands.json` and the
+  package manifest stay byte-aligned. Prove with
+  `TestWalk_ProductionInventoryMatchesCommittedBaseline`. Do not hand-edit the
+  staged package copy out of band.
 - Dashboard feature routes must account for the production `/dashboard/ui/` SPA
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;
