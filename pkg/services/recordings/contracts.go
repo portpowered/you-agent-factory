@@ -333,13 +333,14 @@ type Ledger interface {
 // Published slices (append/subscribe, projection query, recording lifecycle,
 // replay, and artifact export) are additive methods or embedded capability
 // surfaces on this one named interface and use plain Recordings-owned request,
-// result, value, and typed-error contracts. Existing append/subscribe and
-// projection query capabilities remain reachable through this singular root.
-// Peers must depend on Service rather than introducing a second peer-facing
-// Recordings authority. Nested IMP-REC-* implementation moves, event-backbone
-// leases beyond additive root publication, CLI-manifest/provider-conductor
-// ownership changes, and OpenAPI package-motion edits remain out of scope for
-// the root-contract packet.
+// result, value, and typed-error contracts free of peer implementation and
+// ledger storage types. Existing append/subscribe and projection query
+// capabilities remain reachable through this singular root. Peers must depend
+// on Service rather than introducing a second peer-facing Recordings
+// authority. Nested IMP-REC-* implementation moves, event-backbone leases
+// beyond additive root publication, CLI-manifest/provider-conductor ownership
+// changes, and OpenAPI package-motion edits remain out of scope for the
+// root-contract packet.
 type Service interface {
 	Ledger
 	ProjectionService
