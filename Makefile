@@ -119,7 +119,7 @@ endef
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
-.PHONY: fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines fnd-12-visualization-behavior-baselines
+.PHONY: fnd-12-behavior-baselines fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines fnd-12-visualization-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
@@ -256,8 +256,18 @@ cli-contract-smoke:
 	$(GO) run ./cmd/clicontractsmoke -root .
 	$(GO) test ./cmd/clicontractsmoke ./pkg/transports/cli/clicontract -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-# FND-12 captured public CLI success + typed-failure pair (see
+# FND-12 captured public behavior baselines (see
 # docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# Aggregator runs all five surface pairs; does not migrate packages or refresh
+# PR #1262 CLI-manifest baselines. Pair with `make verify-fast` and `make lint`.
+fnd-12-behavior-baselines:
+	$(MAKE) fnd-12-cli-behavior-baselines
+	$(MAKE) fnd-12-http-behavior-baselines
+	$(MAKE) fnd-12-mcp-behavior-baselines
+	$(MAKE) fnd-12-replay-behavior-baselines
+	$(MAKE) fnd-12-visualization-behavior-baselines
+
+# FND-12 captured public CLI success + typed-failure pair.
 # Does not refresh or re-own PR #1262 CLI-manifest baselines.
 fnd-12-cli-behavior-baselines:
 	$(GO) test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -268,13 +278,11 @@ fnd-12-http-behavior-baselines:
 fnd-12-mcp-behavior-baselines:
 	$(GO) test ./pkg/transports/mcp/server -run '^Test(ServeStdioUsesSDKProtocolAndRegistersCatalog|SDKProtocolErrors)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-# FND-12 captured public replay success + typed-failure pair (see
-# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# FND-12 captured public replay success + typed-failure pair.
 fnd-12-replay-behavior-baselines:
 	$(GO) test ./pkg/services/recordings/replay -run '^TestSideEffects_(InferReturnsRecordedProviderResponse|UnmatchedRequestFailsClearly)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-# FND-12 captured visualization activation success + typed-failure pair (see
-# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# FND-12 captured visualization activation success + typed-failure pair.
 fnd-12-visualization-behavior-baselines:
 	$(GO) test ./pkg/services/factory_visualization -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 

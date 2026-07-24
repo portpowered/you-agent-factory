@@ -11,12 +11,16 @@ docs/models/mcp CLI-manifest generation.
 
 ## How to use
 
-Run each surface entry point below before a PSS package move that depends on
-FND-12. Prefer the focused `go test` filters; Make targets are listed when they
-already wrap the same evidence.
+Before a PSS package move that depends on FND-12, run the captured suites:
 
-Foundation gate (after all surfaces are green): `make verify-fast` and
-`make lint`.
+1. `make fnd-12-behavior-baselines` — aggregator for all five surface pairs
+   (CLI, HTTP, MCP, replay, visualization activation). Equivalent to running
+   each per-surface `make fnd-12-*-behavior-baselines` target below.
+2. `make verify-fast`
+3. `make lint`
+
+Per-surface Make targets and focused `go test` filters remain available when
+debugging a single surface. No package-migration steps are required.
 
 ## Ownership note (out of lease)
 
@@ -52,18 +56,18 @@ Do **not** treat the following as sole proof for a surface:
 
 ## Gaps and follow-ups
 
-As of this map, each surface already has a **reusable success + typed-failure
-pair** in existing focused evidence. Remaining FND-12 work is capture/gate
-hardening, not inventing sole-proof source scans:
+As of this map, each surface has a **reusable success + typed-failure pair**
+captured behind a dedicated Make target, plus the aggregator
+`make fnd-12-behavior-baselines`. No sole-proof source scans were added.
 
-- Story 002 (CLI): captured via `make fnd-12-cli-behavior-baselines`.
-- Story 003 (HTTP): captured via `make fnd-12-http-behavior-baselines`.
-- Story 004 (MCP): captured via `make fnd-12-mcp-behavior-baselines`.
-- Story 005 (Replay): captured via `make fnd-12-replay-behavior-baselines`.
-- Story 006 (Visualization activation): captured via `make fnd-12-visualization-behavior-baselines`.
-- Story 007: execute every entry point above plus `make verify-fast` and
-  `make lint` on the capturing branch; optionally introduce a single Make
-  aggregator that shells the five surface targets without package migration.
+- Story 002 (CLI): `make fnd-12-cli-behavior-baselines`
+- Story 003 (HTTP): `make fnd-12-http-behavior-baselines`
+- Story 004 (MCP): `make fnd-12-mcp-behavior-baselines`
+- Story 005 (Replay): `make fnd-12-replay-behavior-baselines`
+- Story 006 (Visualization activation): `make fnd-12-visualization-behavior-baselines`
+- Story 007 (foundation gate): `make fnd-12-behavior-baselines` plus
+  `make verify-fast` and `make lint` on the capturing branch — no package
+  migration.
 - Do not expand this map to own PR #1262 CLI-manifest generate/check artifacts.
 
 ## Non-goals (explicit)
