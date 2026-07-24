@@ -6,12 +6,13 @@ import (
 )
 
 // RenderCatalogMarkdown renders the functional-test Markdown catalog.
-// Story fnd-004-markdown-generator-002 owns the prioritized domain-summary
-// opening; later stories append detail rows, debt, and package coverage.
+// Later stories append golden/debt sections and package coverage.
 func RenderCatalogMarkdown(inputs CatalogInputs) string {
 	var b strings.Builder
 	b.WriteString("# Functional tests\n\n")
 	b.WriteString(RenderDomainSummariesMarkdown(BuildDomainSummaries(inputs.Records)))
+	b.WriteString("\n")
+	b.WriteString(RenderDetailCatalogMarkdown(BuildDetailCatalog(inputs.Records)))
 	return b.String()
 }
 

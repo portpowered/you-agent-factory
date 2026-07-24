@@ -115,8 +115,12 @@ func TestRenderDomainSummariesMarkdownIsStableAndIncludesZeros(t *testing.T) {
 	if !strings.Contains(catalog, "### orchestration\n\n- Customer scenarios: 0\n") {
 		t.Fatalf("zero orchestration domain missing:\n%s", catalog)
 	}
-	if strings.Contains(catalog, "support") || strings.Contains(catalog, "TestHelper") {
-		t.Fatalf("harness leaked into domain summaries:\n%s", catalog)
+	summarySection := catalog
+	if detailIdx := strings.Index(catalog, "## Test catalog\n"); detailIdx >= 0 {
+		summarySection = catalog[:detailIdx]
+	}
+	if strings.Contains(summarySection, "support") || strings.Contains(summarySection, "TestHelper") {
+		t.Fatalf("harness leaked into domain summaries:\n%s", summarySection)
 	}
 
 	// Browse-order headings must appear exactly once each, in order.
