@@ -326,6 +326,17 @@ Use this map when changing the public REST contract.
 
 ## REST operation identity inventory
 
+- Authored Factory `modelProvider` fields reference the open
+  `api/components/schemas/data-models/ProviderIdentity.yaml` syntax contract.
+  `WorkerModelProvider.yaml` is a generated-client convenience enum for built-in
+  constants only and must not be used to close authored worker or guard fields.
+  Keep the `ProviderIdentity` pattern aligned with
+  `provider/inferencecontract.ValidateIdentity`, preserve exact invocation
+  placeholders through the worker field's one-of, and regenerate bundled Go and
+  TypeScript contracts with `make generate-api`. Then run `npm run generate`
+  from `ui/packages/client` to synchronize its package-local generated copy
+  before dashboard typecheck.
+
 - `internal/contractinventory` owns the pure read-only extractor that turns bundled
   OpenAPI YAML into canonical `rest-operations/v1` JSON (`formatVersion`,
   `operations[]` with `operationId`, `method`, `path`, optional `xDocId`,

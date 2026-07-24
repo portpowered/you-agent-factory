@@ -143,7 +143,9 @@ func NewRuntimeWithSelection(
 	if providerRegistry != nil {
 		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
-			service.executorBuilder = builder.WithRunnerSelection(providerRegistry.ResolveRunnerSelection)
+			service.executorBuilder = builder.
+				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
+				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity)
 		}
 	}
 	return service, nil

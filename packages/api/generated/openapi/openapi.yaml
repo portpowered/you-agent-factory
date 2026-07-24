@@ -8524,7 +8524,7 @@ components:
           description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
         modelProvider:
           allOf:
-            - $ref: '#/components/schemas/WorkerModelProvider'
+            - $ref: '#/components/schemas/ProviderIdentity'
           description: Provider whose inference-throttle history controls this factory-level guard.
         model:
           type: string
@@ -8753,10 +8753,10 @@ components:
           description: Model identifier to request from the configured model provider when this worker uses model execution.
         modelProvider:
           oneOf:
-            - $ref: '#/components/schemas/WorkerModelProvider'
+            - $ref: '#/components/schemas/ProviderIdentity'
             - type: string
               pattern: ^\$\{[A-Za-z0-9_.-]+\}$
-          description: Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+          description: Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
         modelLocality:
           allOf:
             - $ref: '#/components/schemas/WorkerModelLocality'
@@ -8840,7 +8840,7 @@ components:
         - HOSTED_WORKER
     WorkerModelProvider:
       type: string
-      description: Canonical model-provider identifiers supported by model workers in factory config.
+      description: Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
       enum:
         - CLAUDE
         - CODEX
@@ -8850,6 +8850,12 @@ components:
         - OPENCODE
         - PI
         - AGY
+    ProviderIdentity:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: ^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$
+      description: Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.
     ProviderCatalog:
       type: object
       additionalProperties: false
@@ -10048,8 +10054,8 @@ components:
           $ref: '#/components/schemas/GlobalConfigWorkerPresetReasoningEffort'
     GlobalConfigWorkerPresetModelProvider:
       type: string
-      description: Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
-      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[\t-\r \N\_  - \L\P  　]*$"
+      description: Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)[\t-\r \N\_  - \L\P  　]*$"
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.

@@ -157,10 +157,21 @@ primary-result behavior.
   use the provider-native executable LookPath path.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
-  executable-prerequisite preflight. Preserve the existing selection precedence
-  and native runner IDs for bundled providers; the registry resolves canonical
-  IDs and published aliases first, with the legacy `cursor-cli` runner ID
-  mapped only at the native-execution compatibility boundary. Preserve accepted public model-provider aliases
+  executable-prerequisite preflight, and to Factory Sessions through the narrow
+  `ProviderIdentityResolver` opening contract. After operator defaults are
+  applied, Factory opening resolves concrete worker and guard selections to
+  canonical registry identities; operator-file defaults and JavaScript worker
+  presets use the same authority. Leave declared invocation interpolation
+  expressions unresolved at this stage. Do not restore built-in membership or
+  alias lists in Factory Runtime or operator-default helpers.
+  Preserve the existing selection precedence and native runner IDs for bundled
+  providers; the registry resolves canonical IDs and published aliases first,
+  with the legacy `cursor-cli` runner ID mapped only at the native-execution
+  compatibility boundary. Externally supplied integrations retain their
+  canonical provider identity during runner selection so opening can validate
+  and carry them onto the provider-neutral conductor without pretending they
+  are a bundled native runner.
+  Preserve accepted public model-provider aliases
   (`openai` and `anthropic`) as collision-validated registry identity claims so
   static lookup and routed selection cannot disagree. Carry the registry's
   canonical legacy-provider selection through the workstation boundary into
@@ -170,6 +181,15 @@ primary-result behavior.
   default-selection path.
   Other unknown, catalog-only, and not-supported identities fail before
   dispatch instead of falling through to the default Codex runner.
+  After invocation interpolation, the Workers workstation executor resolves
+  the concrete `modelProvider` independently through the registry-backed
+  `ProviderIdentityResolver` before applying runner precedence. Do not rely on
+  `ResolveRunnerSelection` alone for this check: an explicit workstation or
+  Factory runner wins precedence and would otherwise mask a malformed,
+  unknown, or non-selectable interpolated provider value. The identity
+  resolver also carries the registry's canonical identity into the execution
+  request before worktree preparation, capability checks, discovery, or
+  provider invocation.
   Provider-native command construction and `ProviderOverride` execution remain
   unchanged; the manifest-backed capability guard is bypassed for an explicit
   replacement provider because that edge owns its own test/runtime contract.
@@ -349,12 +369,14 @@ response-stream output.
   owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
-- `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
-  on authored fields that support invocation interpolation (for example
-  `workers[].modelProvider`) instead of rejecting them as invalid public enum
-  values at the JSON boundary. Keep the exact-placeholder pattern aligned with
-  the accepted OpenAPI one-of, and keep ordinary non-placeholder values on the
-  existing strict enum normalization path.
+- `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve exact
+  `${parameter}` placeholders on authored fields that support invocation
+  interpolation (for example `workers[].modelProvider`) instead of forcing them
+  through concrete provider-identity validation at the JSON boundary. Keep the
+  exact-placeholder pattern aligned with the accepted OpenAPI one-of. Concrete
+  provider values use the open `ProviderIdentity` syntax contract; built-in
+  aliases canonicalize through compatibility mapping, while syntactically valid
+  extension identities remain unchanged for registry selection.
 - `pkg/initializer/runtimeconstruction/operatordefaults/operator_defaults_runtime.go`
   is the
   startup-time runtime-validation seam for operator-defaulted model workers.

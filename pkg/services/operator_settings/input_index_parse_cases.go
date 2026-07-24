@@ -167,10 +167,10 @@ func parseInvalidWorkerPresetInputCases() []InputCase {
 			Entrypoint:  entrypointDecodeGlobalConfig,
 			Outcome:     outcomeReject,
 			Fixture:     "invalid/preset-unsupported-provider.json",
-			Description: "unsupported workerPresets[].modelProvider values are rejected",
+			Description: "malformed workerPresets[].modelProvider values are rejected",
 			ErrorFragments: []string{
 				`"build"`,
-				`"other"`,
+				`"Other_Provider"`,
 				"unsupported modelProvider",
 			},
 		},

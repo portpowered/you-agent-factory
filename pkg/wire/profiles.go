@@ -332,8 +332,18 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		clock factoryruntime.Clock,
 		provider workerprovider.Provider,
 		factory factorysessionwire.FactorySessionExecutionFactory,
+		providerIdentities factorysessions.ProviderIdentityResolver,
 	) (factorysessions.ExecutionService, error) {
-		return factorysessionwire.NewDurableExecutionRuntime(loadOperatorConfig, definition, session, root, clock, provider, factory)
+		return factorysessionwire.NewDurableExecutionRuntime(
+			loadOperatorConfig,
+			definition,
+			session,
+			root,
+			clock,
+			provider,
+			factory,
+			providerIdentities,
+		)
 	}
 }
 

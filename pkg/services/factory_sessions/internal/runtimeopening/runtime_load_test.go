@@ -10,9 +10,11 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -158,5 +160,55 @@ func TestLoadRuntimeRejectsMissingOrNilSessionLoggerFactory(t *testing.T) {
 		nil,
 	); err == nil {
 		t.Fatal("nil session logger error = nil")
+	}
+}
+
+func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T) {
+	var got factoryruntime.JavaScriptWorkerSettings
+	executionFactory := func(
+		_ string,
+		_ factorysessions.PersistencePolicy,
+		_ workerprovider.Provider,
+		_ factoryruntime.Clock,
+		_ map[string]struct{},
+		settings factoryruntime.JavaScriptWorkerSettings,
+	) (factorysessions.ExecutionService, error) {
+		got = settings
+		return nil, nil
+	}
+	_, err := NewDurableExecution(
+		func(string) (operatorconfig.Config, error) {
+			return operatorconfig.Config{
+				Defaults: operatorconfig.Defaults{WorkerModelProvider: "customer"},
+				WorkerPresets: []operatorconfig.WorkerPreset{{
+					ID: "review", ModelProvider: "agent",
+				}},
+			}, nil
+		},
+		factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
+		factorysessions.SessionRuntimeOpeningRequest{SystemConfigHome: t.TempDir()},
+		RuntimeRoot{FactoryRootDir: t.TempDir()},
+		nil,
+		nil,
+		executionFactory,
+		factorysessions.ProviderIdentityResolver(func(identity string) (string, error) {
+			switch identity {
+			case "customer":
+				return "customer.provider", nil
+			case "agent":
+				return "cursor", nil
+			default:
+				return "", errors.New("unexpected provider")
+			}
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewDurableExecution: %v", err)
+	}
+	if got.DefaultModelProvider != "customer.provider" {
+		t.Fatalf("default provider = %q, want canonical extension identity", got.DefaultModelProvider)
+	}
+	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
+		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)
 	}
 }

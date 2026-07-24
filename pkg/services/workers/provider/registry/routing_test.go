@@ -105,6 +105,7 @@ func TestCompatibilityAliasesUseRegistryIdentityAuthority(t *testing.T) {
 	}{
 		{alias: "anthropic", wantCanonical: "claude", wantRunner: "claude"},
 		{alias: workers.RunnerIDCursorCLI, wantCanonical: "cursor", wantRunner: workers.RunnerIDCursorCLI},
+		{alias: "kiro-cli", wantCanonical: "kiro", wantRunner: workers.RunnerIDKiro},
 		{alias: "openai", wantCanonical: "codex", wantRunner: workers.RunnerIDCodex},
 	}
 	for _, test := range tests {
@@ -149,7 +150,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	}
 }
 
-func TestResolveRunnerSelectionRoutesExternalIntegrationOntoConductorIdentity(t *testing.T) {
+func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 	registrations, err := BuiltInRegistrations()
 	if err != nil {
@@ -166,8 +167,12 @@ func TestResolveRunnerSelectionRoutesExternalIntegrationOntoConductorIdentity(t 
 	if err != nil {
 		t.Fatalf("ResolveRunnerSelection(external) error = %v", err)
 	}
-	if selection.RunnerID != "customer.provider" {
-		t.Fatalf("ResolveRunnerSelection(external) = %#v, want conductor identity", selection)
+	if selection.RunnerID != "customer.provider" ||
+		selection.Source != workers.RunnerSelectionSourceWorkstation {
+		t.Fatalf(
+			"ResolveRunnerSelection(external) = %#v, want canonical registered integration",
+			selection,
+		)
 	}
 	if providers.UsesNativeRunner(selection.RunnerID) {
 		t.Fatal("UsesNativeRunner(external) = true, want conductor route")
@@ -177,6 +182,10 @@ func TestResolveRunnerSelectionRoutesExternalIntegrationOntoConductorIdentity(t 
 	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)
+	}
+	if _, err := providers.RunnerID("customer"); err == nil ||
+		!strings.Contains(err.Error(), "not available through the provider-native runner path") {
+		t.Fatalf("RunnerID(external) error = %v, want native-path rejection", err)
 	}
 }
 

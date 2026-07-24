@@ -47,7 +47,7 @@ func (r *Registry) ResolveRunnerSelection(
 			isUnresolvedProviderTemplate(candidate.identity) {
 			continue
 		}
-		runnerID, err := r.RunnerID(candidate.identity)
+		runnerID, err := r.selectionRunnerID(candidate.identity)
 		if err != nil {
 			return workers.ResolvedRunnerSelection{}, err
 		}
@@ -68,31 +68,38 @@ func isUnresolvedProviderTemplate(identity string) bool {
 	return strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}")
 }
 
-// RunnerID resolves a provider canonical ID or alias to the stable execution
-// identity. Bundled providers map onto the retained native runner IDs.
-// Externally supplied selectable integrations keep their canonical identity so
-// shared orchestration can route them through the provider-neutral conductor
-// without a second registry or concrete-provider switch.
+func (r *Registry) selectionRunnerID(identity string) (string, error) {
+	entry, err := r.Lookup(identity)
+	if err != nil {
+		return "", err
+	}
+	canonical := string(entry.Identity())
+	if canonical == "cursor" {
+		return legacyCursorRunnerID, nil
+	}
+	return canonical, nil
+}
+
+// RunnerID resolves a provider canonical ID or alias to the stable native
+// runner ID retained by the current execution path. Externally supplied
+// integrations are selectable through selectionRunnerID / ResolveRunnerSelection
+// and route through the provider-neutral conductor instead.
 func (r *Registry) RunnerID(identity string) (string, error) {
 	entry, err := r.Lookup(identity)
 	if err != nil {
 		return "", err
 	}
 	canonical := string(entry.Identity())
-	switch entry.Manifest().ImplementationAvailability {
-	case ImplementationBundled:
-		if canonical == "cursor" {
-			return legacyCursorRunnerID, nil
-		}
-		return canonical, nil
-	case ImplementationExternallySupplied:
-		return canonical, nil
-	default:
+	if entry.Manifest().ImplementationAvailability != ImplementationBundled {
 		return "", fmt.Errorf(
 			"provider %q is not available through the provider-native runner path",
 			canonical,
 		)
 	}
+	if canonical == "cursor" {
+		return legacyCursorRunnerID, nil
+	}
+	return canonical, nil
 }
 
 // UsesNativeRunner reports whether the resolved identity still executes through
