@@ -19,6 +19,10 @@ type fakeWorkersPeer struct {
 	lastRequest   modelinference.Request
 	result        modelinference.Result
 	err           error
+
+	lastRuntimeBuildRequest workers.RuntimeBuildRequest
+	runtimeBuildResult      workers.RuntimeBuildResult
+	runtimeBuildErr         error
 }
 
 func (f *fakeWorkersPeer) InvokeModel(
@@ -29,6 +33,14 @@ func (f *fakeWorkersPeer) InvokeModel(
 	f.lastModelName = modelName
 	f.lastRequest = request
 	return f.result, f.err
+}
+
+func (f *fakeWorkersPeer) BuildRuntime(
+	_ context.Context,
+	request workers.RuntimeBuildRequest,
+) (workers.RuntimeBuildResult, error) {
+	f.lastRuntimeBuildRequest = request
+	return f.runtimeBuildResult, f.runtimeBuildErr
 }
 
 var _ workers.Service = (*fakeWorkersPeer)(nil)
@@ -96,4 +108,70 @@ func TestServiceRootContract_RuntimeServiceIsNotRequiredPeerAuthority(t *testing
 		t.Fatal("expected non-nil Service")
 	}
 	_ = workers.RuntimeService(nil)
+}
+
+func TestServiceRootContract_RuntimeBuildSuccessThroughSingularSeam(t *testing.T) {
+	want := workers.RuntimeBuildResult{
+		RunnerSelection: workers.ResolvedRunnerSelection{
+			RunnerID: workers.RunnerIDCodex,
+			Source:   workers.RunnerSelectionSourceFactory,
+		},
+		Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName: "writer",
+			RoleKind: workers.RuntimeBuildRoleKindWorker,
+			RunnerSelection: workers.ResolvedRunnerSelection{
+				RunnerID: workers.RunnerIDCodex,
+				Source:   workers.RunnerSelectionSourceFactory,
+			},
+		}},
+	}
+	fake := &fakeWorkersPeer{runtimeBuildResult: want}
+	var service workers.Service = fake
+
+	request := workers.RuntimeBuildRequest{
+		RunnerID: workers.RunnerIDCodex,
+		Opening: workers.RuntimeBuildOpeningOptions{
+			MockWorkers: workers.NewEmptyMockWorkersConfig(),
+		},
+		Roles: []workers.RuntimeBuildRoleRequest{{
+			Name: "writer",
+			Kind: workers.RuntimeBuildRoleKindWorker,
+		}},
+	}
+	result, err := service.BuildRuntime(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildRuntime: %v", err)
+	}
+	if result.RunnerSelection.RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("runner = %#v, want codex factory selection", result.RunnerSelection)
+	}
+	if len(result.Bindings) != 1 || result.Bindings[0].RoleName != "writer" {
+		t.Fatalf("bindings = %#v, want detached writer binding", result.Bindings)
+	}
+	if fake.lastRuntimeBuildRequest.RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("routed request = %#v, want codex", fake.lastRuntimeBuildRequest)
+	}
+}
+
+func TestServiceRootContract_RuntimeBuildTypedFailuresThroughSingularSeam(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid", err: workers.ErrInvalidRuntimeBuildRequest},
+		{name: "missing_runner", err: workers.ErrMissingRunnerSelection},
+		{name: "unknown_runner", err: workers.ErrUnknownRunnerSelection},
+		{name: "rejected", err: workers.ErrRuntimeAssemblyRejected},
+		{name: "incomplete", err: workers.ErrIncompleteRuntimeAssembly},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeWorkersPeer{runtimeBuildErr: tc.err}
+			var service workers.Service = fake
+			_, err := service.BuildRuntime(context.Background(), workers.RuntimeBuildRequest{})
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("BuildRuntime error = %v, want %v", err, tc.err)
+			}
+		})
+	}
 }
