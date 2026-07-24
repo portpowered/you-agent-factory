@@ -11,6 +11,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -30,6 +31,7 @@ type Service struct {
 	factoryroot.UnimplementedService
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	distribution      distribution.Service
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
