@@ -138,6 +138,110 @@ func TestSnapshotsPortability_CaptureValidSourcePreservesIdentity(t *testing.T) 
 	}
 }
 
+func TestSnapshotsPortability_PrepareValidPayloadYieldsPortableImportFacts(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	payload := []byte(`{
+		"name": "alpha",
+		"factoryDirectory": "/factories/alpha",
+		"futureField": {"enabled": true},
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+	request := factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload}
+
+	result, err := portability.PrepareFactorySnapshotImport(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
+	}
+	if result.Snapshot == nil {
+		t.Fatal("PrepareFactorySnapshotImport snapshot is nil")
+	}
+
+	// Public Definitions boundary success shape stays PrepareFactorySnapshotImportResult
+	// with detached FactorySnapshot + PortableFactorySnapshotFacts.
+	var bounded factorydefinitions.PrepareFactorySnapshotImportResult = result
+	if bounded.Snapshot == nil {
+		t.Fatal("PrepareFactorySnapshotImportResult.Snapshot is nil")
+	}
+	if bounded.Name != "alpha" {
+		t.Fatalf("PrepareFactorySnapshotImportResult.Name = %q, want alpha", bounded.Name)
+	}
+	if bounded.Portable.FactoryDir != "/factories/alpha" {
+		t.Fatalf("Portable.FactoryDir = %q, want /factories/alpha", bounded.Portable.FactoryDir)
+	}
+	if len(bounded.Portable.Assets) == 0 || bounded.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
+		t.Fatalf("Portable.Assets = %#v, want README asset fact", bounded.Portable.Assets)
+	}
+
+	var object map[string]any
+	if decodeErr := result.Snapshot.Decode(&object); decodeErr != nil {
+		t.Fatalf("PrepareFactorySnapshotImport decode: %v", decodeErr)
+	}
+	if object["name"] != "alpha" {
+		t.Fatalf("prepared name = %#v, want alpha", object["name"])
+	}
+	if object["factoryDirectory"] != "/factories/alpha" {
+		t.Fatalf("prepared factoryDirectory = %#v, want /factories/alpha", object["factoryDirectory"])
+	}
+	future, ok := object["futureField"].(map[string]any)
+	if !ok || future["enabled"] != true {
+		t.Fatalf("prepared futureField = %#v, want preserved unknown field", object["futureField"])
+	}
+
+	// Detached prepare must not share mutable backing with the request payload.
+	payload[2] = 'X'
+	var afterMutation map[string]any
+	if decodeErr := result.Snapshot.Decode(&afterMutation); decodeErr != nil {
+		t.Fatalf("PrepareFactorySnapshotImport decode after mutation: %v", decodeErr)
+	}
+	if afterMutation["name"] != "alpha" {
+		t.Fatalf("prepared snapshot mutated with request Payload; name = %#v", afterMutation["name"])
+	}
+}
+
+func TestSnapshotsPortability_PrepareInvalidPayloadTypedFailure(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	_, invalidErr := portability.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`["not-object"]`)},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"PrepareFactorySnapshotImport invalid-payload error = %v, want ErrInvalidFactorySnapshotPayload",
+			invalidErr,
+		)
+	}
+	if errors.Is(invalidErr, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatal("invalid prepare payload must not also match ErrUnsafeFactorySnapshotMaterialize")
+	}
+
+	_, emptyErr := portability.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`"string"`)},
+	)
+	if !errors.Is(emptyErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"PrepareFactorySnapshotImport string payload error = %v, want ErrInvalidFactorySnapshotPayload",
+			emptyErr,
+		)
+	}
+}
+
 func TestSnapshotsPortability_OwnsRootSnapshotSurfaceSuccess(t *testing.T) {
 	t.Parallel()
 
