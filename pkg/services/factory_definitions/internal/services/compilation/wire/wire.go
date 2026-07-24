@@ -7,7 +7,7 @@ import (
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service"
 )
 
-// NewService constructs the inert compilation capability for Definitions-owned
+// NewService constructs the compilation capability for Definitions-owned
 // composition. It returns only the compilation.Service contract.
 func NewService() compilation.Service {
 	return compilationservice.New()

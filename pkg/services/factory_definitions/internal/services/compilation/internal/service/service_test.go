@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -23,19 +22,55 @@ func TestCompilationShell_ImplementsSubserviceRoot(t *testing.T) {
 	if direct == nil {
 		t.Fatal("compilation New returned nil implementation")
 	}
+}
 
-	_, err := service.CompileEffectiveFactorySource(
+func TestCompilation_CompileEquivalentInputsSameEffectiveIdentity(t *testing.T) {
+	t.Parallel()
+
+	var service compilation.Service = compilationwire.NewService()
+
+	first, err := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical:  []byte(`  {"name":"alpha"}  `),
+			FactoryDir: "/factories/alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CompileEffectiveFactorySource first: %v", err)
+	}
+
+	second, err := service.CompileEffectiveFactorySource(
 		context.Background(),
 		factorydefinitions.CompileEffectiveFactorySourceRequest{
 			Canonical:  []byte(`{"name":"alpha"}`),
 			FactoryDir: "/factories/alpha",
 		},
 	)
-	if !errors.Is(err, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+	if err != nil {
+		t.Fatalf("CompileEffectiveFactorySource second: %v", err)
+	}
+
+	if first.Effective.ContentIdentity == "" {
+		t.Fatal("CompileEffectiveFactorySource ContentIdentity is empty")
+	}
+	if first.Effective.ContentIdentity != second.Effective.ContentIdentity {
 		t.Fatalf(
-			"shell CompileEffectiveFactorySource error = %v, want %v",
-			err,
-			factorydefinitions.ErrInvalidAuthoredFactorySource,
+			"equivalent inputs produced different ContentIdentity: %q vs %q",
+			first.Effective.ContentIdentity,
+			second.Effective.ContentIdentity,
+		)
+	}
+	if first.Effective.FactoryDir != "/factories/alpha" ||
+		first.Effective.RuntimeBaseDir != "/factories/alpha" {
+		t.Fatalf("CompileEffectiveFactorySource effective = %#v, want alpha identity facts", first.Effective)
+	}
+	if second.Effective.FactoryDir != first.Effective.FactoryDir ||
+		second.Effective.RuntimeBaseDir != first.Effective.RuntimeBaseDir {
+		t.Fatalf(
+			"equivalent inputs produced different directory facts: first=%#v second=%#v",
+			first.Effective,
+			second.Effective,
 		)
 	}
 }
