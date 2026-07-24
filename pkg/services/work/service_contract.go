@@ -36,6 +36,10 @@ type SubmittedFileReader func(string) ([]byte, error)
 // Published slices (admission, content staging/materialization, state access,
 // and invocation/return policy) are additive methods on this interface and use
 // plain Work-owned request, result, value, and typed-error contracts.
+// These published slices are the sealed IMP-WORK unlock surface: peers depend
+// on this one root rather than Work implementation packages. Nested IMP-WORK
+// subservice moves, Wire/CLI-manifest/provider-conductor ownership changes, and
+// OpenAPI package-motion edits remain out of scope for the root-contract packet.
 // Runtime state and event queries belong to Factory Runtime and Recordings.
 type Service interface {
 	// SubmitWorkRequestForSession is the published admission slice. Peers submit
