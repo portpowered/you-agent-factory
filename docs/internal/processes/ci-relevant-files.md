@@ -63,10 +63,17 @@
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
   Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`. Both commands serialize Go package coverage
-  writers before canonicalizing repeated source blocks into one sorted profile;
-  keep that ordering so concurrent packages cannot corrupt the shared profile
-  and the uploaded artifact matches the totals enforced by the lane.
+  `make test-functional-coverage`. `make test-functional-coverage` always runs
+  `functional-boundary-check` first so the required Backend Functional Coverage
+  CI lane cannot succeed without a successful boundary check; the unit coverage
+  lane stays independent of that prerequisite. Both coverage commands serialize
+  Go package coverage writers before canonicalizing repeated source blocks into
+  one sorted profile; keep that ordering so concurrent packages cannot corrupt
+  the shared profile and the uploaded artifact matches the totals enforced by
+  the lane. Prove the functional boundary-before-coverage composition with
+  stubbed Make wrapper smoke under
+  `tests/functional/smoke/functional_coverage_boundary_smoke_test.go` rather
+  than the full functional suite.
   The default functional and functional-coverage lanes share dynamic package
   selection through `internal/testlanes`: retain execution of the complete
   `go list ./tests/functional/...` result, the shared-support exclusion, and
@@ -112,8 +119,10 @@
   `tests/functional/smoke/functional_test_viz_fail_closed_smoke_test.go`
   rather than the full functional suite. Prove rendering with focused
   package/cmd golden fixtures under `internal/functionaltestviz/testdata/`.
-  Later FND-005 cells still own required-CI boundary enforcement, artifact
-  uploads, and Makefile wiring contract proofs.
+  Required CI Backend Functional Coverage already makes
+  `functional-boundary-check` unavoidable through
+  `make test-functional-coverage`. Later FND-005 cells still own artifact
+  uploads and Makefile wiring contract proofs.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions

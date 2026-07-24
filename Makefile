@@ -414,7 +414,12 @@ test-coverage-go:
 test-unit-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
 
+# test-functional-coverage always runs functional-boundary-check first so the
+# required CI Backend Functional Coverage lane (and any local/alias caller of
+# this target) cannot succeed without a successful boundary check. Boundary
+# failures exit non-zero before gocoveragecheck starts.
 test-functional-coverage:
+	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
 
 script-timeout-companion-smoke-100:

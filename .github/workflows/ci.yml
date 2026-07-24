@@ -1051,6 +1051,9 @@ jobs:
           if [[ "${{ matrix.suite }}" == "unit" ]]; then
             GO_UNIT_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-unit-coverage 2>&1 | tee "$artifact_root/command.log"
           else
+            # make test-functional-coverage unavoidably runs functional-boundary-check
+            # before the functional coverage suite; do not replace this with a bare
+            # gocoveragecheck invocation that would skip the boundary gate.
             GO_FUNCTIONAL_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-functional-coverage 2>&1 | tee "$artifact_root/command.log"
           fi
           go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
