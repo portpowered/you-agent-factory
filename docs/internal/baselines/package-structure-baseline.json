@@ -1704,6 +1704,61 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_checkpoint_contract.go",
+      "target": "ApplyCaptureCheckpoint"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_checkpoint_contract.go",
+      "target": "ApplyLoadCheckpoint"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_checkpoint_contract.go",
+      "target": "ApplyRestoreCheckpoint"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_control_contract.go",
+      "target": "ApplyMoveWork"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_control_contract.go",
+      "target": "ApplyPause"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_control_contract.go",
+      "target": "ApplyResume"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_control_contract.go",
+      "target": "ApplyTerminate"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_control_contract.go",
+      "target": "ApplyWaitToComplete"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_dispatch_plan_contract.go",
+      "target": "ApplyAcceptDispatchResult"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_dispatch_plan_contract.go",
+      "target": "ApplyPlanDispatch"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/root_observation_contract.go",
+      "target": "ApplyObserve"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/runtime_metrics_sink.go",
       "target": "NewRuntimeMetricsSink"
     },
@@ -2400,7 +2455,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
@@ -2455,27 +2510,27 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/hosted_logic",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/scripts",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-unexpected-directory",

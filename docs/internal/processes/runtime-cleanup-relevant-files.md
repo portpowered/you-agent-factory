@@ -763,3 +763,14 @@ and branch on root typed errors (`ErrCheckpointNotFound`, `ErrCorruptCheckpoint`
 Petri marking snapshots or JavaScript checkpoint strategy types as peer-facing
 vocabulary, and do not claim Recordings immutable history ownership from this
 slice.
+
+Sealed CTR-RUN root invariants for IMP-RUN unlock live in
+`root_contract_seal_characterization_test.go`: one peer-shaped `Service`
+consumer reaches control, observation, dispatch-plan, and checkpoint slices
+through the singular root and asserts representative success plus typed
+failures using only the published root package (no `factory_runtime/internal`,
+Petri, or JavaScript strategy imports). Concrete `factoryImpl` entrypoints for
+those slices live in `runtime/root_contract_service.go` (kept out of
+`runtime/factory.go` to preserve the backend-size file limit). Nested IMP-RUN
+moves, Wire/root, CLI-manifest, provider-conductor, Workers construction, and
+OpenAPI package-motion edits remain outside this seal.
