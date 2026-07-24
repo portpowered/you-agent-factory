@@ -479,6 +479,34 @@ func (m *MockFactory) Observe(_ context.Context, _ petri.ObserveRequest) (petri.
 	return petri.ObserveResult{}, nil
 }
 
+func (m *MockFactory) PlanDispatch(_ context.Context, req petri.PlanDispatchRequest) (petri.PlanDispatchResult, error) {
+	if m == nil {
+		return petri.PlanDispatchResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.PlanDispatchResult{}, petri.ErrNotRunning
+	}
+	return petri.PlanDispatchResult{
+		Outcome:       petri.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+
+func (m *MockFactory) AcceptDispatchResult(_ context.Context, req petri.AcceptDispatchResultRequest) (petri.AcceptDispatchResultResult, error) {
+	if m == nil {
+		return petri.AcceptDispatchResultResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.AcceptDispatchResultResult{}, petri.ErrNotRunning
+	}
+	return petri.AcceptDispatchResultResult{
+		Outcome:       petri.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
 		return work.OperatorMoveResult{}, m.MoveWorkErr

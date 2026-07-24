@@ -86,6 +86,19 @@ type Service interface {
 	// observation failures. Peers must not treat GetEngineStateSnapshot as the
 	// source of truth for this published slice.
 	Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error)
+
+	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
+	// planning/outbox vocabulary. Workers remains the execution owner. Returns
+	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed
+	// dispatch-plan failures. Nested IMP-RUN packets own durable outbox wiring.
+	PlanDispatch(ctx context.Context, req PlanDispatchRequest) (PlanDispatchResult, error)
+
+	// AcceptDispatchResult accepts or retires a correlated worker result against
+	// a previously planned dispatch intent, including idempotent duplicate
+	// handling vocabulary on success. Returns ErrUnknownDispatchCorrelation,
+	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
+	// dispatch-plan failures.
+	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
 }
 
 // Factory extends Service with a blocking run loop for hosting-owned engine

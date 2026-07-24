@@ -25,4 +25,16 @@ var (
 	// ErrInvalidObservationScope indicates the observation request asked for a
 	// scope outside the published orchestration-neutral observation vocabulary.
 	ErrInvalidObservationScope = errors.New("factory runtime invalid observation scope")
+
+	// ErrDuplicateDispatchIntent indicates a plan/publish request conflicted with
+	// an existing dispatch intent that is not eligible for idempotent re-delivery.
+	ErrDuplicateDispatchIntent = errors.New("factory runtime duplicate dispatch intent")
+
+	// ErrUnknownDispatchCorrelation indicates accept/retire targeted a correlation
+	// that is not present in the Runtime dispatch outbox.
+	ErrUnknownDispatchCorrelation = errors.New("factory runtime unknown dispatch correlation")
+
+	// ErrInvalidDispatchResultBoundary indicates the correlated worker result fell
+	// outside the published result-boundary vocabulary peers may submit.
+	ErrInvalidDispatchResultBoundary = errors.New("factory runtime invalid dispatch result boundary")
 )

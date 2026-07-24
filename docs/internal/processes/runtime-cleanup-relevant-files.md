@@ -738,3 +738,15 @@ Plain observation request/result/value vocabulary lives in
 `ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
 legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
 JavaScript runtime-record types as the peer source of truth for this slice.
+
+Plain dispatch-plan request/result vocabulary lives in
+`root_dispatch_plan_contract.go` (`PlanDispatchRequest`/`PlanDispatchResult`,
+`AcceptDispatchResultRequest`/`AcceptDispatchResultResult`,
+`DispatchPlanOutcome` including `DUPLICATE_IDEMPOTENT`,
+`DispatchResultOutcome`, plus `ApplyPlanDispatch` /
+`ApplyAcceptDispatchResult`). Peers call those helpers or `Service` methods
+(`PlanDispatch`, `AcceptDispatchResult`) and branch on root typed errors
+(`ErrDuplicateDispatchIntent`, `ErrUnknownDispatchCorrelation`,
+`ErrInvalidDispatchResultBoundary`, plus `ErrNotRunning`/`ErrNotFound`). Do not
+expose Petri transition objects or Workers construction/implementation types,
+and do not require a separate public Dispatch Service for this slice.

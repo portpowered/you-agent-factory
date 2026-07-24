@@ -115,6 +115,20 @@ func (f *lifecycleObserverFactory) Terminate(context.Context, factory.TerminateR
 func (f *lifecycleObserverFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
 	return factory.ObserveResult{}, nil
 }
+func (f *lifecycleObserverFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{
+		Outcome:       factory.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *lifecycleObserverFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	return factory.AcceptDispatchResultResult{
+		Outcome:       factory.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
 func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, nil
 }

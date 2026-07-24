@@ -48,6 +48,12 @@ func (s *peerRootService) GetEngineStateSnapshot(context.Context) (*factoryrunti
 func (s *peerRootService) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{}, nil
 }
+func (s *peerRootService) PlanDispatch(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+	return factoryruntime.PlanDispatchResult{Outcome: factoryruntime.DispatchPlanOutcomeAccepted}, nil
+}
+func (s *peerRootService) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+	return factoryruntime.AcceptDispatchResultResult{Outcome: factoryruntime.DispatchPlanOutcomeRetired}, nil
+}
 func (s *peerRootService) MoveWork(
 	context.Context,
 	string,

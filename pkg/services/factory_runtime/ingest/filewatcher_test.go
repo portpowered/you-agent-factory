@@ -71,6 +71,20 @@ func (m *mockFactory) Terminate(_ context.Context, _ factory.TerminateRequest) (
 func (m *mockFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
 	return factory.ObserveResult{}, nil
 }
+func (m *mockFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{
+		Outcome:       factory.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (m *mockFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	return factory.AcceptDispatchResultResult{
+		Outcome:       factory.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

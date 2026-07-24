@@ -149,6 +149,20 @@ func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.Terminate
 func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{}, nil
 }
+func (f *testFactoryRuntime) PlanDispatch(_ context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+	return factoryruntime.PlanDispatchResult{
+		Outcome:       factoryruntime.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *testFactoryRuntime) AcceptDispatchResult(_ context.Context, req factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+	return factoryruntime.AcceptDispatchResultResult{
+		Outcome:       factoryruntime.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
 func (f *testFactoryRuntime) GetFactoryEvents(context.Context) ([]factorydefinitions.FactoryEvent, error) {
 	return nil, nil
 }

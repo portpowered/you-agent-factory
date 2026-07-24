@@ -676,6 +676,47 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	return factory.ObserveResult{Observation: projectRootObservation(snap, req.Scope)}, nil
 }
 
+// PlanDispatch publishes a stable dispatch intent through the root dispatch-plan
+// contract. Nested IMP-RUN packets own durable outbox wiring; this method maps
+// lifecycle availability onto typed root errors for compile continuity.
+func (f *factoryImpl) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		return factory.PlanDispatchResult{
+			Outcome:       factory.DispatchPlanOutcomeAccepted,
+			DispatchID:    req.DispatchID,
+			CorrelationID: req.CorrelationID,
+		}, nil
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return factory.PlanDispatchResult{}, factory.ErrNotRunning
+	default:
+		return factory.PlanDispatchResult{}, factory.ErrNotRunning
+	}
+}
+
+// AcceptDispatchResult accepts or retires a correlated worker result through the
+// root dispatch-plan contract. Nested IMP-RUN packets own durable outbox wiring.
+func (f *factoryImpl) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		return factory.AcceptDispatchResultResult{
+			Outcome:       factory.DispatchPlanOutcomeRetired,
+			DispatchID:    req.DispatchID,
+			CorrelationID: req.CorrelationID,
+		}, nil
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return factory.AcceptDispatchResultResult{}, factory.ErrNotRunning
+	default:
+		return factory.AcceptDispatchResultResult{}, factory.ErrNotRunning
+	}
+}
+
 // GetEngineStateSnapshot returns the aggregate observability snapshot for
 // service-facing callers.
 func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

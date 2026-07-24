@@ -125,6 +125,26 @@ func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveReques
 	return result, nil
 }
 
+// PlanDispatch publishes a stable dispatch intent through the published Factory
+// Runtime root dispatch-plan contract.
+func (fs *SessionRuntime) PlanDispatch(ctx context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.PlanDispatchResult{}, factory.ErrNotFound
+	}
+	return runtime.PlanDispatch(ctx, req)
+}
+
+// AcceptDispatchResult accepts or retires a correlated worker result through the
+// published Factory Runtime root dispatch-plan contract.
+func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.AcceptDispatchResultResult{}, factory.ErrNotFound
+	}
+	return runtime.AcceptDispatchResult(ctx, req)
+}
+
 // GetFactoryEvents returns the canonical factory event history.
 func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
 	runtime := fs.currentRuntimeService()
