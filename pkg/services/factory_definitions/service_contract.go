@@ -40,6 +40,12 @@ type Service interface {
 	// Validate slice: structural/pre-persist and effective-definition validation.
 	ValidateStructuralFactoryDefinition(context.Context, ValidateStructuralFactoryDefinitionRequest) (ValidateStructuralFactoryDefinitionResult, error)
 	ValidateEffectiveFactoryDefinition(context.Context, ValidateEffectiveFactoryDefinitionRequest) (ValidateEffectiveFactoryDefinitionResult, error)
+
+	// Snapshot slice: capture, import/prepare, and materialize of detached
+	// Factory snapshots and bundled assets.
+	CaptureFactorySnapshot(context.Context, CaptureFactorySnapshotRequest) (CaptureFactorySnapshotResult, error)
+	PrepareFactorySnapshotImport(context.Context, PrepareFactorySnapshotImportRequest) (PrepareFactorySnapshotImportResult, error)
+	MaterializeFactorySnapshot(context.Context, MaterializeFactorySnapshotRequest) (MaterializeFactorySnapshotResult, error)
 }
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
@@ -323,6 +329,70 @@ type ValidateEffectiveFactoryDefinitionRequest struct {
 // ValidationResult with no error findings for valid effective definitions.
 type ValidateEffectiveFactoryDefinitionResult struct {
 	Validation ValidationResult
+}
+
+// ErrInvalidFactorySnapshotPayload reports that snapshot bytes were not a
+// detached Factory object peers can import or capture.
+var ErrInvalidFactorySnapshotPayload = errors.New("invalid factory snapshot payload")
+
+// ErrUnsafeFactorySnapshotMaterialize reports that materialize inputs were
+// incomplete or unsafe (for example missing target identity or path escape).
+var ErrUnsafeFactorySnapshotMaterialize = errors.New("unsafe or incomplete factory snapshot materialize")
+
+// CaptureFactorySnapshotRequest selects one authored/effective Factory source
+// for detached snapshot capture. Callers do not supply snapshotcapture or
+// Recordings/Runtime implementation types.
+type CaptureFactorySnapshotRequest struct {
+	FactoryDir string
+	Canonical  []byte
+	Name       string
+}
+
+// CaptureFactorySnapshotResult carries one detached FactorySnapshot peers can
+// consume without importing snapshotcapture implementation types.
+type CaptureFactorySnapshotResult struct {
+	Snapshot *FactorySnapshot
+}
+
+// PrepareFactorySnapshotImportRequest carries raw snapshot payload bytes for
+// import/prepare. Callers do not supply boundary codecs as request fields.
+type PrepareFactorySnapshotImportRequest struct {
+	Payload []byte
+}
+
+// PrepareFactorySnapshotImportResult carries Definitions-owned portable import
+// success facts and the detached snapshot value.
+type PrepareFactorySnapshotImportResult struct {
+	Snapshot *FactorySnapshot
+	Name     string
+	Portable PortableFactorySnapshotFacts
+}
+
+// MaterializeFactorySnapshotRequest materializes one detached snapshot and its
+// bundled assets under a target directory.
+type MaterializeFactorySnapshotRequest struct {
+	TargetDir string
+	Snapshot  *FactorySnapshot
+}
+
+// MaterializeFactorySnapshotResult carries Definitions-owned portable
+// materialize success facts without peer storage types.
+type MaterializeFactorySnapshotResult struct {
+	TargetDir string
+	Portable  PortableFactorySnapshotFacts
+}
+
+// PortableFactorySnapshotFacts are detached portability identity/asset facts
+// peers can consume without importing bundled-asset implementation types.
+type PortableFactorySnapshotFacts struct {
+	FactoryDir string
+	Assets     []PortableSnapshotAssetFact
+}
+
+// PortableSnapshotAssetFact identifies one materialized or imported portable
+// bundled asset relative to the Factory root.
+type PortableSnapshotAssetFact struct {
+	TargetPath string
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped

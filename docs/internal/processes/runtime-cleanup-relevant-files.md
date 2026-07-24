@@ -662,11 +662,16 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). Avoid
-adding a new root Go file when the package is already over the file-count
-baseline; grow `service_contract.go` and `service_contract_test.go` instead,
-and ratchet `backend-package-file-count.json` only for unavoidable prior
-growth.
+with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+slices stay on the singular `Service` via `CaptureFactorySnapshot`,
+`PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
+detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
+snapshotcapture or bundled-asset implementation types); publish distinct
+`ErrInvalidFactorySnapshotPayload` vs `ErrUnsafeFactorySnapshotMaterialize`.
+Avoid adding a new root Go file when the package is already over the
+file-count baseline; grow `service_contract.go` and
+`service_contract_test.go` instead, and ratchet
+`backend-package-file-count.json` only for unavoidable prior growth.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root

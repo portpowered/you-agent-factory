@@ -303,6 +303,32 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 	return factoryroot.ValidateEffectiveFactoryDefinitionResult{}, factoryroot.ErrInvalidFactoryDefinitionPayload
 }
 
+// CaptureFactorySnapshot satisfies the root snapshot slice. Nested
+// snapshotcapture wiring remains an IMP-DEF concern; this method keeps the
+// root Service assignable.
+func (s *Service) CaptureFactorySnapshot(
+	context.Context,
+	factoryroot.CaptureFactorySnapshotRequest,
+) (factoryroot.CaptureFactorySnapshotResult, error) {
+	return factoryroot.CaptureFactorySnapshotResult{}, factoryroot.ErrInvalidFactorySnapshotPayload
+}
+
+// PrepareFactorySnapshotImport satisfies the root snapshot slice.
+func (s *Service) PrepareFactorySnapshotImport(
+	context.Context,
+	factoryroot.PrepareFactorySnapshotImportRequest,
+) (factoryroot.PrepareFactorySnapshotImportResult, error) {
+	return factoryroot.PrepareFactorySnapshotImportResult{}, factoryroot.ErrInvalidFactorySnapshotPayload
+}
+
+// MaterializeFactorySnapshot satisfies the root snapshot slice.
+func (s *Service) MaterializeFactorySnapshot(
+	context.Context,
+	factoryroot.MaterializeFactorySnapshotRequest,
+) (factoryroot.MaterializeFactorySnapshotResult, error) {
+	return factoryroot.MaterializeFactorySnapshotResult{}, factoryroot.ErrUnsafeFactorySnapshotMaterialize
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

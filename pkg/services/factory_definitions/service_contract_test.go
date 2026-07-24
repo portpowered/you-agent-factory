@@ -300,6 +300,77 @@ func (fakeDefinitionsPeer) ValidateEffectiveFactoryDefinition(
 	}, nil
 }
 
+func (p fakeDefinitionsPeer) CaptureFactorySnapshot(
+	_ context.Context,
+	request factorydefinitions.CaptureFactorySnapshotRequest,
+) (factorydefinitions.CaptureFactorySnapshotResult, error) {
+	canonical := strings.TrimSpace(string(request.Canonical))
+	if canonical == "" || canonical == "{" || !strings.HasPrefix(canonical, "{") {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	name := request.Name
+	if name == "" {
+		name = "alpha"
+	}
+	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"name":             name,
+		"factoryDirectory": request.FactoryDir,
+	})
+	if err != nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	return factorydefinitions.CaptureFactorySnapshotResult{Snapshot: snapshot}, nil
+}
+
+func (p fakeDefinitionsPeer) PrepareFactorySnapshotImport(
+	_ context.Context,
+	request factorydefinitions.PrepareFactorySnapshotImportRequest,
+) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
+	payload := strings.TrimSpace(string(request.Payload))
+	if payload == "" || payload == "{" || !strings.HasPrefix(payload, "{") {
+		return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"name": "alpha",
+	})
+	if err != nil {
+		return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	factoryDir := p.authoredFactoryDir
+	if factoryDir == "" {
+		factoryDir = "/factories/alpha"
+	}
+	return factorydefinitions.PrepareFactorySnapshotImportResult{
+		Snapshot: snapshot,
+		Name:     "alpha",
+		Portable: factorydefinitions.PortableFactorySnapshotFacts{
+			FactoryDir: factoryDir,
+			Assets: []factorydefinitions.PortableSnapshotAssetFact{
+				{TargetPath: "factory/docs/README.md"},
+			},
+		},
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) MaterializeFactorySnapshot(
+	_ context.Context,
+	request factorydefinitions.MaterializeFactorySnapshotRequest,
+) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
+	targetDir := strings.TrimSpace(request.TargetDir)
+	if targetDir == "" || request.Snapshot == nil || strings.Contains(targetDir, "..") {
+		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
+	}
+	return factorydefinitions.MaterializeFactorySnapshotResult{
+		TargetDir: targetDir,
+		Portable: factorydefinitions.PortableFactorySnapshotFacts{
+			FactoryDir: targetDir,
+			Assets: []factorydefinitions.PortableSnapshotAssetFact{
+				{TargetPath: "factory/docs/README.md"},
+			},
+		},
+	}, nil
+}
+
 func TestRootService_FakePeerReadPath_TypedNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -684,5 +755,114 @@ func TestRootService_ValidateSlice_TypedInvalidPayloadAndFindings(t *testing.T) 
 	}
 	if !hasErrorFinding {
 		t.Fatal("FactoryDefinitionValidationFailure must carry at least one error-severity finding")
+	}
+}
+
+func TestRootService_SnapshotSlice_CaptureAndImportMaterializeSuccess(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{
+		authoredFactoryDir: "/factories/alpha",
+	}
+	payload := []byte(`{"name":"alpha"}`)
+
+	captured, err := service.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{
+			FactoryDir: "/factories/alpha",
+			Canonical:  payload,
+			Name:       "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot: %v", err)
+	}
+	if captured.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	}
+	var capturedObject map[string]any
+	if decodeErr := captured.Snapshot.Decode(&capturedObject); decodeErr != nil {
+		t.Fatalf("CaptureFactorySnapshot decode: %v", decodeErr)
+	}
+	if capturedObject["name"] != "alpha" {
+		t.Fatalf("CaptureFactorySnapshot name = %#v, want alpha", capturedObject["name"])
+	}
+
+	imported, err := service.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
+	}
+	if imported.Snapshot == nil || imported.Name != "alpha" {
+		t.Fatalf("PrepareFactorySnapshotImport result = %#v, want alpha snapshot facts", imported)
+	}
+	if imported.Portable.FactoryDir != "/factories/alpha" || len(imported.Portable.Assets) == 0 {
+		t.Fatalf("PrepareFactorySnapshotImport portable = %#v, want portable success facts", imported.Portable)
+	}
+
+	materialized, err := service.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "/factories/alpha",
+			Snapshot:  imported.Snapshot,
+		},
+	)
+	if err != nil {
+		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+	}
+	if materialized.TargetDir != "/factories/alpha" ||
+		materialized.Portable.FactoryDir != "/factories/alpha" ||
+		len(materialized.Portable.Assets) == 0 {
+		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
+	}
+}
+
+func TestRootService_SnapshotSlice_TypedInvalidPayloadAndUnsafeMaterialize(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{}
+
+	_, invalidErr := service.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`["not-object"]`)},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"PrepareFactorySnapshotImport invalid-payload error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidFactorySnapshotPayload,
+		)
+	}
+
+	_, captureInvalidErr := service.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{Canonical: []byte(`"string"`)},
+	)
+	if !errors.Is(captureInvalidErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"CaptureFactorySnapshot invalid-payload error = %v, want %v",
+			captureInvalidErr,
+			factorydefinitions.ErrInvalidFactorySnapshotPayload,
+		)
+	}
+
+	_, unsafeErr := service.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "../outside",
+			Snapshot:  nil,
+		},
+	)
+	if !errors.Is(unsafeErr, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatalf(
+			"MaterializeFactorySnapshot unsafe error = %v, want %v",
+			unsafeErr,
+			factorydefinitions.ErrUnsafeFactorySnapshotMaterialize,
+		)
+	}
+	if errors.Is(unsafeErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatal("unsafe materialize must not also match ErrInvalidFactorySnapshotPayload")
 	}
 }
