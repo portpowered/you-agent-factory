@@ -64,12 +64,16 @@ Implement new package-shape enforcement in this order:
    generated OpenAPI contracts, but does not implement service-specific
    transformation or service behavior. Apply the same ownership model to CLI
    and MCP adapters as those migrations are prioritized.
-4. **Functional tests use the feature-oriented customer-boundary layout.** New
-   functional tests live under `tests/functional/<feature-set>/<protocol>` and
-   use `root.BuildProcess`, `Process.Execute`, public HTTP, or public MCP. The
-   catch-all `tests/functional/runtime_api` package is deprecated: prohibit new
-   files and scenarios there, record its current files as deletion-only debt,
-   and migrate each scenario to the owning feature/protocol package.
+4. **Functional tests use the domain-mirrored customer-boundary layout.** New
+   functional tests live under `tests/functional/<domain>/<subsection>/...` and
+   use `root.BuildProcess`, `Process.Execute`, public HTTP, or public MCP.
+   Domain nouns own domain proofs; `transport` owns transport mechanics only.
+   There is no durable `features/` wrapper and no transport-first ownership for
+   domain behavior. The catch-all `tests/functional/runtime_api` package is
+   migration-only deletion debt: prohibit new files and scenarios there, record
+   its current files as deletion-only debt, and migrate each scenario to its
+   owning domain/subsection package. `tests/functional/internal/support` remains
+   the only shared harness exception.
 
 Each new check should initially compare findings with an exact, deletion-only
 nonconformance ledger. New findings, increased occurrences, and stale ledger
@@ -397,40 +401,115 @@ the functioanl tests call nito the root.go and instantiate the entire internal b
 
 ## structure
 
-tests/functional/<feature-set>/my_test.go
+Functional scenario sources **MUST** live under domain nouns that match the
+product and code:
 
-i.e.
-we want to implement dynamic workflows
+```text
+tests/functional/<domain>/<subsection>/...
+```
 
-tests/functional/dynamic_workflows/http/start_test.go
-tests/functional/dynamic_workflows/http/stop_test.go
-tests/functional/dynamic_workflows/http/measures_and_operations_test.go
-tests/functional/dynamic_workflows/cli/run_command.go
-tests/functional/dynamic_workflows/mcp/create_session.go
-tests/functional/dynamic_workflows/cross/build.go
+There is no durable `features/` wrapper and no transport-first ownership for
+domain behavior. `transport` owns transport mechanics only (CLI/HTTP/MCP
+process, routing, content types, protocol errors, and thin wiring). Domain
+proofs live under their domain nouns even when the scenario enters through a
+transport surface.
 
-and so on and so forth
+Intended domain tree:
+
+```text
+tests/functional/
+  transport/
+    cli/
+    http/
+    mcp/
+  workers/
+    script/
+    inference/
+      <provider>/
+    mock/
+  orchestration/
+    javascript/
+    petri/
+  workstations/
+    execution/
+    cron/
+    repeater/
+    poller/
+    watcher/
+  work/
+    submission/
+    relationships/
+    routing/
+    recovery/
+    visualization/
+  sessions/
+    lifecycle/
+    controls/
+    execution/
+    restart/
+  factory/
+    definitions/
+    packaged/
+    current/
+  provider_sessions/
+    details/
+    association/
+  events/
+    factory_events/
+    response_events/
+    replay/
+  models/
+  guards/
+  resources/
+  observability/
+    logging/
+    metrics/
+  product/
+    docs/
+    dashboard/
+  resilience/
+    process/
+    batch/
+    platform/
+  internal/
+    support/             # only shared harness exception
+```
+
+Examples:
+
+```text
+tests/functional/workers/script/execution_failure_test.go
+tests/functional/orchestration/javascript/composition_run_test.go
+tests/functional/sessions/controls/pause_resume_test.go
+tests/functional/transport/cli/parameters/flag_parsing_test.go
+```
+
+Historical catch-alls such as `smoke`, `workflow`, and other non-domain roots
+are not durable owners for new scenarios. Place new coverage under an approved
+domain/subsection path instead.
 
 ### deprecated `runtime_api` layout
 
-`tests/functional/runtime_api` is a migration-only catch-all and is not a
-durable feature owner. Do not add new test files, helpers, or scenarios there.
+`tests/functional/runtime_api` is migration-only deletion debt and is not a
+durable domain owner. Do not add new test files, helpers, or scenarios there.
 Move each existing scenario to:
 
 ```text
-tests/functional/<feature-set>/<protocol>/<behavior>_test.go
+tests/functional/<domain>/<subsection>/<behavior>_test.go
 ```
 
-Use `cross` when one customer scenario intentionally spans multiple public
-protocols. Shared functional process/edge helpers remain under the approved
-`tests/functional/internal/support` boundary and must not construct product
-services.
+When a scenario truly spans domains and has no primary owner, place it under
+the smallest primary domain and name the file for the secondary concern, or use
+a local `cross/` subsection only when necessary. Do not create a generic parity
+bucket. Shared functional process/edge helpers remain under the approved
+`tests/functional/internal/support` boundary—the only shared harness
+exception—and must not construct product services.
 
 The enforcement check must record the current `runtime_api` file/scenario set
 as exact deletion-only debt. A new path or scenario is blocking; removed or
 moved entries are stale and must be deleted from the ledger. Renaming a test
 inside `runtime_api` is not conformance—the destination must have a durable
-feature owner.
+domain/subsection owner.
 
 ## density
 
@@ -444,8 +523,8 @@ we have these as many as possible since they test system flows the best.
 | Functional actions enter through `Process.Execute`, public HTTP, or public MCP. | Selected forbidden imports, calls, fields, and handwritten transport-construction rules. | **Partial** | Add a generic rule preventing direct service method calls in functional test files, except exact edge fakes and generated public clients. |
 | Functional tests override external effects only through `edges.Edges`. | Functional process-edge scans and forbidden configuration-field checks. | **Partial** | Maintain a complete typed edge inventory and reject newly added internal service/factory overrides. |
 | Functional tests do not import service implementations, Wire, Initializer, runtime scopes, replay projections, or internal orchestration. | `functionalboundarycheck` plus `pkgboundarycheck` test/import rules. | **Partial** | The forbidden import lists are explicit. Apply the generic service-owner rule and permit only root contracts, edges, and generated public clients. |
-| Functional tests use `tests/functional/<feature-set>/<subsection>` and have a durable feature owner. | `make pkg-structure` rejects new shallow Go sources and records the current shallow paths as exact deletion-only debt. | **Enforced** | Burn down the baseline by moving each source to its owning subsection; `internal` support is the explicit non-scenario exception. |
-| `tests/functional/runtime_api` receives no new files or scenarios and converges to deletion. | `make pkg-structure` records both the exact Go-file inventory and exact `Test*` scenario inventory. | **Enforced** | Move files and scenarios to feature/subsection owners and delete stale baseline entries. |
+| Functional tests use `tests/functional/<domain>/<subsection>/...` under approved domain nouns and have a durable domain owner. | `make pkg-structure` rejects new shallow Go sources and records the current shallow paths as exact deletion-only debt. | **Enforced** | Burn down the baseline by moving each source to its owning domain/subsection; `internal/support` is the only shared harness exception. |
+| `tests/functional/runtime_api` receives no new files or scenarios and converges to deletion. | `make pkg-structure` records both the exact Go-file inventory and exact `Test*` scenario inventory. | **Enforced** | Move files and scenarios to domain/subsection owners and delete stale baseline entries. |
 | `functional-boundary-check` is merge-blocking. | `make test-functional` runs it. The CI functional coverage lane does not call that Make target directly. | **Missing** | Add it to `make verify-lint` or invoke it from the required CI functional coverage path. |
 
 # integration tests

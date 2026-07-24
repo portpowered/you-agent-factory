@@ -243,11 +243,19 @@ Rules:
   **MUST** use public CLI, HTTP, MCP, Factory Session, Work, and Factory Event
   contracts or observations made by the injected external-effect edge.
 - Functional test sources **MUST** live under
-  `tests/functional/<feature>/<subsection>`. `tests/functional/internal` is the
-  explicit support-code exception. The migration-only
-  `tests/functional/runtime_api` package is deprecated and **MUST NOT** receive
-  new files or scenarios; its exact file and `Test*` inventory is deletion-only
-  debt enforced by `make pkg-structure`.
+  `tests/functional/<domain>/<subsection>/...`, where `<domain>` is a durable
+  product-domain noun such as `transport`, `workers`, `orchestration`,
+  `workstations`, `work`, `sessions`, `factory`, `provider_sessions`, `events`,
+  `models`, `guards`, `resources`, `observability`, `product`, or `resilience`.
+  There is no durable `features/` wrapper and no transport-first ownership for
+  domain behavior: `transport` owns transport mechanics only, and domain proofs
+  live under their domain nouns even when the scenario enters through CLI,
+  HTTP, or MCP. `tests/functional/internal/support` is the only shared harness
+  exception and is not a scenario owner. The migration-only
+  `tests/functional/runtime_api` package is deletion-only debt and **MUST NOT**
+  receive new files or scenarios; its exact file and `Test*` inventory is
+  enforced by `make pkg-structure`. Historical catch-alls such as `smoke` and
+  `workflow` are not durable owners for new scenarios.
 - Stress tests **SHOULD** exist where concurrency, queues, retries, watchers, or scheduler behavior create risk.
 - Contract tests **SHOULD** protect generated surfaces, schema completeness, and compatibility boundaries.
 - Slow tests **MUST** justify their cost by protecting a real regression class.
