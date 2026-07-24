@@ -139,7 +139,7 @@ type sealedSuccessExpectations struct {
 	infer   models.LocalInvocationResult
 }
 
-func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+func assertSealedCatalogSuccess(t *testing.T, service models.Service, want sealedSuccessExpectations) {
 	t.Helper()
 
 	list, err := service.ListModels(context.Background())
@@ -157,6 +157,10 @@ func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedS
 	if detail.Name != want.detail.Name || detail.Status != want.detail.Status {
 		t.Fatalf("catalog GetModel = %#v, want Models-owned detail", detail)
 	}
+}
+
+func assertSealedAssetsSuccess(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+	t.Helper()
 
 	pull, err := service.PullModel(context.Background(), "local-model")
 	if err != nil {
@@ -165,6 +169,10 @@ func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedS
 	if pull.ModelName != want.pull.ModelName || pull.ManagedPullOutcome != want.pull.ManagedPullOutcome {
 		t.Fatalf("assets PullModel = %#v, want Models-owned pull result", pull)
 	}
+}
+
+func assertSealedHostLeaseSuccess(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+	t.Helper()
 
 	runtime, err := service.InspectRuntime(context.Background(), "local-model")
 	if err != nil {
@@ -187,6 +195,10 @@ func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedS
 	if err := service.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: lease.ID}); err != nil {
 		t.Fatalf("host ReleaseLease: %v", err)
 	}
+}
+
+func assertSealedInferSuccess(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+	t.Helper()
 
 	infer, err := service.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Worker: models.LocalWorker{
@@ -203,6 +215,14 @@ func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedS
 	if !infer.Handled || infer.Content != want.infer.Content {
 		t.Fatalf("infer InvokeLocal = %#v, want Models-owned handled result", infer)
 	}
+}
+
+func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+	t.Helper()
+	assertSealedCatalogSuccess(t, service, want)
+	assertSealedAssetsSuccess(t, service, want)
+	assertSealedHostLeaseSuccess(t, service, want)
+	assertSealedInferSuccess(t, service, want)
 }
 
 func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T) {

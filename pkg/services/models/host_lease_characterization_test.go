@@ -132,6 +132,18 @@ func TestHostLease_ReadinessInspectAndAcquireReleaseReturnModelsOwnedShapes(t *t
 	}
 }
 
+func assertHostLeaseErrorIsOnly(t *testing.T, label string, err error, want error, notWants ...error) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("%s = %v, want %v", label, err, want)
+	}
+	for _, notWant := range notWants {
+		if errors.Is(err, notWant) {
+			t.Fatalf("%s must stay distinct from %v: %v", want, notWant, err)
+		}
+	}
+}
+
 func TestHostLease_MissingAssetsLoadingTimeoutCapacityLeaseNotFoundRuntimeNotReadyAreDistinct(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +153,7 @@ func TestHostLease_MissingAssetsLoadingTimeoutCapacityLeaseNotFoundRuntimeNotRea
 			"loading-slow":   models.ErrHostLoadingTimeout,
 		},
 		acquire: map[string]error{
-			"full-capacity":    models.ErrHostCapacityExhausted,
+			"full-capacity":     models.ErrHostCapacityExhausted,
 			"runtime-not-ready": models.ErrHostRuntimeNotReady,
 		},
 		release: map[string]error{
@@ -151,44 +163,24 @@ func TestHostLease_MissingAssetsLoadingTimeoutCapacityLeaseNotFoundRuntimeNotRea
 	}
 
 	_, err := service.InspectRuntime(context.Background(), "missing-assets")
-	if !errors.Is(err, models.ErrHostMissingAssets) {
-		t.Fatalf("InspectRuntime missing-assets = %v, want ErrHostMissingAssets", err)
-	}
-	if errors.Is(err, models.ErrHostLoadingTimeout) || errors.Is(err, models.ErrHostCapacityExhausted) {
-		t.Fatalf("ErrHostMissingAssets must stay distinct: %v", err)
-	}
+	assertHostLeaseErrorIsOnly(t, "InspectRuntime missing-assets", err, models.ErrHostMissingAssets,
+		models.ErrHostLoadingTimeout, models.ErrHostCapacityExhausted)
 
 	_, err = service.InspectRuntime(context.Background(), "loading-slow")
-	if !errors.Is(err, models.ErrHostLoadingTimeout) {
-		t.Fatalf("InspectRuntime loading-slow = %v, want ErrHostLoadingTimeout", err)
-	}
-	if errors.Is(err, models.ErrHostMissingAssets) || errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("ErrHostLoadingTimeout must stay distinct: %v", err)
-	}
+	assertHostLeaseErrorIsOnly(t, "InspectRuntime loading-slow", err, models.ErrHostLoadingTimeout,
+		models.ErrHostMissingAssets, models.ErrHostRuntimeNotReady)
 
 	_, err = service.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "full-capacity"})
-	if !errors.Is(err, models.ErrHostCapacityExhausted) {
-		t.Fatalf("AcquireLease full-capacity = %v, want ErrHostCapacityExhausted", err)
-	}
-	if errors.Is(err, models.ErrHostLeaseNotFound) || errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("ErrHostCapacityExhausted must stay distinct: %v", err)
-	}
+	assertHostLeaseErrorIsOnly(t, "AcquireLease full-capacity", err, models.ErrHostCapacityExhausted,
+		models.ErrHostLeaseNotFound, models.ErrHostRuntimeNotReady)
 
 	_, err = service.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "runtime-not-ready"})
-	if !errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("AcquireLease runtime-not-ready = %v, want ErrHostRuntimeNotReady", err)
-	}
-	if errors.Is(err, models.ErrHostCapacityExhausted) || errors.Is(err, models.ErrHostMissingAssets) {
-		t.Fatalf("ErrHostRuntimeNotReady must stay distinct: %v", err)
-	}
+	assertHostLeaseErrorIsOnly(t, "AcquireLease runtime-not-ready", err, models.ErrHostRuntimeNotReady,
+		models.ErrHostCapacityExhausted, models.ErrHostMissingAssets)
 
 	err = service.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "unknown-lease"})
-	if !errors.Is(err, models.ErrHostLeaseNotFound) {
-		t.Fatalf("ReleaseLease unknown-lease = %v, want ErrHostLeaseNotFound", err)
-	}
-	if errors.Is(err, models.ErrHostCapacityExhausted) || errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("ErrHostLeaseNotFound must stay distinct: %v", err)
-	}
+	assertHostLeaseErrorIsOnly(t, "ReleaseLease unknown-lease", err, models.ErrHostLeaseNotFound,
+		models.ErrHostCapacityExhausted, models.ErrHostRuntimeNotReady)
 }
 
 func TestHostLease_PeerCompilesWithoutNestedHostImport(t *testing.T) {
