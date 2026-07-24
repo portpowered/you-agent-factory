@@ -1,4 +1,4 @@
-package contract_test
+package inference_test
 
 import (
 	"encoding/json"

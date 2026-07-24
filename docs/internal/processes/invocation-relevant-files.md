@@ -171,12 +171,14 @@ primary-result behavior.
   authored public provider vocabulary such as `CODEX` canonicalizes to the
   internal command identity (`codex` / `models.ProviderCodex`) before native
   Infer; packaged-quorum and other built-in smoke assertions must expect that
-  canonical command, not the public enum spelling. Fake custom Integration E2E
-  proof belongs in `tests/functional/providers/contract/` and must register
-  Integrations constructed inside Workers (for example
-  `inferencecontract.ProgressingExternalIntegration`) rather than
-  calling `inferencecontract.NewDiscovery` / `NewEventDraft` / `NewResponse`
-  from the functional package.
+  canonical command, not the public enum spelling.   Fake custom Integration E2E
+  proof belongs in `tests/functional/workers/inference/` (approved
+  domain/subsection under `make pkg-structure`; leave legacy
+  `tests/functional/providers/contract/doc.go` as the required package
+  placeholder) and must register Integrations constructed inside Workers
+  (for example `inferencecontract.ProgressingExternalIntegration`) rather
+  than calling `inferencecontract.NewDiscovery` / `NewEventDraft` /
+  `NewResponse` from the functional package.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
