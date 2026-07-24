@@ -193,3 +193,11 @@
   `normalizedFields`, and relative file pointers for request/process/stdout/
   stderr plus the three expected outputs. Diagnostics must name the case id and
   failing field or rule; pointer resolution must stay inside the case directory.
+- Provider-session golden sanitization (`ValidateProviderSessionCaseSanitization`
+  / `ValidateProviderSessionFixtureContent`) rejects unsanitized fixture material
+  with named categories: `credential`, `host-path`, `private-repo-url`,
+  `env-dump`, `unbounded-content`, and `account-identifier`. Diagnostics must
+  name the category plus fixture path or JSON field. Retain sanitized structural
+  values (fake session/tool/item IDs, usage counts, finish reasons, error codes,
+  `@example.com` emails). Run the gate after manifest validation and before
+  golden comparison.
