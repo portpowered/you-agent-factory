@@ -422,7 +422,10 @@ func TestWorkstationExecutor_ResolvesInterpolatedProviderThroughRegistryBeforeEx
 		canonical string
 	}{
 		{name: "canonical", resolved: "codex", canonical: "codex"},
-		{name: "legacy alias", resolved: "openai", canonical: "codex"},
+		{name: "openai legacy alias", resolved: "openai", canonical: "codex"},
+		{name: "anthropic legacy alias", resolved: "anthropic", canonical: "claude"},
+		{name: "cursor manifest alias", resolved: "agent", canonical: "cursor"},
+		{name: "kiro manifest alias", resolved: "kiro-cli", canonical: "kiro"},
 		{name: "registered extension alias", resolved: "customer", canonical: "customer.provider"},
 	} {
 		test := test

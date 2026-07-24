@@ -105,6 +105,7 @@ func TestCompatibilityAliasesUseRegistryIdentityAuthority(t *testing.T) {
 	}{
 		{alias: "anthropic", wantCanonical: "claude", wantRunner: "claude"},
 		{alias: workers.RunnerIDCursorCLI, wantCanonical: "cursor", wantRunner: workers.RunnerIDCursorCLI},
+		{alias: "kiro-cli", wantCanonical: "kiro", wantRunner: workers.RunnerIDKiro},
 		{alias: "openai", wantCanonical: "codex", wantRunner: workers.RunnerIDCodex},
 	}
 	for _, test := range tests {

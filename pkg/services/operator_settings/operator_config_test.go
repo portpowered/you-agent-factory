@@ -548,14 +548,29 @@ func TestResolve_EnvOverridesFileWhenFlagsUnset(t *testing.T) {
 }
 
 func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
-	resolved, err := Resolve(ResolveInput{
-		File: Defaults{WorkerModelProvider: "kiro-cli"},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "KIRO" {
-		t.Fatalf("provider = %q, want KIRO", resolved.WorkerModelProvider)
+	for _, test := range []struct {
+		alias     string
+		canonical string
+	}{
+		{alias: "anthropic", canonical: "CLAUDE"},
+		{alias: "openai", canonical: "CODEX"},
+		{alias: "agent", canonical: "CURSOR"},
+		{alias: "cursor-agent", canonical: "CURSOR"},
+		{alias: "kiro-cli", canonical: "KIRO"},
+		{alias: "antigravity", canonical: "AGY"},
+	} {
+		test := test
+		t.Run(test.alias, func(t *testing.T) {
+			resolved, err := Resolve(ResolveInput{
+				File: Defaults{WorkerModelProvider: test.alias},
+			}, "/tmp/config.json")
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resolved.WorkerModelProvider != test.canonical {
+				t.Fatalf("provider = %q, want %q", resolved.WorkerModelProvider, test.canonical)
+			}
+		})
 	}
 }
 

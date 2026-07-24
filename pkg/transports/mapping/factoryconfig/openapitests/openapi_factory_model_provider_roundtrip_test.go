@@ -21,6 +21,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 		{factoryapi.WorkerModelProviderKiro, modelprovider.ProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, modelprovider.ProviderOpenCode},
 		{factoryapi.WorkerModelProviderPi, modelprovider.ProviderPi},
+		{factoryapi.WorkerModelProviderAgy, modelprovider.ProviderAgy},
 	}
 
 	for _, tc := range cases {
@@ -36,6 +37,47 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 				t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 			}
 			if got := cfg.Workers[0].ModelProvider; got != string(tc.internal) {
+				t.Fatalf("runtime modelProvider = %q, want %q", got, tc.internal)
+			}
+
+			public := WorkerConfigToOpenAPI(cfg.Workers[0])
+			if public.ModelProvider == nil || *public.ModelProvider != tc.public {
+				t.Fatalf("projected modelProvider = %#v, want %q", public.ModelProvider, tc.public)
+			}
+		})
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderAliasesRetainCompatibilityRoundTrip(t *testing.T) {
+	cases := []struct {
+		authored string
+		public   factoryapi.WorkerModelProvider
+		internal modelprovider.Provider
+	}{
+		{authored: "anthropic", public: factoryapi.WorkerModelProviderClaude, internal: modelprovider.ProviderClaude},
+		{authored: "ANTHROPIC", public: factoryapi.WorkerModelProviderClaude, internal: modelprovider.ProviderClaude},
+		{authored: "openai", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
+		{authored: "OPENAI", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
+		{authored: "agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "cursor-agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "CURSOR_AGENT", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "kiro-cli", public: factoryapi.WorkerModelProviderKiro, internal: modelprovider.ProviderKiro},
+		{authored: "antigravity", public: factoryapi.WorkerModelProviderAgy, internal: modelprovider.ProviderAgy},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.authored, func(t *testing.T) {
+			generated, err := GeneratedFactoryFromOpenAPIJSON(factoryJSONWithModelProvider(tc.authored))
+			if err != nil {
+				t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+			}
+			assertGeneratedWorkerModelProvider(t, generated, tc.public)
+
+			cfg, err := FactoryConfigFromOpenAPI(generated)
+			if err != nil {
+				t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+			}
+			if got := modelprovider.Provider(cfg.Workers[0].ModelProvider); got != tc.internal {
 				t.Fatalf("runtime modelProvider = %q, want %q", got, tc.internal)
 			}
 
