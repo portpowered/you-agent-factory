@@ -13,7 +13,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -103,13 +102,19 @@ func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) fac
 // WaitForTerminalStatus requires the terminal token count to remain stable
 // briefly so watcher-backed seed discovery cannot be mistaken for completion
 // after only the first file is observed.
+//
+// The stable window also covers repeater CONTINUE handoffs: under coverage-shard
+// or parallel load, public categories can briefly show Initial=0 and
+// Processing=0 while a Work token is consumed but not yet marked in-flight.
+// Requiring IDLE/FINISHED runtime status plus a longer stable window prevents
+// those gaps from looking like completion.
 func WaitForTerminalStatus(
 	t testing.TB,
 	baseURL string,
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	const stableWindow = 100 * time.Millisecond
+	const stableWindow = 300 * time.Millisecond
 	var (
 		stableTotal int
 		stableSince time.Time
@@ -120,6 +125,13 @@ func WaitForTerminalStatus(
 		// customer Work. Terminality therefore depends on the absence of
 		// initial/processing Work, not equality with the aggregate token count.
 		if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
+			stableTotal = 0
+			stableSince = time.Time{}
+			return false
+		}
+		switch status.RuntimeStatus {
+		case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
+		default:
 			stableTotal = 0
 			stableSince = time.Time{}
 			return false
@@ -144,7 +156,7 @@ func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkRes
 func UpsertDefaultSessionWorkRequest(
 	t testing.TB,
 	baseURL string,
-	request work.WorkRequest,
+	request factoryapi.WorkRequest,
 ) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
 
@@ -154,7 +166,7 @@ func UpsertDefaultSessionWorkRequest(
 	}
 	endpoint := DefaultSessionWorkURL(
 		baseURL,
-		"/work-requests/"+url.PathEscape(request.RequestID),
+		"/work-requests/"+url.PathEscape(request.RequestId),
 	)
 	httpRequest, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(payload))
 	if err != nil {

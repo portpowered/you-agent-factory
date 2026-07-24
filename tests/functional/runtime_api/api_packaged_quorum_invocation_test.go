@@ -9,6 +9,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -40,9 +41,12 @@ func TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete(
 		t.Fatalf("merge call count = %d, want exactly 1", runner.callCount("merge-quorum"))
 	}
 	runner.assertMergePrompt(t, "quorum request")
-	runner.assertProviderModel(t, "run-quorum-branch-a", "CODEX", "gpt-5")
-	runner.assertProviderModel(t, "run-quorum-branch-b", "CODEX", "gpt-5")
-	runner.assertProviderModel(t, "merge-quorum", "CODEX", "gpt-5")
+	// Public authored vocabulary remains CODEX; runtime command identity is the
+	// canonical internal provider command (codex) after registry resolution.
+	codex := string(modelprovider.ProviderCodex)
+	runner.assertProviderModel(t, "run-quorum-branch-a", codex, "gpt-5")
+	runner.assertProviderModel(t, "run-quorum-branch-b", codex, "gpt-5")
+	runner.assertProviderModel(t, "merge-quorum", codex, "gpt-5")
 }
 
 func TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments(t *testing.T) {
@@ -66,9 +70,10 @@ func TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments(t *testing.T) {
 	}
 	runner.assertMergePrompt(t, "configured quorum request")
 	assertMergedQuorumResult(t, primaryResultText(t, response), "configured quorum request")
-	runner.assertProviderModel(t, "run-quorum-branch-a", "CODEX", "gpt-5.1")
-	runner.assertProviderModel(t, "run-quorum-branch-b", "CODEX", "gpt-5.1")
-	runner.assertProviderModel(t, "merge-quorum", "CODEX", "gpt-5.2")
+	codex := string(modelprovider.ProviderCodex)
+	runner.assertProviderModel(t, "run-quorum-branch-a", codex, "gpt-5.1")
+	runner.assertProviderModel(t, "run-quorum-branch-b", codex, "gpt-5.1")
+	runner.assertProviderModel(t, "merge-quorum", codex, "gpt-5.2")
 }
 
 func startPackagedQuorumInvocationServer(t *testing.T, runner platformprocess.CommandRunner) *functionalAPIServer {

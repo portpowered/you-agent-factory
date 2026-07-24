@@ -2,11 +2,10 @@ package factorysessions
 
 import (
 	"context"
-	"time"
-
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"time"
 )
 
 // ModelInvocationTimeout is the Factory Sessions-owned lifecycle budget for a
@@ -47,12 +46,49 @@ type RuntimeBinding struct {
 	Clock factoryruntime.Clock
 }
 
-// Service is the complete Factory Sessions application boundary. The
-// process-scoped root uses ForRuntime to create an isolated runtime view; a
-// bound view serves the remaining application operations.
+// Service is the singular Factory Sessions root contract and the only
+// cross-service session authority. Identity, live control, durable execution,
+// invocation, response stream, and opening operations already owned by
+// Sessions remain reachable through this one named interface. The published
+// identity slice uses plain IdentityNormalizeRequest,
+// IdentityNormalizeProviderRequest, ResolvedIdentity, and the logical-target
+// typed errors; peers must not import the private identity subservice.
+// The published live-control slice uses OpenRequest/OpenResult,
+// ReadProjection, SessionProjection, ControlRequest, LifecycleControlResult,
+// ErrSessionNotFound, and *ControlError on these Service methods; peers must
+// not import private live-runtime registry or host types and must not depend
+// on a second peer-facing live-session interface.
+// The published durable-execution slice uses DurableStartRequest,
+// DurableAsyncStartResult, DurableResumeRequest, DurableControlRequest,
+// DurableControlResult, DurableInspectResult, *DurableValidationError,
+// ErrDurableSessionNotFound, *DurableResumeError, and *DurableControlError on
+// ExecutionService methods embedded in Service; peers must not import nested
+// durable-execution or internal/execution implementation packages as the
+// peer-facing source of truth.
+// The published invocation slice uses InvocationRequest,
+// ResolvedInvocationInput, InvocationResult, InvocationTimeout,
+// InvocationTerminalStatus, InvocationErrorCode, and *InvocationValidationError
+// as plain root vocabulary on the singular Service aggregate; peers must not
+// import private invocation subservice types and must not depend on a separately
+// published peer-facing invoker interface.
+// The published response-stream slice uses ResponseStreamSubscriptionRequest,
+// ResponseStreamCursor, ResponseStreamEvent, ResponseStreamGap,
+// ResponseStreamKindGap, ResponseStreamCompletionKind,
+// ResponseStreamCompletionPhase, ErrResponseStreamStaleCursor, and
+// ErrResponseStreamSubscriptionClosed on SubscribeFactoryResponseEvents; peers
+// must not import private response-stream store or manager types and must not
+// depend on a nested stream interface for peer import.
+// The published opening/binding slice uses OpeningBindingRequest,
+// OpeningBindingResult, *OpeningBindingError, and ErrOpeningBindingInvalid on
+// ForRuntime; peers supply already-constructed peer root capabilities through
+// plain binding inputs without downcasting or bundling nested opening
+// interfaces. Binding stays inert during construction characterization.
+// The process-scoped root uses ForRuntime to create an isolated runtime view; a
+// bound view serves the remaining application operations. Peers must depend on
+// Service rather than introducing a second peer-facing session authority.
 type Service interface {
 	ExecutionService
-	ForRuntime(RuntimeBinding) (Service, error)
+	ForRuntime(OpeningBindingRequest) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
@@ -77,3 +113,52 @@ type Service interface {
 	RetryDurableFactorySessionDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
 	InterruptDurableFactorySessionDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
 }
+
+// --- merged from live_control_contract.go ---
+
+// Live-control root slice freezes open, list, get/snapshot, pause, resume, and
+// close vocabulary on the singular Service. Peers consume these plain root
+// contracts without importing private live-runtime registry or host types:
+//
+//   - Open: OpenRequest → *OpenResult
+//   - List: []ReadProjection
+//   - Get/snapshot: SessionProjection
+//   - Pause/Resume: ControlRequest → LifecycleControlResult
+//   - Close: session identity → error
+//
+// Typed failures peers distinguish with errors.Is / errors.As:
+//   - ErrSessionNotFound for missing live sessions
+//   - *ControlError for rejected lifecycle transitions (Outcome InvalidState or
+//     TerminalSession), without nested live-runtime imports
+//
+// Live-control operations remain methods on Service; this file does not publish
+// a separate peer-facing live-session interface.
+
+// LiveControlOpenRequest is the plain root open request for live session control.
+// It is the published name for OpenRequest on the live-control slice.
+type LiveControlOpenRequest = OpenRequest
+
+// LiveControlOpenResult is the plain root open result carrying stable session
+// identity and discovered targets for the live-control slice.
+type LiveControlOpenResult = OpenResult
+
+// LiveControlListItem is one live session row returned by list through the
+// live-control root vocabulary.
+type LiveControlListItem = ReadProjection
+
+// LiveControlSnapshot is the plain root get/snapshot result for one live
+// session, including stable identity and live projection shape.
+type LiveControlSnapshot = SessionProjection
+
+// LiveControlRequest is the plain pause/resume request metadata published on
+// the live-control root slice.
+type LiveControlRequest = ControlRequest
+
+// LiveControlResult is the plain pause/resume success shape published on the
+// live-control root slice.
+type LiveControlResult = LifecycleControlResult
+
+// LiveControlError is the typed rejected-lifecycle-transition failure published
+// on the live-control root slice. Peers match it with errors.As and inspect
+// Outcome without importing nested live-runtime packages.
+type LiveControlError = ControlError

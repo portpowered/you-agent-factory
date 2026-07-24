@@ -48,7 +48,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		},
 	})
 	support.WaitForTerminalStatus(t, recordServer.URL(), 15*time.Second)
-	assertReplaySessionPlaces(t, support.GetDefaultSession(t, recordServer.URL()), map[string]int{
+	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, recordServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	recordServer.Stop(t)
@@ -66,7 +66,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		Args:       []string{"--replay", artifactPath},
 	})
 	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
-	assertReplaySessionPlaces(t, support.GetDefaultSession(t, replayServer.URL()), map[string]int{
+	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, replayServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	assertFactoryOnlyReplayProjectsInitialTopology(t, replayServer.GetFactoryEvents(t))
@@ -256,10 +256,10 @@ func replayEventSummaries(events []factoryapi.FactoryEvent) []string {
 	return out
 }
 
-func assertReplaySessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+func assertReplaySessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

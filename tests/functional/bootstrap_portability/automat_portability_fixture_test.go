@@ -150,7 +150,7 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 		authoredDir: authoredFactoryDir,
 	}
 	activateAutomatRequiredToolsOnPath(t)
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, expandedDir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, expandedDir, serviceedges.Edges{
 		ScriptCommandRunner: runner,
 	}, 10*time.Second)
 	for placeID, want := range map[string]int{
@@ -159,7 +159,7 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 		"chapter:staged": 0,
 		"chapter:failed": 0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

@@ -1,6 +1,7 @@
 package contracttests
 
 import (
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
@@ -60,7 +61,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 		{
 			name:       "worker model provider",
 			alias:      "CODEX",
-			unknown:    "mystery-provider",
+			unknown:    "CUSTOM-PROVIDER",
 			want:       "CODEX",
 			permissive: interfaces.PermissivePublicFactoryWorkerModelProvider,
 			strict:     interfaces.StrictPublicFactoryWorkerModelProvider,
@@ -105,6 +106,23 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			permissive: interfaces.PermissivePublicFactoryResourceType,
 			strict:     interfaces.StrictPublicFactoryResourceType,
 		},
+	}
+}
+
+func TestStrictPublicFactoryWorkerModelProviderAcceptsCanonicalExtensionIdentity(t *testing.T) {
+	t.Parallel()
+
+	const identity = "customer.provider-v2"
+	if got := interfaces.StrictPublicFactoryWorkerModelProvider(identity); got != identity {
+		t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want preserved identity", identity, got)
+	}
+	for _, malformed := range []string{
+		"", " customer.provider", "Customer.provider", "customer_provider",
+		"customer..provider", "customer-", "a" + strings.Repeat("b", 128),
+	} {
+		if got := interfaces.StrictPublicFactoryWorkerModelProvider(malformed); got != "" {
+			t.Errorf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want rejection", malformed, got)
+		}
 	}
 }
 

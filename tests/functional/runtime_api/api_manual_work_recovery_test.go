@@ -101,12 +101,12 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 		t.Fatalf("parent after recovery = %#v, want complete", parent)
 	}
 
-	session := support.GetDefaultSession(t, server.URL())
-	if !support.SessionHasWorkAtPlace(session, childWorkID, "task:complete") {
-		t.Fatalf("session marking = %#v, want child at task:complete", session.Runtime.Petri)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if !support.HasWorkAtCustomerState(listed, childWorkID, "task:complete") {
+		t.Fatalf("work listing = %#v, want child at task:complete", listed.Results)
 	}
-	if !support.SessionHasWorkAtPlace(session, parentWorkID, "task:complete") {
-		t.Fatalf("session marking = %#v, want parent at task:complete", session.Runtime.Petri)
+	if !support.HasWorkAtCustomerState(listed, parentWorkID, "task:complete") {
+		t.Fatalf("work listing = %#v, want parent at task:complete", listed.Results)
 	}
 	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }

@@ -12,7 +12,7 @@ properties:
     description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
   modelProvider:
     allOf:
-      - $ref: './WorkerModelProvider.yaml'
+      - $ref: './ProviderIdentity.yaml'
     description: Provider whose inference-throttle history controls this factory-level guard.
   model:
     type: string

@@ -174,7 +174,7 @@ func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.Wo
 
 	parentWorkID := ""
 	if len(dispatch.InputTokens) > 0 {
-		parentWorkID = support.FirstInputToken(dispatch.InputTokens).Color.WorkID
+		parentWorkID = support.FirstInputWorkID(dispatch.InputTokens)
 	}
 
 	childCount := 0

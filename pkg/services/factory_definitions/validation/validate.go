@@ -71,13 +71,13 @@ func workerModelProviderTargets(cfg *interfaces.FactoryConfig) []Target {
 		if provider == "" || interfaces.IsSymbolicWorkerModelProviderDefault(provider) || invocationParameterInterpolation(cfg.InvocationSignature, provider) {
 			continue
 		}
-		if _, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(provider); ok {
+		if interfaces.StrictPublicFactoryWorkerModelProvider(provider) != "" {
 			continue
 		}
 		targets = append(targets, Target{
 			Code:     CodeWorkerUnsupportedModelProvider,
 			Severity: SeverityError,
-			Message:  fmt.Sprintf("worker modelProvider %q is unsupported; supported values: %s", worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary()),
+			Message:  fmt.Sprintf("worker modelProvider %q is malformed; %s", worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary()),
 			Subject:  Subject{Type: SubjectTypeWorker, ID: worker.Name, Location: SubjectLocationDefinition},
 			Path:     fmt.Sprintf("%s.workers[%d](%s).modelProvider", validationRoot, workerIndex, worker.Name),
 		})

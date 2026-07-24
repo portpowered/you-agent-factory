@@ -42,8 +42,9 @@ type ContentHTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// ContentMaterializer resolves a Work content URL to a local path for an
-// invocation.
+// ContentMaterializer is the focused Work materialization role. The published
+// peer root exposes MaterializeContentURL on Service; workers may still inject
+// this narrower role until nested IMP-WORK cuts fold injection onto the root.
 type ContentMaterializer interface {
 	MaterializeContentURL(context.Context, string) (string, ContentCleanup, error)
 }

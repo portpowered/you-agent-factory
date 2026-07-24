@@ -29,10 +29,10 @@ properties:
     description: Model identifier to request from the configured model provider when this worker uses model execution.
   modelProvider:
     oneOf:
-      - $ref: './WorkerModelProvider.yaml'
+      - $ref: './ProviderIdentity.yaml'
       - type: string
         pattern: '^\$\{[A-Za-z0-9_.-]+\}$'
-    description: Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+    description: Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
   modelLocality:
     allOf:
       - $ref: './WorkerModelLocality.yaml'

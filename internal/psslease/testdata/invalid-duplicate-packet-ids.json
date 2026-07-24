@@ -1,0 +1,15 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "FND-10",
+      "exclusivePaths": ["docs/internal/projects/packaged-service-structure/"],
+      "state": "ready"
+    },
+    {
+      "packetId": "FND-10",
+      "exclusivePaths": ["internal/psslease/"],
+      "state": "blocked"
+    }
+  ]
+}

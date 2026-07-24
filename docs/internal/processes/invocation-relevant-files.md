@@ -98,6 +98,48 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- The provider-neutral invocation conductor lives in
+  `pkg/services/workers/provider/conductor/`. Factory Sessions and worker
+  executors should enter registry-selected integrations through that conductor
+  rather than calling Discover, request-sensitive Capabilities, or Invoke
+  directly. Before any of those provider I/O paths, the conductor validates
+  requested capabilities against the selected integration's registry/manifest
+  maximum and rejects escalation, unknown capabilities, and contradictory
+  capability dependencies with deterministic symbolic
+  `conductor.Rejection` diagnostics (`invariant` + offending `capability`,
+  plus `requires` for dependency failures). Accepted Invoke paths compose
+  `inferencecontract.ExecuteInvocation` with a conductor-owned structured
+  response writer that stamps conductor correlation (`RunID` = invocation ID)
+  before leaf Draft validation, preserves emission order, stops immediately on
+  destination write failure, and rejects late writes or closes after close.
+  Invoke wraps the orchestration destination in a terminal guard that sanitizes
+  normalized failures before publication, collapses missing/contradictory
+  terminals into exactly one safe failure close, and preserves destination
+  write failures without publishing a competing close. Cancellation and
+  deadline expiry normalize to conductor-owned canceled/timeout terminals with
+  symbolic diagnostics (`invariant=canceled|timeout`) and provider-neutral
+  retryability (timeout retryable, canceled not). Shared orchestration reads
+  retry handoff only through `conductor.RetryHandoffFromFailure` rather than
+  concrete provider switches. Factory Sessions and worker executors enter
+  registry-selected integrations through the Workers-owned conductor composed
+  from the same authoritative registry: `NewRuntimeWithSelection` constructs
+  `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
+  retained provider-native runner with `conductorInvocationRunner` when
+  `ProviderOverride` is absent.   Externally supplied selectable identities
+  resolve onto their canonical conductor identity; bundled built-ins continue
+  on the provider-native Infer/command path without migrating Gemini, Kiro,
+  Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
+  dispatch/failure branches and `ProviderOverride` remain intact and bypass
+  the registry/conductor decorators. Concurrent cancel, overlapping dispatch,
+  and destination write-failure/backpressure evidence lives in
+  `conductor/concurrency_test.go`: cancelled closes still reject late writes,
+  shared-conductor dispatch keeps per-invocation correlation/order/terminals
+  isolated, and sink backpressure remains the sole terminal for the affected
+  invocation without leaking unsafe provider detail into sibling successes.
+  New measured conductor packages must be registered in both
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`;
+  unit-only registration leaves `make test-functional-coverage` red.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
@@ -124,12 +166,41 @@ primary-result behavior.
   embedding tests can verify composition without importing service packages
   into `pkg/initializer`. Keep `ProviderOverride` on its existing replacement
   path until provider-native execution migrates to the neutral conductor.
+  Externally supplied registrations become selectable conductor identities
+  through the same registry `ResolveRunnerSelection` precedence; they do not
+  use the provider-native executable LookPath path. Runtime copies that rebuild
+  worker executor factories (for example `WithCommandRunners`) must preserve
+  registry-backed runner selection and provider-identity resolution wiring
+  through `construction.Service.WithExecutionFactories` rather than constructing
+  a fresh builder that drops those resolvers. When those resolvers stay wired,
+  authored public provider vocabulary such as `CODEX` canonicalizes to the
+  internal command identity (`codex` / `models.ProviderCodex`) before native
+  Infer; packaged-quorum and other built-in smoke assertions must expect that
+  canonical command, not the public enum spelling.   Fake custom Integration E2E
+  proof belongs in `tests/functional/workers/inference/` (approved
+  domain/subsection under `make pkg-structure`; leave legacy
+  `tests/functional/providers/contract/doc.go` as the required package
+  placeholder) and must register Integrations constructed inside Workers
+  (for example `inferencecontract.ProgressingExternalIntegration`) rather
+  than calling `inferencecontract.NewDiscovery` / `NewEventDraft` /
+  `NewResponse` from the functional package.
 - Wire supplies that same registry to the Workers runtime for routed provider
-  selection, manifest-maximum capability checks, and executable-prerequisite
-  preflight. Preserve the existing selection precedence and native runner IDs;
-  the registry resolves canonical IDs and published aliases first, with the
-  legacy `cursor-cli` runner ID mapped only at the native-execution
-  compatibility boundary. Preserve accepted public model-provider aliases
+  selection, conductor composition, manifest-maximum capability checks, and
+  executable-prerequisite preflight, and to Factory Sessions through the narrow
+  `ProviderIdentityResolver` opening contract. After operator defaults are
+  applied, Factory opening resolves concrete worker and guard selections to
+  canonical registry identities; operator-file defaults and JavaScript worker
+  presets use the same authority. Leave declared invocation interpolation
+  expressions unresolved at this stage. Do not restore built-in membership or
+  alias lists in Factory Runtime or operator-default helpers.
+  Preserve the existing selection precedence and native runner IDs for bundled
+  providers; the registry resolves canonical IDs and published aliases first,
+  with the legacy `cursor-cli` runner ID mapped only at the native-execution
+  compatibility boundary. Externally supplied integrations retain their
+  canonical provider identity during runner selection so opening can validate
+  and carry them onto the provider-neutral conductor without pretending they
+  are a bundled native runner.
+  Preserve accepted public model-provider aliases
   (`openai` and `anthropic`) as collision-validated registry identity claims so
   static lookup and routed selection cannot disagree. Carry the registry's
   canonical legacy-provider selection through the workstation boundary into
@@ -139,6 +210,15 @@ primary-result behavior.
   default-selection path.
   Other unknown, catalog-only, and not-supported identities fail before
   dispatch instead of falling through to the default Codex runner.
+  After invocation interpolation, the Workers workstation executor resolves
+  the concrete `modelProvider` independently through the registry-backed
+  `ProviderIdentityResolver` before applying runner precedence. Do not rely on
+  `ResolveRunnerSelection` alone for this check: an explicit workstation or
+  Factory runner wins precedence and would otherwise mask a malformed,
+  unknown, or non-selectable interpolated provider value. The identity
+  resolver also carries the registry's canonical identity into the execution
+  request before worktree preparation, capability checks, discovery, or
+  provider invocation.
   Provider-native command construction and `ProviderOverride` execution remain
   unchanged; the manifest-backed capability guard is bypassed for an explicit
   replacement provider because that edge owns its own test/runtime contract.
@@ -318,12 +398,14 @@ response-stream output.
   owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
-- `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
-  on authored fields that support invocation interpolation (for example
-  `workers[].modelProvider`) instead of rejecting them as invalid public enum
-  values at the JSON boundary. Keep the exact-placeholder pattern aligned with
-  the accepted OpenAPI one-of, and keep ordinary non-placeholder values on the
-  existing strict enum normalization path.
+- `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve exact
+  `${parameter}` placeholders on authored fields that support invocation
+  interpolation (for example `workers[].modelProvider`) instead of forcing them
+  through concrete provider-identity validation at the JSON boundary. Keep the
+  exact-placeholder pattern aligned with the accepted OpenAPI one-of. Concrete
+  provider values use the open `ProviderIdentity` syntax contract; built-in
+  aliases canonicalize through compatibility mapping, while syntactically valid
+  extension identities remain unchanged for registry selection.
 - `pkg/initializer/runtimeconstruction/operatordefaults/operator_defaults_runtime.go`
   is the
   startup-time runtime-validation seam for operator-defaulted model workers.
@@ -713,7 +795,7 @@ response-stream output.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Process startup follows `cmd/factory -> pkg/root.BuildProcess -> pkg/wire.InjectBundle -> application.Process.Execute -> CLI-selected initializer -> pkg/initializer`. Production and functional tests construct the same reusable process through `BuildProcess`; production supplies empty edges while functional tests replace explicit external boundaries. Every `Execute` call constructs a fresh command tree from invocation-local input. Only after CLI parsing does the matching `Run` or `Stdio` initializer construct its service subtree. There is no generic construction request, alternate production injector, root service-splicing path, or `ProcessGraph`. Keep domain construction out of root and initializer, do not restore root-local lifecycle closures or process-global builder registration, and never construct HTTP/dashboard resources for stdio or an MCP stdio transport for run/API. The normalized invocation home remains authoritative through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, persistence, recording, runtime logging, and metrics. `pkg/initializer` only starts, joins, unwinds, and closes the selected bundle. Boundary coverage lives in `pkg/root/root_test.go`, `pkg/wire/cli_test.go`, initializer application tests, functional CLI tests, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`.
+- Process startup follows `cmd/factory -> pkg/root.BuildProcess -> pkg/wire.InjectBundle -> application.Process.Execute -> CLI-selected initializer -> pkg/initializer`. Production and functional tests construct the same reusable process through `BuildProcess`; production supplies empty edges while functional tests replace explicit external boundaries. Every `Execute` call constructs a fresh command tree from invocation-local input. Only after CLI parsing does the matching `Run` or `Stdio` initializer construct its service subtree. There is no generic construction request, alternate production injector, root service-splicing path, or `ProcessGraph`. Keep domain construction out of root and initializer, do not restore root-local lifecycle closures or process-global builder registration, and never construct HTTP/dashboard resources for stdio or an MCP stdio transport for run/API. The normalized invocation home remains authoritative through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, persistence, recording, runtime logging, and metrics. `pkg/initializer` only starts, joins, unwinds, and closes the selected bundle. Boundary coverage lives in   `pkg/root/root_test.go`, `pkg/root/edges_override_compatibility_test.go` (typed `edges.Edges` override versus empty-default replacement through `BuildProcess` + post-construction `Execute`), `pkg/wire/cli_test.go`, initializer application tests, functional CLI tests, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`. Wire projects that process-edge bag into `runtimeopening.ExternalEffects` before Factory Session applicationopening, runtimeopening, invocation, and executionopening implementations; those packages must not import `pkg/services/edges`. `cmd/pkgboundarycheck` rejects constructed-service production imports or `edges.Edges` fields/parameters under `pkg/services/**` (except `pkg/services/edges` itself) and points maintainers to exact-port injection at `pkg/wire` / `root.BuildProcess` rather than deleting the process-edge aggregator. Package docs in pkg/services/edges and docs/internal/standards/code/general-backend-standards.md keep Edges documented as that process-edge architecture exception for root/Wire construction and functional overrides—not a service locator or Initializer dependency bag—while ownership tests continue to prove it aggregates leaf effect contracts via Merge.
 - `you models invoke` reuses the same Wire-built runtime core and
   `service.NormalizeInvocationBootstrapConfig` adapter path as one-shot factory
   invocation, constructed by `pkg/wire/model_invocation.go` from the typed

@@ -1,0 +1,11 @@
+{
+  "argv": ["provider-cli", "--model", "fixture-model", "--prompt-file", "request.json"],
+  "provider": "harness",
+  "model": "fixture-model",
+  "exitCode": 0,
+  "stdoutStream": true,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "none"
+}

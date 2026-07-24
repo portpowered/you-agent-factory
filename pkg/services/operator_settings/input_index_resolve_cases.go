@@ -137,13 +137,13 @@ func resolvePrecedenceSecondaryInputCases() []InputCase {
 			Category:    categoryResolvePrecedence,
 			Entrypoint:  entrypointResolve,
 			Outcome:     outcomeReject,
-			Description: "unsupported provider values fail resolve with accepted provider summary",
+			Description: "malformed provider values fail resolve with provider identity syntax",
 			ResolveLayers: &ResolveLayers{
-				FileDefaults: DefaultsSnapshot{WorkerModelProvider: "not-a-provider"},
+				FileDefaults: DefaultsSnapshot{WorkerModelProvider: "Not_A_Provider"},
 			},
 			ErrorFragments: []string{
 				"unsupported worker model provider",
-				"accepted canonical providers",
+				"canonical lowercase provider identity",
 			},
 		},
 	}

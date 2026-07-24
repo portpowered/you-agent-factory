@@ -107,7 +107,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	submittedFileReader := provideWorkSubmittedFileReader(edges2)
-	v12 := provideWorkFactory(submittedFileReader)
+	contentStagingService, err := provideWorkContentStagingService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	contentHostPlatform := provideWorkContentHostPlatform(edges2)
+	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
+	if err != nil {
+		return nil, err
+	}
+	v12 := provideWorkFactory(submittedFileReader, contentStagingService, contentMaterializer)
 	v13 := provideAutomationFactory()
 	sessionResultProjectionOperation := factory.NewSessionResultProjectionOperation()
 	invocationInterpolationService := provideInvocationInterpolationService()
@@ -220,11 +229,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	contentHostPlatform := provideWorkContentHostPlatform(edges2)
-	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
-	if err != nil {
-		return nil, err
-	}
 	v39 := provideLoadedFactoryLoader(loader)
 	v40 := provideLoadedFactorySourceFactory()
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
@@ -247,6 +251,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator, configDecoder, configEncoder)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
 	v44 := provideFactorySessionReplayRecordingReader(edges2)
+	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(registry)
 	runtimeOpeningDependencies := wire.RuntimeOpeningDependencies{
 		ProviderSessions:                providersessionsService,
 		FactoryWorkflows:                javaScriptWorkflowDefinitions,
@@ -290,6 +295,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		GenerateRuntimeInstanceID:       runtimeInstanceIDGenerator,
 		ResolveHome:                     homeDirectoryResolver,
 		ReplayFiles:                     v44,
+		ProviderIdentities:              providerIdentityResolver,
 	}
 	v45, err := wire.NewRuntimeOpeningFactory(runtimeOpeningDependencies)
 	if err != nil {
@@ -320,7 +326,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v52, err := wire.NewInvocationOperation(v45, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v14)
+	v52, err := provideInvocationOperation(v45, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v14)
 	if err != nil {
 		return nil, err
 	}
@@ -391,10 +397,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	contentPreparation := work.NewContentPreparation()
 	httpBinder, err := composition.NewHTTPBinder(factoryStatusProjector, contentPreparation)
-	if err != nil {
-		return nil, err
-	}
-	contentStagingService, err := provideWorkContentStagingService(edges2)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +516,7 @@ var platformSet = wire2.NewSet(logging.NewDefaultLogger)
 var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
 var servicesSet = wire2.NewSet(
-	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
@@ -728,7 +730,8 @@ var BundleSet = wire2.NewSet(
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
 	provideRuntimeInputResolver, wire.NewApplicationService, application.NewRuntimeRunnerBuilder, provideRunRuntimeRunnerBuilder,
-	provideRunSelectionFactory, wire.NewInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
+	provideRunSelectionFactory,
+	provideInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory, wire2.Bind(new(wire.StdioExecutionOpening), new(*wire.ExecutionOpeningFactory)), wire.NewStdioOpeningService, wire2.Bind(new(wire.StdioOpeningOperation), new(*wire.StdioOpeningService)), provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,

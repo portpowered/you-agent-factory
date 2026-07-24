@@ -163,10 +163,10 @@
       "entrypoint": "DecodeGlobalConfig",
       "outcome": "reject",
       "fixture": "invalid/preset-unsupported-provider.json",
-      "description": "unsupported workerPresets[].modelProvider values are rejected",
+      "description": "malformed workerPresets[].modelProvider values are rejected",
       "errorFragments": [
         "\"build\"",
-        "\"other\"",
+        "\"Other_Provider\"",
         "unsupported modelProvider"
       ]
     },
@@ -347,16 +347,16 @@
       "category": "resolve-precedence",
       "entrypoint": "Resolve",
       "outcome": "reject",
-      "description": "unsupported provider values fail resolve with accepted provider summary",
+      "description": "malformed provider values fail resolve with provider identity syntax",
       "resolveLayers": {
         "fileDefaults": {
-          "workerModelProvider": "not-a-provider"
+          "workerModelProvider": "Not_A_Provider"
         },
         "flag": {}
       },
       "errorFragments": [
         "unsupported worker model provider",
-        "accepted canonical providers"
+        "canonical lowercase provider identity"
       ]
     },
     {

@@ -24,29 +24,6 @@ func IsPersistedListCandidate(summary DurableSessionListSummary) bool {
 	return summary.Recoverable
 }
 
-// IsRecoverableSession reports whether one durable session is interrupted or has
-// a stale lease while still appearing active.
-func IsRecoverableSession(status LifecycleStatus, staleLease bool) bool {
-	if status == LifecycleStatusInterrupted {
-		return true
-	}
-	return staleLease && !IsTerminalLifecycleStatus(status)
-}
-
-// DeriveSessionActionAvailability classifies which lifecycle controls are valid
-// for one durable session status.
-func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvailability {
-	return SessionActionAvailability{
-		CanPause:             EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
-		CanResume:            EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
-		CanCancel:            EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
-		CanTerminate:         EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
-		CanApprove:           status == LifecycleStatusAwaitingApproval,
-		CanRetryDispatch:     AllowsRetryDispatchOnTerminal(status),
-		CanInterruptDispatch: AllowsInterruptDispatchOnSession(status),
-	}
-}
-
 // LiveListSummaryFromSessionRead projects one in-process durable session into a
 // live-scope row owned by the current service instance.
 func LiveListSummaryFromSessionRead(read SessionReadResult) LiveSessionSummary {
@@ -200,6 +177,20 @@ func SortLiveSessionSummaries(sessions []LiveSessionSummary) []LiveSessionSummar
 }
 
 // ApplySessionListScope shapes one listing result for the requested scope.
+// DeriveSessionActionAvailability classifies which lifecycle controls are valid
+// for one durable session status.
+func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvailability {
+	return SessionActionAvailability{
+		CanPause:             EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
+		CanResume:            EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
+		CanCancel:            EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
+		CanTerminate:         EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
+		CanApprove:           status == LifecycleStatusAwaitingApproval,
+		CanRetryDispatch:     AllowsRetryDispatchOnTerminal(status),
+		CanInterruptDispatch: AllowsInterruptDispatchOnSession(status),
+	}
+}
+
 func ApplySessionListScope(result ListSessionsResult, request ListSessionsRequest) ListSessionsResult {
 	scope := request.Scope
 	if scope == "" {
@@ -227,6 +218,15 @@ func ApplySessionListScope(result ListSessionsResult, request ListSessionsReques
 			DurableSessions: SortDurableSessionSummaries(durable),
 		}
 	}
+}
+
+// IsRecoverableSession reports whether one durable session is interrupted or has
+// a stale lease while still appearing active.
+func IsRecoverableSession(status LifecycleStatus, staleLease bool) bool {
+	if status == LifecycleStatusInterrupted {
+		return true
+	}
+	return staleLease && !IsTerminalLifecycleStatus(status)
 }
 
 func containsLifecycleStatus(values []LifecycleStatus, target LifecycleStatus) bool {
@@ -317,15 +317,6 @@ func latestLifecycleTimestamp(lifecycle *LifecycleTimestamps) *time.Time {
 	}
 	return latest
 }
-
-// SessionListScope selects which factory sessions a list request returns.
-type SessionListScope string
-
-const (
-	SessionListScopeLive      SessionListScope = "live"
-	SessionListScopePersisted SessionListScope = "persisted"
-	SessionListScopeAll       SessionListScope = "all"
-)
 
 func uniqueRuntimeRecords(records []workflowsource.JavaScriptRuntimeRecord) []workflowsource.JavaScriptRuntimeRecord {
 	unique := make([]workflowsource.JavaScriptRuntimeRecord, 0, len(records))
@@ -441,84 +432,6 @@ func canonicalOrchestratorCheckpointRecordEvent(events []json.RawMessage, sessio
 		&checkpointID,
 		mustMarshalPayload(payload),
 	)
-}
-
-// DefaultSessionListScope is live for backward-compatible live workspace session listing.
-const DefaultSessionListScope = SessionListScopeLive
-
-// SessionListFilters narrows scoped session listing without requiring clients to
-// parse session internals.
-type SessionListFilters struct {
-	Statuses          []LifecycleStatus
-	OrchestratorKinds []string
-	SourceKind        workflowsource.WorkflowSourceKind
-	SourceRef         string
-	ProjectBoundary   string
-	Recoverable       *bool
-	StaleLease        *bool
-	CreatedAfter      *time.Time
-	CreatedBefore     *time.Time
-	UpdatedAfter      *time.Time
-	UpdatedBefore     *time.Time
-}
-
-// ListSessionsRequest is the shared scoped session listing request consumed by API,
-// CLI, MCP, and UI transports.
-type ListSessionsRequest struct {
-	Scope   SessionListScope
-	Filters SessionListFilters
-}
-
-// LiveSessionSummary is the shared live workspace session row for scope=live and
-// scope=all responses. Live-session open and invocation remain separate from
-// durable execution listing.
-type LiveSessionSummary struct {
-	ID         string
-	FactoryDir string
-	FolderPath string
-	Project    string
-	IsDefault  bool
-}
-
-// SessionActionAvailability exposes which lifecycle controls are currently valid
-// for one listed durable session.
-type SessionActionAvailability struct {
-	CanPause             bool
-	CanResume            bool
-	CanCancel            bool
-	CanTerminate         bool
-	CanApprove           bool
-	CanRetryDispatch     bool
-	CanInterruptDispatch bool
-}
-
-// DurableSessionListSummary is the shared durable session list row with enough
-// summary data for API, CLI, MCP, and UI to show status, result readiness,
-// dispatch counts, artifact counts, lease/recoverability, and action availability.
-type DurableSessionListSummary struct {
-	SessionID        string
-	Status           LifecycleStatus
-	OrchestratorKind string
-	Dialect          string
-	ResolvedSource   ResolvedSource
-	SourceHash       string
-	Policy           PolicyProjection
-	Phase            string
-	Progress         *ProgressCounts
-	ResultSummary    *ResultSummary
-	ArtifactCount    int
-	StaleLease       bool
-	Recoverable      bool
-	Lifecycle        *LifecycleTimestamps
-	Links            InspectionLinks
-	Actions          SessionActionAvailability
-}
-
-// ListSessionsResult is the shared scoped session listing outcome.
-type ListSessionsResult struct {
-	Scope           SessionListScope
-	LiveSessions    []LiveSessionSummary
-	DurableSessions []DurableSessionListSummary
 }
 
 const canonicalFactoryEventSchemaVersion = "agent-factory.event.v1"

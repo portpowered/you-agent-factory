@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	inferencecontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
@@ -138,6 +140,18 @@ func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *te
 				)
 			}
 		})
+	}
+}
+
+func TestModelProviderForExecutionProjectsCanonicalCursorIdentityToNativeCommand(t *testing.T) {
+	t.Parallel()
+
+	got := modelProviderForExecution("cursor", workerexecution.ResolvedRunnerSelection{
+		RunnerID: workerexecution.RunnerIDCodex,
+		Source:   workerexecution.RunnerSelectionSourceDefault,
+	})
+	if got != "agent" {
+		t.Fatalf("modelProviderForExecution(cursor) = %q, want agent", got)
 	}
 }
 
@@ -407,6 +421,214 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		if parameter.Name == "apiKey" && !parameter.Redacted {
 			t.Fatalf("apiKey diagnostic = %#v, want redacted summary", parameter)
 		}
+	}
+}
+
+func TestWorkstationExecutor_ResolvesInterpolatedProviderThroughRegistryBeforeExecution(t *testing.T) {
+	t.Parallel()
+	providers := providerRegistryWithExternalFixture(t)
+
+	for _, test := range []struct {
+		name      string
+		resolved  string
+		canonical string
+	}{
+		{name: "canonical", resolved: "codex", canonical: "codex"},
+		{name: "openai legacy alias", resolved: "openai", canonical: "codex"},
+		{name: "anthropic legacy alias", resolved: "anthropic", canonical: "claude"},
+		{name: "cursor manifest alias", resolved: "agent", canonical: "cursor"},
+		{name: "kiro manifest alias", resolved: "kiro-cli", canonical: "kiro"},
+		{name: "registered extension alias", resolved: "customer", canonical: "customer.provider"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			mock := &wsMockExecutor{result: workerexecution.WorkResult{
+				Outcome: workerexecution.OutcomeAccepted,
+				Output:  "done",
+			}}
+			executor := interpolatedProviderExecutor(test.resolved, mock)
+			executor.ResolveProviderIdentity = providers.CanonicalIdentity
+			executor.ResolveRunnerSelection = providers.ResolveRunnerSelection
+
+			result, err := executor.Execute(context.Background(), interpolatedProviderDispatch())
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("Execute() result = %#v", result)
+			}
+			if !mock.called {
+				t.Fatal("provider executor was not called")
+			}
+			if mock.dispatch.ModelProvider != test.canonical {
+				t.Fatalf(
+					"execution modelProvider = %q, want canonical %q",
+					mock.dispatch.ModelProvider,
+					test.canonical,
+				)
+			}
+		})
+	}
+}
+
+func TestWorkstationExecutor_RejectsInterpolatedProviderBeforeExecutionIO(t *testing.T) {
+	t.Parallel()
+	providers := providerRegistryWithExternalFixture(t)
+
+	for _, test := range []struct {
+		name     string
+		resolved string
+		want     string
+	}{
+		{name: "malformed", resolved: "Not_A_Provider", want: "is invalid"},
+		{name: "unknown", resolved: "missing.provider", want: "is unknown"},
+		{name: "non-selectable", resolved: "agy", want: "is not selectable"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			mock := &wsMockExecutor{}
+			executor := interpolatedProviderExecutor(test.resolved, mock)
+			executor.ResolveProviderIdentity = providers.CanonicalIdentity
+			// A concrete workstation runner deliberately wins runner precedence.
+			// The provider field must still be validated independently.
+			executor.ResolveRunnerSelection = providers.ResolveRunnerSelection
+
+			result, err := executor.Execute(context.Background(), interpolatedProviderDispatch())
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != workerexecution.OutcomeFailed ||
+				!strings.Contains(result.Error, "invocation modelProvider selection failed") ||
+				!strings.Contains(result.Error, test.want) {
+				t.Fatalf("Execute() result = %#v, want failure containing %q", result, test.want)
+			}
+			if mock.called {
+				t.Fatal("provider executor was called for a rejected provider")
+			}
+			if result.Diagnostics == nil || result.Diagnostics.Invocation == nil {
+				t.Fatalf("result diagnostics = %#v, want invocation diagnostic", result.Diagnostics)
+			}
+		})
+	}
+}
+
+func providerRegistryWithExternalFixture(t *testing.T) *providerregistry.Registry {
+	t.Helper()
+	registrations, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	var catalog struct {
+		Providers []providerregistry.Manifest `json:"providers"`
+	}
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		t.Fatalf("decode provider catalog: %v", err)
+	}
+	manifest := catalog.Providers[0]
+	manifest.ID = "customer.provider"
+	manifest.Aliases = []string{"customer"}
+	manifest.ImplementationAvailability = providerregistry.ImplementationExternallySupplied
+	manifest.TechnicalSupportLevel = providerregistry.SupportProduction
+	manifest.Deprecation = nil
+	manifest.MaximumExecutionCapabilities = providerregistry.ExecutionCapabilities{
+		PromptSubmission: true,
+	}
+	manifest.MaximumResponseFidelityCapabilities = providerregistry.ResponseFidelityCapabilities{}
+	registrations = append(registrations, providerregistry.ExternalRegistration(
+		manifest,
+		executorTestIntegration{},
+	))
+	providers, err := providerregistry.New(registrations...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return providers
+}
+
+type executorTestIntegration struct{}
+
+func (executorTestIntegration) Identity() inferencecontract.Identity {
+	return "customer.provider"
+}
+
+func (executorTestIntegration) MaximumCapabilities() inferencecontract.CapabilitySet {
+	return inferencecontract.NewCapabilitySet(inferencecontract.CapabilityPromptSubmission)
+}
+
+func (executorTestIntegration) Discover(context.Context) (inferencecontract.Discovery, error) {
+	panic("provider discovery must not run during provider selection")
+}
+
+func (executorTestIntegration) Capabilities(
+	context.Context,
+	inferencecontract.InvocationRequest,
+) (inferencecontract.CapabilitySet, error) {
+	panic("provider capability I/O must not run during provider selection")
+}
+
+func (executorTestIntegration) Invoke(
+	context.Context,
+	inferencecontract.InvocationRequest,
+	inferencecontract.ResponseWriter,
+) error {
+	panic("provider invocation must not run during provider selection")
+}
+
+func interpolatedProviderExecutor(
+	resolved string,
+	mock WorkstationRequestExecutor,
+) *WorkstationExecutor {
+	executor := newTestWorkstationExecutor(staticRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{
+			InvocationSignature: &interfaces.InvocationSignatureConfig{
+				Parameters: []interfaces.InvocationParameterConfig{{Name: "provider"}},
+			},
+		},
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker-a": {
+				Type:          interfaces.WorkerTypeModel,
+				ModelProvider: "${provider}",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {
+				Type:           interfaces.WorkstationTypeModel,
+				Runner:         "codex",
+				PromptTemplate: "run",
+			},
+		},
+	}, mock)
+	executor.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
+		InterpolateWorker: func(
+			worker interfaces.FactoryWorkerConfig,
+			_ *work.InvocationArguments,
+			_ interfaces.FileReader,
+		) (interfaces.FactoryWorkerConfig, error) {
+			worker.ModelProvider = resolved
+			return worker, nil
+		},
+	}
+	return executor
+}
+
+func interpolatedProviderDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
+		DispatchID:      "dispatch-provider",
+		TransitionID:    "transition-provider",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+			ID: "token-provider",
+			Color: factoryruntime.RuntimeTokenColor{
+				InvocationArguments: &work.InvocationArguments{
+					Arguments: map[string]work.InvocationArgument{
+						"provider": {Values: []string{"unused-by-scripted-interpolator"}},
+					},
+				},
+			},
+		}),
 	}
 }
 

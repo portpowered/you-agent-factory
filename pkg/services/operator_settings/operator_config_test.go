@@ -449,7 +449,7 @@ func TestParseFileConfig_RejectsInvalidWorkerPresets(t *testing.T) {
 		{name: "duplicate id", json: `{"workerPresets":[{"id":"build","modelProvider":"codex"},{"id":" build ","modelProvider":"claude"}]}`, want: []string{`workerPresets[1].id`, `"build"`, "duplicated"}},
 		{name: "missing provider", json: `{"workerPresets":[{"id":"build"}]}`, want: []string{`workerPresets[0]`, `"build"`, "modelProvider"}},
 		{name: "symbolic provider", json: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`, want: []string{`"build"`, `"DEFAULT"`, "unsupported modelProvider"}},
-		{name: "unsupported provider", json: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`, want: []string{`"build"`, `"other"`, "unsupported modelProvider"}},
+		{name: "malformed provider", json: `{"workerPresets":[{"id":"build","modelProvider":"Other_Provider"}]}`, want: []string{`"build"`, `"Other_Provider"`, "unsupported modelProvider"}},
 		{name: "unsupported reasoning", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","reasoningEffort":"extreme"}]}`, want: []string{`"build"`, `"extreme"`, "unsupported reasoningEffort"}},
 	}
 	for _, tt := range tests {
@@ -469,7 +469,7 @@ func TestParseFileConfig_RejectsInvalidWorkerPresets(t *testing.T) {
 
 func TestLoadFileDefaults_RejectsMalformedWorkerPresets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"unknown"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"Unknown_Provider"}]}`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if _, err := LoadFileDefaults(testFiles, decodeTestConfig, path); err == nil || !strings.Contains(err.Error(), path) {
@@ -548,14 +548,29 @@ func TestResolve_EnvOverridesFileWhenFlagsUnset(t *testing.T) {
 }
 
 func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
-	resolved, err := Resolve(ResolveInput{
-		File: Defaults{WorkerModelProvider: "kiro-cli"},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "KIRO" {
-		t.Fatalf("provider = %q, want KIRO", resolved.WorkerModelProvider)
+	for _, test := range []struct {
+		alias     string
+		canonical string
+	}{
+		{alias: "anthropic", canonical: "CLAUDE"},
+		{alias: "openai", canonical: "CODEX"},
+		{alias: "agent", canonical: "CURSOR"},
+		{alias: "cursor-agent", canonical: "CURSOR"},
+		{alias: "kiro-cli", canonical: "KIRO"},
+		{alias: "antigravity", canonical: "AGY"},
+	} {
+		test := test
+		t.Run(test.alias, func(t *testing.T) {
+			resolved, err := Resolve(ResolveInput{
+				File: Defaults{WorkerModelProvider: test.alias},
+			}, "/tmp/config.json")
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resolved.WorkerModelProvider != test.canonical {
+				t.Fatalf("provider = %q, want %q", resolved.WorkerModelProvider, test.canonical)
+			}
+		})
 	}
 }
 
@@ -605,18 +620,31 @@ func TestResolve_PreservesExplicitConfigPathOverride(t *testing.T) {
 	}
 }
 
-func TestResolve_UnsupportedProviderFailsWithAcceptedProviders(t *testing.T) {
+func TestResolve_MalformedProviderFailsWithIdentitySyntax(t *testing.T) {
 	_, err := Resolve(ResolveInput{
-		File: Defaults{WorkerModelProvider: "not-a-provider"},
+		File: Defaults{WorkerModelProvider: "Not_A_Provider"},
 	}, "/tmp/config.json")
 	if err == nil {
-		t.Fatal("expected unsupported provider error")
+		t.Fatal("expected malformed provider error")
 	}
 	if !strings.Contains(err.Error(), "unsupported worker model provider") {
 		t.Fatalf("error = %q, want unsupported provider message", err.Error())
 	}
-	if !strings.Contains(err.Error(), "accepted canonical providers") {
-		t.Fatalf("error = %q, want accepted provider summary", err.Error())
+	if !strings.Contains(err.Error(), "canonical lowercase provider identity") {
+		t.Fatalf("error = %q, want provider identity syntax", err.Error())
+	}
+}
+
+func TestResolve_PreservesExtensionProviderFromCLIOverride(t *testing.T) {
+	const identity = "customer.provider-v2"
+	resolved, err := Resolve(ResolveInput{
+		Flag: Defaults{WorkerModelProvider: identity},
+	}, "/tmp/config.json")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != identity || resolved.WorkerModelProviderSource != SourceFlag {
+		t.Fatalf("resolved provider = %#v, want CLI identity %q", resolved, identity)
 	}
 }
 

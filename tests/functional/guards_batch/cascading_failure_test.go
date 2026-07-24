@@ -35,10 +35,10 @@ func TestCascadingFailure_DirectChild(t *testing.T) {
 			{Error: errors.New("upstream service down")},
 		},
 	})
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 2, "task:init": 0, "task:processing": 0, "task:complete": 0})
+	assertGuardSessionPlaces(t, listedWork, map[string]int{"task:failed": 2, "task:init": 0, "task:processing": 0, "task:complete": 0})
 	assertFailedDependentWork(t, listedWork, parentWorkID)
 }
 
@@ -81,10 +81,10 @@ func TestCascadingFailure_Transitive(t *testing.T) {
 			{Error: errors.New("crash")},
 		},
 	})
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 3, "task:init": 0, "task:processing": 0, "task:complete": 0})
+	assertGuardSessionPlaces(t, listedWork, map[string]int{"task:failed": 3, "task:init": 0, "task:processing": 0, "task:complete": 0})
 	assertFailedDependentWork(t, listedWork, pWorkID)
 	assertFailedDependentWork(t, listedWork, c1WorkID)
 }
@@ -116,8 +116,8 @@ func TestCascadingFailure_CompletedNotCascaded(t *testing.T) {
 			{Error: errors.New("oops")},
 		},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:failed": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:failed": 1})
 }
 
 func assertFailedDependentWork(t *testing.T, response factoryapi.ListWorkResponse, targetWorkID string) {

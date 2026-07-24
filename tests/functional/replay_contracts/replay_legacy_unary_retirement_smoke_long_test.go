@@ -9,8 +9,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,14 +23,14 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 		workerexecution.InferenceResponse{Content: "step one COMPLETE"},
 		workerexecution.InferenceResponse{Content: "step two COMPLETE"},
 	)
-	request := work.WorkRequest{
-		RequestID: "request-retired-unary-replay",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name:       "replayed",
-			WorkID:     "work-retired-unary-replay",
-			WorkTypeID: "task",
-			Payload:    []byte(`{"title":"record replay canonical submit"}`),
+	request := factoryapi.WorkRequest{
+		RequestId: "request-retired-unary-replay",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "replayed",
+			WorkId:       strPtr("work-retired-unary-replay"),
+			WorkTypeName: strPtr("task"),
+			Payload:      []byte(`{"title":"record replay canonical submit"}`),
 		}},
 	}
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -46,7 +46,7 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 	server.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	assertReplayWorkRequestRecorded(t, artifact, request.RequestID, "external-submit", 1, 0)
+	assertReplayWorkRequestRecorded(t, artifact, request.RequestId, "external-submit", 1, 0)
 	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
@@ -54,5 +54,5 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
 	events := replayServer.GetFactoryEvents(t)
 	replayServer.Stop(t)
-	support.AssertSingleWorkRequestEvent(t, events, request.RequestID, "work-retired-unary-replay", "task")
+	support.AssertSingleWorkRequestEvent(t, events, request.RequestId, "work-retired-unary-replay", "task")
 }

@@ -21,6 +21,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 		{factoryapi.WorkerModelProviderKiro, modelprovider.ProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, modelprovider.ProviderOpenCode},
 		{factoryapi.WorkerModelProviderPi, modelprovider.ProviderPi},
+		{factoryapi.WorkerModelProviderAgy, modelprovider.ProviderAgy},
 	}
 
 	for _, tc := range cases {
@@ -47,13 +48,95 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderAliasesRetainCompatibilityRoundTrip(t *testing.T) {
+	cases := []struct {
+		authored string
+		public   factoryapi.WorkerModelProvider
+		internal modelprovider.Provider
+	}{
+		{authored: "anthropic", public: factoryapi.WorkerModelProviderClaude, internal: modelprovider.ProviderClaude},
+		{authored: "ANTHROPIC", public: factoryapi.WorkerModelProviderClaude, internal: modelprovider.ProviderClaude},
+		{authored: "openai", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
+		{authored: "OPENAI", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
+		{authored: "agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "cursor-agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "CURSOR_AGENT", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
+		{authored: "kiro-cli", public: factoryapi.WorkerModelProviderKiro, internal: modelprovider.ProviderKiro},
+		{authored: "antigravity", public: factoryapi.WorkerModelProviderAgy, internal: modelprovider.ProviderAgy},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.authored, func(t *testing.T) {
+			generated, err := GeneratedFactoryFromOpenAPIJSON(factoryJSONWithModelProvider(tc.authored))
+			if err != nil {
+				t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+			}
+			assertGeneratedWorkerModelProvider(t, generated, tc.public)
+
+			cfg, err := FactoryConfigFromOpenAPI(generated)
+			if err != nil {
+				t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+			}
+			if got := modelprovider.Provider(cfg.Workers[0].ModelProvider); got != tc.internal {
+				t.Fatalf("runtime modelProvider = %q, want %q", got, tc.internal)
+			}
+
+			public := WorkerConfigToOpenAPI(cfg.Workers[0])
+			if public.ModelProvider == nil || *public.ModelProvider != tc.public {
+				t.Fatalf("projected modelProvider = %#v, want %q", public.ModelProvider, tc.public)
+			}
+		})
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnknownWorkerModelProviderAtBoundary(t *testing.T) {
-	assertGeneratedFactoryRejectsMisCasedEnumValue(
-		t,
-		"workers[0].modelProvider",
+	for _, malformed := range []string{
 		"MYSTERY-PROVIDER",
-		string(factoryJSONWithModelProvider("MYSTERY-PROVIDER")),
-	)
+		"customer_provider",
+		"customer..provider",
+		"customer.provider-",
+	} {
+		assertGeneratedFactoryRejectsMisCasedEnumValue(
+			t,
+			"workers[0].modelProvider",
+			malformed,
+			string(factoryJSONWithModelProvider(malformed)),
+		)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesExtensionWorkerAndGuardProviders(t *testing.T) {
+	const identity = "customer.provider-v2"
+	generated, err := GeneratedFactoryFromOpenAPIJSON(factoryJSONWithModelProviderAndGuard(identity))
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	assertGeneratedWorkerModelProvider(t, generated, factoryapi.WorkerModelProvider(identity))
+	if generated.Guards == nil || len(*generated.Guards) != 1 || (*generated.Guards)[0].ModelProvider != factoryapi.WorkerModelProvider(identity) {
+		t.Fatalf("generated guard modelProvider = %#v, want %q", generated.Guards, identity)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if got := cfg.Workers[0].ModelProvider; got != identity {
+		t.Fatalf("runtime worker modelProvider = %q, want %q", got, identity)
+	}
+	if got := cfg.Guards[0].ModelProvider; got != identity {
+		t.Fatalf("runtime guard modelProvider = %q, want %q", got, identity)
+	}
+
+	projected, err := FactoryConfigToOpenAPI(&cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
+	if projected.Workers == nil || (*projected.Workers)[0].ModelProvider == nil || string(*(*projected.Workers)[0].ModelProvider) != identity {
+		t.Fatalf("projected worker modelProvider = %#v, want %q", projected.Workers, identity)
+	}
+	if projected.Guards == nil || string((*projected.Guards)[0].ModelProvider) != identity {
+		t.Fatalf("projected guard modelProvider = %#v, want %q", projected.Guards, identity)
+	}
 }
 
 func factoryJSONWithModelProvider(provider string) []byte {
@@ -69,6 +152,22 @@ func factoryJSONWithModelProvider(provider string) []byte {
 			"outputs":[{"workType":"story","state":"complete"}]
 		}]
 	}`, provider))
+}
+
+func factoryJSONWithModelProviderAndGuard(provider string) []byte {
+	return []byte(fmt.Sprintf(`{
+		"name":"extension-provider-roundtrip-factory",
+		"guards":[{"type":"INFERENCE_THROTTLE_GUARD","modelProvider":%q,"refreshWindow":"1m"}],
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers":[{"name":"executor","type":"MODEL_WORKER","modelProvider":%q}],
+		"workstations":[{
+			"name":"execute-story",
+			"worker":"executor",
+			"type":"MODEL_WORKSTATION",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`, provider, provider))
 }
 
 func assertGeneratedWorkerModelProvider(t *testing.T, generated factoryapi.Factory, want factoryapi.WorkerModelProvider) {

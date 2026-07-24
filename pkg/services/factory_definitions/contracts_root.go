@@ -25,7 +25,6 @@ type ValidationSubjectLocation = contracts.ValidationSubjectLocation
 type ValidationResult = contracts.ValidationResult
 type TopologyFinding = contracts.TopologyFinding
 type TopologyValidationResult = contracts.TopologyValidationResult
-type Service = contracts.Service
 type BlockingFactoryLoadError = contracts.BlockingFactoryLoadError
 type ValidationTopologyError = contracts.ValidationTopologyError
 type FactorySessionSyncPreflightOptions = contracts.FactorySessionSyncPreflightOptions
@@ -104,7 +103,6 @@ var (
 type PortableBundledFileReplacement = contracts.PortableBundledFileReplacement
 type MutableLoadedFactorySource = contracts.MutableLoadedFactorySource
 type DefinitionSession = contracts.DefinitionSession
-type SessionHost = contracts.SessionHost
 
 const (
 	ResourceStateAvailable                               = contracts.ResourceStateAvailable
