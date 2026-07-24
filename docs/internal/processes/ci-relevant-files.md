@@ -72,6 +72,26 @@
   `go list ./tests/functional/...` result, the shared-support exclusion, and
   required provider-destination validation in both callers. Required package
   validation protects topology but must not become an execution allowlist.
+  Durable top-level `Test*` inventory for functional-test visualization lives in
+  `internal/functionaltestmetadata`: walk `*_test.go` with `go/parser` /
+  `go/ast`, emit slash-normalized file/package/name/line metadata, take the
+  first Go-doc sentence through `go/doc.Synopsis`, attach file-level
+  `//go:build` (preferring it over legacy `// +build`) expressions as
+  `BuildTags`, and capture explicit golden fixture/manifest paths from a
+  `//golden: <path>` doc directive or a test-owned `golden` /
+  `goldenManifest` / `goldenFixture` string declaration. Classify
+  `internal/**` and `*helpers*_test.go` paths as harness verification
+  (`ClassificationHarness`); all other inventoried `Test*` records are
+  `ClassificationCustomer`. `CustomerScenarioCount` equals the customer
+  record count only. Fail closed with a file-scoped error on malformed
+  source. Undocumented customer identities are enforced against the exact
+  deletion-only ledger
+  `docs/internal/baselines/functional-undocumented-tests.json` via
+  `CheckAgainstBaseline` / `ValidateBaselineUpdate` (subset or identical
+  match succeeds; new undocumented customer tests and baseline expansions
+  fail; harness/internal helpers stay out of the ledger). Later FND cells
+  wire that check into Make/CI; do not reintroduce regex or line-scraping
+  inventories.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
