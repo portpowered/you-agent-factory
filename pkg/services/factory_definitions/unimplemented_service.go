@@ -114,7 +114,7 @@ func (UnimplementedService) ReplaceNamedFactory(
 }
 
 // CompileEffectiveFactorySource returns ErrInvalidAuthoredFactorySource until
-// nested loading wiring lands.
+// an owner-local implementer overrides it to delegate to nested compilation.
 func (UnimplementedService) CompileEffectiveFactorySource(
 	context.Context,
 	CompileEffectiveFactorySourceRequest,

@@ -11,6 +11,8 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -24,12 +26,14 @@ const (
 )
 
 // Service owns current and named factory definition reads, persistence, and
-// activation policy. UnimplementedService keeps the CTR-DEF root slice methods
-// assignable until nested IMP-DEF collaborators are wired.
+// activation policy. UnimplementedService keeps the remaining CTR-DEF root slice
+// methods assignable until nested IMP-DEF collaborators are wired. Compilation
+// is already delegated to the private nested compilation subservice.
 type Service struct {
 	factoryroot.UnimplementedService
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	compilation       compilation.Service
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
@@ -38,7 +42,24 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
 	}
-	return &Service{host: host, versionFileSystem: versionFileSystem}
+	return &Service{
+		host:              host,
+		versionFileSystem: versionFileSystem,
+		compilation:       compilationwire.NewService(),
+	}
+}
+
+// CompileEffectiveFactorySource delegates authored/canonical → effective-source
+// compile to the private nested compilation subservice so peers keep calling
+// the public Definitions root contract.
+func (s *Service) CompileEffectiveFactorySource(
+	ctx context.Context,
+	request factoryroot.CompileEffectiveFactorySourceRequest,
+) (factoryroot.CompileEffectiveFactorySourceResult, error) {
+	if s == nil || s.compilation == nil {
+		return factoryroot.CompileEffectiveFactorySourceResult{}, factoryroot.ErrInvalidAuthoredFactorySource
+	}
+	return s.compilation.CompileEffectiveFactorySource(ctx, request)
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the
