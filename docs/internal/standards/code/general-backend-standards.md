@@ -142,16 +142,21 @@ Repository package-boundary policy:
 - Direct children of `pkg/` are package families. New root `pkg/` package families are **blocking** unless a maintainer deliberately updates the approved family allowlist with the owning domain and rationale.
 - The durable product-owned root package families are: `pkg/initializer`, `pkg/internal`, `pkg/platform`, `pkg/root`, `pkg/services`, `pkg/transports`, and `pkg/wire`. Product services live below `pkg/services`; the retired `pkg/config`, `pkg/factory`, `pkg/models`, `pkg/orchestrators`, `pkg/work`, and `pkg/workers` roots **MUST NOT** be recreated.
 - Every `pkg/services/<service>` root and every nested
-  `pkg/services/<service>/services/<subservice>` root **MUST** declare exactly
-  one named service interface. Direct production files in that root **MUST NOT**
-  add exported package-level functions; public behavior is exposed through the
-  singular interface, with mostly plain request/result structs at the root.
+  `pkg/services/<service>/internal/services/<subservice>` root **MUST** declare
+  exactly one named service interface. Direct production files in that root
+  **MUST NOT** add exported package-level functions; public behavior is exposed
+  through the singular interface, with mostly plain request/result structs at
+  the root.
 - Direct child directories of every service and subservice root are restricted
-  to `wire`, `internal`, and `services`. `internal` owns the private
-  implementation, `wire` exposes the focused construction providers consumed
-  by canonical root `pkg/wire`, and `services/<subservice>` recursively follows
-  the same package shape. Go files **MUST NOT** live directly in the `services`
-  container.
+  to `wire`, `internal`, and `transports` where transports apply. `internal`
+  owns the private implementation, `wire` exposes the focused construction
+  providers consumed by canonical root `pkg/wire`, and nested services live
+  only under the parent-private
+  `<service-or-subservice>/internal/services/<subservice>` container. Each
+  nested subservice recursively follows the same package shape, with deeper
+  nesting under `<subservice>/internal/services/<child>`. A public sibling
+  `<service>/services/` or `<subservice>/services/` container is non-canonical.
+  Go files **MUST NOT** live directly in an `internal/services` container.
 - `make pkg-structure` mechanically enforces the service-root interface,
   exported-function, recursive directory-shape, and functional-test layout
   rules. Existing violations are exact deletion-only entries in
