@@ -682,3 +682,104 @@ func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
 		t.Fatalf("GetCursor() error = %v, want errors.Is ErrConflict", err)
 	}
 }
+
+// peerConsumePublishedSlices is a peer-shaped consumer of the sealed Automations
+// root. It depends only on automations.Service plain contracts (this file's
+// imports are stdlib + pkg/services/automations) and never needs Automations
+// implementation packages or cron/poller/watcher types.
+func peerConsumePublishedSlices(ctx context.Context, svc automations.Service) error {
+	if _, err := svc.Ready(ctx, automations.ReadyRequest{}); err != nil {
+		return err
+	}
+	if _, err := svc.Reconcile(ctx, automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{
+			{AutomationID: "auto-seal", Kind: "schedule", Enabled: true},
+		},
+		Observed: []automations.ObservedInstance{
+			{AutomationID: "auto-seal", InstanceID: "inst-seal", Status: automations.InstanceStatusRunning},
+		},
+	}); err != nil {
+		return err
+	}
+	started, err := svc.StartSource(ctx, automations.StartSourceRequest{
+		SourceID: "source-seal",
+		Kind:     "schedule",
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := svc.SourceStatus(ctx, automations.SourceStatusRequest{Handle: started.Handle}); err != nil {
+		return err
+	}
+	if _, err := svc.StopSource(ctx, automations.StopSourceRequest{Handle: started.Handle}); err != nil {
+		return err
+	}
+	if _, err := svc.WaitSource(ctx, automations.WaitSourceRequest{Handle: started.Handle}); err != nil {
+		return err
+	}
+	if _, err := svc.GetStatus(ctx, automations.GetStatusRequest{InstanceID: "inst-seal"}); err != nil {
+		return err
+	}
+	if _, err := svc.GetCursor(ctx, automations.GetCursorRequest{InstanceID: "inst-seal"}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestServiceRootSealed_AllPublishedSlicesReachableThroughOneService(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeRootService{
+		ready: true,
+		instances: map[string]fakeInstance{
+			"inst-seal": {
+				automationID: "auto-seal",
+				status:       automations.InstanceStatusRunning,
+				cursor:       "cursor-seal",
+				checkpoint:   "checkpoint-seal",
+			},
+		},
+	}
+	var root automations.Service = svc
+
+	if err := peerConsumePublishedSlices(context.Background(), root); err != nil {
+		t.Fatalf("peerConsumePublishedSlices() unexpected error: %v", err)
+	}
+
+	// Representative typed failures remain distinguishable on the same singular root.
+	_, reconcileErr := root.Reconcile(context.Background(), automations.ReconcileRequest{})
+	assertTypedAutomationsError(t, "Reconcile", reconcileErr, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
+	_, missingSourceErr := root.SourceStatus(context.Background(), automations.SourceStatusRequest{
+		Handle: automations.SourceHandle{ID: "missing-seal-source"},
+	})
+	assertTypedAutomationsError(t, "SourceStatus", missingSourceErr, automations.ErrorCodeNotFound, automations.ErrNotFound)
+
+	_, missingInstanceErr := root.GetStatus(context.Background(), automations.GetStatusRequest{
+		InstanceID: "missing-seal-instance",
+	})
+	assertTypedAutomationsError(t, "GetStatus", missingInstanceErr, automations.ErrorCodeNotFound, automations.ErrNotFound)
+
+	_, staleCursorErr := root.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID:     "inst-seal",
+		ExpectedCursor: "cursor-stale",
+	})
+	assertTypedAutomationsError(t, "GetCursor", staleCursorErr, automations.ErrorCodeConflict, automations.ErrConflict)
+}
+
+func assertTypedAutomationsError(t *testing.T, op string, err error, code automations.ErrorCode, sentinel error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s() error = nil, want typed Automations error", op)
+	}
+	var typed *automations.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("%s() error type = %T, want *automations.Error", op, err)
+	}
+	if typed.Code != code {
+		t.Fatalf("%s() error code = %q, want %q", op, typed.Code, code)
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("%s() error = %v, want errors.Is %v", op, err, sentinel)
+	}
+}
