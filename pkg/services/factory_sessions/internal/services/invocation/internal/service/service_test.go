@@ -346,6 +346,107 @@ func TestServiceCoordinatesSubmissionAndTerminalResult(t *testing.T) {
 	assertCommandedPreparedWork(t, peer.lastRequest, "hello")
 }
 
+func TestService_TypedTimeoutCancelAndValidationOutcomesAreDistinct(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-typed-outcomes"
+	sourceKind := factorysessions.InvocationInputSourceKindText
+
+	service, err := New(validDependencies(nil))
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	_, validationErr := service.InvokeFactorySession(context.Background(), sessionID, factorysessions.InvocationRequest{
+		ContentProvided: false,
+		RequestID:       strPtr("req-invalid"),
+	})
+	var invalidInput *factorysessions.InvocationValidationError
+	if !errors.As(validationErr, &invalidInput) || invalidInput.Field != "content" {
+		t.Fatalf("invalid input = %v (%T), want *InvocationValidationError field=content", validationErr, validationErr)
+	}
+	if strings.Contains(validationErr.Error(), string(factorydefinitions.InvocationErrorCodeTimedOut)) ||
+		strings.Contains(validationErr.Error(), string(factorydefinitions.InvocationErrorCodeCanceled)) {
+		t.Fatalf("validation failure = %v, must not collapse into timeout/cancel codes", validationErr)
+	}
+
+	timeoutDeps := validDependencies(nil)
+	timeoutDeps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		return legacyinvocation.SessionInvocationObservation{}, nil
+	}
+	timeoutDeps.WaitNext = func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	timeoutService, err := New(timeoutDeps)
+	if err != nil {
+		t.Fatalf("New(timeout): %v", err)
+	}
+	timeoutMillis := int64(1)
+	timeoutResult, err := timeoutService.InvokeFactorySession(context.Background(), sessionID, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		RequestID:       strPtr("req-timeout"),
+		TimeoutMillis:   &timeoutMillis,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("timeout InvokeFactorySession(): %v", err)
+	}
+	if timeoutResult.Status != factorydefinitions.InvocationTerminalStatusTimedOut ||
+		timeoutResult.ErrorCode != string(factorydefinitions.InvocationErrorCodeTimedOut) {
+		t.Fatalf("timeout result = %#v, want TIMED_OUT / INVOCATION_TIMED_OUT", timeoutResult)
+	}
+	if timeoutResult.SessionID != sessionID {
+		t.Fatalf("timeout SessionID = %q, want session-scoped %q", timeoutResult.SessionID, sessionID)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelDeps := validDependencies(nil)
+	cancelDeps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		cancel()
+		return legacyinvocation.SessionInvocationObservation{}, nil
+	}
+	cancelDeps.WaitNext = func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	cancelService, err := New(cancelDeps)
+	if err != nil {
+		t.Fatalf("New(cancel): %v", err)
+	}
+	cancelResult, err := cancelService.InvokeFactorySession(ctx, sessionID, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		RequestID:       strPtr("req-cancel"),
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("cancel InvokeFactorySession(): %v", err)
+	}
+	if cancelResult.Status != factorydefinitions.InvocationTerminalStatusCanceled ||
+		cancelResult.ErrorCode != string(factorydefinitions.InvocationErrorCodeCanceled) {
+		t.Fatalf("cancel result = %#v, want CANCELED / INVOCATION_CANCELED", cancelResult)
+	}
+	if cancelResult.SessionID != sessionID {
+		t.Fatalf("cancel SessionID = %q, want session-scoped %q", cancelResult.SessionID, sessionID)
+	}
+
+	if timeoutResult.Status == cancelResult.Status ||
+		timeoutResult.ErrorCode == cancelResult.ErrorCode ||
+		timeoutResult.Status == factorydefinitions.InvocationTerminalStatusCompleted {
+		t.Fatal("timeout and cancellation typed outcomes must stay distinguishable from each other and success")
+	}
+	if cancelResult.ErrorCode == string(factorydefinitions.InvocationErrorCodeTimedOut) ||
+		cancelResult.Status == factorydefinitions.InvocationTerminalStatusTimedOut {
+		t.Fatal("caller-cancellation must stay distinct from timeout typed outcome")
+	}
+	if timeoutResult.ErrorCode == string(factorydefinitions.InvocationErrorCodeCanceled) ||
+		timeoutResult.Status == factorydefinitions.InvocationTerminalStatusCanceled {
+		t.Fatal("timeout must stay distinct from caller-cancellation typed outcome")
+	}
+}
+
 func TestServiceCompletesCancellationExactlyOnce(t *testing.T) {
 	t.Parallel()
 
@@ -417,6 +518,8 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 		t.Fatalf("observation calls = %d, want 1", observeCalls)
 	}
 }
+
+func strPtr(value string) *string { return &value }
 
 func TestServicePreservesDependencyFailure(t *testing.T) {
 	t.Parallel()

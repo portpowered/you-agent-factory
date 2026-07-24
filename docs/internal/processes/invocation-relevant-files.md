@@ -22,7 +22,11 @@ primary-result behavior.
   partial-capture failures) stay session-scoped with stable request/trace
   identity. Partial-capture failed Work must surface as `FAILED` /
   `INVOCATION_RUNTIME_FAILURE` with Work identity fields rather than promoting
-  captured content into a `COMPLETED` primary result.
+  captured content into a `COMPLETED` primary result. Timeout and caller-
+  cancellation return distinct typed terminals (`TIMED_OUT` /
+  `INVOCATION_TIMED_OUT`, `CANCELED` / `INVOCATION_CANCELED`); invalid input is
+  projected to CTR-SES `*InvocationValidationError` and must not collapse into
+  those timeout/cancel codes.
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
