@@ -90,6 +90,7 @@ type coverageResult struct {
 	insufficientCoveragePackages []packageCoverageSummary
 	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
+	packageGates                 map[string]packageCoverageGate
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
 }
@@ -305,6 +306,9 @@ func run(cfg config) (coverageResult, error) {
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures = checkCoverageManifest(manifest, result.packageTotals, cfg.packageManifest)
+		result.packageGates = packageGatesFromManifest(manifest)
+	} else if legacyPackageGateEnabled {
+		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
 	}
 	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
