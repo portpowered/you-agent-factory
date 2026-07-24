@@ -23,17 +23,17 @@ func TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess(t 
 	integration := inference.ProgressingExternalIntegration("customer.provider", "structured progress COMPLETE")
 	manifest := externalProviderManifest(t, "customer.provider", "customer")
 
-	session, _, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		ProviderRegistrations: []inference.Registration{{
 			Manifest:    manifest,
 			Integration: integration,
 		}},
 	}, 20*time.Second)
 
-	if got := support.SessionPlaceTokenCount(session, "task:done"); got != 1 {
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("terminal place tokens = %d, want 1 completed work item", got)
 	}
-	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 0 {
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 

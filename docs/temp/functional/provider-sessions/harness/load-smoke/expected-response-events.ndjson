@@ -1,0 +1,2 @@
+{"type":"message.delta","itemId":"item_fixture_1","text":"Hello"}
+{"type":"message.completed","itemId":"item_fixture_1","finishReason":"stop"}

@@ -428,6 +428,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
 	for time.Now().Before(deadline) {
 		session := support.GetDefaultSession(t, server.URL())
+		listed := support.ListDefaultSessionWork(t, server.URL())
 		dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
 		available, _, resourceFound := runtimeConfigAlignmentResourceUsage(session, "agent-slot")
 		if _, ok := runtimeConfigAlignmentFindDispatch(
@@ -436,7 +437,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 			factoryapi.WorkOutcomeFailed,
 			"execution timeout",
 		); ok &&
-			support.SessionPlaceTokenCount(session, "task:reviewed") == 1 &&
+			support.CountWorkAtCustomerState(listed, "task:reviewed") == 1 &&
 			resourceFound && available == 1 {
 			return
 		}

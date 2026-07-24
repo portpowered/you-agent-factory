@@ -31,10 +31,10 @@ func TestNtoN_TypeMatching(t *testing.T) {
 		Tags:       map[string]string{"source": "figma"},
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("review-done"),
 	}, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"idea:complete": 1, "design:complete": 1})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"idea:complete": 1, "design:complete": 1})
 	assertTerminalWork(t, listedWork, "idea", "cool-idea", "work-idea-100", "trace-idea", map[string]string{"source": "brainstorm"})
 	assertTerminalWork(t, listedWork, "design", "cool-design", "work-design-200", "trace-design", map[string]string{"source": "figma"})
 }
@@ -42,10 +42,10 @@ func TestNtoN_TypeMatching(t *testing.T) {
 func TestMultiOutputReviewerFanoutPreservesSharedNameDownstream(t *testing.T) {
 	dir := scaffoldReviewerFanoutFactory(t)
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("done"),
 	}, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"document:complete": 1, "review-alpha:complete": 1, "review-beta:complete": 1,
 	})
 	assertFanoutTerminalNames(t, listedWork, []string{"review-alpha", "review-beta"}, "source-doc-alpha", "work-document-1")
@@ -155,10 +155,10 @@ func TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream(t *testing.T) 
 		Payload:    []byte("review this document"),
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("<COMPLETE>"),
 	}, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"document:complete":                 1,
 		"review-task-normal-human:complete": 1,
 		"review-task-reviewer:complete":     1,

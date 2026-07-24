@@ -36,10 +36,10 @@ func TestDispatcherLifecycle_IdeaToArchive(t *testing.T) {
 		"archiver": {{Content: "success<COMPLETE>"}},
 	})
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 30*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"code-change:archived": 1, "idea:init": 0, "idea:failed": 0, "prd:init": 0,
 		"prd:failed": 0, "code-change:init": 0, "code-change:approved": 0, "code-change:failed": 0,
 	})
@@ -64,8 +64,8 @@ func TestDispatcherLifecycle_PlannerFailure(t *testing.T) {
 		"planner": {{Content: "failed"}},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:failed": 1, "prd:init": 0, "code-change:init": 0, "code-change:archived": 0,
 	})
 }

@@ -107,8 +107,9 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 	}
 }
 
-// provideRuntimeInputResolver merges only external edges. Per-operation
-// selections are already owner-bounded by the canonical injector mapper.
+// provideRuntimeInputResolver merges process edges into the exact opening
+// effect ports. Per-operation selections are already owner-bounded by the
+// canonical injector mapper.
 func provideRuntimeInputResolver(
 	defaultEdges serviceedges.Edges,
 	resolveClock factoryruntime.ClockResolver,
@@ -129,13 +130,14 @@ func provideRuntimeInputResolver(
 		if resolveClock != nil {
 			edges.Clock = resolveClock(edges.Clock)
 		}
-		if err := validateResolvedRuntimeInputs(ctx, request, edges, logger); err != nil {
+		effects := projectRuntimeOpeningExternalEffects(edges)
+		if err := validateResolvedRuntimeInputs(ctx, request, effects, logger); err != nil {
 			return factorysessionwire.ApplicationRuntimeInputs{}, err
 		}
 		configured := *request
 		return factorysessionwire.ApplicationRuntimeInputs{
 			Request: &configured,
-			Edges:   edges,
+			Effects: effects,
 			Logger:  logger,
 		}, nil
 	}
@@ -144,7 +146,7 @@ func provideRuntimeInputResolver(
 func validateResolvedRuntimeInputs(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges serviceedges.Edges,
+	effects factorysessionwire.RuntimeOpeningExternalEffects,
 	logger *zap.Logger,
 ) error {
 	switch {
@@ -156,7 +158,7 @@ func validateResolvedRuntimeInputs(
 		return errors.New("runtime opening request is required")
 	case logger == nil:
 		return errors.New("runtime logger is required")
-	case isNilRuntimeInput(edges.Clock):
+	case isNilRuntimeInput(effects.Clock):
 		return errors.New("runtime clock edge is required")
 	default:
 		return nil

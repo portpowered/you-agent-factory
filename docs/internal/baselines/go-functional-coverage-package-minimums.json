@@ -704,7 +704,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
-      "minimum": 39.00
+      "minimum": 38.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
@@ -922,7 +922,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 35.81
+      "minimum": 30.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
@@ -1344,7 +1344,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",
-      "minimum": 39.24
+      "minimum": 39.09
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",

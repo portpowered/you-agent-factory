@@ -127,12 +127,12 @@ func TestNamedGoalRouting_InterruptedSuppressesSuccessPrimaryResult(t *testing.T
 		t.Fatalf("work state = %#v, want interrupted", interrupted.State)
 	}
 
-	session := support.GetDefaultSession(t, server.URL())
-	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:complete") {
 		t.Fatalf("interrupted routing reached goal:complete for work %q", workID)
 	}
-	if !markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:interrupted") {
-		t.Fatalf("marking missing goal:interrupted token for work %q", workID)
+	if !markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:interrupted") {
+		t.Fatalf("work listing missing goal:interrupted for work %q: %#v", workID, listed.Results)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestNamedGoalRouting_ReworkLoopsBackThenCompletesWithGoalContext(t *testing
 	}
 
 	work := findNamedGoalRoutingWorkAtCompleteState(t, server)
-	if !markingContainsNamedGoalRoutingWorkAtPlace(support.GetDefaultSession(t, server.URL()), stringPointerValue(work.WorkId), "goal:complete") {
+	if !markingContainsNamedGoalRoutingWorkAtPlace(support.ListDefaultSessionWork(t, server.URL()), stringPointerValue(work.WorkId), "goal:complete") {
 		t.Fatalf("completed work %q missing goal:complete token after rework", stringPointerValue(work.WorkId))
 	}
 }
@@ -682,9 +682,9 @@ func generatedWorkStateName(state *factoryapi.WorkState) string {
 }
 
 func markingContainsNamedGoalRoutingWorkAtPlace(
-	session factoryapi.FactorySession,
+	listed factoryapi.ListWorkResponse,
 	workID string,
 	placeID string,
 ) bool {
-	return support.SessionHasWorkAtPlace(session, workID, placeID)
+	return support.HasWorkAtCustomerState(listed, workID, placeID)
 }

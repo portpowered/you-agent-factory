@@ -48,8 +48,9 @@ type ContentStagingClock interface {
 	Now() time.Time
 }
 
-// ContentStagingService is the Work-owned staging boundary consumed by
-// transports. Each operation owns validation and external effects completely.
+// ContentStagingService is the focused Work staging role. The published peer
+// root exposes the same operations on Service; transports may still inject this
+// narrower role until nested IMP-WORK cuts fold injection onto the root.
 type ContentStagingService interface {
 	StageContent(context.Context, StageContentRequest) (StageContentResult, error)
 	PrepareContent(context.Context, []StagedSubmissionItem) ([]WorkContentPart, error)
@@ -57,6 +58,7 @@ type ContentStagingService interface {
 	CleanupContent(context.Context, string) error
 }
 
+// StageContentRequest is the plain Work-owned staging request contract.
 type StageContentRequest struct {
 	ItemType  string
 	FileName  string
@@ -64,6 +66,9 @@ type StageContentRequest struct {
 	Content   []byte
 }
 
+// StageContentResult is the plain Work-owned staging result. StagedFileRef is an
+// opaque reference peers pass back through prepare/resolve/cleanup without
+// observing staging implementation types.
 type StageContentResult struct {
 	StagedFileRef string
 	FileName      string

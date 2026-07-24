@@ -39,12 +39,12 @@ func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *test
 		Args:       []string{"--replay", artifactPath},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("task:complete token count = %d, want 1", got)
 	}
 	for _, placeID := range []string{"task:init", "task:processing", "task:failed"} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != 0 {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != 0 {
 			t.Fatalf("%s token count = %d, want 0", placeID, got)
 		}
 	}

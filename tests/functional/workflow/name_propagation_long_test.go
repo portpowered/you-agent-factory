@@ -31,8 +31,8 @@ func TestNamePropagation_InPromptTemplate(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"task:complete": 1})
 
 	providerCalls := provider.Calls()
 	if len(providerCalls) == 0 {
@@ -55,10 +55,10 @@ func TestNamePropagation_MarkdownFile(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"task:complete": 1, "task:init": 0})
 
 	providerCalls := provider.Calls()
 	if len(providerCalls) == 0 {
