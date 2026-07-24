@@ -37,6 +37,17 @@ type Service interface {
 	// not supply Factory Session implementation types, provider factory
 	// constructors, or Petri/JavaScript internals on the request shape.
 	BuildRuntime(context.Context, RuntimeBuildRequest) (RuntimeBuildResult, error)
+
+	// DispatchWorkstation is the published workstation-dispatch slice. Peers
+	// supply a plain WorkstationDispatchRequest covering workstation
+	// execution identity and resolved runner selection facts, and receive a
+	// detached WorkstationDispatchResult with execution/work outcomes, or a
+	// typed Workers failure such as ErrInvalidWorkstationDispatchRequest,
+	// ErrWorkstationDispatchRoutingRejected, ErrWorkstationDispatchCancelled,
+	// ErrWorkstationDispatchSaturated, or ErrIncompleteWorkstationDispatch.
+	// The request stays free of provider-native command/decode/session types
+	// and concrete provider identity switches.
+	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
 }
 
 // ModelInvoker is the narrow Workers role that exposes only direct model
@@ -117,3 +128,49 @@ var ErrRuntimeAssemblyRejected = errors.New("Workers runtime assembly rejected")
 // ErrIncompleteRuntimeAssembly reports that Workers could not complete assembly
 // from the supplied runtime-build request.
 var ErrIncompleteRuntimeAssembly = errors.New("Workers runtime assembly incomplete")
+
+// WorkstationDispatchRequest is the plain Workers-owned workstation-dispatch
+// input covering workstation execution identity and resolved runner selection
+// facts peers already consume. It stays free of provider-native
+// command/decode/session types and concrete provider identity switches.
+type WorkstationDispatchRequest struct {
+	DispatchID      string
+	TransitionID    string
+	WorkstationName string
+	WorkerType      string
+	RunnerSelection ResolvedRunnerSelection
+}
+
+// WorkstationDispatchResult carries detached execution/work success facts for
+// one workstation-dispatch operation peers can consume from Workers root types
+// only.
+type WorkstationDispatchResult struct {
+	DispatchID      string
+	TransitionID    string
+	WorkstationName string
+	RunnerSelection ResolvedRunnerSelection
+	Outcome         WorkOutcome
+	Output          string
+	Error           string
+}
+
+// ErrInvalidWorkstationDispatchRequest reports a malformed or empty
+// workstation-dispatch request peers can distinguish without parsing free-form
+// dispatch details.
+var ErrInvalidWorkstationDispatchRequest = errors.New("invalid Workers workstation-dispatch request")
+
+// ErrWorkstationDispatchRoutingRejected reports that Workers rejected runner
+// routing or selection for a workstation-dispatch request.
+var ErrWorkstationDispatchRoutingRejected = errors.New("Workers workstation-dispatch routing rejected")
+
+// ErrWorkstationDispatchCancelled reports that a workstation-dispatch was
+// cancelled before a detached execution result was produced.
+var ErrWorkstationDispatchCancelled = errors.New("Workers workstation-dispatch cancelled")
+
+// ErrWorkstationDispatchSaturated reports that Workers could not accept a
+// workstation-dispatch because dispatch capacity was saturated.
+var ErrWorkstationDispatchSaturated = errors.New("Workers workstation-dispatch saturated")
+
+// ErrIncompleteWorkstationDispatch reports that Workers could not complete
+// workstation dispatch from the supplied request.
+var ErrIncompleteWorkstationDispatch = errors.New("Workers workstation dispatch incomplete")

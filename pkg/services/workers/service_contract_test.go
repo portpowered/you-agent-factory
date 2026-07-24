@@ -23,6 +23,10 @@ type fakeWorkersPeer struct {
 	lastRuntimeBuildRequest workers.RuntimeBuildRequest
 	runtimeBuildResult      workers.RuntimeBuildResult
 	runtimeBuildErr         error
+
+	lastWorkstationDispatchRequest workers.WorkstationDispatchRequest
+	workstationDispatchResult      workers.WorkstationDispatchResult
+	workstationDispatchErr         error
 }
 
 func (f *fakeWorkersPeer) InvokeModel(
@@ -41,6 +45,14 @@ func (f *fakeWorkersPeer) BuildRuntime(
 ) (workers.RuntimeBuildResult, error) {
 	f.lastRuntimeBuildRequest = request
 	return f.runtimeBuildResult, f.runtimeBuildErr
+}
+
+func (f *fakeWorkersPeer) DispatchWorkstation(
+	_ context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	f.lastWorkstationDispatchRequest = request
+	return f.workstationDispatchResult, f.workstationDispatchErr
 }
 
 var _ workers.Service = (*fakeWorkersPeer)(nil)
@@ -171,6 +183,72 @@ func TestServiceRootContract_RuntimeBuildTypedFailuresThroughSingularSeam(t *tes
 			_, err := service.BuildRuntime(context.Background(), workers.RuntimeBuildRequest{})
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("BuildRuntime error = %v, want %v", err, tc.err)
+			}
+		})
+	}
+}
+
+func TestServiceRootContract_WorkstationDispatchSuccessThroughSingularSeam(t *testing.T) {
+	want := workers.WorkstationDispatchResult{
+		DispatchID:      "dispatch-1",
+		TransitionID:    "transition-1",
+		WorkstationName: "writer",
+		RunnerSelection: workers.ResolvedRunnerSelection{
+			RunnerID: workers.RunnerIDCodex,
+			Source:   workers.RunnerSelectionSourceWorkstation,
+		},
+		Outcome: workers.OutcomeAccepted,
+		Output:  "done",
+	}
+	fake := &fakeWorkersPeer{workstationDispatchResult: want}
+	var service workers.Service = fake
+
+	request := workers.WorkstationDispatchRequest{
+		DispatchID:      "dispatch-1",
+		TransitionID:    "transition-1",
+		WorkstationName: "writer",
+		WorkerType:      "codex-worker",
+		RunnerSelection: workers.ResolvedRunnerSelection{
+			RunnerID: workers.RunnerIDCodex,
+			Source:   workers.RunnerSelectionSourceWorkstation,
+		},
+	}
+	result, err := service.DispatchWorkstation(context.Background(), request)
+	if err != nil {
+		t.Fatalf("DispatchWorkstation: %v", err)
+	}
+	if result.DispatchID != "dispatch-1" || result.TransitionID != "transition-1" {
+		t.Fatalf("identity = %#v, want dispatch-1/transition-1", result)
+	}
+	if result.WorkstationName != "writer" || result.Outcome != workers.OutcomeAccepted {
+		t.Fatalf("result = %#v, want writer ACCEPTED", result)
+	}
+	if result.RunnerSelection.RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("runner = %#v, want codex workstation selection", result.RunnerSelection)
+	}
+	if fake.lastWorkstationDispatchRequest.WorkstationName != "writer" {
+		t.Fatalf("routed request = %#v, want writer", fake.lastWorkstationDispatchRequest)
+	}
+}
+
+func TestServiceRootContract_WorkstationDispatchTypedFailuresThroughSingularSeam(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid", err: workers.ErrInvalidWorkstationDispatchRequest},
+		{name: "routing_rejected", err: workers.ErrWorkstationDispatchRoutingRejected},
+		{name: "cancelled", err: workers.ErrWorkstationDispatchCancelled},
+		{name: "saturated", err: workers.ErrWorkstationDispatchSaturated},
+		{name: "incomplete", err: workers.ErrIncompleteWorkstationDispatch},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeWorkersPeer{workstationDispatchErr: tc.err}
+			var service workers.Service = fake
+			_, err := service.DispatchWorkstation(context.Background(), workers.WorkstationDispatchRequest{})
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("DispatchWorkstation error = %v, want %v", err, tc.err)
 			}
 		})
 	}

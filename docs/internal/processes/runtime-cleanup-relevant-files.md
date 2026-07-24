@@ -710,15 +710,17 @@ definition package—otherwise package-coverage minima regress on both
 unit and functional lanes.
 
 CTR-WRK publishes additive Workers root slices on the singular
-`pkg/services/workers.Service` (`BuildRuntime` today; workstation-dispatch
-and Runner-neutral next) with plain request/result/typed-error contracts
+`pkg/services/workers.Service` (`BuildRuntime` and `DispatchWorkstation`
+today; Runner-neutral next) with plain request/result/typed-error contracts
 in `service_contract.go`, proved by an external `workers_test` fake that
 imports only the Workers root plus approved peer roots. Keep
 `RuntimeService` as Factory Session opening/composition only. Concrete
 `service.Service` must still satisfy embedded `Service` methods with a
-typed incomplete-assembly stub until IMP-WRK wires real assembly; ratchet
-`backend-package-file-count.json` when `service_contract*.go` growth
-increases the Workers root file count.
+typed incomplete stub until IMP-WRK wires real assembly/dispatch; keep
+those incomplete stubs colocated in one `service/root_contract_stubs.go`
+so the concrete service package stays under the default file-count limit.
+Ratchet `backend-package-file-count.json` when `service_contract*.go`
+growth increases the Workers root file count.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
