@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 )
 
@@ -43,8 +44,10 @@ func newRootDistributeServiceForPeer(
 			Project: "builtin-goal",
 			JSON:    []byte(`{"name":"goal"}`),
 		}},
-		installer,
-		scaffold,
+		distribution.Dependencies{
+			Installer: installer,
+			Scaffold:  scaffold,
+		},
 	)
 	if err != nil {
 		t.Fatalf("distributionwire.NewService: %v", err)

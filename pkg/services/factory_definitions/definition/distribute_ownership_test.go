@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 )
 
@@ -31,12 +32,14 @@ func TestRootService_DistributeSuccessThroughPrivateDistribution(t *testing.T) {
 			Project: "builtin-goal",
 			JSON:    []byte(`{"name":"goal"}`),
 		}},
-		distributeOwnershipInstaller{result: []factoryroot.PackagedFactoryInstallResult{{
-			Name:       "@you/goal",
-			FactoryDir: factoryDir,
-			Outcome:    factoryroot.PackagedFactoryInstallCreated,
-		}}},
-		func(factoryroot.ScaffoldConfig) error { return nil },
+		distribution.Dependencies{
+			Installer: distributeOwnershipInstaller{result: []factoryroot.PackagedFactoryInstallResult{{
+				Name:       "@you/goal",
+				FactoryDir: factoryDir,
+				Outcome:    factoryroot.PackagedFactoryInstallCreated,
+			}}},
+			Scaffold: func(factoryroot.ScaffoldConfig) error { return nil },
+		},
 	)
 	if err != nil {
 		t.Fatalf("distributionwire.NewService: %v", err)

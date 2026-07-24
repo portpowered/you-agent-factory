@@ -62,8 +62,10 @@ func TestDistributionService_OwnsBuiltInInstallAndScaffoldSuccess(t *testing.T) 
 			Project: "builtin-goal",
 			JSON:    []byte(`{"name":"goal"}`),
 		}},
-		installer,
-		scaffold,
+		distribution.Dependencies{
+			Installer: installer,
+			Scaffold:  scaffold,
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -145,8 +147,10 @@ func TestDistributionService_InstallAndScaffoldShareAggregateFacts(t *testing.T)
 			Project: "builtin-goal",
 			JSON:    []byte(`{"name":"goal"}`),
 		}},
-		installer,
-		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		distribution.Dependencies{
+			Installer: installer,
+			Scaffold:  func(factorydefinitions.ScaffoldConfig) error { return nil },
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -224,12 +228,14 @@ func TestDistributionService_BuiltInListAndTypedDistributeFailures(t *testing.T)
 			Project: "builtin-goal",
 			JSON:    []byte(`{"name":"goal","secret":true}`),
 		}},
-		installer,
-		func(cfg factorydefinitions.ScaffoldConfig) error {
-			if strings.TrimSpace(cfg.Type) == "unsupported" {
-				return fmt.Errorf("unsupported scaffold type %q", cfg.Type)
-			}
-			return nil
+		distribution.Dependencies{
+			Installer: installer,
+			Scaffold: func(cfg factorydefinitions.ScaffoldConfig) error {
+				if strings.TrimSpace(cfg.Type) == "unsupported" {
+					return fmt.Errorf("unsupported scaffold type %q", cfg.Type)
+				}
+				return nil
+			},
 		},
 	)
 	if err != nil {
