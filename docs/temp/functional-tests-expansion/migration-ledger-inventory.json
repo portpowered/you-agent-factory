@@ -191,160 +191,160 @@
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/harness_smoke_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/harness_smoke_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/install_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/install_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/install_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/install_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/invalid_quiet_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/invalid_quiet_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestInvalidGoal_OutputModesExitNonZero",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/models/invoke/cli_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/output_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestInvocationOutput_TerminalFailureExitsNonZero",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/process/stdout_stderr_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/provider_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/provider_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/acceptance/provider_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
@@ -691,640 +691,640 @@
       "package": "you-agent-factory/tests/functional/cli/dynamic_workflows",
       "scenario": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
       "package": "you-agent-factory/tests/functional/cli/dynamic_workflows",
       "scenario": "TestRunJavaScriptFactoryWithMockWorkersUsesFakeChildExecutor",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/events/events_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/events",
       "scenario": "TestSuccessfulInvocationEmitsCanonicalNDJSON",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/events/javascript_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/events",
       "scenario": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/output/failure_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/output",
       "scenario": "TestInvocationFailureOutputContracts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/output/json_result_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/output/output_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/output",
       "scenario": "TestSuccessfulInvocationOutputModes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/output/json_result_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestPackagedFactoryJSONAndYAMLValidateFlattenAndRunParity",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestPublicMappingFailuresRetainJSONAndYAMLSourceContext",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestRejectedAuthoredSourcesFailBeforeRuntimeExecution",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestRuntimeMappingFailureRetainsSelectedSourceContext",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestCanonicalFactoryGroupRejectsUnknownSubcommand",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestCanonicalRunInputCompositionAndResolution",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionCoversProductionCommandShapes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionEnforcesProductionInputContracts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionParsesVariadicInputsThroughApplicationRoot",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeBuildsSyntheticHierarchyDeterministically",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeEnforcesEveryRelationshipKindBeforeHandler",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidArgumentAndRelationshipRecords",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidFlagRecordsBeforeReturningTree",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeDispatchesScalarBooleanAndInt64Arguments",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeKeepsNonRunnableCommandsOnCobraHelpPath",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeProjectsMatchingInheritedPresentation",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/input_contract/generic_constructor_helpers_test.go",
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidCanonicalFlagValuesBeforeDispatch",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestMCPResumeSmokeLane_ResumeControlStaysOnCanonicalFactorySessionTools",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestMCPResumeSmokeLane_ResumeReadModelsUseSharedFactorySessionVocabulary",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestMCPResumeSmokeLane_RuntimeBackedAsyncServeRegression",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/named_invocation/named_invocation_test.go",
       "package": "you-agent-factory/tests/functional/cli/named_invocation",
       "scenario": "TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/named_invocation/named_invocation_test.go",
       "package": "you-agent-factory/tests/functional/cli/named_invocation",
       "scenario": "TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "package": "you-agent-factory/tests/functional/cli/root_discovery",
       "scenario": "TestBareRootPrintsConciseHelpWithoutProductEffects",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session/session_enumeration_test.go",
       "package": "you-agent-factory/tests/functional/cli/session",
       "scenario": "TestSessionEnumeration",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session/session_enumeration_test.go",
       "package": "you-agent-factory/tests/functional/cli/session",
       "scenario": "TestSessionEnumerationJSON",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_non_regression_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_non_regression_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/session_resume/resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/session_resume",
       "scenario": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_ConfigCreationFailureSurfacesActionableCLIError",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_DoubleRunJSONReportsSkippedOutcomes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_DoubleRunReportsSkippedOutcomes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_ExistingConfigReportsSkippedWithoutRewrite",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_FactoryMaterializationFailureSurfacesActionableCLIError",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_JSONEmitsStructuredSummary",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/config_init/config_init_test.go",
       "package": "you-agent-factory/tests/functional/config_init",
       "scenario": "TestInit_UsesProvidedHomeDirWithoutReadingProcessHome",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/guards_batch/cascading_failure_test.go",
@@ -1611,480 +1611,480 @@
       "package": "you-agent-factory/tests/functional/models/model_invoke",
       "scenario": "TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/models/invoke/cli_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
       "package": "you-agent-factory/tests/functional/operator_settings/configcore",
       "scenario": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_ArgTemplating",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_ArgTemplatingWithTags",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_Failure",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_FailureRoutesToFailedPlace",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_PreservesTokenColor",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_Success",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_SuccessWithColorMetadata",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_WorkTypeIDFromTargetPlace",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_timeout_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOnLaterTick",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestIntegrationSmoke_ProcessTreeHelper",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_timeout_companion_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "script-timeout-companion-smoke-100",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cli_worktree_passthrough_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestWorktreePassthrough",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/codex/process_harness_test.go",
       "package": "you-agent-factory/tests/functional/providers/codex",
       "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/codex_content_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCodexContentDispatch_MixedContentEmitsOrderedImageArgs",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/codex_content_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCodexContentDispatch_TextOnlyContentDoesNotEmitImageArgs",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/codex_worktree_workstation_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cursor_provider_command_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cursor_provider_command_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCursorProviderCommand_PublicModelProviderEnumRoutesToAgent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/cursor_provider_command_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCursorProviderCommand_SkipPermissionsPassesForceFlag",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_agent_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_agent_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_agent_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/concurrent_requests_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_end_to_end_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_script_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_script_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_script_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ScriptHelper",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_script_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_script_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/mock_workers_service_runner_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/packaged_script_runtime_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/packaged_script_runtime_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/providers/runtime_logging_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/observability/logging/redaction_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go",
@@ -3411,130 +3411,130 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsAdjacentLargeEventSequences",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/compare_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsEveryRetainedFactMismatch",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/compare_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsMissingUnexpectedDuplicateAndReorderedFacts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/compare_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_ExcludeTransportDetailsAndRetainSessionFacts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/contract_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestProjectionContract_PreservesOptionalStableFactAbsence",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/contract_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestProjectionContract_RetainsEveryStableFactorySessionFact",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/fixtures_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestTerminalFixtureObservations_AreDeterministic",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/fixtures_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestTerminalFixtureObservations_NormalizeAcrossCustomerInterfaces",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/normalize_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizeCLIJSON_PreservesCustomerVisibleCollectionOrder",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/normalize_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizeMCP_RejectsReorderedCanonicalEventCursors",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/normalize_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_MapRepresentativeRealCustomerShapes",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/normalize_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_PreserveDistinctLargeIntegerResultValues",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/sessionparity/normalize_test.go",
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_RejectEveryMissingRequiredScalarFact",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/smoke/archive_terminal_test.go",
@@ -4481,10 +4481,10 @@
       "package": "you-agent-factory/tests/functional/work/visualization",
       "scenario": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: unit \u2014 calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/workflow/batch_ideation_pipeline_test.go",
@@ -5253,7 +5253,7 @@
     "lane_functionallong": 122,
     "lane_short": 381
   },
-  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. destination and deletion_only_batch remain TBD until mapping stories fill them. specialty_targets is none until specialty-binding stories record Make selectors.",
+  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
@@ -5306,5 +5306,21 @@
       "replay_contracts-delete-05-workers-script",
       "replay_contracts-delete-06-wrong-layer"
     ]
+  },
+  "remaining_packages_mapping": {
+    "mapped_at_utc": "2026-07-24T02:32:20Z",
+    "story": "fnd-007-migration-ledger-006",
+    "scenario_count": 142,
+    "wrong_layer_count": 43,
+    "by_package": {
+      "acceptance": 16,
+      "cli": 56,
+      "config_init": 8,
+      "models": 1,
+      "operator_settings": 1,
+      "providers": 46,
+      "sessionparity": 13,
+      "work": 1
+    }
   }
 }

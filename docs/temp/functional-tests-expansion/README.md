@@ -23,7 +23,10 @@ the repository's customer-level functional tests.
   (FND-007-003). `smoke` and `workflow` rows are fully mapped into named
   `smoke-delete-*` and `workflow-delete-*` split batches (FND-007-004).
   `guards_batch`, `bootstrap_portability`, and `replay_contracts` rows are fully
-  mapped into named `*-delete-*` split batches (FND-007-005).
+  mapped into named `*-delete-*` split batches (FND-007-005). Remaining
+  non-catch-all packages (`acceptance`, `cli`, `config_init`, `models`,
+  `operator_settings`, `providers`, `sessionparity`, `work`) are fully mapped
+  with `deletion_only_batch` = `n/a` (FND-007-006).
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.
