@@ -61,6 +61,29 @@ shared composition paths above.
 OpenAPI and generated output changes occur only for **approved public contract**
 changes, not package motion.
 
+## PSS-I03 CLI shared surfaces
+
+`cli` surfaces serialize exclusively under **PSS-I03**. Required shared surfaces
+cover:
+
+- CLI root assembly (`pkg/transports/cli` root composition)
+- shared Cobra/manifest generation authority (`contracts/cli/**`,
+  `climanifest` / `climanifestcobra` / `climanifestgen`, generated CLI family
+  artifacts)
+- global help and shell-completion composition paths that serialize with root
+  ownership
+
+Accepted `CLI-*` / service-owned adapter cutovers queue on those surfaces; this
+inventory does not perform any CLI cutover by itself.
+
+Owner-local **service-owned** CLI adapters remain explicitly allowed to proceed
+on **disjoint** paths while PSS-I03 serializes only shared root/manifest
+composition.
+
+This inventory **does not transfer** or redefine the live **Schema CLI**
+manifest/generation ownership. It only names the PSS serial lane that must later
+integrate through that ownership after portfolio holds clear.
+
 ## Scope boundary
 
 This model is **integration metadata only**. Publishing or updating the

@@ -1,0 +1,25 @@
+{
+  "formatVersion": "1.0.0",
+  "integrationMetadataOnly": true,
+  "authorizesPackageMoves": false,
+  "authorizesPublicContractChanges": false,
+  "authorizesTransportCutovers": false,
+  "concurrentWriteLeasesAllowed": false,
+  "queueSemantics": {
+    "ordering": "deterministic-stable",
+    "activationPolicy": "head-of-queue-only",
+    "ownerLocalOutsideExclusivePaths": "unblocked"
+  },
+  "surfaces": {
+    "cli.root.assembly": {
+      "surfaceId": "cli.root.assembly",
+      "protocolFamily": "cli",
+      "exclusiveChangedPathSummary": "pkg/transports/cli root assembly",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    }
+  },
+  "holds": {}
+}

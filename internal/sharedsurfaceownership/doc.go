@@ -19,6 +19,14 @@ var RequiredPSSI02SurfaceIDs = []string{
 	"http.toplevel.server-route-composition",
 }
 
+// RequiredPSSI03SurfaceIDs are the shared CLI composition surfaces that must be
+// inventoried under serial integrator lane PSS-I03.
+var RequiredPSSI03SurfaceIDs = []string{
+	"cli.root.assembly",
+	"cli.manifest.cobra-generation-authority",
+	"cli.global.help-and-completion-composition",
+}
+
 // Diagnostic is one maintainer-readable validation finding.
 type Diagnostic struct {
 	Rule     string

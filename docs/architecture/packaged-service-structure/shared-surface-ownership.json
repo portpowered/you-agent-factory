@@ -55,6 +55,33 @@
       "activeHolder": null,
       "ownerRequestQueue": [],
       "holdConditionRefs": []
+    },
+    "cli.root.assembly": {
+      "surfaceId": "cli.root.assembly",
+      "protocolFamily": "cli",
+      "exclusiveChangedPathSummary": "pkg/transports/cli root assembly (root.go and shared root composition wiring; excludes service-owned CLI adapters)",
+      "serialIntegratorLaneId": "PSS-I03",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "cli.manifest.cobra-generation-authority": {
+      "surfaceId": "cli.manifest.cobra-generation-authority",
+      "protocolFamily": "cli",
+      "exclusiveChangedPathSummary": "contracts/cli/** authored CLI command manifests plus pkg/transports/cli/climanifest, climanifestcobra, climanifestgen, generated CLI family artifacts, and cmd/climanifestgen shared Cobra/manifest generation authority",
+      "serialIntegratorLaneId": "PSS-I03",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "cli.global.help-and-completion-composition": {
+      "surfaceId": "cli.global.help-and-completion-composition",
+      "protocolFamily": "cli",
+      "exclusiveChangedPathSummary": "pkg/transports/cli global help and shell-completion composition paths that serialize with CLI root ownership (excludes service-owned CLI adapters on disjoint paths)",
+      "serialIntegratorLaneId": "PSS-I03",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
     }
   },
   "holds": {}

@@ -55,6 +55,11 @@ func TestValidateFixtures(t *testing.T) {
 			fixture:    "invalid-openapi-http-wrong-lane.json",
 			wantSubstr: "PSS-I02",
 		},
+		{
+			name:       "cli surface mapped away from PSS-I03",
+			fixture:    "invalid-cli-wrong-lane.json",
+			wantSubstr: "PSS-I03",
+		},
 	}
 
 	for _, test := range tests {
@@ -145,6 +150,51 @@ func TestCanonicalInventoryIncludesPSSI02OpenAPIHTTPSurfaces(t *testing.T) {
 	}
 }
 
+func TestCanonicalInventoryIncludesPSSI03CLISurfaces(t *testing.T) {
+	t.Parallel()
+
+	path := testutil.MustRepoPath(t, sharedsurfaceownership.CanonicalInventoryRelPath)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read canonical inventory: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(payload, &root); err != nil {
+		t.Fatalf("decode canonical inventory: %v", err)
+	}
+	surfaces, _ := root["surfaces"].(map[string]any)
+	for _, surfaceID := range sharedsurfaceownership.RequiredPSSI03SurfaceIDs {
+		raw, ok := surfaces[surfaceID]
+		if !ok {
+			t.Fatalf("canonical inventory missing required PSS-I03 surface %q", surfaceID)
+		}
+		surface, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("surface %q must be an object", surfaceID)
+		}
+		if got, _ := surface["protocolFamily"].(string); got != "cli" {
+			t.Fatalf("surface %q protocolFamily = %q, want cli", surfaceID, got)
+		}
+		if got, _ := surface["serialIntegratorLaneId"].(string); got != "PSS-I03" {
+			t.Fatalf("surface %q serialIntegratorLaneId = %q, want PSS-I03", surfaceID, got)
+		}
+		if surface["activeHolder"] != nil {
+			t.Fatalf("surface %q activeHolder must be null; this packet performs no CLI cutover", surfaceID)
+		}
+		queue, ok := surface["ownerRequestQueue"].([]any)
+		if !ok {
+			t.Fatalf("surface %q must declare an ownerRequestQueue array", surfaceID)
+		}
+		if len(queue) != 0 {
+			t.Fatalf("surface %q ownerRequestQueue must be empty until a CLI-* adapter cutover is accepted", surfaceID)
+		}
+		summary, _ := surface["exclusiveChangedPathSummary"].(string)
+		if strings.TrimSpace(summary) == "" {
+			t.Fatalf("surface %q requires exclusiveChangedPathSummary", surfaceID)
+		}
+	}
+}
+
 func TestModelDocsDeclareMetadataOnlySchedulingContract(t *testing.T) {
 	t.Parallel()
 
@@ -167,6 +217,14 @@ func TestModelDocsDeclareMetadataOnlySchedulingContract(t *testing.T) {
 		"concurrent",
 		"public contract",
 		"package motion",
+		"PSS-I03",
+		"CLI root",
+		"manifest",
+		"help",
+		"completion",
+		"Schema CLI",
+		"does not transfer",
+		"disjoint",
 	}
 	for _, needle := range required {
 		if !strings.Contains(strings.ToLower(text), strings.ToLower(needle)) {
