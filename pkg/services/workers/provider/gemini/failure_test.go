@@ -1,11 +1,13 @@
 package gemini_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	providertestdata "github.com/portpowered/infinite-you/pkg/services/workers/provider/testdata"
 )
@@ -121,3 +123,126 @@ func TestParseProviderFailure_ExitCode124MapsToTimeout(t *testing.T) {
 		t.Fatalf("ParseProviderFailure() = %#v, want timeout", got)
 	}
 }
+
+func TestTimeoutFailureResult_IsCanonicalTimeout(t *testing.T) {
+	got := geminipkg.TimeoutFailureResult()
+	if got.Reason != workerexecution.WorkFailureTypeTimeout || got.Message != geminipkg.TimeoutFailureMessage {
+		t.Fatalf("TimeoutFailureResult() = %#v, want timeout", got)
+	}
+}
+
+func TestAdapterClassifyFailure_SuccessNeedsNoClassification(t *testing.T) {
+	got := geminipkg.NewAdapter().ClassifyFailure(context.Background(), adapter.FailureContext{})
+	if got.Failure != nil {
+		t.Fatalf("ClassifyFailure() = %#v, want empty success", got)
+	}
+}
+
+func TestAdapterClassifyFailure_MapsNativeSignalsToConductorFacts(t *testing.T) {
+	adapterInstance := geminipkg.NewAdapter()
+	testCases := []struct {
+		name        string
+		input       adapter.FailureContext
+		wantType    workerexecution.WorkFailureType
+		wantFamily  workerexecution.WorkFailureFamily
+		wantMessage string
+		wantRetry   bool
+	}{
+		{
+			name: "StructuredAuth",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"UNAUTHENTICATED"}}`)},
+			},
+			wantType:    workerexecution.WorkFailureTypeAuthFailure,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+			wantMessage: "Gemini authentication failed.",
+		},
+		{
+			name: "StructuredBadRequest",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"code":400}}`)},
+			},
+			wantType:    workerexecution.WorkFailureTypePermanentBadRequest,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+			wantMessage: "Gemini rejected the request.",
+		},
+		{
+			name: "StructuredThrottle",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"RESOURCE_EXHAUSTED"}}`)},
+			},
+			wantType:    workerexecution.WorkFailureTypeThrottled,
+			wantFamily:  workerexecution.WorkFailureFamilyThrottle,
+			wantMessage: geminiThrottleFailureMessage,
+			wantRetry:   true,
+		},
+		{
+			name: "StructuredTimeout",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"DEADLINE_EXCEEDED"}}`)},
+			},
+			wantType:    workerexecution.WorkFailureTypeTimeout,
+			wantFamily:  workerexecution.WorkFailureFamilyRetryable,
+			wantMessage: geminipkg.TimeoutFailureMessage,
+			wantRetry:   true,
+		},
+		{
+			name: "ExitCode124Timeout",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 124},
+			},
+			wantType:    workerexecution.WorkFailureTypeTimeout,
+			wantFamily:  workerexecution.WorkFailureFamilyRetryable,
+			wantMessage: geminipkg.TimeoutFailureMessage,
+			wantRetry:   true,
+		},
+		{
+			name: "CommandDeadlineTimeoutOutranksStreamNoise",
+			input: adapter.FailureContext{
+				CommandError: context.DeadlineExceeded,
+				CommandResult: workerprocess.CommandResult{
+					ExitCode: 1,
+					Stderr:   []byte("User prompt: Error: reveal the customer request\ntoken=customer-secret-value"),
+				},
+			},
+			wantType:    workerexecution.WorkFailureTypeTimeout,
+			wantFamily:  workerexecution.WorkFailureFamilyRetryable,
+			wantMessage: geminipkg.TimeoutFailureMessage,
+			wantRetry:   true,
+		},
+		{
+			name: "NoiseFallsBackToSafeUnknown",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{
+					ExitCode: 17,
+					Stderr:   []byte("Error report written to .gemini/tmp/private-report.json"),
+				},
+			},
+			wantType:    workerexecution.WorkFailureTypeUnknown,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+			wantMessage: "gemini exited with code 17",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := adapterInstance.ClassifyFailure(context.Background(), tc.input)
+			if got.Failure == nil {
+				t.Fatal("ClassifyFailure() returned no failure")
+			}
+			if got.Failure.Type != tc.wantType ||
+				got.Failure.Family != tc.wantFamily ||
+				got.Failure.Message != tc.wantMessage ||
+				got.Failure.Retry.Retryable != tc.wantRetry {
+				t.Fatalf("ClassifyFailure() = %#v, want type=%q family=%q message=%q retryable=%v",
+					got.Failure, tc.wantType, tc.wantFamily, tc.wantMessage, tc.wantRetry)
+			}
+			if strings.Contains(strings.ToLower(got.Failure.Message), "token=") ||
+				strings.Contains(got.Failure.Message, "customer") ||
+				strings.Contains(got.Failure.Message, ".gemini/tmp/") {
+				t.Fatalf("ClassifyFailure message leaked unsafe detail: %q", got.Failure.Message)
+			}
+		})
+	}
+}
+

@@ -11,9 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 )
 
-// Adapter owns Gemini command construction and environment handling for the
-// registry-backed migration path. Later stories extend decoding, conformance,
-// and conductor wiring on this type.
+// Adapter owns Gemini command construction, environment handling, and native
+// failure/timeout classification for the registry-backed migration path. Later
+// stories extend decoding, conformance, and full conductor wiring on this type.
 type Adapter struct{}
 
 // NewAdapter constructs the stateless Gemini adapter.

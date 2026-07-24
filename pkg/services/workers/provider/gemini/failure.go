@@ -1,12 +1,15 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 )
 
 const (
@@ -52,6 +55,55 @@ func ParseProviderFailure(input FailureInput) FailureResult {
 	return parseProviderFailure(input)
 }
 
+// TimeoutFailureResult returns the canonical Gemini timeout outcome used by the
+// conductor path and by the temporary aggregate timeout bridge.
+func TimeoutFailureResult() FailureResult {
+	return geminiFailureResult(workerexecution.WorkFailureTypeTimeout, "")
+}
+
+// ClassifyFailure maps Gemini native subprocess outcomes into conductor-compatible
+// normalized failure facts. ParseProviderFailure remains the authoritative parser
+// for structured and text exit failures; command-deadline timeouts are owned here
+// so cancel/timeout outranks competing stream detail.
+func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
+	if !geminiFailureNeedsClassification(input) {
+		return adapter.FailureResult{}
+	}
+	if errors.Is(input.CommandError, context.DeadlineExceeded) {
+		return normalizedFailureResult(TimeoutFailureResult(), input.CommandError)
+	}
+	parsed := ParseProviderFailure(FailureInput{
+		Stdout:   input.CommandResult.Stdout,
+		Stderr:   input.CommandResult.Stderr,
+		ExitCode: input.CommandResult.ExitCode,
+	})
+	return normalizedFailureResult(parsed, errors.Join(
+		input.CommandError, input.DecodeError, input.FlushError, input.ParseError,
+	))
+}
+
+func geminiFailureNeedsClassification(input adapter.FailureContext) bool {
+	return input.CommandError != nil ||
+		input.CommandResult.ExitCode != 0 ||
+		input.DecodeError != nil ||
+		input.FlushError != nil ||
+		input.ParseError != nil
+}
+
+func normalizedFailureResult(parsed FailureResult, cause error) adapter.FailureResult {
+	providerErr := workerexecution.NewProviderError(parsed.Reason, parsed.Message, cause)
+	decision := workerexecution.FailureDecisionFromMetadata(&workerexecution.WorkFailureMetadata{
+		Family: providerErr.Family,
+		Type:   providerErr.Type,
+	})
+	return adapter.FailureResult{Failure: &adapter.FailureFacts{
+		Family:  providerErr.Family,
+		Type:    providerErr.Type,
+		Message: providerErr.Message,
+		Retry:   adapter.RetryGuidance{Retryable: decision.Retryable},
+	}}
+}
+
 // ParseGeminiProviderFailure converts Gemini-owned structured and text failure
 // shapes into one canonical reason/message pair. The final valid structured
 // record wins (stderr is the deterministic cross-stream tie-breaker), followed
@@ -71,7 +123,7 @@ func parseProviderFailure(input FailureInput) FailureResult {
 		return failure
 	}
 	if result.ExitCode == 124 {
-		return geminiFailureResult(workerexecution.WorkFailureTypeTimeout, "")
+		return TimeoutFailureResult()
 	}
 	stderr := tailForFailureScan(result.Stderr)
 	if failure, ok := lastGeminiTextFailure(stderr); ok {

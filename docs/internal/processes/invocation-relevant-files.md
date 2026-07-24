@@ -796,7 +796,11 @@ response-stream output.
   `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
   first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
   keep only a thin aggregate delegate until the later legacy-branch deletion
-  story. Native JSONL fixture tests should
+  story. Move Gemini-native failure and timeout parsing into the same package
+  (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
+  the conductor path consumes provider-owned normalized facts; aggregate exit
+  and timeout bridges may only thin-delegate until legacy deletion. Native
+  JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
   Provider retry and compaction records should publish only bounded typed facts

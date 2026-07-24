@@ -782,7 +782,8 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 			message = codexError
 		}
 	case string(modelprovider.ProviderGemini):
-		message = geminipkg.TimeoutFailureMessage
+		failure := geminipkg.TimeoutFailureResult()
+		return ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}
 	case string(modelprovider.ProviderKiro):
 		message = kiropkg.TimeoutFailureMessage
 	}
