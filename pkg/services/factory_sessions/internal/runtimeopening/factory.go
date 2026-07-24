@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -255,10 +254,10 @@ func (f *Factory) openRuntime(
 func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges serviceedges.Edges,
+	effects ExternalEffects,
 	logger *zap.Logger,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, externalEffectsFromProcessEdges(edges), logger)
+	opened, err := f.openRuntime(ctx, request, effects, logger)
 	return opened.application, err
 }
 
@@ -267,10 +266,10 @@ func (f *Factory) OpenApplicationRuntime(
 func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges serviceedges.Edges,
+	effects ExternalEffects,
 	logger *zap.Logger,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, externalEffectsFromProcessEdges(edges), logger)
+	opened, err := f.openRuntime(ctx, request, effects, logger)
 	return opened.invocation, err
 }
 
@@ -284,25 +283,4 @@ func (f *Factory) OpenExecutionRuntime(
 ) (roles.OpenedExecutionRuntime, error) {
 	opened, err := f.openRuntime(ctx, request, effects, logger)
 	return opened.execution, err
-}
-
-// externalEffectsFromProcessEdges is retained for application and invocation
-// callers until those opening operations move their own edge projection into
-// Wire. Execution opening consumes ExternalEffects directly.
-func externalEffectsFromProcessEdges(edges serviceedges.Edges) ExternalEffects {
-	return ExternalEffects{
-		Clock:                     edges.Clock,
-		ProviderOverride:          edges.ProviderOverride,
-		ModelPullMetricsRecorder:  edges.ModelPullMetricsRecorder,
-		InvocationMetricsRecorder: edges.InvocationMetricsRecorder,
-		ProviderCommandRunner:     edges.ProviderCommandRunner,
-		ScriptCommandRunner:       edges.ScriptCommandRunner,
-		SubmissionRecorder:        edges.SubmissionRecorder,
-		DispatchRecorder:          edges.DispatchRecorder,
-		RuntimeHostObserver:       edges.RuntimeHostObserver,
-		HostedClock:               edges.HostedClock,
-		HostedHTTPClient:          edges.HostedHTTPClient,
-		HostedSecretResolver:      edges.HostedSecretResolver,
-		HostedLinearEndpoint:      edges.HostedLinearEndpoint,
-	}
 }

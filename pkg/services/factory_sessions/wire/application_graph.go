@@ -2,7 +2,6 @@ package wire
 
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -208,7 +207,7 @@ func NewApplicationService(
 
 func NewInvocationOperation(
 	openRuntime *RuntimeOpeningFactory,
-	edges serviceedges.Edges,
+	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter models.InvocationArtifactExporter,
@@ -218,7 +217,7 @@ func NewInvocationOperation(
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
-		edges,
+		effects,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,

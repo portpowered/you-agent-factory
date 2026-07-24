@@ -12,7 +12,6 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -23,7 +22,7 @@ import (
 
 type operation struct {
 	openRuntime       *runtimeopening.Factory
-	edges             serviceedges.Edges
+	effects           runtimeopening.ExternalEffects
 	workingDirectory  platformfilesystem.WorkingDirectory
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
 	artifactExporter  models.InvocationArtifactExporter
@@ -37,7 +36,7 @@ type operation struct {
 // or selecting application dependencies.
 func NewOperation(
 	openRuntime *runtimeopening.Factory,
-	edges serviceedges.Edges,
+	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter models.InvocationArtifactExporter,
@@ -66,10 +65,9 @@ func NewOperation(
 	if generateSessionID == nil {
 		return nil, errors.New("Factory Session ID generator is required")
 	}
-	edges.APIServerStarter = nil
 	return &operation{
 		openRuntime:       openRuntime,
-		edges:             edges,
+		effects:           effects,
 		workingDirectory:  workingDirectory,
 		resolveCurrentDir: resolveCurrentDir,
 		artifactExporter:  artifactExporter,
@@ -538,11 +536,11 @@ func (o *operation) open(
 		return roles.OpenedInvocationRuntime{}, nil, errors.New("invocation operation is required")
 	}
 	config := o.runtimeConfig(target)
-	edges := o.edges
+	effects := o.effects
 	if target.MetricsRecorder != nil {
-		edges.InvocationMetricsRecorder = target.MetricsRecorder
+		effects.InvocationMetricsRecorder = target.MetricsRecorder
 	}
-	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config, edges, target.Logger)
+	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config, effects, target.Logger)
 	if err != nil {
 		return roles.OpenedInvocationRuntime{}, nil, fmt.Errorf("open invocation runtime: %w", err)
 	}
