@@ -176,3 +176,12 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
+
+- Provider-session golden fixtures live under
+  `docs/temp/functional/provider-sessions/**`. Keep that path narrowly
+  un-ignored after the general `docs/temp/**` rule by re-including each parent
+  directory (`!docs/temp/functional/`, `!docs/temp/functional/provider-sessions/`,
+  then `!docs/temp/functional/provider-sessions/**`). Prove the exception with
+  `git check-ignore -q` (exit 1 = not ignored, exit 0 = ignored) plus a sibling
+  `docs/temp/...` path that remains ignored. Shared helpers and fixture-root
+  constants belong in `tests/functional/internal/support`.

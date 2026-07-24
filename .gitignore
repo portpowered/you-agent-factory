@@ -15,6 +15,10 @@ ui/dist_stamp.go
 
 ## do not include temporary working files
 docs/temp/**
+# Provider-session golden fixtures must remain versioned for functional CI.
+!docs/temp/functional/
+!docs/temp/functional/provider-sessions/
+!docs/temp/functional/provider-sessions/**
 ## Do not include temporary files in general for worktree progress
 prd.json
 prd.md
