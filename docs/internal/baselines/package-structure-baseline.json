@@ -2594,6 +2594,11 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_sessions",
+      "target": "pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/service_contracts.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization",
       "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
     },
