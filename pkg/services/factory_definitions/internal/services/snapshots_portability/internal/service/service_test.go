@@ -310,6 +310,158 @@ func TestSnapshotsPortability_OwnsRootSnapshotSurfaceSuccess(t *testing.T) {
 	}
 }
 
+func TestSnapshotsPortability_DetachedRoundTripPreservesPortableFacts(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	canonical := []byte(`{
+		"name": "source-name",
+		"futureField": {"enabled": true},
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+
+	captured, err := portability.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{
+			FactoryDir: "/factories/alpha",
+			Canonical:  canonical,
+			Name:       "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot: %v", err)
+	}
+	if captured.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	}
+
+	imported, err := portability.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{
+			Payload: []byte(*captured.Snapshot),
+		},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
+	}
+	if imported.Snapshot == nil || imported.Name != "alpha" {
+		t.Fatalf("PrepareFactorySnapshotImport result = %#v, want alpha snapshot", imported)
+	}
+	if imported.Portable.FactoryDir != "/factories/alpha" {
+		t.Fatalf("imported Portable.FactoryDir = %q, want /factories/alpha", imported.Portable.FactoryDir)
+	}
+	if len(imported.Portable.Assets) == 0 || imported.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
+		t.Fatalf("imported Portable.Assets = %#v, want README asset", imported.Portable.Assets)
+	}
+
+	materialized, err := portability.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "/factories/replay-alpha",
+			Snapshot:  imported.Snapshot,
+		},
+	)
+	if err != nil {
+		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+	}
+
+	// Public Definitions boundary success shape stays MaterializeFactorySnapshotResult
+	// with Definitions-owned portable success facts — not Recordings/Runtime types.
+	var bounded factorydefinitions.MaterializeFactorySnapshotResult = materialized
+	if bounded.TargetDir != "/factories/replay-alpha" {
+		t.Fatalf("MaterializeFactorySnapshotResult.TargetDir = %q, want /factories/replay-alpha", bounded.TargetDir)
+	}
+	if bounded.Portable.FactoryDir != "/factories/replay-alpha" {
+		t.Fatalf("materialized Portable.FactoryDir = %q, want /factories/replay-alpha", bounded.Portable.FactoryDir)
+	}
+	if len(bounded.Portable.Assets) == 0 || bounded.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
+		t.Fatalf("materialized Portable.Assets = %#v, want README asset preserved across round trip", bounded.Portable.Assets)
+	}
+
+	// Replay-compatible identity facts survive capture → prepare → materialize.
+	var capturedObject map[string]any
+	if decodeErr := captured.Snapshot.Decode(&capturedObject); decodeErr != nil {
+		t.Fatalf("captured decode: %v", decodeErr)
+	}
+	var importedObject map[string]any
+	if decodeErr := imported.Snapshot.Decode(&importedObject); decodeErr != nil {
+		t.Fatalf("imported decode: %v", decodeErr)
+	}
+	if capturedObject["name"] != "alpha" || importedObject["name"] != "alpha" {
+		t.Fatalf("round-trip name facts: captured=%#v imported=%#v, want alpha", capturedObject["name"], importedObject["name"])
+	}
+	if capturedObject["factoryDirectory"] != "/factories/alpha" ||
+		importedObject["factoryDirectory"] != "/factories/alpha" {
+		t.Fatalf(
+			"round-trip factoryDirectory facts: captured=%#v imported=%#v, want /factories/alpha",
+			capturedObject["factoryDirectory"],
+			importedObject["factoryDirectory"],
+		)
+	}
+	future, ok := importedObject["futureField"].(map[string]any)
+	if !ok || future["enabled"] != true {
+		t.Fatalf("round-trip futureField = %#v, want preserved unknown field", importedObject["futureField"])
+	}
+}
+
+func TestSnapshotsPortability_MaterializeUnsafeInputsTypedFailure(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	validSnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"name":             "alpha",
+		"factoryDirectory": "/factories/alpha",
+		"resourceManifest": map[string]any{
+			"bundledFiles": []any{
+				map[string]any{"type": "DOC", "targetPath": "factory/docs/README.md"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+
+	assertUnsafe := func(t *testing.T, label string, request factorydefinitions.MaterializeFactorySnapshotRequest) {
+		t.Helper()
+		_, unsafeErr := portability.MaterializeFactorySnapshot(context.Background(), request)
+		if !errors.Is(unsafeErr, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+			t.Fatalf(
+				"%s error = %v, want ErrUnsafeFactorySnapshotMaterialize",
+				label,
+				unsafeErr,
+			)
+		}
+		if errors.Is(unsafeErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+			t.Fatalf("%s must not also match ErrInvalidFactorySnapshotPayload", label)
+		}
+	}
+
+	assertUnsafe(t, "empty TargetDir", factorydefinitions.MaterializeFactorySnapshotRequest{
+		TargetDir: "",
+		Snapshot:  validSnapshot,
+	})
+	assertUnsafe(t, "nil Snapshot", factorydefinitions.MaterializeFactorySnapshotRequest{
+		TargetDir: "/factories/alpha",
+		Snapshot:  nil,
+	})
+	assertUnsafe(t, "path escape TargetDir", factorydefinitions.MaterializeFactorySnapshotRequest{
+		TargetDir: "../outside",
+		Snapshot:  validSnapshot,
+	})
+}
+
 func TestSnapshotsPortability_TypedFailuresStayDistinct(t *testing.T) {
 	t.Parallel()
 
