@@ -147,9 +147,7 @@ func TestMid(t *testing.T) {}
 		if first[i].Name != wantNames[i] || first[i].File != wantFiles[i] {
 			t.Fatalf("record[%d] = %s::%s, want %s::%s", i, first[i].File, first[i].Name, wantFiles[i], wantNames[i])
 		}
-		if first[i] != second[i] {
-			t.Fatalf("repeated parse diverged at index %d: %#v vs %#v", i, first[i], second[i])
-		}
+		assertRecordsEqual(t, first[i], second[i])
 	}
 }
 
@@ -271,6 +269,190 @@ func TestOnly(t *testing.T) {}
 	}
 }
 
+func TestParseCapturesFileLevelBuildTags(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"long/tagged_test.go": `//go:build functionallong
+
+package long
+
+import "testing"
+
+// TestLongOnly is gated by the functionallong build tag.
+func TestLongOnly(t *testing.T) {}
+`,
+		"short/untagged_test.go": `package short
+
+import "testing"
+
+// TestShort has no file-level build constraints.
+func TestShort(t *testing.T) {}
+`,
+		"platform/negated_test.go": `//go:build !windows
+
+package platform
+
+import "testing"
+
+// TestNotWindows excludes Windows hosts.
+func TestNotWindows(t *testing.T) {}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("Parse() returned %d records, want 3: %#v", len(records), records)
+	}
+
+	byName := map[string]functionaltestmetadata.Record{}
+	for _, record := range records {
+		byName[record.Name] = record
+	}
+
+	if got := byName["TestLongOnly"].BuildTags; len(got) != 1 || got[0] != "functionallong" {
+		t.Fatalf("TestLongOnly.BuildTags = %#v, want [functionallong]", got)
+	}
+	if got := byName["TestNotWindows"].BuildTags; len(got) != 1 || got[0] != "!windows" {
+		t.Fatalf("TestNotWindows.BuildTags = %#v, want [!windows]", got)
+	}
+	if got := byName["TestShort"].BuildTags; len(got) != 0 {
+		t.Fatalf("TestShort.BuildTags = %#v, want empty (no fabricated default)", got)
+	}
+}
+
+func TestParsePrefersGoBuildOverPlusBuild(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"pkg/both_test.go": `//go:build functionallong
+// +build functionallong
+
+package pkg
+
+import "testing"
+
+// TestBothConstraints prefers the go:build expression.
+func TestBothConstraints(t *testing.T) {}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Parse() returned %d records, want 1", len(records))
+	}
+	if got := records[0].BuildTags; len(got) != 1 || got[0] != "functionallong" {
+		t.Fatalf("BuildTags = %#v, want exactly [functionallong]", got)
+	}
+}
+
+func TestParseCapturesGoldenFromCommentDirective(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"workers/inference/codex/golden_success_test.go": `package codex
+
+import "testing"
+
+// TestCodexGoldenSuccess replays the sanitized success transcript.
+//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+func TestCodexGoldenSuccess(t *testing.T) {}
+`,
+		"workers/inference/codex/plain_test.go": `package codex
+
+import "testing"
+
+// TestCodexPlain has no golden declaration.
+func TestCodexPlain(t *testing.T) {}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("Parse() returned %d records, want 2: %#v", len(records), records)
+	}
+
+	byName := map[string]functionaltestmetadata.Record{}
+	for _, record := range records {
+		byName[record.Name] = record
+	}
+
+	wantGolden := "docs/temp/functional/provider-sessions/codex/success/manifest.json"
+	if got := byName["TestCodexGoldenSuccess"].Golden; got != wantGolden {
+		t.Fatalf("Golden = %q, want %q", got, wantGolden)
+	}
+	if byName["TestCodexGoldenSuccess"].Description != "TestCodexGoldenSuccess replays the sanitized success transcript." {
+		t.Fatalf("Description polluted by golden directive: %#v", byName["TestCodexGoldenSuccess"])
+	}
+	if got := byName["TestCodexPlain"].Golden; got != "" {
+		t.Fatalf("TestCodexPlain.Golden = %q, want empty (no fabricated reference)", got)
+	}
+}
+
+func TestParseCapturesGoldenFromTestOwnedDeclaration(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"workers/inference/claude/golden_failure_test.go": `package claude
+
+import "testing"
+
+// TestClaudeGoldenFailure uses a test-owned golden manifest declaration.
+func TestClaudeGoldenFailure(t *testing.T) {
+	const goldenManifest = "docs/temp/functional/provider-sessions/claude/failure/manifest.json"
+	_ = goldenManifest
+}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Parse() returned %d records, want 1", len(records))
+	}
+	want := "docs/temp/functional/provider-sessions/claude/failure/manifest.json"
+	if records[0].Golden != want {
+		t.Fatalf("Golden = %q, want %q", records[0].Golden, want)
+	}
+	if records[0].Description != "TestClaudeGoldenFailure uses a test-owned golden manifest declaration." {
+		t.Fatalf("Description = %q, want ordinary doc synopsis", records[0].Description)
+	}
+}
+
+func TestParseNormalizesWindowsStyleGoldenPaths(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"pkg/golden_test.go": "package pkg\n\nimport \"testing\"\n\n" +
+			"// TestGoldenPath normalizes separators in golden references.\n" +
+			"//golden: docs\\temp\\functional\\provider-sessions\\cursor\\success\\manifest.json\n" +
+			"func TestGoldenPath(t *testing.T) {}\n",
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Parse() returned %d records, want 1", len(records))
+	}
+	want := "docs/temp/functional/provider-sessions/cursor/success/manifest.json"
+	if records[0].Golden != want {
+		t.Fatalf("Golden = %q, want slash-normalized %q", records[0].Golden, want)
+	}
+}
+
 func assertRecord(t *testing.T, got functionaltestmetadata.Record, file, pkg, name, description string, undocumented bool) {
 	t.Helper()
 	if got.File != file {
@@ -287,6 +469,23 @@ func assertRecord(t *testing.T, got functionaltestmetadata.Record, file, pkg, na
 	}
 	if got.Undocumented != undocumented {
 		t.Fatalf("Undocumented = %v, want %v", got.Undocumented, undocumented)
+	}
+}
+
+func assertRecordsEqual(t *testing.T, got, want functionaltestmetadata.Record) {
+	t.Helper()
+	if got.File != want.File || got.Package != want.Package || got.Name != want.Name ||
+		got.Line != want.Line || got.Description != want.Description || got.Undocumented != want.Undocumented ||
+		got.Golden != want.Golden {
+		t.Fatalf("records differ:\ngot  %#v\nwant %#v", got, want)
+	}
+	if len(got.BuildTags) != len(want.BuildTags) {
+		t.Fatalf("BuildTags length %d != %d:\ngot  %#v\nwant %#v", len(got.BuildTags), len(want.BuildTags), got, want)
+	}
+	for i := range got.BuildTags {
+		if got.BuildTags[i] != want.BuildTags[i] {
+			t.Fatalf("BuildTags[%d] = %q, want %q", i, got.BuildTags[i], want.BuildTags[i])
+		}
 	}
 }
 

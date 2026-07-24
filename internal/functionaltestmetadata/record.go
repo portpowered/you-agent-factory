@@ -16,6 +16,14 @@ type Record struct {
 	// Undocumented is true when the declaration has no conventional Go doc
 	// comment first sentence.
 	Undocumented bool `json:"undocumented"`
+	// BuildTags are the file-level //go:build (or legacy // +build) constraint
+	// expressions that apply to this test. Empty when the file has no build
+	// constraints; never fabricated with a default tag.
+	BuildTags []string `json:"buildTags,omitempty"`
+	// Golden is an explicit fixture/manifest path declared for this test via a
+	// //golden: comment or a test-owned golden string declaration. Empty when
+	// no golden is declared; never fabricated.
+	Golden string `json:"golden,omitempty"`
 }
 
 // Identity returns the stable catalog identity for this record.
