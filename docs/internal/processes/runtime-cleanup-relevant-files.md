@@ -739,8 +739,11 @@ available for shared shape parity while admission owns the admission-facing
 path. Idempotent `Accept` records accepted request identities in-memory and
 returns `ErrWorkRequestConflict` for duplicate or incompatible replays and
 `ErrWorkRequestRejected` for rejection-shaped accept inputs, without taking
-content staging, materialization, or state-access leases. Cross-service peers
-continue to call the Work root `Service` admission slice
-(`SubmitWorkRequestForSession`); they must not import the nested admission
-package. Keep Session/Runtime/Petri types, filesystem/SQL/OS effect types, and
-Wire/root construction ownership off the admission public surface.
+content staging, materialization, or state-access leases. The Work root
+`service.NewService` constructs admission privately and
+`SubmitWorkRequestForSession` delegates normalize/validate/accept through that
+nested Service before forwarding first-time accepts to the session runtime for
+side effects; duplicate/conflict/rejection cases return CTR-WORK typed failures
+without requiring peers to import the nested admission package. Keep
+Session/Runtime/Petri types, filesystem/SQL/OS effect types, and Wire/root
+construction ownership off the admission public surface.

@@ -32,7 +32,16 @@ func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 	runtime := &recordingFactory{}
 	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil)
 
-	request := work.WorkRequest{RequestID: "request-root-contract"}
+	request := work.WorkRequest{
+		RequestID: "request-root-contract",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "story-root",
+			WorkTypeID: "story",
+			State:      "draft",
+			Payload:    map[string]any{"title": "root"},
+		}},
+	}
 	if _, err := service.SubmitWorkRequestForSession(
 		context.Background(),
 		"session-1",
@@ -58,6 +67,65 @@ func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 			runtime.movedID,
 			runtime.source,
 		)
+	}
+}
+
+func TestNewServiceRootAdmissionDelegatesSuccessAndTypedFailures(t *testing.T) {
+	runtime := &recordingFactory{}
+	// Peers consume only the Work root contract; they do not import admission.
+	var service work.Service = workservice.NewService(
+		workRuntimeResolver{runtime: runtime},
+		os.ReadFile,
+		nil,
+		nil,
+	)
+	ctx := context.Background()
+
+	valid := work.WorkRequest{
+		RequestID: "request-root-admit-1",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "story-admit",
+			WorkTypeID: "story",
+			State:      "draft",
+			Payload:    map[string]any{"title": "admit"},
+		}},
+	}
+
+	first, err := service.SubmitWorkRequestForSession(ctx, "session-admit", valid)
+	if err != nil {
+		t.Fatalf("first SubmitWorkRequestForSession: %v", err)
+	}
+	if !first.Accepted || first.RequestID != "request-root-admit-1" || len(first.Works) != 1 {
+		t.Fatalf("first admission result = %#v, want accepted request-root-admit-1", first)
+	}
+	if runtime.submitted.RequestID != "request-root-admit-1" {
+		t.Fatalf("runtime submit = %q, want request-root-admit-1", runtime.submitted.RequestID)
+	}
+
+	_, err = service.SubmitWorkRequestForSession(ctx, "session-admit", valid)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("duplicate SubmitWorkRequestForSession error = %v, want ErrWorkRequestConflict", err)
+	}
+
+	incompatible := valid
+	incompatible.Works = []work.Work{{
+		Name:       "story-other",
+		WorkTypeID: "story",
+		State:      "draft",
+		Payload:    map[string]any{"title": "other"},
+	}}
+	_, err = service.SubmitWorkRequestForSession(ctx, "session-admit", incompatible)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("conflict SubmitWorkRequestForSession error = %v, want ErrWorkRequestConflict", err)
+	}
+
+	_, err = service.SubmitWorkRequestForSession(ctx, "session-admit", work.WorkRequest{
+		RequestID: "request-root-reject-1",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+	})
+	if !errors.Is(err, work.ErrInvalidWorkRequest) && !errors.Is(err, work.ErrWorkRequestRejected) {
+		t.Fatalf("rejection SubmitWorkRequestForSession error = %v, want typed invalid/rejected", err)
 	}
 }
 

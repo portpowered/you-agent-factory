@@ -11,6 +11,8 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/admission"
+	admissionwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/admission/wire"
 )
 
 // Service coordinates Work operations against the runtime registered for a
@@ -28,6 +30,7 @@ type applicationService struct {
 	readSubmittedFile   work.SubmittedFileReader
 	contentStaging      work.ContentStagingService
 	contentMaterializer work.ContentMaterializer
+	admission           admission.Service
 }
 
 // New constructs the canonical Work application service.
@@ -38,6 +41,8 @@ func New(sessions RuntimeResolver) *Service {
 // NewService constructs the Work root contract for composition. Content staging
 // and materialization may be nil when a caller only needs admission/state-access
 // slices; content methods then return a deterministic configuration error.
+// Admission is constructed privately via the nested admission wire so peers
+// keep calling the Work root contract only.
 func NewService(
 	runtimes work.RuntimeResolver,
 	readSubmittedFile work.SubmittedFileReader,
@@ -49,6 +54,7 @@ func NewService(
 		readSubmittedFile:   readSubmittedFile,
 		contentStaging:      contentStaging,
 		contentMaterializer: contentMaterializer,
+		admission:           admissionwire.NewService(),
 	}
 }
 
@@ -90,7 +96,30 @@ func (s *applicationService) SubmitWorkRequestForSession(
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	return runtime.SubmitWorkRequest(ctx, request)
+	if s.admission == nil {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Work admission is required")
+	}
+
+	normalized, err := s.admission.Normalize(ctx, admission.NormalizeRequest{Request: request})
+	if err != nil {
+		return work.WorkRequestSubmitResult{}, err
+	}
+	if err := s.admission.Validate(ctx, admission.ValidateRequest{Request: request}); err != nil {
+		return work.WorkRequestSubmitResult{}, err
+	}
+	accepted, err := s.admission.Accept(ctx, admission.AcceptRequest{
+		RequestID:  normalized.RequestID,
+		Normalized: normalized.Normalized,
+	})
+	if err != nil {
+		return work.WorkRequestSubmitResult{}, err
+	}
+
+	// Preserve session-side effects after admission owns normalize/validate/accept.
+	if _, err := runtime.SubmitWorkRequest(ctx, request); err != nil {
+		return work.WorkRequestSubmitResult{}, err
+	}
+	return accepted, nil
 }
 
 func (s *applicationService) MoveWorkForSession(
