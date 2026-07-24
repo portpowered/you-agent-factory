@@ -257,6 +257,7 @@
     "pkg/services/workers/provider/codex/exitfailure",
     "pkg/services/workers/provider/codex/progress",
     "pkg/services/workers/provider/commandenv",
+    "pkg/services/workers/provider/conductor",
     "pkg/services/workers/provider/cursor",
     "pkg/services/workers/provider/cursor/progress",
     "pkg/services/workers/provider/functionaltests",
@@ -1426,6 +1427,11 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/commandenv",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/conductor",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },
