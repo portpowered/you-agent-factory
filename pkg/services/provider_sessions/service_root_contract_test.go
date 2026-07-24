@@ -57,6 +57,35 @@ func (f *rootServiceFake) Project(req providersessions.ProjectRequest) (provider
 	return f.project, nil
 }
 
+func assertDetailIdentity(t *testing.T, detail providersessions.Detail, provider providersessions.Provider, kind, id string) {
+	t.Helper()
+	if detail.ProviderSession.Provider != provider || detail.ProviderSession.Kind != kind || detail.ProviderSession.ID != id {
+		t.Fatalf("ProviderSession = %#v", detail.ProviderSession)
+	}
+}
+
+func assertSingleAssistantTranscript(t *testing.T, detail providersessions.Detail, text string) {
+	t.Helper()
+	if len(detail.Transcript) != 1 || detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != text {
+		t.Fatalf("Transcript = %#v", detail.Transcript)
+	}
+}
+
+func assertInputTokenUsage(t *testing.T, detail providersessions.Detail, inputTokens int) {
+	t.Helper()
+	if detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.InputTokens == nil ||
+		*detail.Parse.TokenUsage.InputTokens != inputTokens {
+		t.Fatalf("Parse.TokenUsage = %#v", detail.Parse.TokenUsage)
+	}
+}
+
+func assertSourcePresent(t *testing.T, source providersessions.SourceMetadata) {
+	t.Helper()
+	if source.RelativePath == "" || source.ModifiedAt == nil {
+		t.Fatalf("Source = %#v", source)
+	}
+}
+
 func TestRootService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	modifiedAt := time.Date(2026, 7, 23, 18, 0, 0, 0, time.UTC)
 	text := "hello from peer fake"
@@ -98,21 +127,10 @@ func TestRootService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	if fake.lastProvider != "codex" || fake.lastKind != providersessions.SessionIDKind || fake.lastID != "session-root-1" {
 		t.Fatalf("fake recorded identity = (%q, %q, %q)", fake.lastProvider, fake.lastKind, fake.lastID)
 	}
-	if detail.ProviderSession.Provider != providersessions.ProviderCodex ||
-		detail.ProviderSession.Kind != providersessions.SessionIDKind ||
-		detail.ProviderSession.ID != "session-root-1" {
-		t.Fatalf("ProviderSession = %#v", detail.ProviderSession)
-	}
-	if len(detail.Transcript) != 1 || detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != text {
-		t.Fatalf("Transcript = %#v", detail.Transcript)
-	}
-	if detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.InputTokens == nil ||
-		*detail.Parse.TokenUsage.InputTokens != inputTokens {
-		t.Fatalf("Parse.TokenUsage = %#v", detail.Parse.TokenUsage)
-	}
-	if detail.Source.RelativePath == "" || detail.Source.ModifiedAt == nil {
-		t.Fatalf("Source = %#v", detail.Source)
-	}
+	assertDetailIdentity(t, detail, providersessions.ProviderCodex, providersessions.SessionIDKind, "session-root-1")
+	assertSingleAssistantTranscript(t, detail, text)
+	assertInputTokenUsage(t, detail, inputTokens)
+	assertSourcePresent(t, detail.Source)
 }
 
 func TestRootService_Characterization_TypedFailures(t *testing.T) {
@@ -244,7 +262,18 @@ func TestRootService_Inspect_Characterization_TypedFailures(t *testing.T) {
 	}
 }
 
-func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing.T) {
+type projectSuccessFixture struct {
+	ref           providersessions.SessionRef
+	assistantText string
+	reasoningText string
+	toolName      string
+	inputTokens   int
+	outputTokens  int
+	totalTokens   int
+	detail        providersessions.Detail
+}
+
+func newProjectSuccessFixture() projectSuccessFixture {
 	modifiedAt := time.Date(2026, 7, 24, 4, 0, 0, 0, time.UTC)
 	assistantText := "projected assistant reply"
 	reasoningText := "projected reasoning"
@@ -260,121 +289,137 @@ func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-project-1",
 	}
-	fake := &rootServiceFake{
-		project: providersessions.ProjectResult{
-			Session: ref,
-			Detail: providersessions.Detail{
-				ProviderSession: providersessions.Ref{
-					Provider: ref.Provider,
-					Kind:     ref.Kind,
-					ID:       ref.ID,
+	return projectSuccessFixture{
+		ref:           ref,
+		assistantText: assistantText,
+		reasoningText: reasoningText,
+		toolName:      toolName,
+		inputTokens:   inputTokens,
+		outputTokens:  outputTokens,
+		totalTokens:   totalTokens,
+		detail: providersessions.Detail{
+			ProviderSession: providersessions.Ref{Provider: ref.Provider, Kind: ref.Kind, ID: ref.ID},
+			Source: providersessions.SourceMetadata{
+				ModifiedAt:   &modifiedAt,
+				RelativePath: "2026/07/24/rollout-session-project-1.jsonl",
+				SizeBytes:    99,
+			},
+			Parse: providersessions.ParseSummary{
+				EventCount: 3,
+				LineCount:  3,
+				FunctionCalls: []providersessions.FunctionCallSummary{{
+					Arguments: &toolArgs,
+					CallID:    &toolCallID,
+					Name:      &toolName,
+					Order:     1,
+					Status:    &toolStatus,
+					Type:      "function_call",
+				}},
+				Reasoning: []providersessions.ReasoningSummary{{
+					Order:      1,
+					SourceType: "agent_reasoning",
+					Text:       &reasoningText,
+				}},
+				TokenUsage: &providersessions.TokenUsage{
+					InputTokens:  &inputTokens,
+					OutputTokens: &outputTokens,
+					TotalTokens:  &totalTokens,
 				},
-				Source: providersessions.SourceMetadata{
-					ModifiedAt:   &modifiedAt,
-					RelativePath: "2026/07/24/rollout-session-project-1.jsonl",
-					SizeBytes:    99,
-				},
-				Parse: providersessions.ParseSummary{
-					EventCount: 3,
-					LineCount:  3,
-					FunctionCalls: []providersessions.FunctionCallSummary{{
-						Arguments: &toolArgs,
-						CallID:    &toolCallID,
-						Name:      &toolName,
-						Order:     1,
-						Status:    &toolStatus,
-						Type:      "function_call",
-					}},
-					Reasoning: []providersessions.ReasoningSummary{{
-						Order:      1,
-						SourceType: "agent_reasoning",
-						Text:       &reasoningText,
-					}},
-					TokenUsage: &providersessions.TokenUsage{
-						InputTokens:  &inputTokens,
-						OutputTokens: &outputTokens,
-						TotalTokens:  &totalTokens,
-					},
-					Turns: []providersessions.TurnSummary{{
-						Index:             0,
-						EventCount:        3,
-						FunctionCallCount: 1,
-						ReasoningCount:    1,
-					}},
-				},
-				Transcript: []providersessions.TranscriptEntry{
-					{
-						Order: 0,
-						Text:  &reasoningText,
-						Type:  providersessions.TranscriptReasoning,
-					},
-					{
-						Arguments: &toolArgs,
-						CallID:    &toolCallID,
-						Name:      &toolName,
-						Order:     1,
-						Status:    &toolStatus,
-						Type:      providersessions.TranscriptToolCall,
-					},
-					{
-						Order: 2,
-						Text:  &assistantText,
-						Type:  providersessions.TranscriptAssistantMessage,
-					},
-				},
+				Turns: []providersessions.TurnSummary{{
+					Index:             0,
+					EventCount:        3,
+					FunctionCallCount: 1,
+					ReasoningCount:    1,
+				}},
+			},
+			Transcript: []providersessions.TranscriptEntry{
+				{Order: 0, Text: &reasoningText, Type: providersessions.TranscriptReasoning},
+				{Arguments: &toolArgs, CallID: &toolCallID, Name: &toolName, Order: 1, Status: &toolStatus, Type: providersessions.TranscriptToolCall},
+				{Order: 2, Text: &assistantText, Type: providersessions.TranscriptAssistantMessage},
 			},
 		},
 	}
+}
 
-	var svc providersessions.Service = fake
-	result, err := svc.Project(providersessions.ProjectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Project: %v", err)
-	}
-	if fake.lastProjected != ref {
-		t.Fatalf("fake recorded SessionRef = %#v, want %#v", fake.lastProjected, ref)
-	}
-	if result.Session != ref {
-		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, ref)
-	}
-	detail := result.Detail
-	if detail.ProviderSession.Provider != ref.Provider ||
-		detail.ProviderSession.Kind != ref.Kind ||
-		detail.ProviderSession.ID != ref.ID {
-		t.Fatalf("Detail.ProviderSession = %#v", detail.ProviderSession)
-	}
+func assertProjectedTranscript(t *testing.T, detail providersessions.Detail, fx projectSuccessFixture) {
+	t.Helper()
 	if len(detail.Transcript) != 3 {
 		t.Fatalf("Transcript len = %d, want 3", len(detail.Transcript))
 	}
 	if detail.Transcript[0].Type != providersessions.TranscriptReasoning ||
-		detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != reasoningText {
+		detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != fx.reasoningText {
 		t.Fatalf("Transcript[0] = %#v", detail.Transcript[0])
 	}
 	if detail.Transcript[1].Type != providersessions.TranscriptToolCall ||
-		detail.Transcript[1].Name == nil || *detail.Transcript[1].Name != toolName {
+		detail.Transcript[1].Name == nil || *detail.Transcript[1].Name != fx.toolName {
 		t.Fatalf("Transcript[1] = %#v", detail.Transcript[1])
 	}
 	if detail.Transcript[2].Type != providersessions.TranscriptAssistantMessage ||
-		detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != assistantText {
+		detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != fx.assistantText {
 		t.Fatalf("Transcript[2] = %#v", detail.Transcript[2])
 	}
+}
+
+func assertProjectedParseFacts(t *testing.T, detail providersessions.Detail, fx projectSuccessFixture) {
+	t.Helper()
 	if len(detail.Parse.Reasoning) != 1 || detail.Parse.Reasoning[0].Text == nil ||
-		*detail.Parse.Reasoning[0].Text != reasoningText {
+		*detail.Parse.Reasoning[0].Text != fx.reasoningText {
 		t.Fatalf("Parse.Reasoning = %#v", detail.Parse.Reasoning)
 	}
 	if len(detail.Parse.FunctionCalls) != 1 || detail.Parse.FunctionCalls[0].Name == nil ||
-		*detail.Parse.FunctionCalls[0].Name != toolName {
+		*detail.Parse.FunctionCalls[0].Name != fx.toolName {
 		t.Fatalf("Parse.FunctionCalls = %#v", detail.Parse.FunctionCalls)
 	}
-	if detail.Parse.TokenUsage == nil ||
-		detail.Parse.TokenUsage.InputTokens == nil || *detail.Parse.TokenUsage.InputTokens != inputTokens ||
-		detail.Parse.TokenUsage.OutputTokens == nil || *detail.Parse.TokenUsage.OutputTokens != outputTokens ||
-		detail.Parse.TokenUsage.TotalTokens == nil || *detail.Parse.TokenUsage.TotalTokens != totalTokens {
-		t.Fatalf("Parse.TokenUsage = %#v", detail.Parse.TokenUsage)
+}
+
+func assertProjectedTokenUsage(t *testing.T, usage *providersessions.TokenUsage, fx projectSuccessFixture) {
+	t.Helper()
+	if usage == nil || usage.InputTokens == nil || *usage.InputTokens != fx.inputTokens ||
+		usage.OutputTokens == nil || *usage.OutputTokens != fx.outputTokens ||
+		usage.TotalTokens == nil || *usage.TotalTokens != fx.totalTokens {
+		t.Fatalf("Parse.TokenUsage = %#v", usage)
 	}
-	if detail.Source.RelativePath == "" || detail.Source.ModifiedAt == nil || detail.Source.SizeBytes != 99 {
-		t.Fatalf("Source = %#v", detail.Source)
+}
+
+func assertProjectedSource(t *testing.T, source providersessions.SourceMetadata) {
+	t.Helper()
+	if source.RelativePath == "" || source.ModifiedAt == nil || source.SizeBytes != 99 {
+		t.Fatalf("Source = %#v", source)
 	}
+}
+
+func assertProjectedParseAndUsage(t *testing.T, detail providersessions.Detail, fx projectSuccessFixture) {
+	t.Helper()
+	assertProjectedParseFacts(t, detail, fx)
+	assertProjectedTokenUsage(t, detail.Parse.TokenUsage, fx)
+	assertProjectedSource(t, detail.Source)
+}
+
+func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing.T) {
+	fx := newProjectSuccessFixture()
+	fake := &rootServiceFake{
+		project: providersessions.ProjectResult{Session: fx.ref, Detail: fx.detail},
+	}
+
+	var svc providersessions.Service = fake
+	result, err := svc.Project(providersessions.ProjectRequest{Session: fx.ref})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+	if fake.lastProjected != fx.ref {
+		t.Fatalf("fake recorded SessionRef = %#v, want %#v", fake.lastProjected, fx.ref)
+	}
+	if result.Session != fx.ref {
+		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, fx.ref)
+	}
+	detail := result.Detail
+	if detail.ProviderSession.Provider != fx.ref.Provider ||
+		detail.ProviderSession.Kind != fx.ref.Kind ||
+		detail.ProviderSession.ID != fx.ref.ID {
+		t.Fatalf("Detail.ProviderSession = %#v", detail.ProviderSession)
+	}
+	assertProjectedTranscript(t, detail, fx)
+	assertProjectedParseAndUsage(t, detail, fx)
 }
 
 func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
@@ -425,20 +470,8 @@ func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
 	}
 }
 
-// TestRootService_Seal_PublishedSlicesOnSingularRoot proves stories 002-003
-// slices are both reachable through one named Service using only Provider
-// Sessions root contracts (no Codex/Cursor reader, filesystem/SQL/OS effect,
-// Providers catalog/execution, or Workers selection-policy imports).
-func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
-	modifiedAt := time.Date(2026, 7, 24, 5, 0, 0, 0, time.UTC)
-	assistantText := "sealed assistant reply"
-	inputTokens := 5
-	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "session-seal-1",
-	}
-	fake := &rootServiceFake{
+func sealRootFake(ref providersessions.SessionRef, assistantText string, inputTokens int, modifiedAt time.Time) *rootServiceFake {
+	return &rootServiceFake{
 		inspect: providersessions.InspectResult{
 			Session: ref,
 			Source: providersessions.SourceMetadata{
@@ -450,11 +483,7 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 		project: providersessions.ProjectResult{
 			Session: ref,
 			Detail: providersessions.Detail{
-				ProviderSession: providersessions.Ref{
-					Provider: ref.Provider,
-					Kind:     ref.Kind,
-					ID:       ref.ID,
-				},
+				ProviderSession: providersessions.Ref{Provider: ref.Provider, Kind: ref.Kind, ID: ref.ID},
 				Source: providersessions.SourceMetadata{
 					ModifiedAt:   &modifiedAt,
 					RelativePath: "2026/07/24/rollout-session-seal-1.jsonl",
@@ -473,9 +502,10 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 			},
 		},
 	}
+}
 
-	var svc providersessions.Service = fake
-
+func assertSealInspectSuccess(t *testing.T, svc providersessions.Service, ref providersessions.SessionRef) {
+	t.Helper()
 	inspected, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
@@ -483,10 +513,11 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 	if inspected.Session != ref {
 		t.Fatalf("InspectResult.Session = %#v, want %#v", inspected.Session, ref)
 	}
-	if inspected.Source.RelativePath == "" || inspected.Source.ModifiedAt == nil {
-		t.Fatalf("InspectResult.Source = %#v", inspected.Source)
-	}
+	assertSourcePresent(t, inspected.Source)
+}
 
+func assertSealProjectSuccess(t *testing.T, svc providersessions.Service, ref providersessions.SessionRef, assistantText string, inputTokens int) {
+	t.Helper()
 	projected, err := svc.Project(providersessions.ProjectRequest{Session: ref})
 	if err != nil {
 		t.Fatalf("Project: %v", err)
@@ -494,21 +525,12 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 	if projected.Session != ref {
 		t.Fatalf("ProjectResult.Session = %#v, want %#v", projected.Session, ref)
 	}
-	if len(projected.Detail.Transcript) != 1 ||
-		projected.Detail.Transcript[0].Text == nil ||
-		*projected.Detail.Transcript[0].Text != assistantText {
-		t.Fatalf("ProjectResult.Detail.Transcript = %#v", projected.Detail.Transcript)
-	}
-	if projected.Detail.Parse.TokenUsage == nil ||
-		projected.Detail.Parse.TokenUsage.InputTokens == nil ||
-		*projected.Detail.Parse.TokenUsage.InputTokens != inputTokens {
-		t.Fatalf("ProjectResult.Detail.Parse.TokenUsage = %#v", projected.Detail.Parse.TokenUsage)
-	}
+	assertSingleAssistantTranscript(t, projected.Detail, assistantText)
+	assertInputTokenUsage(t, projected.Detail, inputTokens)
+}
 
-	if fake.lastInspected != ref || fake.lastProjected != ref {
-		t.Fatalf("fake recorded Inspect=%#v Project=%#v, want both %#v", fake.lastInspected, fake.lastProjected, ref)
-	}
-
+func assertSealTypedFailures(t *testing.T, svc providersessions.Service, fake *rootServiceFake, ref providersessions.SessionRef) {
+	t.Helper()
 	fake.inspectErr = providersessions.ErrSessionNotFound
 	fake.projectErr = providersessions.ErrUnsupportedProvider
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: ref}); !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -517,4 +539,28 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: ref}); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("Project typed failure = %v, want ErrUnsupportedProvider", err)
 	}
+}
+
+// TestRootService_Seal_PublishedSlicesOnSingularRoot proves stories 002-003
+// slices are both reachable through one named Service using only Provider
+// Sessions root contracts (no Codex/Cursor reader, filesystem/SQL/OS effect,
+// Providers catalog/execution, or Workers selection-policy imports).
+func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
+	modifiedAt := time.Date(2026, 7, 24, 5, 0, 0, 0, time.UTC)
+	assistantText := "sealed assistant reply"
+	inputTokens := 5
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-seal-1",
+	}
+	fake := sealRootFake(ref, assistantText, inputTokens, modifiedAt)
+	var svc providersessions.Service = fake
+
+	assertSealInspectSuccess(t, svc, ref)
+	assertSealProjectSuccess(t, svc, ref, assistantText, inputTokens)
+	if fake.lastInspected != ref || fake.lastProjected != ref {
+		t.Fatalf("fake recorded Inspect=%#v Project=%#v, want both %#v", fake.lastInspected, fake.lastProjected, ref)
+	}
+	assertSealTypedFailures(t, svc, fake, ref)
 }
