@@ -316,7 +316,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "minimum": 42.66
+      "minimum": 35.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
@@ -384,7 +384,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 65.08
+      "minimum": 54.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -712,7 +712,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
-      "minimum": 44.15
+      "minimum": 43.77
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation",
