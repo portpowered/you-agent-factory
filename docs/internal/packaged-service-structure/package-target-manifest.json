@@ -118,6 +118,7 @@
     "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
     "pkg/services/factory_runtime/internal/orchestrators/petri",
+    "pkg/services/factory_runtime/internal/rootobservation",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
     "pkg/services/factory_runtime/orchestratorcontract",
@@ -734,6 +735,11 @@
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/javascript",

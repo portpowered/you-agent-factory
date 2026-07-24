@@ -829,6 +829,11 @@ JavaScript runtime-record types as the peer source of truth for this slice.
 Concrete sanitized projection from legacy engine snapshots lives under
 `factory_runtime/internal/rootobservation` so raw `EngineStateSnapshot` types
 stay off the public Runtime package surface enforced by `make pkg-boundary`.
+Adding that new production package (any non-test `.go` under a new
+`pkg/services/...` directory) also requires regenerating
+`docs/internal/packaged-service-structure/package-target-manifest.json` with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory` then
+`-write-owner-packages` so Dev Package Prerequisites / `make lint` stay green.
 External peer fakes that must still stub `GetEngineStateSnapshot` should return
 `LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
 prohibited Petri public-surface symbols in non-internal packages.
