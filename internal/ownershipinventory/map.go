@@ -136,6 +136,9 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		ResponsibilityClusters:  BuildResponsibilityClusters(),
 		CrossServiceEdges:       edges,
 		NamedOwnerConfirmations: BuildNamedOwnerConfirmations(),
+		MisplacedGuards:         BuildMisplacedGuards(),
+		PublicSurfaces:          BuildPublicSurfaces(),
+		OwnedRoles:              BuildOwnedRoles(),
 		Packages:                rows,
 	}, nil
 }

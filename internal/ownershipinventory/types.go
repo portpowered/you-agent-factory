@@ -28,7 +28,10 @@ const (
 	OwnerRationaleSortKeyDescription         = "serviceID ascending byte order"
 	ResponsibilityClusterSortKeyDescription  = "owner then clusterID ascending byte order"
 	CrossServiceEdgeSortKeyDescription       = "fromOwner then toOwner ascending byte order"
-	NamedOwnerSortKeyDescription             = "owner ascending byte order"
+	NamedOwnerSortKeyDescription          = "owner ascending byte order"
+	MisplacedGuardSortKeyDescription      = "id ascending byte order"
+	PublicSurfaceSortKeyDescription       = "id ascending byte order"
+	OwnedRoleSortKeyDescription           = "kind then id ascending byte order"
 
 	NamedOwnerStatusConfirmed = "confirmed"
 
@@ -66,7 +69,43 @@ type Inventory struct {
 	ResponsibilityClusters   []ResponsibilityCluster `json:"responsibilityClusters"`
 	CrossServiceEdges        []CrossServiceEdge      `json:"crossServiceEdges"`
 	NamedOwnerConfirmations  []NamedOwnerConfirmation `json:"namedOwnerConfirmations"`
+	MisplacedGuards          []MisplacedGuardEntry    `json:"misplacedGuards"`
+	PublicSurfaces           []PublicSurfaceEntry     `json:"publicSurfaces"`
+	OwnedRoles               []OwnedRoleEntry         `json:"ownedRoles"`
 	Packages                 []PackageRow            `json:"packages"`
+}
+
+// MisplacedGuardEntry records one normative standard, allowlist, package guard,
+// baseline, or diagnostic that still assigns provider inference or hosted
+// polling to Workers, plus the durable replacement owner for later DEL/CUT.
+type MisplacedGuardEntry struct {
+	ID                string `json:"id"`
+	Kind              string `json:"kind"`
+	SurfacePath       string `json:"surfacePath"`
+	CurrentOwnerClaim string `json:"currentOwnerClaim"`
+	MisplacedConcern  string `json:"misplacedConcern"`
+	ReplacementOwner  string `json:"replacementOwner"`
+	Note              string `json:"note"`
+}
+
+// PublicSurfaceEntry maps one behavior test or public CLI/HTTP/MCP/replay/
+// visualization surface to its durable service owner.
+type PublicSurfaceEntry struct {
+	ID               string `json:"id"`
+	Kind             string `json:"kind"`
+	SurfacePath      string `json:"surfacePath"`
+	ReplacementOwner string `json:"replacementOwner"`
+	Note             string `json:"note"`
+}
+
+// OwnedRoleEntry assigns one constructor, datastore, lifecycle role, or
+// protocol adapter to exactly one committed destination or deletion mapping.
+type OwnedRoleEntry struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	Destination string `json:"destination"`
+	Note        string `json:"note"`
 }
 
 // NamedOwnerConfirmation freezes one PRD-named owner onto the committed tree
@@ -189,6 +228,12 @@ type Report struct {
 	MissingNamedOwners             []string
 	UnconfirmedNamedOwners         []string
 	InvalidNamedOwnerMaps          []string
+	MissingMisplacedGuards         []string
+	InvalidMisplacedGuards         []string
+	MissingPublicSurfaces          []string
+	InvalidPublicSurfaces          []string
+	MissingOwnedRoles              []string
+	InvalidOwnedRoles              []string
 	MissingCrossServiceEdgeTable   bool
 	MissingProcessEdgesException   bool
 	UnstableSort                   bool
@@ -196,6 +241,9 @@ type Report struct {
 	UnstableResponsibilitySort     bool
 	UnstableEdgeSort               bool
 	UnstableNamedOwnerSort         bool
+	UnstableMisplacedGuardSort     bool
+	UnstablePublicSurfaceSort      bool
+	UnstableOwnedRoleSort          bool
 	ReusedFND01Seed                bool
 }
 
@@ -217,11 +265,20 @@ func (r Report) OK() bool {
 		len(r.MissingNamedOwners) == 0 &&
 		len(r.UnconfirmedNamedOwners) == 0 &&
 		len(r.InvalidNamedOwnerMaps) == 0 &&
+		len(r.MissingMisplacedGuards) == 0 &&
+		len(r.InvalidMisplacedGuards) == 0 &&
+		len(r.MissingPublicSurfaces) == 0 &&
+		len(r.InvalidPublicSurfaces) == 0 &&
+		len(r.MissingOwnedRoles) == 0 &&
+		len(r.InvalidOwnedRoles) == 0 &&
 		!r.MissingCrossServiceEdgeTable &&
 		!r.MissingProcessEdgesException &&
 		!r.UnstableSort &&
 		!r.UnstableRationaleSort &&
 		!r.UnstableResponsibilitySort &&
 		!r.UnstableEdgeSort &&
-		!r.UnstableNamedOwnerSort
+		!r.UnstableNamedOwnerSort &&
+		!r.UnstableMisplacedGuardSort &&
+		!r.UnstablePublicSurfaceSort &&
+		!r.UnstableOwnedRoleSort
 }

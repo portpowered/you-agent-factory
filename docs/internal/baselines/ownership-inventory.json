@@ -1812,6 +1812,371 @@
       "note": "Retain System Bootstrap with no nested subservice. Legacy migration remains a deletion-only responsibility cluster, not a discovery-open nested service."
     }
   ],
+  "misplacedGuards": [
+    {
+      "id": "allowlist:pkgboundary:inferencecontract-leaf-effect",
+      "kind": "allowlist",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Package-boundary leaf-effect allowlist still treats pkg/services/workers/provider/inferencecontract as the Workers-owned provider inference port."
+    },
+    {
+      "id": "baseline:architecture:workers-and-providers-row",
+      "kind": "baseline",
+      "surfacePath": "docs/architecture/architecture.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Architecture ownership table still places provider adapters and inference under the Workers family instead of Providers Execution."
+    },
+    {
+      "id": "baseline:architecture:workers-hosted-logic",
+      "kind": "baseline",
+      "surfacePath": "docs/architecture/architecture.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Architecture ownership table still places hosted logic under Workers; hosted polling/source reconciliation moves to Automation Hosted Sources."
+    },
+    {
+      "id": "diagnostic:pkgboundary:retired-hostedworkers",
+      "kind": "diagnostic",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Retired pkg/hostedworkers diagnostic still directs maintainers to a Workers hosted path instead of Automation Hosted Sources for polling/reconciliation."
+    },
+    {
+      "id": "package_guard:pkgboundary:converged-hosted-logic",
+      "kind": "package_guard",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "convergedServiceSubpackageRoots still assigns pkg/services/workers/services/hosted_logic to workers."
+    },
+    {
+      "id": "package_guard:pkgboundary:converged-workers-provider",
+      "kind": "package_guard",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "convergedServiceSubpackageRoots still assigns pkg/services/workers/provider to workers."
+    },
+    {
+      "id": "standard:general-backend-standards:hosted-polling",
+      "kind": "standard",
+      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Normative backend standard still directs retired pkg/hostedworkers imports to pkg/services/workers/services/hosted_logic instead of Automation Hosted Sources."
+    },
+    {
+      "id": "standard:general-backend-standards:provider-inference",
+      "kind": "standard",
+      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Normative backend standard still names pkg/services/workers/provider/inferencecontract as the provider inference leaf-effect owner."
+    }
+  ],
+  "publicSurfaces": [
+    {
+      "id": "behavior_test:provider-functionaltests",
+      "kind": "behavior_test",
+      "surfacePath": "pkg/services/workers/provider/functionaltests",
+      "replacementOwner": "providers",
+      "note": "Provider compatibility/behavior tests follow the Providers Execution successor after cutover."
+    },
+    {
+      "id": "behavior_test:workers-hosted-poller",
+      "kind": "behavior_test",
+      "surfacePath": "pkg/services/workers/services/hosted_logic",
+      "replacementOwner": "automations",
+      "note": "Hosted poller/source behavior coverage under Workers hosted_logic moves with Automation Hosted Sources; Workers retains hosted runner execution tests only."
+    },
+    {
+      "id": "cli:docs-workers-provider-topics",
+      "kind": "cli",
+      "surfacePath": "docs/reference/workers.md",
+      "replacementOwner": "providers",
+      "note": "Provider enumeration/modelProvider CLI docs burn down to Providers Catalog; Workers docs retain selection/retry/runner policy only."
+    },
+    {
+      "id": "cli:you-providers-list",
+      "kind": "cli",
+      "surfacePath": "pkg/transports/cli",
+      "replacementOwner": "providers",
+      "note": "you providers list and provider-facing CLI adapters consume Providers Catalog as the durable owner."
+    },
+    {
+      "id": "http:openapi-worker-provider-fields",
+      "kind": "http",
+      "surfacePath": "api/components",
+      "replacementOwner": "providers",
+      "note": "OpenAPI provider identity/capability fields stay transport-shaped but durable domain owner is Providers."
+    },
+    {
+      "id": "mcp:factory-session-tools",
+      "kind": "mcp",
+      "surfacePath": "pkg/transports/mcp",
+      "replacementOwner": "factory_sessions",
+      "note": "MCP Factory Session tools adapt Factory Sessions; they are not Workers-owned provider surfaces."
+    },
+    {
+      "id": "replay:recordings-replay",
+      "kind": "replay",
+      "surfacePath": "pkg/services/recordings/replay",
+      "replacementOwner": "recordings",
+      "note": "Replay and artifact reconstruction remain Recordings-owned public surfaces."
+    },
+    {
+      "id": "visualization:factory-visualization",
+      "kind": "visualization",
+      "surfacePath": "pkg/services/factory_visualization",
+      "replacementOwner": "factory_visualization",
+      "note": "Dashboard/live-view visualization remains Factory Visualization-owned."
+    }
+  ],
+  "ownedRoles": [
+    {
+      "id": "constructor:automations",
+      "kind": "constructor",
+      "name": "Automations service constructor",
+      "destination": "automations",
+      "note": "Wire constructs Automations at the Automations root."
+    },
+    {
+      "id": "constructor:factory_definitions",
+      "kind": "constructor",
+      "name": "Factory Definitions service constructor",
+      "destination": "factory_definitions",
+      "note": "Wire constructs Factory Definitions at the Definitions root."
+    },
+    {
+      "id": "constructor:factory_runtime",
+      "kind": "constructor",
+      "name": "Factory Runtime service constructor",
+      "destination": "factory_runtime",
+      "note": "Wire constructs Factory Runtime at the Runtime root."
+    },
+    {
+      "id": "constructor:factory_sessions",
+      "kind": "constructor",
+      "name": "Factory Sessions service constructor",
+      "destination": "factory_sessions",
+      "note": "Wire constructs Factory Sessions at the Sessions root."
+    },
+    {
+      "id": "constructor:factory_visualization",
+      "kind": "constructor",
+      "name": "Factory Visualization service constructor",
+      "destination": "factory_visualization",
+      "note": "Wire constructs Factory Visualization at the Visualization root."
+    },
+    {
+      "id": "constructor:models",
+      "kind": "constructor",
+      "name": "Models service constructor",
+      "destination": "models",
+      "note": "Wire constructs Models via models/wire only."
+    },
+    {
+      "id": "constructor:operator_settings",
+      "kind": "constructor",
+      "name": "Operator Settings service constructor",
+      "destination": "operator_settings",
+      "note": "Wire constructs Operator Settings at the Operator Settings root."
+    },
+    {
+      "id": "constructor:provider_sessions",
+      "kind": "constructor",
+      "name": "Provider Sessions service constructor",
+      "destination": "provider_sessions",
+      "note": "Wire constructs Provider Sessions at the Provider Sessions root."
+    },
+    {
+      "id": "constructor:providers",
+      "kind": "constructor",
+      "name": "Providers service constructor",
+      "destination": "providers",
+      "note": "Providers root constructor is the durable destination for Workers provider extraction."
+    },
+    {
+      "id": "constructor:recordings",
+      "kind": "constructor",
+      "name": "Recordings service constructor",
+      "destination": "recordings",
+      "note": "Wire constructs Recordings at the Recordings root."
+    },
+    {
+      "id": "constructor:system_initialization",
+      "kind": "constructor",
+      "name": "System Bootstrap service constructor",
+      "destination": "system_initialization",
+      "note": "Wire constructs System Bootstrap at the System Bootstrap root."
+    },
+    {
+      "id": "constructor:work",
+      "kind": "constructor",
+      "name": "Work service constructor",
+      "destination": "work",
+      "note": "Wire constructs Work at the Work root."
+    },
+    {
+      "id": "constructor:workers",
+      "kind": "constructor",
+      "name": "Workers service constructor",
+      "destination": "workers",
+      "note": "Wire constructs Workers at the Workers root for selection/retry/runners only."
+    },
+    {
+      "id": "datastore:automationStore",
+      "kind": "datastore",
+      "name": "automationStore",
+      "destination": "automations",
+      "note": "structures.md Automation datastore."
+    },
+    {
+      "id": "datastore:definitionStore",
+      "kind": "datastore",
+      "name": "definitionStore",
+      "destination": "factory_definitions",
+      "note": "structures.md Factory Definition datastore."
+    },
+    {
+      "id": "datastore:ledgerStore",
+      "kind": "datastore",
+      "name": "ledgerStore",
+      "destination": "recordings",
+      "note": "structures.md Session Ledger datastore."
+    },
+    {
+      "id": "datastore:modelStore",
+      "kind": "datastore",
+      "name": "modelStore",
+      "destination": "models",
+      "note": "structures.md Model Runtime datastore."
+    },
+    {
+      "id": "datastore:providerSessionStore",
+      "kind": "datastore",
+      "name": "providerSessionStore",
+      "destination": "provider_sessions",
+      "note": "structures.md Provider Session datastore."
+    },
+    {
+      "id": "datastore:runtimeStore",
+      "kind": "datastore",
+      "name": "runtimeStore",
+      "destination": "factory_runtime",
+      "note": "structures.md Factory Runtime datastore."
+    },
+    {
+      "id": "datastore:sessionStore",
+      "kind": "datastore",
+      "name": "sessionStore",
+      "destination": "factory_sessions",
+      "note": "structures.md Factory Session datastore."
+    },
+    {
+      "id": "datastore:workStore",
+      "kind": "datastore",
+      "name": "workStore",
+      "destination": "work",
+      "note": "structures.md Work datastore."
+    },
+    {
+      "id": "datastore:workerStore",
+      "kind": "datastore",
+      "name": "workerStore",
+      "destination": "workers",
+      "note": "structures.md Worker Execution datastore."
+    },
+    {
+      "id": "lifecycle_role:automations-hosted-sources",
+      "kind": "lifecycle_role",
+      "name": "Automation Hosted Sources lifecycle",
+      "destination": "automations",
+      "note": "Hosted polling/source reconciliation lifecycle moves to Automations."
+    },
+    {
+      "id": "lifecycle_role:factory-session",
+      "kind": "lifecycle_role",
+      "name": "Factory Session lifecycle",
+      "destination": "factory_sessions",
+      "note": "Desired/observed session lifecycle stays Factory Sessions-owned."
+    },
+    {
+      "id": "lifecycle_role:initializer",
+      "kind": "lifecycle_role",
+      "name": "Initializer process lifecycle",
+      "destination": "initializer",
+      "note": "Process start/stop/join remains Initializer-owned."
+    },
+    {
+      "id": "lifecycle_role:provider-session",
+      "kind": "lifecycle_role",
+      "name": "Provider Session lifecycle",
+      "destination": "provider_sessions",
+      "note": "Provider session transcript/lifecycle stays Provider Sessions-owned."
+    },
+    {
+      "id": "lifecycle_role:providers-execution",
+      "kind": "lifecycle_role",
+      "name": "Providers Execution attempt lifecycle",
+      "destination": "providers",
+      "note": "Normalized provider inference attempt lifecycle moves to Providers Execution."
+    },
+    {
+      "id": "lifecycle_role:recordings",
+      "kind": "lifecycle_role",
+      "name": "Recordings lifecycle",
+      "destination": "recordings",
+      "note": "Ledger/recording lifecycle stays Recordings-owned."
+    },
+    {
+      "id": "lifecycle_role:workers-runners",
+      "kind": "lifecycle_role",
+      "name": "Workers runner attempt lifecycle",
+      "destination": "workers",
+      "note": "Work selection/retry and runner attempts remain Workers-owned."
+    },
+    {
+      "id": "protocol_adapter:cli",
+      "kind": "protocol_adapter",
+      "name": "CLI transport adapter",
+      "destination": "transports",
+      "note": "CLI protocol adapter stays under transports; domain owners remain separate."
+    },
+    {
+      "id": "protocol_adapter:http",
+      "kind": "protocol_adapter",
+      "name": "HTTP/REST/SSE transport adapter",
+      "destination": "transports",
+      "note": "HTTP protocol adapter stays under transports."
+    },
+    {
+      "id": "protocol_adapter:mcp",
+      "kind": "protocol_adapter",
+      "name": "MCP transport adapter",
+      "destination": "transports",
+      "note": "MCP protocol adapter stays under transports."
+    },
+    {
+      "id": "protocol_adapter:visualization-sink",
+      "kind": "protocol_adapter",
+      "name": "Factory Visualization presentation adapter",
+      "destination": "factory_visualization",
+      "note": "Visualization presentation adapters remain Factory Visualization-owned."
+    }
+  ],
   "packages": [
     {
       "packagePath": "pkg/initializer",

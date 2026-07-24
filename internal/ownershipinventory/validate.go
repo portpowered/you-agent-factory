@@ -102,8 +102,166 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	validateResponsibilityClusters(inventory, &report)
 	validateCrossServiceEdges(inventory, &report)
 	validateNamedOwners(inventory, &report)
+	validateMisplacedGuards(inventory, &report)
+	validatePublicSurfaces(inventory, &report)
+	validateOwnedRoles(inventory, &report)
 
 	return report
+}
+
+func validateMisplacedGuards(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.MisplacedGuards, compareMisplacedGuards) {
+		report.UnstableMisplacedGuardSort = true
+	}
+
+	byID := map[string]MisplacedGuardEntry{}
+	for _, entry := range inventory.MisplacedGuards {
+		byID[entry.ID] = entry
+		if msg := validateMisplacedGuardEntry(entry); msg != "" {
+			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, msg)
+		}
+	}
+	for _, id := range RequiredMisplacedGuardIDs() {
+		if _, ok := byID[id]; !ok {
+			report.MissingMisplacedGuards = append(report.MissingMisplacedGuards, id)
+		}
+	}
+	slices.Sort(report.MissingMisplacedGuards)
+	slices.Sort(report.InvalidMisplacedGuards)
+	report.InvalidMisplacedGuards = slices.Compact(report.InvalidMisplacedGuards)
+}
+
+func validateMisplacedGuardEntry(entry MisplacedGuardEntry) string {
+	if strings.TrimSpace(entry.ID) == "" {
+		return "misplaced guard missing id"
+	}
+	switch entry.Kind {
+	case MisplacedGuardKindStandard, MisplacedGuardKindAllowlist, MisplacedGuardKindPackageGuard,
+		MisplacedGuardKindBaseline, MisplacedGuardKindDiagnostic:
+	default:
+		return entry.ID + ": unknown kind " + strconv.Quote(entry.Kind)
+	}
+	if strings.TrimSpace(entry.SurfacePath) == "" {
+		return entry.ID + ": missing surfacePath"
+	}
+	if entry.CurrentOwnerClaim != "workers" {
+		return entry.ID + ": currentOwnerClaim must be workers"
+	}
+	switch entry.MisplacedConcern {
+	case MisplacedConcernProviderInference:
+		if entry.ReplacementOwner != "providers" {
+			return entry.ID + ": provider_inference replacementOwner must be providers"
+		}
+	case MisplacedConcernHostedPolling:
+		if entry.ReplacementOwner != "automations" {
+			return entry.ID + ": hosted_polling replacementOwner must be automations"
+		}
+	default:
+		return entry.ID + ": unknown misplacedConcern " + strconv.Quote(entry.MisplacedConcern)
+	}
+	if strings.TrimSpace(entry.ReplacementOwner) == "" {
+		return entry.ID + ": missing replacementOwner"
+	}
+	if !isKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
+		return entry.ID + ": replacementOwner outside product owner vocabulary"
+	}
+	if strings.TrimSpace(entry.Note) == "" {
+		return entry.ID + ": missing note"
+	}
+	return ""
+}
+
+func validatePublicSurfaces(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.PublicSurfaces, comparePublicSurfaces) {
+		report.UnstablePublicSurfaceSort = true
+	}
+
+	byID := map[string]PublicSurfaceEntry{}
+	for _, entry := range inventory.PublicSurfaces {
+		byID[entry.ID] = entry
+		if msg := validatePublicSurfaceEntry(entry); msg != "" {
+			report.InvalidPublicSurfaces = append(report.InvalidPublicSurfaces, msg)
+		}
+	}
+	for _, id := range RequiredPublicSurfaceIDs() {
+		if _, ok := byID[id]; !ok {
+			report.MissingPublicSurfaces = append(report.MissingPublicSurfaces, id)
+		}
+	}
+	slices.Sort(report.MissingPublicSurfaces)
+	slices.Sort(report.InvalidPublicSurfaces)
+	report.InvalidPublicSurfaces = slices.Compact(report.InvalidPublicSurfaces)
+}
+
+func validatePublicSurfaceEntry(entry PublicSurfaceEntry) string {
+	if strings.TrimSpace(entry.ID) == "" {
+		return "public surface missing id"
+	}
+	switch entry.Kind {
+	case PublicSurfaceKindBehaviorTest, PublicSurfaceKindCLI, PublicSurfaceKindHTTP,
+		PublicSurfaceKindMCP, PublicSurfaceKindReplay, PublicSurfaceKindVisualization:
+	default:
+		return entry.ID + ": unknown kind " + strconv.Quote(entry.Kind)
+	}
+	if strings.TrimSpace(entry.SurfacePath) == "" {
+		return entry.ID + ": missing surfacePath"
+	}
+	if strings.TrimSpace(entry.ReplacementOwner) == "" {
+		return entry.ID + ": missing replacementOwner"
+	}
+	if !isKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
+		return entry.ID + ": replacementOwner outside closed vocabulary"
+	}
+	if strings.TrimSpace(entry.Note) == "" {
+		return entry.ID + ": missing note"
+	}
+	return ""
+}
+
+func validateOwnedRoles(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.OwnedRoles, compareOwnedRoles) {
+		report.UnstableOwnedRoleSort = true
+	}
+
+	byID := map[string]OwnedRoleEntry{}
+	for _, entry := range inventory.OwnedRoles {
+		byID[entry.ID] = entry
+		if msg := validateOwnedRoleEntry(entry); msg != "" {
+			report.InvalidOwnedRoles = append(report.InvalidOwnedRoles, msg)
+		}
+	}
+	for _, id := range RequiredOwnedRoleIDs() {
+		if _, ok := byID[id]; !ok {
+			report.MissingOwnedRoles = append(report.MissingOwnedRoles, id)
+		}
+	}
+	slices.Sort(report.MissingOwnedRoles)
+	slices.Sort(report.InvalidOwnedRoles)
+	report.InvalidOwnedRoles = slices.Compact(report.InvalidOwnedRoles)
+}
+
+func validateOwnedRoleEntry(entry OwnedRoleEntry) string {
+	if strings.TrimSpace(entry.ID) == "" {
+		return "owned role missing id"
+	}
+	switch entry.Kind {
+	case OwnedRoleKindConstructor, OwnedRoleKindDatastore, OwnedRoleKindLifecycleRole, OwnedRoleKindProtocolAdapter:
+	default:
+		return entry.ID + ": unknown kind " + strconv.Quote(entry.Kind)
+	}
+	if strings.TrimSpace(entry.Name) == "" {
+		return entry.ID + ": missing name"
+	}
+	if strings.TrimSpace(entry.Destination) == "" {
+		return entry.ID + ": missing destination"
+	}
+	if !isKnownDestination(entry.Destination) {
+		return entry.ID + ": destination outside closed vocabulary"
+	}
+	if strings.TrimSpace(entry.Note) == "" {
+		return entry.ID + ": missing note"
+	}
+	return ""
 }
 
 func validateNamedOwners(inventory Inventory, report *Report) {

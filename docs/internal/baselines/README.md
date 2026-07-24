@@ -22,10 +22,15 @@ nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
 transaction boundary, failure/recovery), large responsibility clusters, a
 cross-service edge table that classifies each distinct-owner production import
 as command, query, event, protocol composition, construction, lifecycle, or
-external effect, and named-owner confirmations for Providers, Provider Sessions,
+external effect, named-owner confirmations for Providers, Provider Sessions,
 Operator Settings, System Bootstrap, Factory Visualization, and Recordings with
 reviewed nested-subservice maps (no alternate top-level owners or further
-discovery). Process Edges edges are marked as the architecture exception and
+discovery), a misplaced-guard burn-down for standards/allowlists/package
+guards/baselines/diagnostics that still assign provider inference or hosted
+polling to Workers (replacement owners Providers or Automations), public
+CLI/HTTP/MCP/replay/visualization and behavior-test surfaces mapped to durable
+owners, and constructor/datastore/lifecycle-role/protocol-adapter ownership
+rows. Process Edges edges are marked as the architecture exception and
 restricted to construction or external effect. When
 `package-target-manifest.json` (FND-01) is present, validators reuse that seed
 for package rows instead of inventing a second destination catalog. Regenerate
