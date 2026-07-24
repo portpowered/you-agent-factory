@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   buildFormFieldAriaDescribedBy,
   FormDescription,
@@ -26,6 +24,7 @@ import {
   FormSuccess as FormsFormSuccess,
   FormWarning as FormsFormWarning,
 } from "@you-agent-factory/components/forms";
+import { describe, expect, it } from "vitest";
 
 describe("@you-agent-factory/components form-field imports", () => {
   it("imports form-field messaging from the package root", () => {
@@ -51,6 +50,8 @@ describe("@you-agent-factory/components form-field imports", () => {
     expect(FormsFormSuccess).toBe(FormSuccess);
     expect(FormsFormFieldGroup).toBe(FormFieldGroup);
     expect(FormsFormFieldGroupLabel).toBe(FormFieldGroupLabel);
-    expect(FormsBuildFormFieldAriaDescribedBy).toBe(buildFormFieldAriaDescribedBy);
+    expect(FormsBuildFormFieldAriaDescribedBy).toBe(
+      buildFormFieldAriaDescribedBy,
+    );
   });
 });

@@ -50,7 +50,9 @@ export function DialogOverlay({
   );
 }
 
-export type DialogContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
+export type DialogContentProps = ComponentProps<
+  typeof DialogPrimitive.Content
+> & {
   closeDisabled?: boolean;
   closeLabel?: string;
 };

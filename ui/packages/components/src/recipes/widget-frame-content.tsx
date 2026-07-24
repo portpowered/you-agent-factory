@@ -107,7 +107,10 @@ export function WidgetEmptyStateText({
   ...props
 }: WidgetEmptyStateTextProps) {
   return (
-    <p className={cn("m-0", WIDGET_FRAME_BODY_TEXT_CLASS, className)} {...props}>
+    <p
+      className={cn("m-0", WIDGET_FRAME_BODY_TEXT_CLASS, className)}
+      {...props}
+    >
       {children}
     </p>
   );

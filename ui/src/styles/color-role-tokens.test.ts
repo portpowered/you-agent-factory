@@ -13,7 +13,10 @@ const packageStylesDir = path.resolve(
   "src",
   "styles",
 );
-const roleTokensSourcePath = path.join(packageStylesDir, "color-role-tokens.css");
+const roleTokensSourcePath = path.join(
+  packageStylesDir,
+  "color-role-tokens.css",
+);
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
 
 const PRODUCT_AF_ROLE_PAIRS: ReadonlyArray<

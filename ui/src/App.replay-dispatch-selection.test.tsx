@@ -193,33 +193,33 @@ describe("App replay dispatch selection flows", () => {
         ).toBeTruthy();
       },
     },
-  ])("selects a workstation dispatch and routes $label request context through work-item details", async ({
-    requestProjection,
-    verify,
-  }) => {
-    renderApp({
-      snapshot: semanticWorkflowDashboardSnapshot,
-      workstationRequestsByDispatchID: {
-        [requestProjection.dispatch_id]: requestProjection,
-      },
-    });
-
-    await selectReviewRequest(requestProjection.dispatch_id);
-
-    await waitFor(() => {
-      const currentSelection = screen.getByRole("article", {
-        name: "Current selection",
+  ])(
+    "selects a workstation dispatch and routes $label request context through work-item details",
+    async ({ requestProjection, verify }) => {
+      renderApp({
+        snapshot: semanticWorkflowDashboardSnapshot,
+        workstationRequestsByDispatchID: {
+          [requestProjection.dispatch_id]: requestProjection,
+        },
       });
-      expect(
-        within(currentSelection).getAllByText(requestProjection.dispatch_id)
-          .length,
-      ).toBeGreaterThan(0);
-      expect(
-        within(currentSelection).queryByRole("heading", {
-          name: "Active work",
-        }),
-      ).toBeNull();
-      verify(currentSelection);
-    });
-  });
+
+      await selectReviewRequest(requestProjection.dispatch_id);
+
+      await waitFor(() => {
+        const currentSelection = screen.getByRole("article", {
+          name: "Current selection",
+        });
+        expect(
+          within(currentSelection).getAllByText(requestProjection.dispatch_id)
+            .length,
+        ).toBeGreaterThan(0);
+        expect(
+          within(currentSelection).queryByRole("heading", {
+            name: "Active work",
+          }),
+        ).toBeNull();
+        verify(currentSelection);
+      });
+    },
+  );
 });

@@ -1,9 +1,9 @@
 import type { FitViewOptions, ReactFlowInstance } from "@xyflow/react";
 import {
-  useEffect,
-  useRef,
   type MutableRefObject,
   type RefObject,
+  useEffect,
+  useRef,
 } from "react";
 
 import type { FactoryLayoutViewport } from "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations";

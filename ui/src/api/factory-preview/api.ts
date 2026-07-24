@@ -37,10 +37,7 @@ export class FactoryPreviewAPIError extends Error {
   public readonly status?: number;
   public readonly statusText?: string;
 
-  public constructor(
-    message: string,
-    details: FactoryPreviewAPIErrorDetails,
-  ) {
+  public constructor(message: string, details: FactoryPreviewAPIErrorDetails) {
     super(message);
     this.name = "FactoryPreviewAPIError";
     this.code = details.code;
@@ -138,9 +135,7 @@ function resolveFactoryPreviewErrorMessage(responseBody: unknown): string {
   return factoryPreviewAPIErrorMessages.rejectedRequest;
 }
 
-function isFactoryPreviewResult(
-  value: unknown,
-): value is FactoryPreviewResult {
+function isFactoryPreviewResult(value: unknown): value is FactoryPreviewResult {
   if (!isAPIRecord(value)) {
     return false;
   }

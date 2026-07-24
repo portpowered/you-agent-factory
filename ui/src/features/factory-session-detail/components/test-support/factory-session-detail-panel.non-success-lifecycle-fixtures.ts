@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
-import { jsonResponse } from "./factory-session-detail-panel.test-helpers";
 import { BASELINE_SESSION_ID } from "./factory-session-detail-panel.baseline-fixtures";
+import { jsonResponse } from "./factory-session-detail-panel.test-helpers";
 
 export const NOT_FOUND_SESSION_ID = "session-missing";
 export const PETRI_SESSION_ID = "~default";
@@ -27,13 +27,10 @@ export function mockSessionNotFoundFetch() {
 
 export function mockSessionApiErrorFetch() {
   vi.mocked(globalThis.fetch).mockResolvedValue(
-    new Response(
-      JSON.stringify({ code: "INTERNAL_ERROR", message: "boom" }),
-      {
-        headers: { "Content-Type": "application/json" },
-        status: 500,
-      },
-    ),
+    new Response(JSON.stringify({ code: "INTERNAL_ERROR", message: "boom" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 500,
+    }),
   );
 }
 

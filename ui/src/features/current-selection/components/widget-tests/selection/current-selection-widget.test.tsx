@@ -4,13 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
 
 import type { CurrentFactoryDocument } from "../../../../../api/current-factory-definition";
-import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
 } from "../../../../../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { CurrentSelectionState } from "../../../hooks/core/useCurrentSelection";
 import { selectWorkItemExecutionDetails } from "../../../state/executionDetails";
@@ -796,7 +796,9 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(screen.getByDisplayValue("reviewer")).toBeTruthy();
-    expect(screen.getAllByText("Model worker (legacy)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Model worker (legacy)").length).toBeGreaterThan(
+      0,
+    );
     expect(
       screen.getByRole("heading", { name: "Worker configuration" }),
     ).toBeTruthy();

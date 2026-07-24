@@ -188,7 +188,9 @@ export function localAgentCliRuntimeLoopbackWorkItem(): DashboardWorkItemRef {
     (work) => work.name === "local-agent-cli-runtime-loopback",
   );
   if (!loopback) {
-    throw new Error("Expected loopback work item in local agent CLI runtime batch.");
+    throw new Error(
+      "Expected loopback work item in local agent CLI runtime batch.",
+    );
   }
 
   return {
@@ -226,7 +228,10 @@ export function localAgentCliRuntimeBatchSnapshot(): DashboardSnapshot & {
     if (relation.requiredState) {
       entry.requiredState = relation.requiredState;
     }
-    relationsByWorkID[sourceWorkID] = [...(relationsByWorkID[sourceWorkID] ?? []), entry];
+    relationsByWorkID[sourceWorkID] = [
+      ...(relationsByWorkID[sourceWorkID] ?? []),
+      entry,
+    ];
     if (!relationsByWorkID[targetWorkID]) {
       relationsByWorkID[targetWorkID] = [];
     }

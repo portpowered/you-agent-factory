@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 import { useSaveEditableDocConfiguration } from "../../doc-selection/hooks/use-save-editable-doc-configuration";
+import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 import { useSaveEditableResourceConfiguration } from "../../resource-selection/hooks/use-save-editable-resource-configuration";
 import { useSaveEditableWorkStateConfiguration } from "../../work-state-selection/hooks/use-save-editable-work-state-configuration";
 import { useSaveEditableWorkTypeConfiguration } from "../../work-type-selection/hooks/use-save-editable-work-type-configuration";
@@ -9,9 +9,12 @@ import { useSaveEditableWorkerConfiguration } from "../../worker-selection/hooks
 import { useSaveEditableWorkstationConfiguration } from "../../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { useCurrentSelectionDetailSave } from "./use-current-selection-detail-save";
 
-vi.mock("../../doc-selection/hooks/use-save-editable-doc-configuration", () => ({
-  useSaveEditableDocConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../../doc-selection/hooks/use-save-editable-doc-configuration",
+  () => ({
+    useSaveEditableDocConfiguration: vi.fn(),
+  }),
+);
 
 vi.mock(
   "../../resource-selection/hooks/use-save-editable-resource-configuration",
@@ -172,7 +175,6 @@ describe("useCurrentSelectionDetailSave", () => {
       }),
     );
   });
-
 });
 
 describe("useCurrentSelectionDetailSave additional scopes", () => {

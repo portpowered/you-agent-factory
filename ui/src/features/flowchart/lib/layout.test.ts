@@ -31,31 +31,34 @@ describe("buildGraphLayout", () => {
     expect(layout.nodes[0]?.y).toBeGreaterThanOrEqual(36);
   });
 
-  it.each(
-    Object.entries(dashboardTopologyFixtures),
-  )("lays out visible nodes and edges from the %s fixture", async (_fixtureName, topology) => {
-    const layout = await buildGraphLayout(topology);
-    const positionedNodeIds = layout.nodes.map((node) => node.nodeId);
-    const workstationNodeIds = layout.nodes
-      .filter((node) => node.nodeKind === "workstation")
-      .map((node) => node.nodeId);
+  it.each(Object.entries(dashboardTopologyFixtures))(
+    "lays out visible nodes and edges from the %s fixture",
+    async (_fixtureName, topology) => {
+      const layout = await buildGraphLayout(topology);
+      const positionedNodeIds = layout.nodes.map((node) => node.nodeId);
+      const workstationNodeIds = layout.nodes
+        .filter((node) => node.nodeKind === "workstation")
+        .map((node) => node.nodeId);
 
-    expect(workstationNodeIds).toEqual(
-      expect.arrayContaining(
-        topology.workstation_node_ids.map((nodeId) => `workstation:${nodeId}`),
-      ),
-    );
-    expect(
-      positionedNodeIds.some((nodeId) => nodeId.startsWith("place:")),
-    ).toBe(true);
-    expect(layout.nodes.length).toBeGreaterThan(
-      topology.workstation_node_ids.length,
-    );
-    if (_fixtureName === "mediumBranching") {
-      expect(positionedNodeIds).toContain("place:quality-gate:ready");
-    }
-    expect(layout.edges.length).toBeGreaterThan(0);
-  });
+      expect(workstationNodeIds).toEqual(
+        expect.arrayContaining(
+          topology.workstation_node_ids.map(
+            (nodeId) => `workstation:${nodeId}`,
+          ),
+        ),
+      );
+      expect(
+        positionedNodeIds.some((nodeId) => nodeId.startsWith("place:")),
+      ).toBe(true);
+      expect(layout.nodes.length).toBeGreaterThan(
+        topology.workstation_node_ids.length,
+      );
+      if (_fixtureName === "mediumBranching") {
+        expect(positionedNodeIds).toContain("place:quality-gate:ready");
+      }
+      expect(layout.edges.length).toBeGreaterThan(0);
+    },
+  );
 
   it("keeps workstation heights fixed as runtime work content changes", async () => {
     const layout = await buildGraphLayout(oneNodeDashboardTopology);

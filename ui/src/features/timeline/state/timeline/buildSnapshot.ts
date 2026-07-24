@@ -1,8 +1,8 @@
-import type { FactoryEvent } from "../../../../api/events";
 import {
   advanceFactoryReplay,
   projectFactoryWorldAtTick,
 } from "@you-agent-factory/factory-replay";
+import type { FactoryEvent } from "../../../../api/events";
 import { projectSnapshot } from "./projectSnapshot";
 import { applyReplayEvent } from "./replayWorldState";
 import { emptyReplayWorldState } from "./replayWorldStateSupport";

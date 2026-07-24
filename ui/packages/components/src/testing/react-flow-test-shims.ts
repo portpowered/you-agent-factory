@@ -42,6 +42,7 @@ class PackageDOMMatrixReadOnly {
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the shared shim installer keeps captured globals and their exact restoration in one lifecycle boundary.
 export function installReactFlowTestShims(): () => void {
   const resizeObserver = globalThis.ResizeObserver;
   const domMatrixReadOnly = globalThis.DOMMatrixReadOnly;
@@ -163,7 +164,11 @@ export function installReactFlowTestShims(): () => void {
       Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
     }
     if (svgGetBBoxDescriptor) {
-      Object.defineProperty(SVGElement.prototype, "getBBox", svgGetBBoxDescriptor);
+      Object.defineProperty(
+        SVGElement.prototype,
+        "getBBox",
+        svgGetBBoxDescriptor,
+      );
     } else {
       Reflect.deleteProperty(SVGElement.prototype, "getBBox");
     }

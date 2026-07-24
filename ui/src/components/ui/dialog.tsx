@@ -1,3 +1,4 @@
+export type { DialogContentProps } from "@you-agent-factory/components/overlays";
 export {
   Dialog,
   DialogClose,
@@ -10,4 +11,3 @@ export {
   DialogTitle,
   DialogTrigger,
 } from "@you-agent-factory/components/overlays";
-export type { DialogContentProps } from "@you-agent-factory/components/overlays";

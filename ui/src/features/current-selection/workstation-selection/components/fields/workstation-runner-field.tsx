@@ -62,10 +62,7 @@ export function EditableConfigurationRunnerField({
         }))}
         value={state.draft.runnerName}
       />
-      <Text
-        className="m-0 text-on-surface-subtle"
-        variant="supporting"
-      >
+      <Text className="m-0 text-on-surface-subtle" variant="supporting">
         {messages.runnerFieldHelp(runnerName, sourceLabel)}
       </Text>
     </div>

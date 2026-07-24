@@ -1,9 +1,4 @@
-import {
-  Button,
-  Label,
-  Text,
-  SurfacePanel,
-} from "../../../components/ui";
+import { Button, Label, SurfacePanel, Text } from "../../../components/ui";
 import type { FactoryPngDropState } from "../../import/hooks/use-factory-png-drop";
 import type { ReadFactoryImportPngError } from "../../import/lib/factory-png-import";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";

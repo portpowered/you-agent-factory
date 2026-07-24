@@ -3,12 +3,12 @@
 import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen, within } from "../testing/render";
+import { WidgetFrame } from "./widget-frame";
 import {
   WidgetDetailCopy,
   WidgetEmptyState,
   WidgetSubtitle,
 } from "./widget-frame-content";
-import { WidgetFrame } from "./widget-frame";
 
 describe("WidgetFrame", () => {
   it("renders the shared widget frame contract with host-provided content", () => {

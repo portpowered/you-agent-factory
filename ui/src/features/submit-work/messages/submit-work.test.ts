@@ -85,7 +85,9 @@ describe("getSubmitWorkMessages invocation copy", () => {
     const messages = getSubmitWorkMessages("zh-CN");
 
     expect(messages.addItemOptionLabel("image")).toBe("图像");
-    expect(messages.fileItemDragActive("图像")).toBe("拖放图像文件以上传暂存。");
+    expect(messages.fileItemDragActive("图像")).toBe(
+      "拖放图像文件以上传暂存。",
+    );
     expect(messages.fileItemFailure("音频")).toBe(
       "重新暂存这个音频文件，或改选另一个文件。",
     );
@@ -107,7 +109,9 @@ describe("getSubmitWorkMessages invocation copy", () => {
     expect(messages.invocation.loadingState).toBe(
       "正在加载当前工厂的调用契约...",
     );
-    expect(messages.invocation.namedBinding("output")).toBe("命名参数：--output");
+    expect(messages.invocation.namedBinding("output")).toBe(
+      "命名参数：--output",
+    );
     expect(messages.invocation.positionalBinding(4)).toBe("位置参数 4");
     expect(messages.invocation.outputContentType("text/markdown")).toBe(
       "内容类型：text/markdown",

@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "../testing/render";
+import { Code, Heading, Label, Text } from "./typography";
 import {
   CAPTION_TEXT_CLASS,
   DENSE_BODY_TEXT_CLASS,
@@ -10,7 +11,6 @@ import {
   TEXT_TRUNCATE_CLASS,
   TEXT_WRAP_CLASS,
 } from "./typography-roles";
-import { Code, Heading, Label, Text } from "./typography";
 
 const LONG_LABEL =
   "Extremely long host-supplied label that should not force horizontal overflow";
@@ -104,9 +104,7 @@ describe("typography primitives", () => {
   });
 
   it("applies wrapping classes for long body copy", () => {
-    renderPackageComponent(
-      <Text wrap>{LONG_LABEL}</Text>,
-    );
+    renderPackageComponent(<Text wrap>{LONG_LABEL}</Text>);
 
     expect(screen.getByText(LONG_LABEL).className).toContain(TEXT_WRAP_CLASS);
   });
@@ -120,8 +118,8 @@ describe("typography primitives", () => {
       </div>,
     );
 
-    expect(screen.getByRole("heading", { name: LONG_LABEL }).className).toContain(
-      TEXT_TRUNCATE_CLASS,
-    );
+    expect(
+      screen.getByRole("heading", { name: LONG_LABEL }).className,
+    ).toContain(TEXT_TRUNCATE_CLASS);
   });
 });

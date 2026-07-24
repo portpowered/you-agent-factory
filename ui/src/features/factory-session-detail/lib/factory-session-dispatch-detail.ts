@@ -72,7 +72,9 @@ export function normalizeFactorySessionDispatchDetail(
       : undefined,
     javascript: dispatch.javascript
       ? {
-          executionMode: normalizeOptionalText(dispatch.javascript.executionMode),
+          executionMode: normalizeOptionalText(
+            dispatch.javascript.executionMode,
+          ),
           taskKind: dispatch.javascript.taskKind,
           taskLabel: normalizeOptionalText(dispatch.javascript.taskLabel),
         }

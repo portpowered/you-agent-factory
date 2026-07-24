@@ -72,7 +72,9 @@ export async function invokeSessionFactory(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(factorySessionScopedPath("/invocations", options.sessionID)),
+      factoryAPIURL(
+        factorySessionScopedPath("/invocations", options.sessionID),
+      ),
       {
         body: JSON.stringify(request),
         headers: {

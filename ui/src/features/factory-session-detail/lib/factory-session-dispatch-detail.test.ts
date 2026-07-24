@@ -1,10 +1,11 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dispatch drilldown projection cases share one normalization harness.
+
+import { describe, expect, it, vi } from "vitest";
 import {
-  getFactorySessionDispatchDetail,
   type FactoryDispatch,
+  getFactorySessionDispatchDetail,
 } from "../../../api/factory-sessions/dispatch-detail";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import { describe, expect, it, vi } from "vitest";
 import { normalizeFactorySessionDispatchDetail } from "./factory-session-dispatch-detail";
 
 const successfulDispatchFixture = {
@@ -254,7 +255,10 @@ describe("factory session dispatch drilldown regression and scope", () => {
     );
 
     await getFactorySessionDispatchDetail(
-      { dispatch_id: "dispatch-success-1", session_id: "dur-sess-js-success-1" },
+      {
+        dispatch_id: "dispatch-success-1",
+        session_id: "dur-sess-js-success-1",
+      },
       { fetch },
     );
 

@@ -195,7 +195,11 @@ describe("FactorySessionDetailPanel durable summary", () => {
           phase: "plan",
           phaseSummaries: [{ dispatchCount: 1, phase: "plan" }],
           partialResultAvailable: true,
-          progress: { inFlightDispatches: 1, queuedDispatches: 1, totalDispatches: 1 },
+          progress: {
+            inFlightDispatches: 1,
+            queuedDispatches: 1,
+            totalDispatches: 1,
+          },
           resultSummary: { resultStatus: "PARTIAL" },
           resolvedSource: {
             kind: "WORKFLOW_NAME",

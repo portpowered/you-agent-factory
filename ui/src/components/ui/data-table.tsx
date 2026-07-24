@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
-
 import {
   DataTable as PackageDataTable,
   type DataTableProps as PackageDataTableProps,
 } from "@you-agent-factory/components/data-display";
+import type { ReactNode } from "react";
 import { useAppLocale } from "../../i18n";
 import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 

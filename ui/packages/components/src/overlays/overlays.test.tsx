@@ -1,8 +1,5 @@
 // @vitest-environment happy-dom
 
-import { axe } from "jest-axe";
-import { describe, expect, it } from "vitest";
-
 import {
   Collapsible,
   CollapsibleContent,
@@ -23,11 +20,9 @@ import {
   Popover as DeepPopover,
   ScrollArea as DeepScrollArea,
 } from "@you-agent-factory/components/overlays";
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { axe } from "jest-axe";
+import { describe, expect, it } from "vitest";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 
 describe("overlay primitives from @you-agent-factory/components", () => {
   it("renders Dialog through the root package import", async () => {
@@ -37,16 +32,23 @@ describe("overlay primitives from @you-agent-factory/components", () => {
       <main>
         <Dialog>
           <DialogTrigger>Open settings</DialogTrigger>
-          <DialogContent aria-describedby={undefined} closeLabel="Dismiss dialog">
+          <DialogContent
+            aria-describedby={undefined}
+            closeLabel="Dismiss dialog"
+          >
             <DialogTitle>Settings</DialogTitle>
-            <DialogDescription>Adjust package-owned dialog content.</DialogDescription>
+            <DialogDescription>
+              Adjust package-owned dialog content.
+            </DialogDescription>
           </DialogContent>
         </Dialog>
       </main>,
     );
 
     await user.click(screen.getByRole("button", { name: "Open settings" }));
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Settings" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Dismiss dialog" }),
     ).toBeInTheDocument();
@@ -91,7 +93,9 @@ describe("overlay primitives from @you-agent-factory/components", () => {
       <main>
         <Collapsible>
           <CollapsibleTrigger>More details</CollapsibleTrigger>
-          <CollapsibleContent>Expanded package collapsible content</CollapsibleContent>
+          <CollapsibleContent>
+            Expanded package collapsible content
+          </CollapsibleContent>
         </Collapsible>
       </main>,
     );

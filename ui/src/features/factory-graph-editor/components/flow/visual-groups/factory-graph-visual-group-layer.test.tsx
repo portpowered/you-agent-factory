@@ -1,6 +1,7 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: visual-group layer interaction cases share one React Flow rendering harness.
 import "@testing-library/jest-dom/vitest";
-import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import type { ComponentProps, CSSProperties } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -121,7 +122,11 @@ describe("FactoryGraphVisualGroupLayer", () => {
     const { container } = render(
       <ReactFlowProvider>
         <div style={{ height: 480, width: 640 }}>
-          <ReactFlow defaultViewport={{ x: 0, y: 0, zoom: 1 }} edges={[]} nodes={[]}>
+          <ReactFlow
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            edges={[]}
+            nodes={[]}
+          >
             <FactoryGraphVisualGroupLayer
               canEdit
               groupAriaLabel={(group) => group.label ?? group.id}
@@ -318,7 +323,9 @@ describe("FactoryGraphVisualGroupLayer", () => {
         { height: 480, position: "relative", width: 640 },
       );
 
-      const resizeHandle = screen.getByRole("button", { name: `Resize ${corner}` });
+      const resizeHandle = screen.getByRole("button", {
+        name: `Resize ${corner}`,
+      });
       enablePointerCapture(resizeHandle);
       fireEvent.pointerDown(resizeHandle, {
         clientX: 240,

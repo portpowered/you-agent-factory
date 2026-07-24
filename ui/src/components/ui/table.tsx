@@ -1,3 +1,7 @@
+export type {
+  TableProps,
+  TableSize,
+} from "@you-agent-factory/components/data-display";
 export {
   Table,
   TableBody,
@@ -11,4 +15,3 @@ export {
   tableMinWidthWideClassName,
   tableNarrowContainerClassName,
 } from "@you-agent-factory/components/data-display";
-export type { TableProps, TableSize } from "@you-agent-factory/components/data-display";

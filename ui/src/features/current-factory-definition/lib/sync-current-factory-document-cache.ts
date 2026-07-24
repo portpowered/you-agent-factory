@@ -1,12 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import { useDashboardStreamStore } from "../../dashboard/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../hooks/useCurrentFactoryDefinition";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
-import { useDashboardStreamStore } from "../../dashboard/public";
 
 export function syncCurrentFactoryDocumentCache(
   queryClient: QueryClient,

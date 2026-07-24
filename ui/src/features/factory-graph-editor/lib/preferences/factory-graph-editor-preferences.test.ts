@@ -77,12 +77,15 @@ describe("factoryGraphEditorViewPreferences", () => {
       storage,
     );
 
-    expect(readFactoryGraphEditorPreferencesForScope("session-alpha", storage))
-      .toEqual({
+    expect(
+      readFactoryGraphEditorPreferencesForScope("session-alpha", storage),
+    ).toEqual({
       hiddenNodeClasses: new Set(["resource"]),
       visibilityPreset: "execution",
     });
-    expect(readFactoryGraphEditorPreferencesForScope("session-beta", storage)).toEqual({
+    expect(
+      readFactoryGraphEditorPreferencesForScope("session-beta", storage),
+    ).toEqual({
       hiddenNodeClasses: new Set(["work-state"]),
       visibilityPreset: "workflow",
     });
@@ -101,10 +104,12 @@ describe("factoryGraphEditorViewPreferences", () => {
     );
     clearFactoryGraphEditorPreferencesForScope("session-alpha", storage);
 
-    expect(storage.getItem(FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY)).toBeNull();
-    expect(readFactoryGraphEditorPreferencesForScope("session-alpha", storage)).toEqual(
-      DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,
-    );
+    expect(
+      storage.getItem(FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY),
+    ).toBeNull();
+    expect(
+      readFactoryGraphEditorPreferencesForScope("session-alpha", storage),
+    ).toEqual(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES);
   });
 
   it("ignores invalid stored preference payloads", () => {
@@ -119,7 +124,9 @@ describe("factoryGraphEditorViewPreferences", () => {
       }),
     );
 
-    expect(readFactoryGraphEditorPreferencesForScope("session-alpha", storage)).toEqual({
+    expect(
+      readFactoryGraphEditorPreferencesForScope("session-alpha", storage),
+    ).toEqual({
       hiddenNodeClasses: new Set(["work-state"]),
       visibilityPreset: "all",
     });

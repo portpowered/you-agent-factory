@@ -52,7 +52,11 @@ export async function expectNoHorizontalOverflow(page, label) {
   }
 }
 
-export async function expectVisibleLabelWithinViewport(page, labelText, viewport) {
+export async function expectVisibleLabelWithinViewport(
+  page,
+  labelText,
+  viewport,
+) {
   const label = page.getByText(labelText, { exact: true });
   await label.waitFor({ state: "visible" });
 

@@ -149,10 +149,7 @@ function mergeTraceRelationFlowNodes(
       ...left.data,
       ...right.data,
       relationStates: [
-        ...new Set([
-          ...left.data.relationStates,
-          ...right.data.relationStates,
-        ]),
+        ...new Set([...left.data.relationStates, ...right.data.relationStates]),
       ].sort(),
       relationTypes: [
         ...new Set([...left.data.relationTypes, ...right.data.relationTypes]),

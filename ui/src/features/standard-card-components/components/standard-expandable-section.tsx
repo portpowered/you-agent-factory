@@ -86,10 +86,7 @@ export function StandardExpandableSection({
             </Heading>
           </div>
           {supportingText ? (
-            <Text
-              className="m-0 text-on-surface-subtle"
-              variant="supporting"
-            >
+            <Text className="m-0 text-on-surface-subtle" variant="supporting">
               {supportingText}
             </Text>
           ) : null}

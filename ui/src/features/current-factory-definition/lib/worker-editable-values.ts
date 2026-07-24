@@ -1,15 +1,15 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
+  goDurationFromWorkerTimeoutPicker,
+  type WorkerTimeoutUnit,
+  workerTimeoutPickerFromGoDuration,
+} from "./worker-timeout-duration";
+import {
   DEFAULT_WORKER_TYPE,
   EDITABLE_WORKER_TYPES,
   isModelProviderWorkerType,
   isScriptWorkerType,
 } from "./worker-workstation-taxonomy";
-import {
-  goDurationFromWorkerTimeoutPicker,
-  type WorkerTimeoutUnit,
-  workerTimeoutPickerFromGoDuration,
-} from "./worker-timeout-duration";
 
 type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
@@ -17,6 +17,7 @@ type CanonicalWorker = NonNullable<
 type WorkerType = NonNullable<CanonicalWorker["type"]>;
 
 export { EDITABLE_WORKER_TYPES };
+
 type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 type ModelLocality = NonNullable<CanonicalWorker["modelLocality"]>;
 type ExecutorProvider = NonNullable<CanonicalWorker["executorProvider"]>;

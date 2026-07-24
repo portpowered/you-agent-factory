@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   ActionRow,
   DescriptionList,
@@ -10,6 +8,7 @@ import {
   SurfacePanel,
   Text,
 } from "@you-agent-factory/components";
+import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "./testing/render";
 
@@ -31,7 +30,9 @@ describe("typography and display primitives package import surface", () => {
       </SurfacePanel>,
     );
 
-    expect(screen.getByRole("heading", { name: "Details" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Details" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Example value")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Primary action" }),

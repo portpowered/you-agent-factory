@@ -1,24 +1,22 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: layout draft hook scenarios stay grouped for undo coverage.
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-
-import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
+  moveFactoryLayoutNode,
+} from "../../lib/layout/factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
   addNodeToFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
 } from "../../lib/layout/visual-groups/factory-graph-layout-groups";
-import {
-  createDefaultFactoryLayout,
-  factoryLayoutNodePosition,
-  moveFactoryLayoutNode,
-} from "../../lib/layout/factory-graph-layout-operations";
+import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 
-const EDGE_ID =
-  "workstation-output:workstation:draft->work-state:story:done";
+const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
 
 describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {
@@ -34,7 +32,9 @@ describe("useFactoryGraphLayoutDraftState movement history", () => {
     });
 
     expect(result.current.canUndoLayout).toBe(true);
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 120,
       y: 160,
     });
@@ -44,13 +44,17 @@ describe("useFactoryGraphLayoutDraftState movement history", () => {
     });
 
     expect(result.current.canRedoLayout).toBe(true);
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
 
     act(() => {
       result.current.redoLayout();
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 120,
       y: 160,
     });
@@ -59,10 +63,14 @@ describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("clears history when discarding layout without recording a reset command", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
-      layout: moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
-        x: 40,
-        y: 80,
-      }),
+      layout: moveFactoryLayoutNode(
+        baseFactoryDefinition.layout ?? {},
+        "workstation:draft",
+        {
+          x: 40,
+          y: 80,
+        },
+      ),
     };
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
@@ -114,10 +122,14 @@ describe("useFactoryGraphLayoutDraftState viewport and multi-node moves", () => 
   it("moves multiple nodes by delta and supports undo", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
-      layout: moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
-        x: 100,
-        y: 200,
-      }),
+      layout: moveFactoryLayoutNode(
+        baseFactoryDefinition.layout ?? {},
+        "workstation:draft",
+        {
+          x: 100,
+          y: 200,
+        },
+      ),
     };
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
@@ -137,7 +149,9 @@ describe("useFactoryGraphLayoutDraftState viewport and multi-node moves", () => 
       );
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 120,
       y: 190,
     });
@@ -146,7 +160,9 @@ describe("useFactoryGraphLayoutDraftState viewport and multi-node moves", () => 
       result.current.undoLayout();
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 100,
       y: 200,
     });
@@ -157,10 +173,14 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
   it("records reset layout in history when recordHistory is enabled", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
-      layout: moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
-        x: 40,
-        y: 80,
-      }),
+      layout: moveFactoryLayoutNode(
+        baseFactoryDefinition.layout ?? {},
+        "workstation:draft",
+        {
+          x: 40,
+          y: 80,
+        },
+      ),
     };
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
@@ -174,7 +194,9 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
       result.current.resetLayout();
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 40,
       y: 80,
     });
@@ -184,7 +206,9 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
       result.current.undoLayout();
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 120,
       y: 160,
     });
@@ -197,10 +221,14 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
         factoryDocumentScopeKey: "session-adopt",
       }),
     );
-    const savedLayout = moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
-      x: 300,
-      y: 400,
-    });
+    const savedLayout = moveFactoryLayoutNode(
+      baseFactoryDefinition.layout ?? {},
+      "workstation:draft",
+      {
+        x: 300,
+        y: 400,
+      },
+    );
 
     act(() => {
       result.current.moveNode("workstation:draft", { x: 10, y: 20 });
@@ -208,7 +236,9 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
     });
 
     expect(result.current.layoutDirty).toBe(false);
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 300,
       y: 400,
     });
@@ -233,7 +263,9 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
       result.current.replaceLayout(replacementLayout);
     });
 
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 55,
       y: 66,
     });
@@ -275,7 +307,9 @@ describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
     });
 
     expect(result.current.layoutDirty).toBe(false);
-    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+    expect(
+      factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID),
+    ).toBeUndefined();
   });
 
   it("records waypoint add, move, and remove commands with undo and redo", () => {
@@ -314,7 +348,9 @@ describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
       result.current.undoLayout();
     });
 
-    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+    expect(
+      factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID),
+    ).toBeUndefined();
     expect(result.current.layoutDirty).toBe(false);
 
     act(() => {
@@ -392,7 +428,9 @@ describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
     });
 
     expect(result.current.canUndoLayout).toBe(false);
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 80,
       y: 90,
     });
@@ -416,7 +454,9 @@ describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
     rerender({ scopeKey: "scope-b" });
 
     expect(result.current.layoutDirty).toBe(false);
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
     expect(result.current.canUndoLayout).toBe(false);
   });
 });
@@ -434,7 +474,10 @@ describe("useFactoryGraphLayoutDraftState visual group create rename style", () 
       result.current.createVisualGroup({ x: 200, y: 150 });
     });
 
-    const createdGroup = factoryLayoutGroupById(result.current.layout, "group-1");
+    const createdGroup = factoryLayoutGroupById(
+      result.current.layout,
+      "group-1",
+    );
     expect(createdGroup).toMatchObject({
       id: "group-1",
       label: "Group 1",
@@ -447,7 +490,9 @@ describe("useFactoryGraphLayoutDraftState visual group create rename style", () 
       result.current.setVisualGroupColor("group-1", "warning");
     });
 
-    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toMatchObject({
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1"),
+    ).toMatchObject({
       color: "warning",
       label: "Planning",
     });
@@ -457,7 +502,9 @@ describe("useFactoryGraphLayoutDraftState visual group create rename style", () 
       result.current.undoLayout();
     });
 
-    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toMatchObject({
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1"),
+    ).toMatchObject({
       color: "primary",
       label: "Group 1",
     });
@@ -611,13 +658,17 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
       result.current.moveVisualGroupByDelta("group-1", { x: 10, y: 5 });
     });
 
-    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual({
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({
       height: 320,
       width: 480,
       x: -230,
       y: -155,
     });
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 50,
       y: 65,
     });
@@ -626,9 +677,9 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
       result.current.undoLayout();
     });
 
-    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual(
-      defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
-    );
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual(defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }));
 
     act(() => {
       result.current.redoLayout();
@@ -640,13 +691,17 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
       });
     });
 
-    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual({
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({
       height: 200,
       width: 300,
       x: 0,
       y: 0,
     });
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 50,
       y: 65,
     });
@@ -656,7 +711,9 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
     });
 
     expect(result.current.layout.groups).toBeUndefined();
-    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({
       x: 50,
       y: 65,
     });

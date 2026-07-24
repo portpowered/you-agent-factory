@@ -1,10 +1,10 @@
-import { expect, userEvent, within } from "storybook/test";
 import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../../styles.css";
+import { expectStyledCheckboxInStory } from "../../../../testing/checkbox-story-helpers";
 import { createEmptyEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
-import { expectStyledCheckboxInStory } from "../../../../testing/checkbox-story-helpers";
 import type { FactoryGraphAddEntityDraft } from "../../lib/editor/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import { FactoryGraphEditorAddWorkstationFields } from "./factory-graph-editor-add-workstation-fields";

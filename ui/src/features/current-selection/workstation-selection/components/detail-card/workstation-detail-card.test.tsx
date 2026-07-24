@@ -908,9 +908,7 @@ describe("WorkstationDetailCard", () => {
         exact: false,
       },
     );
-    expect(unavailableWorkStatus.className).toContain(
-      "af-supporting-text",
-    );
+    expect(unavailableWorkStatus.className).toContain("af-supporting-text");
     expect(unavailableWorkStatus.className).not.toContain("text-[0.78rem]");
 
     rerender(
@@ -1281,9 +1279,7 @@ describe("WorkstationDetailCard", () => {
     const activeWorkHeading = screen.getByRole("heading", {
       name: "Active work",
     });
-    expect(activeWorkHeading.className).toContain(
-      "af-section-heading",
-    );
+    expect(activeWorkHeading.className).toContain("af-section-heading");
     const activeWorkCard = screen.getByText("Active Story").closest("li");
     expect(activeWorkCard?.className).toContain("af-body-text");
 

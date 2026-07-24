@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard";
 import type { FactoryEvent, FactoryWorkItem } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import dispatchWithoutInputContentFixture from "./fixtures/payload-lineage/dispatch-without-input-content.json";
 import workRequestWithContentFixture from "./fixtures/payload-lineage/work-request-with-content.json";
 import { projectRuntime } from "./projectRuntime";
-import { reconstructFactoryReplayState } from "./buildSnapshot";
 import {
   consumedWorkItemRefsForDispatch,
   selectedWorkItemRefForID,
@@ -213,7 +213,10 @@ function expectRefMatchesExpected(
 }
 
 function replayGoldenFixture(fixture: PayloadLineageGoldenFixture) {
-  const state = reconstructFactoryReplayState(fixture.events, fixture.selectedTick);
+  const state = reconstructFactoryReplayState(
+    fixture.events,
+    fixture.selectedTick,
+  );
   const runtime = projectRuntime(state);
   return { runtime, state };
 }

@@ -63,9 +63,7 @@ describe("App shell export dialog flows", () => {
         name: "Export factory",
       });
       await waitFor(() => {
-        expect(
-          within(dialog).getByDisplayValue("Factory Poster"),
-        ).toBeTruthy();
+        expect(within(dialog).getByDisplayValue("Factory Poster")).toBeTruthy();
       });
       expect(
         within(dialog).getByText(/without changing the live dashboard state/i),

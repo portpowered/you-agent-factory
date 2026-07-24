@@ -152,9 +152,8 @@ function buildEditableConfigurationSectionInitialValues(
     workstationName: "Review",
     workstationOptions: ["Plan", "Review"],
     workstationType,
-    workstationTypeOptions: resolveEditableWorkstationTypeConversionOptions(
-      workstationType,
-    ),
+    workstationTypeOptions:
+      resolveEditableWorkstationTypeConversionOptions(workstationType),
   };
 }
 

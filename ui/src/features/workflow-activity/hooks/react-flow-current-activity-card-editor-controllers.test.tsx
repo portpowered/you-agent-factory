@@ -155,59 +155,57 @@ describe("current activity graph editor controllers", () => {
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
-  ])("commits %s keyboard anchor connections and clears the pending source", ({
-    edgeKind,
-    sourceAnchorId,
-    targetAnchorId,
-    targetNodeId,
-  }) => {
-    const graph = createDraftState().graph;
-    const draftState = createDraftState({
-      graph: {
-        ...graph,
-        edges: graph.edges.filter((edge) => edge.kind !== edgeKind),
-      },
-    });
-    const editableGraph = createEditableGraph();
+  ])(
+    "commits %s keyboard anchor connections and clears the pending source",
+    ({ edgeKind, sourceAnchorId, targetAnchorId, targetNodeId }) => {
+      const graph = createDraftState().graph;
+      const draftState = createDraftState({
+        graph: {
+          ...graph,
+          edges: graph.edges.filter((edge) => edge.kind !== edgeKind),
+        },
+      });
+      const editableGraph = createEditableGraph();
 
-    const { result } = renderHook(() =>
-      useFactoryGraphConnectionController({
-        activeTool: "connect",
-        canInteractWithEditor: true,
-        draftState,
-        editableGraph,
-        hiddenNodeClasses: new Set(),
-      }),
-    );
+      const { result } = renderHook(() =>
+        useFactoryGraphConnectionController({
+          activeTool: "connect",
+          canInteractWithEditor: true,
+          draftState,
+          editableGraph,
+          hiddenNodeClasses: new Set(),
+        }),
+      );
 
-    act(() => {
-      result.current.handleConnectionAnchorClick({
+      act(() => {
+        result.current.handleConnectionAnchorClick({
+          anchorId: sourceAnchorId,
+          nodeId: "workstation:review",
+        });
+      });
+
+      expect(result.current.pendingConnectionSource).toEqual({
         anchorId: sourceAnchorId,
         nodeId: "workstation:review",
       });
-    });
 
-    expect(result.current.pendingConnectionSource).toEqual({
-      anchorId: sourceAnchorId,
-      nodeId: "workstation:review",
-    });
-
-    act(() => {
-      result.current.handleConnectionAnchorClick({
-        anchorId: targetAnchorId,
-        nodeId: targetNodeId,
+      act(() => {
+        result.current.handleConnectionAnchorClick({
+          anchorId: targetAnchorId,
+          nodeId: targetNodeId,
+        });
       });
-    });
 
-    expect(editableGraph.actions.connectNodes).toHaveBeenCalledWith({
-      sourceAnchorId,
-      sourceNodeId: "workstation:review",
-      targetAnchorId,
-      targetNodeId,
-    });
-    expect(result.current.connectionNotice).toBeNull();
-    expect(result.current.pendingConnectionSource).toBeNull();
-  });
+      expect(editableGraph.actions.connectNodes).toHaveBeenCalledWith({
+        sourceAnchorId,
+        sourceNodeId: "workstation:review",
+        targetAnchorId,
+        targetNodeId,
+      });
+      expect(result.current.connectionNotice).toBeNull();
+      expect(result.current.pendingConnectionSource).toBeNull();
+    },
+  );
 
   it("shows actionable connection notices for invalid connection paths", () => {
     const draftState = createDraftState();
@@ -318,46 +316,46 @@ describe("current activity graph editor controllers", () => {
     {
       edgeId: "worker-assignment:worker:writer->workstation:review",
     },
-  ])("opens confirmation before applying removable $edgeId draft edge removals", ({
-    edgeId,
-    factoryDefinition = baseFactoryDefinition,
-  }) => {
-    const reset = vi.fn();
-    const draftState = createDraftState({
-      baseFactoryDefinition: factoryDefinition,
-    });
-    const editableGraph = createEditableGraph();
+  ])(
+    "opens confirmation before applying removable $edgeId draft edge removals",
+    ({ edgeId, factoryDefinition = baseFactoryDefinition }) => {
+      const reset = vi.fn();
+      const draftState = createDraftState({
+        baseFactoryDefinition: factoryDefinition,
+      });
+      const editableGraph = createEditableGraph();
 
-    const { result } = renderHook(() =>
-      useFactoryGraphRemovalController({
-        activeTool: "delete",
-        canInteractWithEditor: true,
-        draftState,
-        editableGraph,
-        hiddenNodeClasses: new Set(),
-        saveEditableDefinition: {
-          reset,
-        } as never,
-      }),
-    );
+      const { result } = renderHook(() =>
+        useFactoryGraphRemovalController({
+          activeTool: "delete",
+          canInteractWithEditor: true,
+          draftState,
+          editableGraph,
+          hiddenNodeClasses: new Set(),
+          saveEditableDefinition: {
+            reset,
+          } as never,
+        }),
+      );
 
-    act(() => {
-      result.current.handleEditorEdgeDelete(edgeId);
-    });
+      act(() => {
+        result.current.handleEditorEdgeDelete(edgeId);
+      });
 
-    expect(editableGraph.actions.disconnectEdge).not.toHaveBeenCalled();
-    expect(result.current.pendingRemovalIntent).toMatchObject({
-      requiresConfirmation: true,
-    });
+      expect(editableGraph.actions.disconnectEdge).not.toHaveBeenCalled();
+      expect(result.current.pendingRemovalIntent).toMatchObject({
+        requiresConfirmation: true,
+      });
 
-    act(() => {
-      result.current.handleConfirmRemoval();
-    });
+      act(() => {
+        result.current.handleConfirmRemoval();
+      });
 
-    expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
-    expect(result.current.pendingRemovalIntent).toBeNull();
-  });
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
+      expect(result.current.pendingRemovalIntent).toBeNull();
+    },
+  );
 
   it("surfaces blocked work-type-state edge removal without mutating the draft", () => {
     const reset = vi.fn();
@@ -866,54 +864,55 @@ describe("current activity graph editor controllers", () => {
     {
       nodeId: "worker:editor",
     },
-  ])("immediately applies removable $nodeId draft node removals", ({
-    nodeId,
-  }) => {
-    const reset = vi.fn();
-    const unassignedDefinition: CanonicalFactoryDefinition = {
-      ...baseFactoryDefinition,
-      resources: [
-        ...(baseFactoryDefinition.resources ?? []),
-        { capacity: 1, name: "cache" },
-      ],
-      workers: [
-        ...(baseFactoryDefinition.workers ?? []),
-        {
-          model: "gpt-5",
-          name: "editor",
-          type: "MODEL_WORKER",
-        },
-      ],
-    };
-    const draftState = createDraftState({
-      baseFactoryDefinition: unassignedDefinition,
-    });
-    const editableGraph = createEditableGraph();
+  ])(
+    "immediately applies removable $nodeId draft node removals",
+    ({ nodeId }) => {
+      const reset = vi.fn();
+      const unassignedDefinition: CanonicalFactoryDefinition = {
+        ...baseFactoryDefinition,
+        resources: [
+          ...(baseFactoryDefinition.resources ?? []),
+          { capacity: 1, name: "cache" },
+        ],
+        workers: [
+          ...(baseFactoryDefinition.workers ?? []),
+          {
+            model: "gpt-5",
+            name: "editor",
+            type: "MODEL_WORKER",
+          },
+        ],
+      };
+      const draftState = createDraftState({
+        baseFactoryDefinition: unassignedDefinition,
+      });
+      const editableGraph = createEditableGraph();
 
-    const { result } = renderHook(() =>
-      useFactoryGraphRemovalController({
-        activeTool: "delete",
-        canInteractWithEditor: true,
-        draftState,
-        editableGraph,
-        hiddenNodeClasses: new Set(),
-        saveEditableDefinition: {
-          reset,
-        } as never,
-      }),
-    );
+      const { result } = renderHook(() =>
+        useFactoryGraphRemovalController({
+          activeTool: "delete",
+          canInteractWithEditor: true,
+          draftState,
+          editableGraph,
+          hiddenNodeClasses: new Set(),
+          saveEditableDefinition: {
+            reset,
+          } as never,
+        }),
+      );
 
-    act(() => {
-      result.current.handleEditorNodeDelete(nodeId);
-    });
+      act(() => {
+        result.current.handleEditorNodeDelete(nodeId);
+      });
 
-    expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
-      edgeIds: [],
-      nodeIds: [nodeId],
-    });
-    expect(result.current.pendingRemovalIntent).toBeNull();
-  });
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+        edgeIds: [],
+        nodeIds: [nodeId],
+      });
+      expect(result.current.pendingRemovalIntent).toBeNull();
+    },
+  );
 
   it("applies batch selection delete for multiple draft-only resources", () => {
     const reset = vi.fn();

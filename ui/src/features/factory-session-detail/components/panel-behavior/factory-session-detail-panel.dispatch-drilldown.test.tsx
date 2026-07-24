@@ -146,31 +146,23 @@ describe("FactorySessionDetailPanel dispatch drilldown replacement and error sta
     await user.click(alphaTrigger);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: "artifact-alpha" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("link", { name: "artifact-alpha" })).toBeTruthy();
     });
     expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
     expect(alphaTrigger.getAttribute("aria-expanded")).toBe("true");
     expect(betaTrigger.getAttribute("aria-expanded")).toBe("false");
-    expect(
-      screen.queryByRole("link", { name: "artifact-beta" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "artifact-beta" })).toBeNull();
     expect(screen.queryByText("Checksum mismatch on beta verify.")).toBeNull();
 
     await user.click(betaTrigger);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: "artifact-beta" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("link", { name: "artifact-beta" })).toBeTruthy();
     });
     expect(screen.getByText("Checksum mismatch on beta verify.")).toBeTruthy();
     expect(alphaTrigger.getAttribute("aria-expanded")).toBe("false");
     expect(betaTrigger.getAttribute("aria-expanded")).toBe("true");
-    expect(
-      screen.queryByRole("link", { name: "artifact-alpha" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "artifact-alpha" })).toBeNull();
     expect(screen.getByText("Runtime")).toBeTruthy();
     expect(screen.getByText("JavaScript workflow")).toBeTruthy();
   });

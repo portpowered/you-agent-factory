@@ -1,24 +1,22 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout save scenarios share one factory fixture.
 import { describe, expect, it } from "vitest";
-
+import { factoryDefinitionSavePayloadHasGraphLayoutFields } from "../../document-save/factory-graph-save-layout-boundary";
 import { baseFactoryDefinition } from "../../draft/factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
+import { buildFactoryGraphSaveSummary } from "../../editor-runtime/factory-graph-editor-save-summary";
 import {
   applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
 } from "../../operations/factory-graph-operations";
-import { factoryDefinitionSavePayloadHasGraphLayoutFields } from "../../document-save/factory-graph-save-layout-boundary";
 import { setFactoryLayoutEdgeWaypoints } from "../factory-graph-layout-edge-waypoints";
 import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
-import { buildFactoryGraphSaveSummary } from "../../editor-runtime/factory-graph-editor-save-summary";
 
-const EDGE_ID =
-  "workstation-output:workstation:draft->work-state:story:done";
+const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
 const FAILURE_EDGE_ID =
   "workstation-on-failure:workstation:draft->work-state:story:done";
 
@@ -57,7 +55,9 @@ describe("factory graph layout save", () => {
     ).entries()) {
       expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
     }
-    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+    for (const [index, workType] of (
+      baseFactoryDefinition.workTypes ?? []
+    ).entries()) {
       expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
     }
   });
@@ -96,7 +96,9 @@ describe("factory graph layout save", () => {
     ).entries()) {
       expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
     }
-    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+    for (const [index, workType] of (
+      baseFactoryDefinition.workTypes ?? []
+    ).entries()) {
       expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
     }
 
@@ -227,7 +229,9 @@ describe("factory graph layout save", () => {
     ).entries()) {
       expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
     }
-    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+    for (const [index, workType] of (
+      baseFactoryDefinition.workTypes ?? []
+    ).entries()) {
       expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
     }
 
@@ -273,7 +277,9 @@ describe("factory graph layout save", () => {
         parentGroupId: "parent-lane",
       },
     ]);
-    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+    for (const [index, workType] of (
+      baseFactoryDefinition.workTypes ?? []
+    ).entries()) {
       expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
     }
     for (const [index, workstation] of (

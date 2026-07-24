@@ -1,8 +1,6 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useId } from "react";
 import type { DashboardInferenceAttempt } from "../../../../../api/dashboard/types";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import { useCurrentSelectionDetailMessages } from "../../../base/components/presentation/current-selection-locale";
@@ -45,9 +43,13 @@ export function InferenceAttemptResponseSection({
   }
 
   return attempt.outcome ? (
-    <WidgetDetailCopy>{detailMessages.providerResponseUnavailable}</WidgetDetailCopy>
+    <WidgetDetailCopy>
+      {detailMessages.providerResponseUnavailable}
+    </WidgetDetailCopy>
   ) : (
-    <WidgetDetailCopy>{detailMessages.awaitingProviderResponse}</WidgetDetailCopy>
+    <WidgetDetailCopy>
+      {detailMessages.awaitingProviderResponse}
+    </WidgetDetailCopy>
   );
 }
 

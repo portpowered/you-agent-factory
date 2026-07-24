@@ -7,8 +7,8 @@ import { useCallback, useMemo } from "react";
 
 import type { DashboardStreamState } from "../../../../api/dashboard/types";
 import {
-  factoryTimelineEntryKey,
   type FactoryTimelineEntryState,
+  factoryTimelineEntryKey,
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
   useFactoryTimelineStore,

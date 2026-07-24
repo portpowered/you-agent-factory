@@ -152,11 +152,7 @@ export function useCustomerDemoPlayback<State, World>({
     wantsPlaybackRef.current = false;
     autoplayAvailableRef.current = !prefersReducedMotion();
     const outcome = await instance.commands.restart();
-    if (
-      outcome.status === "accepted" &&
-      isVisible &&
-      !prefersReducedMotion()
-    ) {
+    if (outcome.status === "accepted" && isVisible && !prefersReducedMotion()) {
       autoplayAvailableRef.current = false;
       wantsPlaybackRef.current = true;
       instance.commands.play();

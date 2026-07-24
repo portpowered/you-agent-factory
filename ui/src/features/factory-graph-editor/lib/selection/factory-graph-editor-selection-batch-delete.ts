@@ -1,3 +1,4 @@
+import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import { buildPendingFactoryDefinition } from "../draft/factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import type {
@@ -16,7 +17,6 @@ import {
   buildFactoryGraphDocRemovalIntent,
   parseFactoryBundledDocNodeId,
 } from "../factory-graph-doc-editor";
-import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import type { FactoryGraphEditorSelectionState } from "./factory-graph-editor-selection";
 import { removeFromFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 
@@ -84,8 +84,9 @@ export function buildFactoryGraphSelectionBatchRemovalPlan(options: {
       options.draft,
       options.locale,
     ) ?? options.baseFactoryDefinition;
-  const topology =
-    buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
+  const topology = buildFactoryGraphTopologyFromDefinition(
+    currentFactoryDefinition,
+  );
   const nodeIdsToRemove: string[] = [];
   const edgeIdsToRemove: string[] = [];
   const confirmations: FactoryGraphSelectionBatchRemovalConfirmation[] = [];
@@ -278,8 +279,9 @@ export function applyFactoryGraphSelectionBatchRemoval(
     const currentFactoryDefinition =
       buildPendingFactoryDefinition(baseFactoryDefinition, nextDraft) ??
       baseFactoryDefinition;
-    const topology =
-      buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      currentFactoryDefinition,
+    );
     const edge = topology.edges.find((entry) => entry.id === edgeId);
     if (!edge) {
       continue;

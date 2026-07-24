@@ -53,8 +53,7 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
-  const currentFactoryDefinition =
-    overrides.currentFactoryDefinition ?? null;
+  const currentFactoryDefinition = overrides.currentFactoryDefinition ?? null;
   const selectedResourceName =
     overrides.selectedResourceName ??
     (overrides.selection?.kind === "resource"

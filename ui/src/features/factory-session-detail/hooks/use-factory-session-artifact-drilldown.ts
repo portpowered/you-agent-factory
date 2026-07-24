@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getFactorySessionArtifact } from "../../../api/factory-sessions";
 import {
-  normalizeFactorySessionArtifactDrilldown,
-  normalizeFactorySessionArtifactDrilldownLoadFailure,
   type FactorySessionArtifactDrilldown,
   type FactorySessionArtifactDrilldownLoadFailure,
+  normalizeFactorySessionArtifactDrilldown,
+  normalizeFactorySessionArtifactDrilldownLoadFailure,
 } from "../lib/factory-session-artifact-drilldown";
 
 export const FACTORY_SESSION_ARTIFACT_DRILLDOWN_QUERY_KEY = [
@@ -46,7 +46,11 @@ export function useFactorySessionArtifactDrilldown(
     retry: false,
   });
 
-  if (!enabled || resolvedSessionID.length === 0 || resolvedArtifactID.length === 0) {
+  if (
+    !enabled ||
+    resolvedSessionID.length === 0 ||
+    resolvedArtifactID.length === 0
+  ) {
     return { status: "idle" };
   }
 

@@ -112,9 +112,9 @@ export const PaletteSwitching = {
       expectPrimaryContainerBackground(selectedMenuItem);
 
       if (paletteId === "factory-light") {
-        expect(normalizeColor(window.getComputedStyle(selectedMenuItem).color)).not.toBe(
-          FACTORY_LIGHT_ACCENT_COLOR,
-        );
+        expect(
+          normalizeColor(window.getComputedStyle(selectedMenuItem).color),
+        ).not.toBe(FACTORY_LIGHT_ACCENT_COLOR);
       }
     }
 

@@ -31,8 +31,7 @@ function isRepeaterRejectedOutcome(
 ): boolean {
   return (
     value.trim().toUpperCase() === RAW_REJECTED_OUTCOME &&
-    workstationKind?.trim().toUpperCase() ===
-      WorkstationKind.REPEATER
+    workstationKind?.trim().toUpperCase() === WorkstationKind.REPEATER
   );
 }
 

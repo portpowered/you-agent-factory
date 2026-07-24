@@ -1,7 +1,6 @@
-import { expect, within } from "storybook/test";
-
-import { DashboardActionButton } from "./dashboard-action-button";
 import { ActionRow } from "@you-agent-factory/components";
+import { expect, within } from "storybook/test";
+import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 function DashboardActionControlsShowcase() {
@@ -153,9 +152,7 @@ export const SharedDashboardActionControls = {
     const actionRow = canvas.getByLabelText(
       "Shared dashboard action row example",
     );
-    const sections = actionRow.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    const sections = actionRow.querySelectorAll("[data-action-row-section]");
 
     await expect(
       canvas.getByRole("button", { name: "Export factory" }),
@@ -183,11 +180,11 @@ export const SharedDashboardActionControls = {
     await expect(canvas.getByText("Unsaved changes")).toBeVisible();
     await expect(canvas.getByText("Editor unavailable")).toBeVisible();
     await expect(sections).toHaveLength(2);
-    await expect(
-      sections[0]?.getAttribute("data-action-row-section"),
-    ).toBe("statuses");
-    await expect(
-      sections[1]?.getAttribute("data-action-row-section"),
-    ).toBe("actions");
+    await expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
+      "statuses",
+    );
+    await expect(sections[1]?.getAttribute("data-action-row-section")).toBe(
+      "actions",
+    );
   },
 };

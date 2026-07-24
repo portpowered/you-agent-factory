@@ -12,6 +12,7 @@ import {
   updateFactoryLayoutViewport,
 } from "./factory-graph-layout-operations";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: layout operation cases share one canonical graph fixture vocabulary.
 describe("factory graph layout operations", () => {
   it("moves one node into canonical layout.nodes", () => {
     const layout = createDefaultFactoryLayout();
@@ -34,10 +35,14 @@ describe("factory graph layout operations", () => {
   });
 
   it("moves every selected node by the same delta", () => {
-    const layout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
-      x: 40,
-      y: 80,
-    });
+    const layout = moveFactoryLayoutNode(
+      createDefaultFactoryLayout(),
+      "worker:writer",
+      {
+        x: 40,
+        y: 80,
+      },
+    );
     const resolvedPositions = new Map([
       ["worker:writer", { x: 40, y: 80 }],
       ["workstation:draft", { x: 200, y: 100 }],
@@ -61,10 +66,14 @@ describe("factory graph layout operations", () => {
   });
 
   it("falls back to automatic layout positions for nodes without saved layout", () => {
-    const layout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
-      x: 10,
-      y: 20,
-    });
+    const layout = moveFactoryLayoutNode(
+      createDefaultFactoryLayout(),
+      "worker:writer",
+      {
+        x: 10,
+        y: 20,
+      },
+    );
     const autoLayoutPositions = new Map([
       ["worker:writer", { x: 10, y: 20 }],
       ["workstation:draft", { x: 300, y: 150 }],
@@ -111,10 +120,14 @@ describe("factory graph layout operations", () => {
         ],
       },
     });
-    const pendingLayout = moveFactoryLayoutNode(baseLayout, "workstation:draft", {
-      x: 44,
-      y: 88,
-    });
+    const pendingLayout = moveFactoryLayoutNode(
+      baseLayout,
+      "workstation:draft",
+      {
+        x: 44,
+        y: 88,
+      },
+    );
 
     expect(hasFactoryLayoutChanges(baseLayout, pendingLayout)).toBe(true);
     expect(hasFactoryLayoutChanges(baseLayout, baseLayout)).toBe(false);

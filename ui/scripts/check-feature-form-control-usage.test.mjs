@@ -113,18 +113,15 @@ test("scanFeatureFormControlUsage rejects raw select and native select in featur
       expect.arrayContaining([
         expect.objectContaining({
           kind: "blocked-select-import",
-          relativeFilePath:
-            "src/features/forms/components/export-dialog.tsx",
+          relativeFilePath: "src/features/forms/components/export-dialog.tsx",
         }),
         expect.objectContaining({
           kind: "raw-select",
-          relativeFilePath:
-            "src/features/forms/components/export-dialog.tsx",
+          relativeFilePath: "src/features/forms/components/export-dialog.tsx",
         }),
         expect.objectContaining({
           kind: "native-select",
-          relativeFilePath:
-            "src/features/forms/components/export-dialog.tsx",
+          relativeFilePath: "src/features/forms/components/export-dialog.tsx",
         }),
       ]),
     );
@@ -165,13 +162,11 @@ test("scanFeatureFormControlUsage rejects direct Radix select primitive composit
       violations: expect.arrayContaining([
         expect.objectContaining({
           kind: "blocked-select-import",
-          relativeFilePath:
-            "src/features/forms/components/work-type-field.tsx",
+          relativeFilePath: "src/features/forms/components/work-type-field.tsx",
         }),
         expect.objectContaining({
           kind: "select-primitive",
-          relativeFilePath:
-            "src/features/forms/components/work-type-field.tsx",
+          relativeFilePath: "src/features/forms/components/work-type-field.tsx",
         }),
       ]),
     });
@@ -220,7 +215,9 @@ test("CLI output reports actionable feature select guidance", async () => {
       }),
     ).rejects.toMatchObject({
       code: 1,
-      stderr: expect.stringContaining("Feature form-control usage guard failed."),
+      stderr: expect.stringContaining(
+        "Feature form-control usage guard failed.",
+      ),
     });
     await expect(
       execFileAsync(process.execPath, [scriptPath], {

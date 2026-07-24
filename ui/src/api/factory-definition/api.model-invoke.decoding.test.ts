@@ -1,7 +1,4 @@
-import {
-  FactoryDefinitionAPIError,
-  normalizeFactoryDefinition,
-} from "./api";
+import { FactoryDefinitionAPIError, normalizeFactoryDefinition } from "./api";
 import {
   decodeModelOperation,
   decodeWorkstationOperationBinding,
@@ -20,7 +17,12 @@ describe("normalizeFactoryDefinition model invoke decoding", () => {
           operationBindings: [
             {
               slot: "text",
-              selector: { slot: "text", label: "utterance", role: "input", type: "TEXT" },
+              selector: {
+                slot: "text",
+                label: "utterance",
+                role: "input",
+                type: "TEXT",
+              },
               config: [
                 {
                   type: "text",
@@ -32,11 +34,23 @@ describe("normalizeFactoryDefinition model invoke decoding", () => {
                   artifactId: "artifact-1",
                   metadata: { source: "config" },
                 },
-                { type: "image", url: "https://example.com/a.png", file: "a.png" },
+                {
+                  type: "image",
+                  url: "https://example.com/a.png",
+                  file: "a.png",
+                },
                 { type: "IMAGE", url: "https://example.com/b.png" },
-                { type: "AUDIO", url: "https://example.com/a.mp3", file: "a.mp3" },
+                {
+                  type: "AUDIO",
+                  url: "https://example.com/a.mp3",
+                  file: "a.mp3",
+                },
                 { type: "JSON", json: { voice: "alloy" } },
-                { type: "BINARY", url: "https://example.com/a.bin", file: "a.bin" },
+                {
+                  type: "BINARY",
+                  url: "https://example.com/a.bin",
+                  file: "a.bin",
+                },
               ],
             },
           ],
@@ -48,7 +62,12 @@ describe("normalizeFactoryDefinition model invoke decoding", () => {
     expect(normalized.workstations?.[0]?.operationBindings).toEqual([
       {
         slot: "text",
-        selector: { slot: "text", label: "utterance", role: "input", type: "TEXT" },
+        selector: {
+          slot: "text",
+          label: "utterance",
+          role: "input",
+          type: "TEXT",
+        },
         config: [
           {
             type: "text",
@@ -138,7 +157,12 @@ describe("decodeWorkstationOperationBinding", () => {
       decodeWorkstationOperationBinding(
         {
           slot: "voice",
-          selector: { slot: "voice", label: "voice", role: "config", type: "JSON" },
+          selector: {
+            slot: "voice",
+            label: "voice",
+            role: "config",
+            type: "JSON",
+          },
         },
         "factory.workstations[0].operationBindings[0]",
       ),

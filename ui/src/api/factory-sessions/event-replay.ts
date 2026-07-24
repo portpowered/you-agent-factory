@@ -1,11 +1,8 @@
-import { FACTORY_EVENTS_ENDPOINT, type FactoryEvent } from "../events";
 import { factoryAPIURL } from "../baseUrl";
+import { FACTORY_EVENTS_ENDPOINT, type FactoryEvent } from "../events";
 import { factorySessionScopedPath } from "../session-routing";
 import { readAPIResponseBody } from "../transport";
-import {
-  buildFactorySessionsAPIError,
-  FactorySessionsAPIError,
-} from "./api";
+import { buildFactorySessionsAPIError, FactorySessionsAPIError } from "./api";
 
 export interface ListFactorySessionEventReplayOptions {
   fetch?: typeof globalThis.fetch;
@@ -28,7 +25,9 @@ export async function listFactorySessionEventReplay(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(factorySessionScopedPath(FACTORY_EVENTS_ENDPOINT, sessionID)),
+      factoryAPIURL(
+        factorySessionScopedPath(FACTORY_EVENTS_ENDPOINT, sessionID),
+      ),
       {
         headers: {
           Accept: "text/event-stream",
@@ -71,7 +70,9 @@ export async function listFactorySessionEventReplay(
   }
 }
 
-export function parseFactoryEventReplayStream(replayStream: string): FactoryEvent[] {
+export function parseFactoryEventReplayStream(
+  replayStream: string,
+): FactoryEvent[] {
   const events: FactoryEvent[] = [];
   const normalized = replayStream.replace(/\r\n/g, "\n");
   for (const block of normalized.split("\n\n")) {

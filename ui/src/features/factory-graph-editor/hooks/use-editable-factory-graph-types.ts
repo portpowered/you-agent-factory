@@ -76,10 +76,7 @@ export interface EditableFactoryGraphViewModel {
     moveLayoutNodesByDelta: (
       nodeIds: readonly string[],
       delta: { x: number; y: number },
-      resolvedPositionsByNodeId: ReadonlyMap<
-        string,
-        { x: number; y: number }
-      >,
+      resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
     ) => void;
     resetLayout: (options?: { recordHistory?: boolean }) => void;
     redoLayout: () => void;
@@ -90,7 +87,10 @@ export interface EditableFactoryGraphViewModel {
       y: number;
       zoom: number;
     }) => void;
-    createVisualGroup: (center: { x: number; y: number }) => { id: string } | null;
+    createVisualGroup: (center: {
+      x: number;
+      y: number;
+    }) => { id: string } | null;
     renameVisualGroup: (groupId: string, label: string) => void;
     setVisualGroupColor: (
       groupId: string,

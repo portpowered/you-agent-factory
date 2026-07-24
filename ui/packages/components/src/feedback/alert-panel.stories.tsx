@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import {
   AlertPanel,
+  type AlertPanelSemanticVariant,
   AlertPanelText,
   AlertPanelTitle,
-  type AlertPanelSemanticVariant,
 } from "./alert-panel";
 
 const semanticVariants = [
@@ -69,7 +69,9 @@ export const Info: Story = {
     children: (
       <>
         <AlertPanelTitle>Info feedback</AlertPanelTitle>
-        <AlertPanelText>Helpful context for the current surface.</AlertPanelText>
+        <AlertPanelText>
+          Helpful context for the current surface.
+        </AlertPanelText>
       </>
     ),
   },
@@ -81,7 +83,9 @@ export const Success: Story = {
     children: (
       <>
         <AlertPanelTitle>Success feedback</AlertPanelTitle>
-        <AlertPanelText>The requested action completed successfully.</AlertPanelText>
+        <AlertPanelText>
+          The requested action completed successfully.
+        </AlertPanelText>
       </>
     ),
   },
@@ -93,7 +97,9 @@ export const Warning: Story = {
     children: (
       <>
         <AlertPanelTitle>Warning feedback</AlertPanelTitle>
-        <AlertPanelText>Review the highlighted details before continuing.</AlertPanelText>
+        <AlertPanelText>
+          Review the highlighted details before continuing.
+        </AlertPanelText>
       </>
     ),
   },
@@ -105,7 +111,9 @@ export const Danger: Story = {
     children: (
       <>
         <AlertPanelTitle>Danger feedback</AlertPanelTitle>
-        <AlertPanelText>This action may have destructive consequences.</AlertPanelText>
+        <AlertPanelText>
+          This action may have destructive consequences.
+        </AlertPanelText>
       </>
     ),
   },
@@ -117,7 +125,9 @@ export const ErrorState: Story = {
     children: (
       <>
         <AlertPanelTitle>Request failed</AlertPanelTitle>
-        <AlertPanelText>The server rejected the latest submission.</AlertPanelText>
+        <AlertPanelText>
+          The server rejected the latest submission.
+        </AlertPanelText>
       </>
     ),
   },

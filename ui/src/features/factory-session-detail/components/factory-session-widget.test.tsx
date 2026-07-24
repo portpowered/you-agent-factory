@@ -4,11 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FactorySessionWidget } from "./factory-session-widget";
 
 vi.mock("./factory-session-detail-panel", () => ({
-  FactorySessionDetailPanel: ({
-    sessionID,
-  }: {
-    sessionID: string | null;
-  }) => <div>Selected factory session {sessionID}</div>,
+  FactorySessionDetailPanel: ({ sessionID }: { sessionID: string | null }) => (
+    <div>Selected factory session {sessionID}</div>
+  ),
 }));
 
 describe("FactorySessionWidget", () => {
@@ -26,9 +24,7 @@ describe("FactorySessionWidget", () => {
     render(<FactorySessionWidget sessionID="~default" />);
 
     expect(
-      screen.getByText(
-        "Selected factory session dur-sess-js-success-002",
-      ),
+      screen.getByText("Selected factory session dur-sess-js-success-002"),
     ).toBeTruthy();
   });
 

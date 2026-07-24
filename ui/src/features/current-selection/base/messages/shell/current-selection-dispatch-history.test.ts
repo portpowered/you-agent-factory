@@ -60,21 +60,24 @@ describe("getCurrentSelectionDispatchHistoryMessages", () => {
       "解決済み引数",
       "プロバイダー",
     ],
-  ] as const)("resolves %s catalog copy", (locale, expectedCurrentDispatchBadge, expectedRequestDetailsTitle, expectedUnknownDispatchTitle, expectedTraceIdsLabel, expectedSelectWorkItemLabel, expectedExpandAction, expectedScriptRequestIdLabel, expectedResolvedArgsLabel, expectedProviderLabel) => {
-    const messages = getCurrentSelectionDispatchHistoryMessages(locale);
+  ] as const)(
+    "resolves %s catalog copy",
+    (locale, expectedCurrentDispatchBadge, expectedRequestDetailsTitle, expectedUnknownDispatchTitle, expectedTraceIdsLabel, expectedSelectWorkItemLabel, expectedExpandAction, expectedScriptRequestIdLabel, expectedResolvedArgsLabel, expectedProviderLabel) => {
+      const messages = getCurrentSelectionDispatchHistoryMessages(locale);
 
-    expect(messages.currentDispatchBadge).toBe(expectedCurrentDispatchBadge);
-    expect(messages.requestDetailsTitle).toBe(expectedRequestDetailsTitle);
-    expect(messages.unknownDispatchTitle).toBe(expectedUnknownDispatchTitle);
-    expect(messages.traceIdsLabel).toBe(expectedTraceIdsLabel);
-    expect(messages.selectWorkItemAccessibleLabel("Active Story")).toBe(
-      expectedSelectWorkItemLabel,
-    );
-    expect(messages.expandAction).toBe(expectedExpandAction);
-    expect(messages.scriptRequestIdLabel).toBe(expectedScriptRequestIdLabel);
-    expect(messages.resolvedArgsLabel).toBe(expectedResolvedArgsLabel);
-    expect(messages.providerLabel).toBe(expectedProviderLabel);
-  });
+      expect(messages.currentDispatchBadge).toBe(expectedCurrentDispatchBadge);
+      expect(messages.requestDetailsTitle).toBe(expectedRequestDetailsTitle);
+      expect(messages.unknownDispatchTitle).toBe(expectedUnknownDispatchTitle);
+      expect(messages.traceIdsLabel).toBe(expectedTraceIdsLabel);
+      expect(messages.selectWorkItemAccessibleLabel("Active Story")).toBe(
+        expectedSelectWorkItemLabel,
+      );
+      expect(messages.expandAction).toBe(expectedExpandAction);
+      expect(messages.scriptRequestIdLabel).toBe(expectedScriptRequestIdLabel);
+      expect(messages.resolvedArgsLabel).toBe(expectedResolvedArgsLabel);
+      expect(messages.providerLabel).toBe(expectedProviderLabel);
+    },
+  );
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getCurrentSelectionDispatchHistoryMessages("en");

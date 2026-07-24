@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { resolveEditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
-import { resolveWorkerOptionsState } from "./validation/editable-workstation-configuration-validation";
 import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,
   modelWorkstationValues,
 } from "../../../../testing/editable-workstation-configuration-validation-fixtures";
+import type { resolveEditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { resolveWorkerOptionsState } from "./validation/editable-workstation-configuration-validation";
 
 describe("resolveWorkerOptionsState logical move", () => {
   it("returns ready options without worker membership checks for LOGICAL_MOVE", () => {

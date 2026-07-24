@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
+  hasFactoryLayoutChanges,
+  moveFactoryLayoutNode,
+} from "../factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
   addNodeToFactoryLayoutGroup,
@@ -8,11 +13,11 @@ import {
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
-  factoryLayoutGroups,
   factoryLayoutGroupCanvasNodeOptions,
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
   factoryLayoutGroupContainsNode,
+  factoryLayoutGroups,
   factoryLayoutGroupsEqual,
   isApprovedFactoryLayoutGroupColor,
   moveFactoryLayoutGroupByDelta,
@@ -22,12 +27,6 @@ import {
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "./factory-graph-layout-groups";
-import {
-  createDefaultFactoryLayout,
-  factoryLayoutNodePosition,
-  hasFactoryLayoutChanges,
-  moveFactoryLayoutNode,
-} from "../factory-graph-layout-operations";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: group layout scenarios share fixtures.
 describe("factory graph layout groups", () => {
@@ -251,7 +250,9 @@ describe("factory graph layout groups", () => {
     const withoutGroup = removeFactoryLayoutGroup(withMember, "group-1");
 
     expect(withoutGroup.groups).toBeUndefined();
-    expect(factoryLayoutNodePosition(withoutGroup, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(withoutGroup, "workstation:draft"),
+    ).toEqual({
       x: 40,
       y: 60,
     });
@@ -286,9 +287,9 @@ describe("factory graph layout groups", () => {
     expect(factoryLayoutGroupById(unchangedAdd, "group-1")?.nodeIds).toEqual([
       "workstation:draft",
     ]);
-    expect(factoryLayoutGroupById(unchangedRemove, "group-1")?.nodeIds).toEqual([
-      "workstation:draft",
-    ]);
+    expect(factoryLayoutGroupById(unchangedRemove, "group-1")?.nodeIds).toEqual(
+      ["workstation:draft"],
+    );
   });
 
   it("returns the original layout when moving a missing group or empty member set", () => {
@@ -305,8 +306,8 @@ describe("factory graph layout groups", () => {
       moveFactoryLayoutGroupByDelta(layout, "missing-group", { x: 1, y: 2 }),
     ).toBe(layout);
     expect(
-      moveFactoryLayoutGroupByDelta(layout, "group-1", { x: 1, y: 2 }).groups?.[0]
-        ?.bounds,
+      moveFactoryLayoutGroupByDelta(layout, "group-1", { x: 1, y: 2 })
+        .groups?.[0]?.bounds,
     ).toEqual({
       height: 320,
       width: 480,
@@ -398,10 +399,14 @@ describe("factory graph layout groups", () => {
 
     expect(factoryLayoutGroupsEqual(group, structuredClone(group))).toBe(true);
     expect(
-      updateFactoryLayoutGroup(createDefaultFactoryLayout(), "missing", (current) => ({
-        ...current,
-        label: "Ignored",
-      })),
+      updateFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        "missing",
+        (current) => ({
+          ...current,
+          label: "Ignored",
+        }),
+      ),
     ).toEqual(createDefaultFactoryLayout());
   });
 
@@ -415,9 +420,9 @@ describe("factory graph layout groups", () => {
 
     expect(factoryLayoutGroups(layout)).toHaveLength(1);
     expect(factoryLayoutGroupById(layout, "group-1")?.label).toBe("Review");
-    expect(factoryLayoutGroupById(createDefaultFactoryLayout(), "missing")).toBe(
-      undefined,
-    );
+    expect(
+      factoryLayoutGroupById(createDefaultFactoryLayout(), "missing"),
+    ).toBe(undefined);
   });
 
   it("builds sorted canvas node options from topology nodes", () => {

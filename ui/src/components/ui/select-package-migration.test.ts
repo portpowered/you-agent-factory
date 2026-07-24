@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vitest";
-
 import {
   EnumSelect,
   NativeSelect,
@@ -12,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@you-agent-factory/components";
+import { describe, expect, it } from "vitest";
 import {
   EnumSelect as DashboardEnumSelect,
   OptionalEnumSelect as DashboardOptionalEnumSelect,

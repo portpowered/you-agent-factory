@@ -1,8 +1,5 @@
 // @vitest-environment happy-dom
 
-import { useState } from "react";
-import { describe, expect, it } from "vitest";
-
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,6 +13,8 @@ import {
   PopoverTrigger,
   ScrollArea,
 } from "@you-agent-factory/components";
+import { useState } from "react";
+import { describe, expect, it } from "vitest";
 import {
   renderPackageComponent,
   screen,
@@ -102,7 +101,10 @@ describe("Dialog focus and keyboard behavior", () => {
       <main>
         <Dialog>
           <DialogTrigger>Open settings</DialogTrigger>
-          <DialogContent aria-describedby={undefined} closeLabel="Dismiss dialog">
+          <DialogContent
+            aria-describedby={undefined}
+            closeLabel="Dismiss dialog"
+          >
             <DialogTitle>Settings</DialogTitle>
             <button type="button">First action</button>
             <button type="button">Second action</button>
@@ -147,8 +149,12 @@ describe("Dialog focus and keyboard behavior", () => {
 
     renderPackageComponent(<ControlledDialogExample />);
 
-    const trigger = screen.getByRole("button", { name: "Open controlled dialog" });
-    expect(screen.queryByRole("dialog", { name: "Controlled dialog" })).toBeNull();
+    const trigger = screen.getByRole("button", {
+      name: "Open controlled dialog",
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Controlled dialog" }),
+    ).toBeNull();
 
     await user.click(trigger);
     expect(
@@ -212,7 +218,9 @@ describe("Popover focus and keyboard behavior", () => {
 
     renderPackageComponent(<ControlledPopoverExample />);
 
-    const trigger = screen.getByRole("button", { name: "Show controlled popover" });
+    const trigger = screen.getByRole("button", {
+      name: "Show controlled popover",
+    });
     expect(screen.queryByText("Controlled popover content")).toBeNull();
 
     await user.click(trigger);
@@ -235,7 +243,9 @@ describe("Collapsible keyboard and disclosure behavior", () => {
       <main>
         <Collapsible>
           <CollapsibleTrigger>More details</CollapsibleTrigger>
-          <CollapsibleContent>Expanded package collapsible content</CollapsibleContent>
+          <CollapsibleContent>
+            Expanded package collapsible content
+          </CollapsibleContent>
         </Collapsible>
       </main>,
     );
@@ -267,7 +277,9 @@ describe("Collapsible keyboard and disclosure behavior", () => {
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Controlled collapsible content")).toBeInTheDocument();
+    expect(
+      screen.getByText("Controlled collapsible content"),
+    ).toBeInTheDocument();
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "false");

@@ -13,9 +13,7 @@ export function DetailMetric({
     <div className="grid gap-1 py-1.5">
       <Label>{label}</Label>
       {typeof value === "string" || typeof value === "number" ? (
-        <Text className="m-0 mt-1 [overflow-wrap:anywhere]">
-          {value}
-        </Text>
+        <Text className="m-0 mt-1 [overflow-wrap:anywhere]">{value}</Text>
       ) : (
         <Text as="div" className="mt-1 [overflow-wrap:anywhere]">
           {value}

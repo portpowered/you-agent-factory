@@ -389,9 +389,7 @@ export function expandDetailCardResourceConfiguration(
 
 export function currentSelectionHeaderActionSection() {
   const article = screen.getByRole("article", { name: "Current selection" });
-  const section = article.querySelector(
-    "[data-action-row-section='actions']",
-  );
+  const section = article.querySelector("[data-action-row-section='actions']");
   if (!section) {
     throw new Error("expected current selection header action section");
   }

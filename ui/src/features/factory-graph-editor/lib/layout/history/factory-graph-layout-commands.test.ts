@@ -1,6 +1,24 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout command inverse scenarios stay grouped around shared fixtures.
 import { describe, expect, it } from "vitest";
-
+import {
+  addFactoryLayoutEdgeWaypoint,
+  factoryLayoutEdgeWaypoints,
+  moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
+  setFactoryLayoutEdgeWaypoints,
+} from "../factory-graph-layout-edge-waypoints";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
+  moveFactoryLayoutNode,
+} from "../factory-graph-layout-operations";
+import {
+  addFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  defaultFactoryLayoutGroupBounds,
+  factoryLayoutGroupById,
+} from "../visual-groups/factory-graph-layout-groups";
 import {
   applyFactoryLayoutCommand,
   createDeleteFactoryLayoutGroupCommand,
@@ -10,35 +28,17 @@ import {
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutViewportCommand,
+  type FactoryLayoutCommand,
   factoryLayoutCommandAffectedNodeIds,
   factoryLayoutCommandReferencesDeletedNodeIds,
   invertFactoryLayoutCommand,
-  type FactoryLayoutCommand,
 } from "./factory-graph-layout-commands";
-import {
-  addFactoryLayoutEdgeWaypoint,
-  factoryLayoutEdgeWaypoints,
-  moveFactoryLayoutEdgeWaypoint,
-  removeFactoryLayoutEdgeWaypoint,
-  setFactoryLayoutEdgeWaypoints,
-} from "../factory-graph-layout-edge-waypoints";
-import {
-  addFactoryLayoutGroup,
-  addNodeToFactoryLayoutGroup,
-  createFactoryLayoutGroup,
-  defaultFactoryLayoutGroupBounds,
-  factoryLayoutGroupById,
-} from "../visual-groups/factory-graph-layout-groups";
-import {
-  createDefaultFactoryLayout,
-  factoryLayoutNodePosition,
-  moveFactoryLayoutNode,
-} from "../factory-graph-layout-operations";
 
-const EDGE_ID =
-  "workstation-output:workstation:draft->work-state:story:done";
+const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
 
-function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
+function requireCommand(
+  command: FactoryLayoutCommand | null,
+): FactoryLayoutCommand {
   expect(command).not.toBeNull();
   if (!command) {
     throw new Error("Expected layout command to be created.");
@@ -48,10 +48,14 @@ function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutComm
 
 describe("factory graph layout commands", () => {
   it("creates and inverts single-node movement without whole-document snapshots", () => {
-    const layout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
-      x: 40,
-      y: 80,
-    });
+    const layout = moveFactoryLayoutNode(
+      createDefaultFactoryLayout(),
+      "worker:writer",
+      {
+        x: 40,
+        y: 80,
+      },
+    );
     const command = requireCommand(
       createMoveFactoryLayoutNodeCommand({
         layout,
@@ -95,7 +99,9 @@ describe("factory graph layout commands", () => {
       invertFactoryLayoutCommand(command),
     );
 
-    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(undoneLayout, "worker:writer"),
+    ).toBeUndefined();
   });
 
   it("creates and inverts multi-node movement commands", () => {
@@ -118,8 +124,12 @@ describe("factory graph layout commands", () => {
       invertFactoryLayoutCommand(command),
     );
 
-    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toBeUndefined();
-    expect(factoryLayoutNodePosition(undoneLayout, "workstation:draft")).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(undoneLayout, "worker:writer"),
+    ).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(undoneLayout, "workstation:draft"),
+    ).toBeUndefined();
   });
 
   it("creates and inverts viewport updates", () => {
@@ -142,10 +152,14 @@ describe("factory graph layout commands", () => {
   });
 
   it("creates and inverts reset layout commands", () => {
-    const fromLayout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
-      x: 40,
-      y: 80,
-    });
+    const fromLayout = moveFactoryLayoutNode(
+      createDefaultFactoryLayout(),
+      "worker:writer",
+      {
+        x: 40,
+        y: 80,
+      },
+    );
     const toLayout = createDefaultFactoryLayout();
     const command = requireCommand(
       createResetFactoryLayoutCommand({ fromLayout, toLayout }),
@@ -157,7 +171,9 @@ describe("factory graph layout commands", () => {
       invertFactoryLayoutCommand(command),
     );
 
-    expect(factoryLayoutNodePosition(nextLayout, "worker:writer")).toBeUndefined();
+    expect(
+      factoryLayoutNodePosition(nextLayout, "worker:writer"),
+    ).toBeUndefined();
     expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toEqual({
       x: 40,
       y: 80,
@@ -177,7 +193,10 @@ describe("factory graph layout commands", () => {
       createUpdateFactoryLayoutEdgeWaypointsCommand({
         edgeId: EDGE_ID,
         layout,
-        to: [{ x: 10, y: 20 }, { x: 50, y: 60 }],
+        to: [
+          { x: 10, y: 20 },
+          { x: 50, y: 60 },
+        ],
       }),
     );
 
@@ -233,11 +252,15 @@ describe("factory graph layout commands", () => {
   });
 
   it("creates waypoint removal commands that preserve remaining waypoint order", () => {
-    const layout = setFactoryLayoutEdgeWaypoints(createDefaultFactoryLayout(), EDGE_ID, [
-      { x: 10, y: 20 },
-      { x: 30, y: 40 },
-      { x: 50, y: 60 },
-    ]);
+    const layout = setFactoryLayoutEdgeWaypoints(
+      createDefaultFactoryLayout(),
+      EDGE_ID,
+      [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+        { x: 50, y: 60 },
+      ],
+    );
     const nextLayout = removeFactoryLayoutEdgeWaypoint(layout, EDGE_ID, 1);
     const command = requireCommand(
       createUpdateFactoryLayoutEdgeWaypointsCommand({
@@ -331,7 +354,9 @@ describe("factory graph layout commands", () => {
     expect(factoryLayoutGroupById(undoneLayout, "group-1")?.bounds).toEqual(
       factoryLayoutGroupById(withMember, "group-1")?.bounds,
     );
-    expect(factoryLayoutNodePosition(undoneLayout, "workstation:draft")).toEqual({
+    expect(
+      factoryLayoutNodePosition(undoneLayout, "workstation:draft"),
+    ).toEqual({
       x: 40,
       y: 60,
     });
@@ -383,10 +408,16 @@ describe("factory graph layout commands", () => {
     );
 
     expect(
-      factoryLayoutCommandReferencesDeletedNodeIds(command, new Set(["worker:writer"])),
+      factoryLayoutCommandReferencesDeletedNodeIds(
+        command,
+        new Set(["worker:writer"]),
+      ),
     ).toBe(false);
     expect(
-      factoryLayoutCommandReferencesDeletedNodeIds(command, new Set(["workstation:draft"])),
+      factoryLayoutCommandReferencesDeletedNodeIds(
+        command,
+        new Set(["workstation:draft"]),
+      ),
     ).toBe(true);
   });
 });
@@ -407,10 +438,14 @@ describe("factory graph layout command helpers", () => {
   });
 
   it("collects affected node ids for reset-layout commands", () => {
-    const fromLayout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
-      x: 40,
-      y: 80,
-    });
+    const fromLayout = moveFactoryLayoutNode(
+      createDefaultFactoryLayout(),
+      "worker:writer",
+      {
+        x: 40,
+        y: 80,
+      },
+    );
     const command = requireCommand(
       createResetFactoryLayoutCommand({
         fromLayout,
@@ -418,6 +453,8 @@ describe("factory graph layout command helpers", () => {
       }),
     );
 
-    expect(factoryLayoutCommandAffectedNodeIds(command)).toEqual(["worker:writer"]);
+    expect(factoryLayoutCommandAffectedNodeIds(command)).toEqual([
+      "worker:writer",
+    ]);
   });
 });

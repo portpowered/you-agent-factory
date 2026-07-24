@@ -1,8 +1,4 @@
-import {
-  existsSync,
-  mkdtempSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
@@ -51,9 +47,7 @@ test("sanitizeVitestReportsDirForShardMerge removes stale monolithic and out-of-
     "react-flow-current-activity-card.json",
   ]);
   expect(existsSync(mainCoveredShardBlobPath(1, reportsDir))).toBe(true);
-  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(
-    false,
-  );
+  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-3.json"))).toBe(false);
 });
@@ -86,9 +80,7 @@ test("runUiCoverageMerge ignores stale blobs before running merge phases", () =>
 
   expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-99.json"))).toBe(false);
-  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(
-    false,
-  );
+  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(false);
   expect(spawn).toHaveBeenCalledTimes(3);
   expect(exit).not.toHaveBeenCalled();
 

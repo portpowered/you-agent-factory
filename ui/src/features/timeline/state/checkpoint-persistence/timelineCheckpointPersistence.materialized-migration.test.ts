@@ -43,17 +43,18 @@ interface MutableMaterializedState extends Record<string, unknown> {
 }
 
 describe("materialized timeline checkpoint schema migration", () => {
-  it.each([
-    1, 2, 3, 999,
-  ])("deletes non-migratable envelope schema version %i", async (schemaVersion) => {
-    const fixture = await persistedFixture();
-    storedEnvelope(fixture.records).schemaVersion = schemaVersion;
+  it.each([1, 2, 3, 999])(
+    "deletes non-migratable envelope schema version %i",
+    async (schemaVersion) => {
+      const fixture = await persistedFixture();
+      storedEnvelope(fixture.records).schemaVersion = schemaVersion;
 
-    await expect(
-      readTimelineCheckpoint(fixture.indexedDB, IDENTITY),
-    ).resolves.toBeNull();
-    expect(fixture.records.has(STORAGE_KEY)).toBe(false);
-  });
+      await expect(
+        readTimelineCheckpoint(fixture.indexedDB, IDENTITY),
+      ).resolves.toBeNull();
+      expect(fixture.records.has(STORAGE_KEY)).toBe(false);
+    },
+  );
 
   it.each([
     {
@@ -167,23 +168,24 @@ describe("materialized timeline checkpoint schema migration", () => {
     expect(fixture.records.has(STORAGE_KEY)).toBe(false);
   });
 
-  it.each([
-    1, 2, 3,
-  ])("deletes UUID-keyed legacy schema version %i during session preflight", async (schemaVersion) => {
-    const fixture = await persistedFixture();
-    const envelope = storedEnvelope(fixture.records);
-    envelope.schemaVersion = schemaVersion;
-    envelope.sessionID = IDENTITY.factorySessionID;
-    Reflect.deleteProperty(envelope, "streamIdentity");
+  it.each([1, 2, 3])(
+    "deletes UUID-keyed legacy schema version %i during session preflight",
+    async (schemaVersion) => {
+      const fixture = await persistedFixture();
+      const envelope = storedEnvelope(fixture.records);
+      envelope.schemaVersion = schemaVersion;
+      envelope.sessionID = IDENTITY.factorySessionID;
+      Reflect.deleteProperty(envelope, "streamIdentity");
 
-    await expect(
-      peekPersistedTimelineCheckpoint(
-        fixture.indexedDB,
-        IDENTITY.factorySessionID,
-      ),
-    ).resolves.toBeNull();
-    expect(fixture.records.has(STORAGE_KEY)).toBe(false);
-  });
+      await expect(
+        peekPersistedTimelineCheckpoint(
+          fixture.indexedDB,
+          IDENTITY.factorySessionID,
+        ),
+      ).resolves.toBeNull();
+      expect(fixture.records.has(STORAGE_KEY)).toBe(false);
+    },
+  );
 });
 
 async function persistedFixture() {

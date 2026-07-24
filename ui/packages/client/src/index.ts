@@ -34,9 +34,9 @@ export {
   safeParseFactoryEventReplayText,
 } from "./replay.js";
 export {
+  type FactoryVisualizationLayoutCanonicalNodeContext,
   parseFactoryVisualizationLayout,
   safeParseFactoryVisualizationLayout,
-  type FactoryVisualizationLayoutCanonicalNodeContext,
 } from "./visualization-layout.js";
 export {
   FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,

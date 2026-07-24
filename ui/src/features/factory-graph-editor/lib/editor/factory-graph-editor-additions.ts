@@ -1,17 +1,5 @@
 import { validateEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/editable-workstation-cron-validation";
-import type {
-  FactoryGraphAddModelOperationDraft,
-  FactoryGraphAddModelOperationValidationErrors,
-} from "../factory-graph-add-model-operation-draft";
-import {
-  applyFactoryGraphDocAddEntityDraft,
-  createFactoryGraphDocAddEntityDraft,
-  validateFactoryGraphDocAddEntityDraft,
-} from "../factory-graph-editor-doc-additions";
-import {
-  applyFactoryGraphAddWorkerDraft,
-  validateFactoryGraphAddWorkerDraft,
-} from "../factory-graph-editor-additions.worker";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   type EditableWorkstationBehavior,
@@ -25,17 +13,30 @@ import {
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
   DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
-  isPollerRunWorkstationType,
-} from "../../../current-factory-definition/public";
-import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
-import {
   DEFAULT_WORKER_TYPE,
   type FactoryGraphAddWorkerType,
+  isPollerRunWorkstationType,
 } from "../../../current-factory-definition/public";
+import type {
+  FactoryGraphAddModelOperationDraft,
+  FactoryGraphAddModelOperationValidationErrors,
+} from "../factory-graph-add-model-operation-draft";
+import {
+  applyFactoryGraphAddWorkerDraft,
+  validateFactoryGraphAddWorkerDraft,
+} from "../factory-graph-editor-additions.worker";
+import {
+  applyFactoryGraphDocAddEntityDraft,
+  createFactoryGraphDocAddEntityDraft,
+  validateFactoryGraphDocAddEntityDraft,
+} from "../factory-graph-editor-doc-additions";
 
 export type { FactoryGraphAddWorkerType };
+
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
+
 export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
+
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,

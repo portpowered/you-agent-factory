@@ -304,9 +304,7 @@ describe("selected-work-dispatch-history-helpers", () => {
     );
     expect(requestOutcome(runtime)).toBe("ACCEPTED");
 
-    expect(requestFailureReason(projectedFromResponseView)).toBe(
-      "unknown",
-    );
+    expect(requestFailureReason(projectedFromResponseView)).toBe("unknown");
     expect(requestFailureMessage(projectedFromResponseView)).toBe(
       "Dispatch failed after response view fallback.",
     );

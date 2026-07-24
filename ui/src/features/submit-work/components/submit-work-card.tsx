@@ -1,20 +1,19 @@
-import { Plus } from "lucide-react";
-import { type ReactNode, useState } from "react";
-
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
+import { Plus } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import {
   Button,
   DashboardIconButtonShell,
-  Label,
-  Text,
   FormError,
   Input,
+  Label,
+  Text,
 } from "../../../components/ui";
-import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
@@ -208,23 +207,20 @@ export function SubmitWorkCard({
               widgetId={widgetId}
             />
             {validationErrors?.submissionItems ? (
-              <Text
-                className="text-on-error-container"
-                variant="supporting"
-              >
+              <Text className="text-on-error-container" variant="supporting">
                 {validationErrors.submissionItems}
               </Text>
             ) : null}
           </div>
         </div>
 
-	        <div className="grid gap-3">
-	          {shouldRenderStatus ? (
-	            <SubmitWorkStatusPanel id={statusID} status={status} />
-	          ) : null}
-	          <Button
-	            aria-busy={isSubmitting ? "true" : undefined}
-	            className="w-full justify-center"
+        <div className="grid gap-3">
+          {shouldRenderStatus ? (
+            <SubmitWorkStatusPanel id={statusID} status={status} />
+          ) : null}
+          <Button
+            aria-busy={isSubmitting ? "true" : undefined}
+            className="w-full justify-center"
             disabled={!canAttemptSubmit}
             tone={isFormReady ? "default" : "outline"}
             type="submit"

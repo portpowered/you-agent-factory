@@ -51,10 +51,9 @@ describe("graph-editor-harness visual groups", () => {
       groupId,
       "workstation:draft",
     );
-    expect(graph.layoutDraftState.removeNodeFromVisualGroup).toHaveBeenCalledWith(
-      groupId,
-      "workstation:draft",
-    );
+    expect(
+      graph.layoutDraftState.removeNodeFromVisualGroup,
+    ).toHaveBeenCalledWith(groupId, "workstation:draft");
     expect(graph.layoutDraftState.moveVisualGroupByDelta).toHaveBeenCalledWith(
       groupId,
       { x: 12, y: 8 },

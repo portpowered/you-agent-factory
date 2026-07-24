@@ -8,8 +8,8 @@ import {
 } from "../../../api/factory-preview";
 import {
   buildFactoryPreviewQueryKey,
-  useFactoryPreview,
   factoryPreviewQueryOptions,
+  useFactoryPreview,
 } from "./useWorkflowPreview";
 
 vi.mock("../../../api/factory-preview", async () => {

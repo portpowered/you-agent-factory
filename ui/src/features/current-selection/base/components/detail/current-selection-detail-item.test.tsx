@@ -23,9 +23,7 @@ describe("CurrentSelectionDetailItem", () => {
       <CurrentSelectionDetailItem code label="Request ID" value="request-1" />,
     );
 
-    expect(screen.getByText("request-1").className).toContain(
-      "af-body-code",
-    );
+    expect(screen.getByText("request-1").className).toContain("af-body-code");
   });
 
   it("exposes value and code subcomponents for custom detail rows", () => {

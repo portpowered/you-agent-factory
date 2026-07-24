@@ -23,7 +23,8 @@ describe("useDashboardLayout factory-session widget placement", () => {
     });
 
     const factorySessionCard = result.current.dashboardLayout.find(
-      (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession,
+      (item) =>
+        item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession,
     );
     const addWidgetCard = result.current.dashboardLayout.find(
       (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,

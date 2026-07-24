@@ -5,17 +5,16 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-
-import {
-  DASHBOARD_FORM_FIELD_RESPONSIVE_VIEWPORTS,
-  DASHBOARD_FORM_FIELD_STORY_CHECKS,
-} from "./verify-dashboard-form-field-storybook-responsive.mjs";
 import {
   expectNoHorizontalOverflow,
   expectVisible,
   storyUrl,
   waitForStoryRender,
 } from "./storybook-responsive-helpers.mjs";
+import {
+  DASHBOARD_FORM_FIELD_RESPONSIVE_VIEWPORTS,
+  DASHBOARD_FORM_FIELD_STORY_CHECKS,
+} from "./verify-dashboard-form-field-storybook-responsive.mjs";
 
 const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const host = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";

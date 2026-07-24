@@ -56,8 +56,7 @@ type FactoryInvocationOutputContract =
 type FactoryInvocationParameter = FactorySchemas["FactoryInvocationParameter"];
 type FactoryInvocationParameterBinding =
   FactorySchemas["FactoryInvocationParameterBinding"];
-type FactoryInvocationSignature =
-  FactorySchemas["FactoryInvocationSignature"];
+type FactoryInvocationSignature = FactorySchemas["FactoryInvocationSignature"];
 type FactoryNameValue = FactorySchemas["NameValue"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
@@ -135,11 +134,7 @@ const INVOCATION_OUTPUT_CONTRACT_KEYS = new Set([
   "mode",
   "pathParameter",
 ]);
-const INVOCATION_EXAMPLE_KEYS = new Set([
-  "args",
-  "description",
-  "name",
-]);
+const INVOCATION_EXAMPLE_KEYS = new Set(["args", "description", "name"]);
 const NAME_VALUE_KEYS = new Set(["id", "locales", "type", "value", "values"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set([
@@ -392,8 +387,18 @@ function decodeFactoryDefinition(
     name: readRequiredString(value, "name", path),
   };
   const id = readOptionalString(value, "id", path);
-  const description = readOptionalObject(value, "description", path, decodeNameValue);
-  const examples = readOptionalArray(value, "examples", path, decodeInvocationExample);
+  const description = readOptionalObject(
+    value,
+    "description",
+    path,
+    decodeNameValue,
+  );
+  const examples = readOptionalArray(
+    value,
+    "examples",
+    path,
+    decodeInvocationExample,
+  );
   const factoryDirectory = readOptionalString(value, "factoryDirectory", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
@@ -421,8 +426,11 @@ function decodeFactoryDefinition(
     expectObject,
   );
   const version = readOptionalFactoryVersion(value, "version", path);
-  const workers = readOptionalArray(value, "workers", path, (entry, entryPath) =>
-    decodeWorker(entry, entryPath, invocationSignature),
+  const workers = readOptionalArray(
+    value,
+    "workers",
+    path,
+    (entry, entryPath) => decodeWorker(entry, entryPath, invocationSignature),
   );
   const workstations = readOptionalArray(
     value,
@@ -677,7 +685,12 @@ function decodeNameValue(value: unknown, path: string): FactoryNameValue {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, NAME_VALUE_KEYS, path);
   const result: FactoryNameValue = {
-    type: readRequiredEnum(record, "type", path, new Set(["LOCALIZABLE_ASSET"])),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      new Set(["LOCALIZABLE_ASSET"]),
+    ),
     value: readRequiredString(record, "value", path),
   };
   const id = readOptionalString(record, "id", path);
@@ -697,11 +710,16 @@ function decodeInvocationExampleArgs(value: unknown, path: string) {
       args[key] = item;
       continue;
     }
-    if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) {
+    if (
+      Array.isArray(item) &&
+      item.every((entry) => typeof entry === "string")
+    ) {
       args[key] = item;
       continue;
     }
-    throw new FactoryDefinitionAPIError(`${path}.${key} must be a string or array of strings`);
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key} must be a string or array of strings`,
+    );
   }
   return args;
 }

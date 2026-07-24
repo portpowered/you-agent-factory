@@ -64,7 +64,11 @@ export const Focus: Story = {
   render: () => (
     <PackageFormStoryField label={PACKAGE_INPUT_STORY_LABEL}>
       {(controlProps) => (
-        <PackageInput {...controlProps} autoFocus defaultValue="Focused value" />
+        <PackageInput
+          {...controlProps}
+          autoFocus
+          defaultValue="Focused value"
+        />
       )}
     </PackageFormStoryField>
   ),

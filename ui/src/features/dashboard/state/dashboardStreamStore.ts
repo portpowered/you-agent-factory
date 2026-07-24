@@ -8,7 +8,9 @@ interface DashboardStreamStoreState {
   backendRuntimeCacheScope: string | null;
   resetStreamState: (locale?: string | null) => void;
   resolvedStreamIdentity: StreamDerivedCacheIdentity | null;
-  setBackendRuntimeCacheScope: (backendRuntimeCacheScope: string | null) => void;
+  setBackendRuntimeCacheScope: (
+    backendRuntimeCacheScope: string | null,
+  ) => void;
   setResolvedStreamIdentity: (
     streamIdentity: StreamDerivedCacheIdentity | null,
   ) => void;

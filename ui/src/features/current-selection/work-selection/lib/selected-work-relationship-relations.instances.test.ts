@@ -51,9 +51,8 @@ describe("projectSelectedWorkRelationshipGraphToDashboardRelations repeated DEPE
       throw new Error(`expected ready graph, got ${graph.status}`);
     }
 
-    const relations = projectSelectedWorkRelationshipGraphToDashboardRelations(
-      graph,
-    );
+    const relations =
+      projectSelectedWorkRelationshipGraphToDashboardRelations(graph);
 
     expect(
       relations?.filter(

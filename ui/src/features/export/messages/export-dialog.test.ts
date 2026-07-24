@@ -42,10 +42,13 @@ describe("getExportDialogMessages", () => {
   it.each([
     ["ko", "factory-aurora.png", "cover.png"],
     ["zh-CN", "factory-aurora.png", "cover.png"],
-  ] as const)("keeps %s interpolation helpers available for coverage-sensitive locales", (locale, filename, imageName) => {
-    const messages = getExportDialogMessages(locale);
+  ] as const)(
+    "keeps %s interpolation helpers available for coverage-sensitive locales",
+    (locale, filename, imageName) => {
+      const messages = getExportDialogMessages(locale);
 
-    expect(messages.successMessage(filename)).toContain(filename);
-    expect(messages.selectedImageLabel(imageName)).toContain(imageName);
-  });
+      expect(messages.successMessage(filename)).toContain(filename);
+      expect(messages.selectedImageLabel(imageName)).toContain(imageName);
+    },
+  );
 });

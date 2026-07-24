@@ -106,9 +106,7 @@ const sharedReactDedupe = [
   "recharts",
 ] as const;
 
-function createComponentsPackageResolvePlugin(
-  packageRoot: string,
-): Plugin {
+function createComponentsPackageResolvePlugin(packageRoot: string): Plugin {
   const categoryAliases = new Map(
     COMPONENT_CATEGORY_EXPORT_PATHS.map((categoryPath) => [
       `@you-agent-factory/components/${categoryPath}`,

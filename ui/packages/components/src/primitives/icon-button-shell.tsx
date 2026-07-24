@@ -22,10 +22,7 @@ export interface IconButtonShellProps
 export const IconButtonShell = forwardRef<
   HTMLButtonElement,
   IconButtonShellProps
->(function IconButtonShell(
-  { className, tone = "outline", ...props },
-  ref,
-) {
+>(function IconButtonShell({ className, tone = "outline", ...props }, ref) {
   const buttonTone = tone === "dangerGhost" ? "ghost" : tone;
   const toneClassName =
     tone === "dangerGhost"

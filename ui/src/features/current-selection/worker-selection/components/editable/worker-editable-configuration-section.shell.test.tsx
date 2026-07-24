@@ -180,9 +180,8 @@ describe("WorkerEditableConfigurationSection ready-state feedback", () => {
   });
 
   it("merges save-state field errors with draft validation errors", () => {
-    const saveNameError = messages.editableConfigurationNameDuplicate(
-      "other-worker",
-    );
+    const saveNameError =
+      messages.editableConfigurationNameDuplicate("other-worker");
 
     render(
       <WorkerEditableConfigurationSection

@@ -1,15 +1,18 @@
-import { EnumSelect, ResetEnumSelect } from "@you-agent-factory/components/forms";
+import {
+  EnumSelect,
+  ResetEnumSelect,
+} from "@you-agent-factory/components/forms";
 import { useId } from "react";
 
 import { MonacoGuardSelectorEditor } from "../../../../../components/prompt-editor";
 import {
   DashboardActionButton,
-  Label,
-  Text,
   FormDescription,
   FormError,
   Input,
+  Label,
   SurfacePanel,
+  Text,
 } from "../../../../../components/ui";
 import {
   createDefaultWorkstationGuard,
@@ -137,10 +140,7 @@ function WorkstationGuardRow({
             <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
               {messages.localizeWorkstationGuardType(guard.type)}
             </h6>
-            <Text
-              className="m-0 text-on-surface-subtle"
-              variant="supporting"
-            >
+            <Text className="m-0 text-on-surface-subtle" variant="supporting">
               {formatWorkstationGuardSummary(guard)}
             </Text>
           </div>
@@ -309,9 +309,7 @@ function MatchesFieldsGuardFields({
 
   return (
     <div className="grid gap-1">
-      <Label>
-        {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </Label>
+      <Label>{messages.matchesFieldsGuardInputKeyFieldLabel}</Label>
       <MonacoGuardSelectorEditor
         ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
         ariaInvalid={Boolean(inputKeyError)}

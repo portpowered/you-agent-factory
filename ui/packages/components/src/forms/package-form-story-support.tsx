@@ -1,5 +1,5 @@
 import type { Decorator } from "@storybook/react-vite";
-import { useId, useState, type ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { PackageCheckbox } from "./package-checkbox";
 import { PackageFileInput } from "./package-file-input";
@@ -93,10 +93,7 @@ export function UncontrolledInputStoryExample() {
   return (
     <PackageFormStoryField label={PACKAGE_INPUT_STORY_LABEL}>
       {(controlProps) => (
-        <PackageInput
-          {...controlProps}
-          defaultValue="Initial factory name"
-        />
+        <PackageInput {...controlProps} defaultValue="Initial factory name" />
       )}
     </PackageFormStoryField>
   );

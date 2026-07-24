@@ -10,7 +10,10 @@ export class FactoryDefinitionAPIError extends Error {
   }
 }
 
-export function expectObject(value: unknown, path: string): Record<string, unknown> {
+export function expectObject(
+  value: unknown,
+  path: string,
+): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new FactoryDefinitionAPIError(`${path} must be an object.`);
   }

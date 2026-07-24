@@ -8,6 +8,4 @@
 
 @source "./package-token-fixture-usage.ts";
 @source "../**/*.{ts,tsx}";
-@source inline(
-  "bg-primary text-on-surface text-on-surface-variant text-body-medium text-title-large text-label-medium gap-layout-section gap-layout-tight gap-layout-element gap-layout-group p-layout-inset-dialog font-display shadow-xl border-outline bg-surface-container-high bg-surface-container-low bg-black/70 bg-outline-variant hover:bg-surface-container-low hover:bg-on-surface-variant"
-);
+@source inline("bg-primary text-on-surface text-on-surface-variant text-body-medium text-title-large text-label-medium gap-layout-section gap-layout-tight gap-layout-element gap-layout-group p-layout-inset-dialog font-display shadow-xl border-outline bg-surface-container-high bg-surface-container-low bg-black/70 bg-outline-variant hover:bg-surface-container-low hover:bg-on-surface-variant");

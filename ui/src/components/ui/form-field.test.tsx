@@ -1,19 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
-
-import {
-  buildFormFieldAriaDescribedBy,
-  FormDescription,
-  FormError,
-  FormField,
-  FormFieldGroup,
-  FormFieldGroupLabel,
-  FormHelperText,
-  FormLabel,
-  FormSuccess,
-  FormWarning,
-} from "./form-field";
 import {
   buildFormFieldAriaDescribedBy as PackageBuildFormFieldAriaDescribedBy,
   FormDescription as PackageFormDescription,
@@ -26,6 +13,18 @@ import {
   FormSuccess as PackageFormSuccess,
   FormWarning as PackageFormWarning,
 } from "@you-agent-factory/components/forms";
+import {
+  buildFormFieldAriaDescribedBy,
+  FormDescription,
+  FormError,
+  FormField,
+  FormFieldGroup,
+  FormFieldGroupLabel,
+  FormHelperText,
+  FormLabel,
+  FormSuccess,
+  FormWarning,
+} from "./form-field";
 
 describe("dashboard form field re-exports", () => {
   it("re-exports package form-field messaging from the dashboard ui surface", () => {
@@ -38,7 +37,9 @@ describe("dashboard form field re-exports", () => {
     expect(FormSuccess).toBe(PackageFormSuccess);
     expect(FormFieldGroup).toBe(PackageFormFieldGroup);
     expect(FormFieldGroupLabel).toBe(PackageFormFieldGroupLabel);
-    expect(buildFormFieldAriaDescribedBy).toBe(PackageBuildFormFieldAriaDescribedBy);
+    expect(buildFormFieldAriaDescribedBy).toBe(
+      PackageBuildFormFieldAriaDescribedBy,
+    );
   });
 
   it("renders field layout, visible labels, and supporting descriptions", () => {

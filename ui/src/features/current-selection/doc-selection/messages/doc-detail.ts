@@ -29,8 +29,7 @@ const docDetailMessagesByLocale = {
       "Doc paths must use forward slashes.",
     editableConfigurationFileNameInvalid:
       "Enter a valid file name under factory/docs/.",
-    editableConfigurationFileNameMustBeFile:
-      "Doc paths must point to a file.",
+    editableConfigurationFileNameMustBeFile: "Doc paths must point to a file.",
     editableConfigurationFileNameOutsideDocsRoot:
       "Doc paths must stay under factory/docs/.",
     editableConfigurationFileNameRequired:
@@ -77,11 +76,9 @@ const docDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "展开文档编辑器",
     editableConfigurationFileNameDuplicate: (fileName) =>
       `运行中的工厂定义中已存在名为“${fileName}”的文档。`,
-    editableConfigurationFileNameDotSegments:
-      "文档路径不能包含“.”或“..”段。",
+    editableConfigurationFileNameDotSegments: "文档路径不能包含“.”或“..”段。",
     editableConfigurationFileNameFieldLabel: "文件名",
-    editableConfigurationFileNameForwardSlashes:
-      "文档路径必须使用正斜杠。",
+    editableConfigurationFileNameForwardSlashes: "文档路径必须使用正斜杠。",
     editableConfigurationFileNameInvalid:
       "请输入 factory/docs/ 下的有效文件名。",
     editableConfigurationFileNameMustBeFile: "文档路径必须指向文件。",

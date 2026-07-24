@@ -412,9 +412,9 @@ describe("useDashboardSnapshot composer", () => {
       "/factory-sessions/session-beta/events",
     );
     await waitFor(() => {
-      expect(
-        useDashboardStreamStore.getState().resolvedStreamIdentity,
-      ).toEqual(defaultStreamIdentity("session-beta"));
+      expect(useDashboardStreamStore.getState().resolvedStreamIdentity).toEqual(
+        defaultStreamIdentity("session-beta"),
+      );
     });
   });
 

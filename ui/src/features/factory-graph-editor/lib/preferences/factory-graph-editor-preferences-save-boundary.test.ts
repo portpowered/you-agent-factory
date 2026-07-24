@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
-
-import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
-import {
-  DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,
-  writeFactoryGraphEditorPreferencesForScope,
-} from "./factory-graph-editor-preferences";
-import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
 import {
   factoryDefinitionSavePayloadHasGraphLayoutFields,
   findGraphLayoutPropertyPaths,
 } from "../document-save/factory-graph-save-layout-boundary";
+import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
+import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
 import { moveFactoryLayoutNode } from "../layout/factory-graph-layout-operations";
+import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
+import {
+  DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,
+  writeFactoryGraphEditorPreferencesForScope,
+} from "./factory-graph-editor-preferences";
 
 describe("factory graph editor preference save boundary", () => {
   it("does not export private editor preferences in portable save payloads", () => {
@@ -60,7 +59,9 @@ describe("factory graph editor preference save boundary", () => {
     expect(saveInput.value).not.toHaveProperty("editorPreferences");
     expect(saveInput.value).not.toEqual(
       expect.objectContaining({
-        hiddenNodeClasses: [...DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses],
+        hiddenNodeClasses: [
+          ...DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses,
+        ],
       }),
     );
   });

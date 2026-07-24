@@ -11,7 +11,9 @@ function stringValue(value: string | null | undefined): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-function ensureJavaScriptRuntime(state: ReplayWorldState): ReplayJavaScriptRuntime {
+function ensureJavaScriptRuntime(
+  state: ReplayWorldState,
+): ReplayJavaScriptRuntime {
   if (!state.javascriptRuntime) {
     state.javascriptRuntime = {
       checkpoints: [],

@@ -1,14 +1,12 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   EnumSelect,
   NativeSelect,
   OptionalEnumSelect,
   ResetEnumSelect,
-  Select,
   SELECT_EMPTY_STATE_VALUE,
+  Select,
   SelectContent,
   SelectEmpty,
   SelectField,
@@ -25,9 +23,9 @@ import {
   OptionalEnumSelect as FormsOptionalEnumSelect,
   ResetEnumSelect as FormsResetEnumSelect,
   Select as FormsSelect,
-  SELECT_EMPTY_STATE_VALUE as FormsSelectEmptyStateValue,
   SelectContent as FormsSelectContent,
   SelectEmpty as FormsSelectEmpty,
+  SELECT_EMPTY_STATE_VALUE as FormsSelectEmptyStateValue,
   SelectField as FormsSelectField,
   SelectGroup as FormsSelectGroup,
   SelectItem as FormsSelectItem,
@@ -36,6 +34,7 @@ import {
   SelectTrigger as FormsSelectTrigger,
   SelectValue as FormsSelectValue,
 } from "@you-agent-factory/components/forms";
+import { describe, expect, it } from "vitest";
 
 describe("@you-agent-factory/components select imports", () => {
   it("imports select primitives from the package root", () => {

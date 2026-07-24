@@ -94,7 +94,9 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(title.className).toContain("type-headline-large");
     expect(within(historyCard).getByText("Current dispatch")).toBeTruthy();
     expect(within(historyCard).queryByText("Workstation")).toBeNull();
-    expect(within(historyCard).getByRole("heading", { name: "Summary" })).toBeTruthy();
+    expect(
+      within(historyCard).getByRole("heading", { name: "Summary" }),
+    ).toBeTruthy();
     const header = title.closest("div");
     expect(header?.parentElement?.className).toContain("justify-between");
 

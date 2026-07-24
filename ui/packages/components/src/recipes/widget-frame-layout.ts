@@ -10,7 +10,8 @@ export const WIDGET_FRAME_WIDE_BODY_CLASS = "min-h-72";
 
 export const WIDGET_FRAME_RESPONSIVE_SHELL_CLASS = "min-w-0 w-full";
 
-export const WIDGET_FRAME_STORY_SHELL_DATA_ATTR = "data-widget-frame-story-shell";
+export const WIDGET_FRAME_STORY_SHELL_DATA_ATTR =
+  "data-widget-frame-story-shell";
 
 export const WIDGET_FRAME_OVERFLOW_TOLERANCE_PX = 1;
 

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryEvent, FactoryWorkItem } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import { projectRuntime } from "./projectRuntime";
 import { reconstructFactoryReplayState } from "./buildSnapshot";
+import { projectRuntime } from "./projectRuntime";
 
 const eventTime = "2026-06-01T12:00:00.000Z";
 

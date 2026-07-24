@@ -1,6 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./package-select";
 import {
   ControlledOpenSelectStoryExample,
   ControlledSelectStoryExample,
@@ -13,13 +19,6 @@ import {
   PackageSelectStoryField,
   withMobileWidth,
 } from "./package-select-story-support";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./package-select";
 
 const meta = {
   title: "Forms/PackageSelect",
@@ -75,7 +74,10 @@ export const DisabledField: Story = {
     <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
       {(controlProps) => (
         <Select disabled value="story">
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -93,7 +95,10 @@ export const DisabledOption: Story = {
     <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
       {(controlProps) => (
         <Select value="story">
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>

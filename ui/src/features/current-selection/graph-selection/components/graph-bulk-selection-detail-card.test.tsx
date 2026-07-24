@@ -25,9 +25,7 @@ describe("GraphBulkSelectionDetailCard", () => {
     expect(within(panel).getByText("Workstations")).toBeTruthy();
     expect(within(panel).getByText("Workers")).toBeTruthy();
     expect(within(panel).getByText("Edges")).toBeTruthy();
-    expect(
-      within(panel).queryByRole("textbox", { name: "Model" }),
-    ).toBeNull();
+    expect(within(panel).queryByRole("textbox", { name: "Model" })).toBeNull();
     expect(within(panel).queryByRole("button", { name: "Save" })).toBeNull();
   });
 });

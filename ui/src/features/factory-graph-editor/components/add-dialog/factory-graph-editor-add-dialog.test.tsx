@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,9 +13,10 @@ import { ModelOperationContentType } from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
 vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@you-agent-factory/components/overlays")
-  >();
+  const actual =
+    await importOriginal<
+      typeof import("@you-agent-factory/components/overlays")
+    >();
   const mockDialog = await import("../../../../testing/mock-dashboard-dialog");
 
   return {
@@ -27,10 +34,10 @@ vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
 
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { createEmptyEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
-import { createEmptyFactoryGraphAddModelOperationDraft } from "../../lib/factory-graph-add-model-operation-draft";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../../lib/editor/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../../lib/editor/factory-graph-editor-additions";
+import { createEmptyFactoryGraphAddModelOperationDraft } from "../../lib/factory-graph-add-model-operation-draft";
 import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 
 let restoreBrowserShims: (() => void) | undefined;
@@ -336,7 +343,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Operation 1", level: 3 }),
     ).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Operation name" })).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Operation name" }),
+    ).toBeTruthy();
     expect(screen.getByText("Input slots")).toBeTruthy();
     expect(screen.getByText("Output slots")).toBeTruthy();
     expect(
@@ -417,9 +426,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           inputs: [
             {
               ...operation.inputs[0],
-              contentTypes: [
-                ModelOperationContentType.TEXT,
-              ],
+              contentTypes: [ModelOperationContentType.TEXT],
             },
           ],
         },
@@ -475,7 +482,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       },
     });
 
-    await user.click(screen.getByRole("combobox", { name: "Workstation type" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Workstation type" }),
+    );
     const workstationListbox = await screen.findByRole("listbox");
     for (const label of [
       "Inference run",
@@ -607,11 +616,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(screen.queryByLabelText("Prompt body")).toBeNull();
     expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
 
-    await selectLabeledComboboxOption(
-      user,
-      "Workstation type",
-      "Agent run",
-    );
+    await selectLabeledComboboxOption(user, "Workstation type", "Agent run");
 
     expect(onChange).toHaveBeenCalledWith({
       behavior: "CRON",

@@ -255,7 +255,8 @@ const currentSelectionDetailMessagesByLocale = {
     agentFailureClassLabel: "Failure class",
     agentRecoveryActionLabel: "Recovery action",
     agentToolDiagnosticsHeading: "Tool diagnostics",
-    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentToolDiagnosticsEmpty:
+      "No tool diagnostics were recorded for this agent run.",
     agentTranscriptHeading: "Transcript metadata",
     agentTranscriptEmpty:
       "No bounded transcript metadata was recorded for this agent run.",
@@ -403,7 +404,8 @@ const currentSelectionDetailMessagesByLocale = {
     agentFailureClassLabel: "Failure class",
     agentRecoveryActionLabel: "Recovery action",
     agentToolDiagnosticsHeading: "Tool diagnostics",
-    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentToolDiagnosticsEmpty:
+      "No tool diagnostics were recorded for this agent run.",
     agentTranscriptHeading: "Transcript metadata",
     agentTranscriptEmpty:
       "No bounded transcript metadata was recorded for this agent run.",
@@ -551,7 +553,8 @@ const currentSelectionDetailMessagesByLocale = {
     agentFailureClassLabel: "Failure class",
     agentRecoveryActionLabel: "Recovery action",
     agentToolDiagnosticsHeading: "Tool diagnostics",
-    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentToolDiagnosticsEmpty:
+      "No tool diagnostics were recorded for this agent run.",
     agentTranscriptHeading: "Transcript metadata",
     agentTranscriptEmpty:
       "No bounded transcript metadata was recorded for this agent run.",
@@ -685,7 +688,8 @@ const currentSelectionDetailMessagesByLocale = {
     agentFailureClassLabel: "Failure class",
     agentRecoveryActionLabel: "Recovery action",
     agentToolDiagnosticsHeading: "Tool diagnostics",
-    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentToolDiagnosticsEmpty:
+      "No tool diagnostics were recorded for this agent run.",
     agentTranscriptHeading: "Transcript metadata",
     agentTranscriptEmpty:
       "No bounded transcript metadata was recorded for this agent run.",

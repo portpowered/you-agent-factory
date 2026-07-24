@@ -77,7 +77,9 @@ describe("graph-editor-harness layout and mutation helpers", () => {
     graph.documentSaveControls.clearSaveFeedback();
     expect(draftState.documentSave).toEqual({ status: "idle" });
 
-    expect(graph.actions.updateLayoutViewport({ x: 1, y: 2, zoom: 0.5 })).toBeUndefined();
+    expect(
+      graph.actions.updateLayoutViewport({ x: 1, y: 2, zoom: 0.5 }),
+    ).toBeUndefined();
     expect(graph.layoutDraftState.updateViewport).toHaveBeenCalledWith({
       x: 1,
       y: 2,

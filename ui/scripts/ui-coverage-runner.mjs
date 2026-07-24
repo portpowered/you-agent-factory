@@ -13,9 +13,9 @@ import { performance } from "node:perf_hooks";
 import {
   defaultCapturedStdoutMaxBuffer,
   defaultSlowFileSummaryLimit,
+  logSlowFileSummary as emitSlowFileSummary,
   formatElapsedMs,
   formatSlowFileSummaryLines,
-  logSlowFileSummary as emitSlowFileSummary,
   mergeFileDurations,
   parseVitestFileDurationsFromLog,
   rankSlowestTestFiles,
@@ -25,7 +25,7 @@ export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "2";
 export const defaultShardMainCoveredMaxWorkers = "1";
-export { defaultSlowFileSummaryLimit, defaultCapturedStdoutMaxBuffer };
+export { defaultCapturedStdoutMaxBuffer, defaultSlowFileSummaryLimit };
 export const defaultUiCoverageShardTotal = 10;
 export const defaultTimingReportsDir = ".vitest-report-timings";
 export const isolatedReactFlowCoverageFiles = [
@@ -367,8 +367,7 @@ export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
 export function logSlowFileSummary(capturedStdout, summaryTitle) {
   emitSlowFileSummary(capturedStdout, {
     logPrefix: phaseLogPrefix,
-    summaryTitle:
-      summaryTitle ?? "Main covered pass slowest test files",
+    summaryTitle: summaryTitle ?? "Main covered pass slowest test files",
   });
 }
 

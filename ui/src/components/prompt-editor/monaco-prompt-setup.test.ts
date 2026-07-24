@@ -721,7 +721,8 @@ describe("registerWorkstationPromptMonaco", () => {
       availableVariables: [
         {
           category: "DOC",
-          description: "Bundled factory documentation at factory/docs/overview.md.",
+          description:
+            "Bundled factory documentation at factory/docs/overview.md.",
           example: '{{ index .Docs "factory/docs/overview.md" }}',
           path: '.Docs["factory/docs/overview.md"]',
         },

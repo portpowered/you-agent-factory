@@ -29,7 +29,9 @@ function mockAdjacentSurfacesFetch(options?: {
   vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
     const url = String(input);
     if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
-      return jsonResponse(buildSuccessfulDurableSession(successfulReplaySessionID));
+      return jsonResponse(
+        buildSuccessfulDurableSession(successfulReplaySessionID),
+      );
     }
     if (
       url.endsWith(`/factory-sessions/${successfulReplaySessionID}/dispatches`)
@@ -55,15 +57,16 @@ function mockAdjacentSurfacesFetch(options?: {
       }
       return jsonResponse(buildSuccessfulLiveProviderDispatchDetail());
     }
-    if (
-      url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)
-    ) {
-      return new Response(buildSuccessfulReplayEventStream(successfulReplaySessionID), {
-        headers: {
-          "Content-Type": "text/event-stream",
+    if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
+      return new Response(
+        buildSuccessfulReplayEventStream(successfulReplaySessionID),
+        {
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+          status: 200,
         },
-        status: 200,
-      });
+      );
     }
     if (
       url.endsWith(
@@ -135,9 +138,9 @@ describe("FactorySessionDetailPanel adjacent surfaces regression", () => {
       expect(screen.getByText("Showing 5 Factory Events.")).toBeTruthy();
     });
     expect(screen.getByText("Session started")).toBeTruthy();
-    expect(screen.getAllByText(/artifact-release-notes/).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByText(/artifact-release-notes/).length,
+    ).toBeGreaterThan(0);
     expectLiveProviderSummaryState();
   });
 });

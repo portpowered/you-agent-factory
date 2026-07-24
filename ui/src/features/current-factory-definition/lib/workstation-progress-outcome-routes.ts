@@ -3,12 +3,12 @@ import {
   WorkstationKind,
   WorkstationType,
 } from "../../../api/generated/openapi";
-import { resolveEditableWorkstationBehavior } from "./workstation-behavior";
-import { resolveEditableWorkstationType } from "./workstation/workstation-type";
 import {
   isAgentRunWorkstationType,
   isInferenceRunWorkstationType,
 } from "./worker-workstation-taxonomy";
+import { resolveEditableWorkstationType } from "./workstation/workstation-type";
+import { resolveEditableWorkstationBehavior } from "./workstation-behavior";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -59,8 +59,7 @@ export function workstationSupportsProgressOutcomeRoutes(
   }
 
   if (
-    resolveEditableWorkstationType(workstation) ===
-    WorkstationType.LOGICAL_MOVE
+    resolveEditableWorkstationType(workstation) === WorkstationType.LOGICAL_MOVE
   ) {
     return false;
   }
@@ -90,8 +89,7 @@ export function workstationSupportsProgressOutcomeFailureRoute(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
   return (
-    resolveEditableWorkstationType(workstation) !==
-    WorkstationType.LOGICAL_MOVE
+    resolveEditableWorkstationType(workstation) !== WorkstationType.LOGICAL_MOVE
   );
 }
 

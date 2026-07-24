@@ -1,21 +1,21 @@
 import { spawn } from "node:child_process";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import {
-  PACKAGE_DATATABLE_STORY_IDS,
-  verifyPackageDataTableStories,
-} from "./verify-package-storybook-datatable.mjs";
 import {
   PACKAGE_FORM_FOCUS_STORY_IDS,
   PACKAGE_FORM_MOBILE_STORY_IDS,
   verifyPackageFormFocusStories,
   verifyPackageFormMobileStories,
 } from "./verify-package-form-storybook-browser.mjs";
+import {
+  PACKAGE_DATATABLE_STORY_IDS,
+  verifyPackageDataTableStories,
+} from "./verify-package-storybook-datatable.mjs";
 import {
   hostResponsibilityCopy,
   overlayStoryIds,
@@ -35,9 +35,9 @@ export {
 } from "./verify-package-form-storybook-browser.mjs";
 export {
   PACKAGE_SELECT_EDGE_STATE_STORY_IDS,
+  PACKAGE_SELECT_FOCUS_STORY_ID,
   PACKAGE_SELECT_KEYBOARD_STORY_ID,
   PACKAGE_SELECT_KEYBOARD_STORY_IDS,
-  PACKAGE_SELECT_FOCUS_STORY_ID,
   PACKAGE_SELECT_STORY_LABEL,
 } from "./verify-package-storybook-selects.mjs";
 
@@ -46,9 +46,7 @@ const packageRoot = path.resolve(
   "..",
 );
 const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
-const port = Number(
-  process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
-);
+const port = Number(process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817");
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
@@ -117,9 +115,7 @@ function readStaticAssetBundleText() {
   const assetsDir = path.join(staticDir, "assets");
   return readdirSync(assetsDir)
     .filter((fileName) => fileName.endsWith(".js"))
-    .map((fileName) =>
-      readFileSync(path.join(assetsDir, fileName), "utf8"),
-    )
+    .map((fileName) => readFileSync(path.join(assetsDir, fileName), "utf8"))
     .join("\n");
 }
 
@@ -153,7 +149,9 @@ async function main() {
         return;
       }
 
-      reject(new Error(`build-storybook exited with code ${code ?? "unknown"}`));
+      reject(
+        new Error(`build-storybook exited with code ${code ?? "unknown"}`),
+      );
     });
   });
 

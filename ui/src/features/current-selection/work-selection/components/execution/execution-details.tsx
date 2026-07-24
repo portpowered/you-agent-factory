@@ -1,11 +1,9 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
   formatDurationFromISO,
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
@@ -122,7 +120,9 @@ export function InferenceAttemptsSection({
         ))}
       </div>
     ) : (
-      <WidgetDetailCopy>{messages.inferenceAttemptsEmptyState}</WidgetDetailCopy>
+      <WidgetDetailCopy>
+        {messages.inferenceAttemptsEmptyState}
+      </WidgetDetailCopy>
     );
 
   if (!showHeading) {

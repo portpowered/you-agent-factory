@@ -683,68 +683,71 @@ describe("current activity graph editor handles", () => {
     ["add", true],
     ["connect", true],
     [null, true],
-  ] as const)("omits graph node selection callbacks in delete mode and restores them for other tools (activeTool=%s)", async (activeTool, expectSelectionCallbacks) => {
-    const factory = loadSampleFactoryDefinition();
-    const snapshot = buildSampleFactorySnapshot(factory);
-    const graphLayout =
-      await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
-    const nodes = buildCurrentActivityNodes({
-      activeExecutionsByWorkstationNodeID: {},
-      activeGraphHighlights: buildActiveGraphHighlights(
-        [],
-        visibleGraphEdges,
-        graphLayout.nodes,
-      ),
-      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
-      editor: {
-        activeTool,
-        canInteractWithEditor: true,
-        editorMode: true,
-        onConnectionAnchorClick: vi.fn(),
-        pendingConnectionSource: null,
-      },
-      graphLayout,
-      now: Date.parse("2026-05-24T00:00:00Z"),
-      onSelectStateNode: vi.fn(),
-      onSelectWorkID: vi.fn(),
-      onSelectDoc: vi.fn(),
-      onSelectResource: vi.fn(),
-      onSelectWorker: vi.fn(),
-      onSelectWorkType: vi.fn(),
-      onSelectWorkstation: vi.fn(),
-      selection: null,
-      snapshot,
-    });
+  ] as const)(
+    "omits graph node selection callbacks in delete mode and restores them for other tools (activeTool=%s)",
+    async (activeTool, expectSelectionCallbacks) => {
+      const factory = loadSampleFactoryDefinition();
+      const snapshot = buildSampleFactorySnapshot(factory);
+      const graphLayout =
+        await buildCurrentActivityGraphLayoutFromFactory(factory);
+      const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+      const nodes = buildCurrentActivityNodes({
+        activeExecutionsByWorkstationNodeID: {},
+        activeGraphHighlights: buildActiveGraphHighlights(
+          [],
+          visibleGraphEdges,
+          graphLayout.nodes,
+        ),
+        activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+        editor: {
+          activeTool,
+          canInteractWithEditor: true,
+          editorMode: true,
+          onConnectionAnchorClick: vi.fn(),
+          pendingConnectionSource: null,
+        },
+        graphLayout,
+        now: Date.parse("2026-05-24T00:00:00Z"),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        selection: null,
+        snapshot,
+      });
 
-    const workerNode = nodes.find((node) => node.id === "worker:processor");
-    const resourceNode = nodes.find(
-      (node) => node.id === "resource:executor-slot",
-    );
-    const workTypeNode = nodes.find((node) => node.id === "work-type:task");
-    const workStateNode = nodes.find(
-      (node) => node.id === "work-state:task:init",
-    );
-    const workstationNode = nodes.find(
-      (node) => node.id === "workstation:process",
-    );
+      const workerNode = nodes.find((node) => node.id === "worker:processor");
+      const resourceNode = nodes.find(
+        (node) => node.id === "resource:executor-slot",
+      );
+      const workTypeNode = nodes.find((node) => node.id === "work-type:task");
+      const workStateNode = nodes.find(
+        (node) => node.id === "work-state:task:init",
+      );
+      const workstationNode = nodes.find(
+        (node) => node.id === "workstation:process",
+      );
 
-    if (expectSelectionCallbacks) {
-      expect(workerNode?.data).toHaveProperty("onSelectWorker");
-      expect(resourceNode?.data).toHaveProperty("onSelectResource");
-      expect(workTypeNode?.data).toHaveProperty("onSelectWorkType");
-      expect(workStateNode?.data).toHaveProperty("onSelectStateNode");
-      expect(workstationNode?.data).toHaveProperty("onSelectWorkstation");
-      expect(workstationNode?.data).toHaveProperty("onSelectWorkID");
-    } else {
-      expect(workerNode?.data).not.toHaveProperty("onSelectWorker");
-      expect(resourceNode?.data).not.toHaveProperty("onSelectResource");
-      expect(workTypeNode?.data).not.toHaveProperty("onSelectWorkType");
-      expect(workStateNode?.data).not.toHaveProperty("onSelectStateNode");
-      expect(workstationNode?.data).not.toHaveProperty("onSelectWorkstation");
-      expect(workstationNode?.data).not.toHaveProperty("onSelectWorkID");
-    }
-  });
+      if (expectSelectionCallbacks) {
+        expect(workerNode?.data).toHaveProperty("onSelectWorker");
+        expect(resourceNode?.data).toHaveProperty("onSelectResource");
+        expect(workTypeNode?.data).toHaveProperty("onSelectWorkType");
+        expect(workStateNode?.data).toHaveProperty("onSelectStateNode");
+        expect(workstationNode?.data).toHaveProperty("onSelectWorkstation");
+        expect(workstationNode?.data).toHaveProperty("onSelectWorkID");
+      } else {
+        expect(workerNode?.data).not.toHaveProperty("onSelectWorker");
+        expect(resourceNode?.data).not.toHaveProperty("onSelectResource");
+        expect(workTypeNode?.data).not.toHaveProperty("onSelectWorkType");
+        expect(workStateNode?.data).not.toHaveProperty("onSelectStateNode");
+        expect(workstationNode?.data).not.toHaveProperty("onSelectWorkstation");
+        expect(workstationNode?.data).not.toHaveProperty("onSelectWorkID");
+      }
+    },
+  );
 
   it("uses semantic handles for visible worker and resource relationships in editor mode", async () => {
     const factory = {

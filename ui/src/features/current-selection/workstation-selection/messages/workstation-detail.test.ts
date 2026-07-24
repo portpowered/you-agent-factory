@@ -62,74 +62,72 @@ describe("getWorkstationDetailMessages", () => {
     );
   });
 
-  it.each([
-    "ko",
-    "zh-CN",
-  ] as const)("keeps %s request and run count helpers available", (locale) => {
-    const messages = getWorkstationDetailMessages(locale);
+  it.each(["ko", "zh-CN"] as const)(
+    "keeps %s request and run count helpers available",
+    (locale) => {
+      const messages = getWorkstationDetailMessages(locale);
 
-    expect(messages.historyRequestCountLabel(1)).toContain("1");
-    expect(messages.historyRunCountLabel(3)).toContain("3");
-    expect(
-      messages.requestDetailsUnavailable("dispatch-review-active"),
-    ).toContain("dispatch-review-active");
-    expect(messages.openNamedWorkItemAction("Retry Story")).toContain(
-      "Retry Story",
-    );
-  });
+      expect(messages.historyRequestCountLabel(1)).toContain("1");
+      expect(messages.historyRunCountLabel(3)).toContain("3");
+      expect(
+        messages.requestDetailsUnavailable("dispatch-review-active"),
+      ).toContain("dispatch-review-active");
+      expect(messages.openNamedWorkItemAction("Retry Story")).toContain(
+        "Retry Story",
+      );
+    },
+  );
 
-  it.each([
-    "en",
-    "ja",
-    "ko",
-    "zh-CN",
-  ] as const)("keeps all %s workstation-detail helper messages callable", (locale) => {
-    const messages = getWorkstationDetailMessages(locale);
+  it.each(["en", "ja", "ko", "zh-CN"] as const)(
+    "keeps all %s workstation-detail helper messages callable",
+    (locale) => {
+      const messages = getWorkstationDetailMessages(locale);
 
-    expect(
-      messages.editableConfigurationOverwriteWarning("prompt, model"),
-    ).toContain("prompt");
-    expect(
-      messages.editableConfigurationSaveConflictConfirmationDescription(
-        "template",
-      ),
-    ).toContain("template");
-    expect(
-      messages.editableConfigurationPromptAutocompleteSummary(2, 1),
-    ).toContain("2");
-    expect(
-      messages.editableConfigurationPromptAutocompleteDetail,
-    ).not.toHaveLength(0);
-    expect(messages.historyRequestCountLabel(4)).toContain("4");
-    expect(messages.historyRunCountLabel(5)).toContain("5");
-    expect(messages.providerSummary("codex", null)).toContain("codex");
-    expect(messages.providerSummary("codex", "gpt-5.4")).toContain("gpt-5.4");
-    expect(
-      messages.requestDetailsUnavailable("dispatch-review-history"),
-    ).toContain("dispatch-review-history");
-    expect(messages.requestStatusStartedAgo("9s")).toContain("9s");
-    expect(messages.scriptCommandSummary("script-tool")).toContain(
-      "script-tool",
-    );
-    expect(
-      messages.selectRequestLabel("Review Story", "dispatch-review-history"),
-    ).toContain("dispatch-review-history");
-    expect(messages.selectWorkItemLabel("Review Story")).toContain(
-      "Review Story",
-    );
-    expect(
-      messages.selectWorkstationRequestLabel("dispatch-review-history"),
-    ).toContain("dispatch-review-history");
-    expect(messages.selectedRequestLabel("dispatch-review-history")).toContain(
-      "dispatch-review-history",
-    );
-    expect(messages.openNamedWorkItemAction("Review Story")).toContain(
-      "Review Story",
-    );
-    expect(
-      messages.workDetailsUnavailable("dispatch-review-history"),
-    ).toContain("dispatch-review-history");
-  });
+      expect(
+        messages.editableConfigurationOverwriteWarning("prompt, model"),
+      ).toContain("prompt");
+      expect(
+        messages.editableConfigurationSaveConflictConfirmationDescription(
+          "template",
+        ),
+      ).toContain("template");
+      expect(
+        messages.editableConfigurationPromptAutocompleteSummary(2, 1),
+      ).toContain("2");
+      expect(
+        messages.editableConfigurationPromptAutocompleteDetail,
+      ).not.toHaveLength(0);
+      expect(messages.historyRequestCountLabel(4)).toContain("4");
+      expect(messages.historyRunCountLabel(5)).toContain("5");
+      expect(messages.providerSummary("codex", null)).toContain("codex");
+      expect(messages.providerSummary("codex", "gpt-5.4")).toContain("gpt-5.4");
+      expect(
+        messages.requestDetailsUnavailable("dispatch-review-history"),
+      ).toContain("dispatch-review-history");
+      expect(messages.requestStatusStartedAgo("9s")).toContain("9s");
+      expect(messages.scriptCommandSummary("script-tool")).toContain(
+        "script-tool",
+      );
+      expect(
+        messages.selectRequestLabel("Review Story", "dispatch-review-history"),
+      ).toContain("dispatch-review-history");
+      expect(messages.selectWorkItemLabel("Review Story")).toContain(
+        "Review Story",
+      );
+      expect(
+        messages.selectWorkstationRequestLabel("dispatch-review-history"),
+      ).toContain("dispatch-review-history");
+      expect(
+        messages.selectedRequestLabel("dispatch-review-history"),
+      ).toContain("dispatch-review-history");
+      expect(messages.openNamedWorkItemAction("Review Story")).toContain(
+        "Review Story",
+      );
+      expect(
+        messages.workDetailsUnavailable("dispatch-review-history"),
+      ).toContain("dispatch-review-history");
+    },
+  );
 
   it("localizes workstation behavior, kind, and type labels with unknown fallback", () => {
     expect(

@@ -36,7 +36,8 @@ describe("Textarea", () => {
     const longText = "line\n".repeat(40);
     render(<Textarea aria-label="Factory notes" defaultValue={longText} />);
 
-    const textarea = screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
+    const textarea =
+      screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
     Object.defineProperty(textarea, "scrollHeight", {
       configurable: true,
       value: 480,
@@ -58,7 +59,8 @@ describe("Textarea", () => {
       <Textarea aria-label="Factory notes" onChange={onChange} />,
     );
 
-    const textarea = screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
+    const textarea =
+      screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
     fireEvent.change(textarea, { target: { value: "Updated notes" } });
     expect(onChange).toHaveBeenCalled();
 

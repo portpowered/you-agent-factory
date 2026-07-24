@@ -140,8 +140,7 @@ describe("useEditableDocConfigurationState", () => {
       ),
     );
     expect(emptyResult.current).toEqual({
-      message:
-        "This doc is no longer attached to the current factory.",
+      message: "This doc is no longer attached to the current factory.",
       status: "empty",
     });
   });

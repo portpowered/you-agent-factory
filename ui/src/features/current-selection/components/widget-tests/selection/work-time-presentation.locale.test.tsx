@@ -155,33 +155,29 @@ function renderDispatchStartedAt(
 }
 
 describe("work time presentation locale regression", () => {
-  it.each(
-    localeCases,
-  )("renders the same canonical Started at output on work-state and dispatch surfaces for $locale", ({
-    locale,
-    unavailableLabel,
-    startedAtLabel,
-    dispatchHistoryRegion,
-  }) => {
-    const expected = formatLocalDateTime(
-      sharedStartedAt,
-      unavailableLabel,
-      locale,
-    );
-    const hourOnly = formatTime(sharedStartedAt, locale);
+  it.each(localeCases)(
+    "renders the same canonical Started at output on work-state and dispatch surfaces for $locale",
+    ({ locale, unavailableLabel, startedAtLabel, dispatchHistoryRegion }) => {
+      const expected = formatLocalDateTime(
+        sharedStartedAt,
+        unavailableLabel,
+        locale,
+      );
+      const hourOnly = formatTime(sharedStartedAt, locale);
 
-    expect(expected).not.toBe(hourOnly);
+      expect(expected).not.toBe(hourOnly);
 
-    const workStateStartedAt = renderWorkStateStartedAt(locale);
-    const dispatchStartedAt = renderDispatchStartedAt(
-      locale,
-      startedAtLabel,
-      dispatchHistoryRegion,
-    );
+      const workStateStartedAt = renderWorkStateStartedAt(locale);
+      const dispatchStartedAt = renderDispatchStartedAt(
+        locale,
+        startedAtLabel,
+        dispatchHistoryRegion,
+      );
 
-    expect(workStateStartedAt).toBe(expected);
-    expect(dispatchStartedAt).toBe(expected);
-    expect(workStateStartedAt).toBe(dispatchStartedAt);
-    expect(workStateStartedAt).not.toBe(hourOnly);
-  });
+      expect(workStateStartedAt).toBe(expected);
+      expect(dispatchStartedAt).toBe(expected);
+      expect(workStateStartedAt).toBe(dispatchStartedAt);
+      expect(workStateStartedAt).not.toBe(hourOnly);
+    },
+  );
 });

@@ -3,14 +3,14 @@ import {
   listFactoryDocTargetPaths,
 } from "../../current-factory-definition/lib/doc-editable-values";
 import { isFactoryBundledDocTargetPath } from "../../workflow-activity/lib/factory-bundled-docs";
-import {
-  resolveDocTargetPathFromFileName,
-  suggestDefaultDocFileName,
-} from "./factory-graph-doc-editor";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
 } from "./draft/factory-graph-draft-types";
+import {
+  resolveDocTargetPathFromFileName,
+  suggestDefaultDocFileName,
+} from "./factory-graph-doc-editor";
 
 export type FactoryGraphDocAddEntityDraft = {
   fileName: string;

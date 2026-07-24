@@ -1,6 +1,15 @@
+export type {
+  SelectContentProps,
+  SelectEmptyProps,
+  SelectFieldProps,
+  SelectItemProps,
+  SelectLabelProps,
+  SelectSeparatorProps,
+  SelectTriggerProps,
+} from "@you-agent-factory/components/forms";
 export {
-  Select,
   SELECT_EMPTY_STATE_VALUE,
+  Select,
   SelectContent,
   SelectEmpty,
   SelectField,
@@ -10,13 +19,4 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@you-agent-factory/components/forms";
-export type {
-  SelectContentProps,
-  SelectEmptyProps,
-  SelectFieldProps,
-  SelectItemProps,
-  SelectLabelProps,
-  SelectSeparatorProps,
-  SelectTriggerProps,
 } from "@you-agent-factory/components/forms";

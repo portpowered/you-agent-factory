@@ -361,7 +361,9 @@ function validateNodeEmptyState(
  */
 export function safeParseFactoryVisualizationLayout(
   input: unknown,
-  factory: Readonly<FactoryDefinition> | FactoryVisualizationLayoutCanonicalNodeContext,
+  factory:
+    | Readonly<FactoryDefinition>
+    | FactoryVisualizationLayoutCanonicalNodeContext,
 ): SafeParseFactoryVisualizationLayoutResult {
   if (!isInputRecord(input)) {
     return {
@@ -449,7 +451,9 @@ export function safeParseFactoryVisualizationLayout(
 
 export function parseFactoryVisualizationLayout(
   input: unknown,
-  factory: Readonly<FactoryDefinition> | FactoryVisualizationLayoutCanonicalNodeContext,
+  factory:
+    | Readonly<FactoryDefinition>
+    | FactoryVisualizationLayoutCanonicalNodeContext,
 ): FactoryVisualizationLayoutV1 {
   const result = safeParseFactoryVisualizationLayout(input, factory);
   if (!result.success) {

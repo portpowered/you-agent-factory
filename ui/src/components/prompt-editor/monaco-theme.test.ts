@@ -148,44 +148,44 @@ describe("buildWorkstationPromptTheme", () => {
     expect(findRuleForeground(theme, "variable.root")).toBe("#0F4C5C");
   });
 
-  it.each(
-    PALETTE_FIXTURES,
-  )("keeps prompt editor text and core syntax readable for %s", ({
-    expectedBase,
-    id,
-    tokens,
-  }) => {
-    applyThemeTokens(tokens);
+  it.each(PALETTE_FIXTURES)(
+    "keeps prompt editor text and core syntax readable for %s",
+    ({ expectedBase, id, tokens }) => {
+      applyThemeTokens(tokens);
 
-    const theme = buildWorkstationPromptTheme();
-    const background =
-      theme.colors["editor.background"] ??
-      tokens["--color-af-foundation-surface"];
+      const theme = buildWorkstationPromptTheme();
+      const background =
+        theme.colors["editor.background"] ??
+        tokens["--color-af-foundation-surface"];
 
-    expect(theme.base).toBe(expectedBase);
-    expect(
-      readContrastRatio(theme.colors["editor.foreground"] ?? "", background),
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      readContrastRatio(
-        findRuleForeground(theme, "keyword.template"),
-        background,
-      ),
-    ).toBeGreaterThanOrEqual(3);
-    expect(
-      readContrastRatio(
-        findRuleForeground(theme, "string.template"),
-        background,
-      ),
-    ).toBeGreaterThanOrEqual(3);
-    expect(
-      readContrastRatio(findRuleForeground(theme, "variable.root"), background),
-    ).toBeGreaterThanOrEqual(3);
-    expect(findRuleForeground(theme, "delimiter.template")).not.toBe(
-      theme.colors["editor.foreground"],
-    );
-    expect(id).toBeTruthy();
-  });
+      expect(theme.base).toBe(expectedBase);
+      expect(
+        readContrastRatio(theme.colors["editor.foreground"] ?? "", background),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        readContrastRatio(
+          findRuleForeground(theme, "keyword.template"),
+          background,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        readContrastRatio(
+          findRuleForeground(theme, "string.template"),
+          background,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        readContrastRatio(
+          findRuleForeground(theme, "variable.root"),
+          background,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+      expect(findRuleForeground(theme, "delimiter.template")).not.toBe(
+        theme.colors["editor.foreground"],
+      );
+      expect(id).toBeTruthy();
+    },
+  );
 });
 
 describe("buildWorkstationGuardSelectorTheme", () => {
@@ -193,36 +193,37 @@ describe("buildWorkstationGuardSelectorTheme", () => {
     document.documentElement.removeAttribute("style");
   });
 
-  it.each(
-    PALETTE_FIXTURES,
-  )("uses the same palette token source with readable guard-selector syntax for %s", ({
-    expectedBase,
-    tokens,
-  }) => {
-    applyThemeTokens(tokens);
+  it.each(PALETTE_FIXTURES)(
+    "uses the same palette token source with readable guard-selector syntax for %s",
+    ({ expectedBase, tokens }) => {
+      applyThemeTokens(tokens);
 
-    const theme = buildWorkstationGuardSelectorTheme();
-    const background =
-      theme.colors["editor.background"] ??
-      tokens["--color-af-foundation-surface"];
+      const theme = buildWorkstationGuardSelectorTheme();
+      const background =
+        theme.colors["editor.background"] ??
+        tokens["--color-af-foundation-surface"];
 
-    expect(theme.base).toBe(expectedBase);
-    expect(findRuleForeground(theme, "text")).toBe(
-      tokens["--color-af-foundation-ink"],
-    );
-    expect(
-      readContrastRatio(findRuleForeground(theme, "text"), background),
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      readContrastRatio(
-        findRuleForeground(theme, "selector.field"),
-        background,
-      ),
-    ).toBeGreaterThanOrEqual(3);
-    expect(
-      readContrastRatio(findRuleForeground(theme, "selector.tag"), background),
-    ).toBeGreaterThanOrEqual(3);
-  });
+      expect(theme.base).toBe(expectedBase);
+      expect(findRuleForeground(theme, "text")).toBe(
+        tokens["--color-af-foundation-ink"],
+      );
+      expect(
+        readContrastRatio(findRuleForeground(theme, "text"), background),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        readContrastRatio(
+          findRuleForeground(theme, "selector.field"),
+          background,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        readContrastRatio(
+          findRuleForeground(theme, "selector.tag"),
+          background,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 function applyThemeTokens(tokens: Record<string, string>) {

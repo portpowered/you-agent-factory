@@ -1,16 +1,19 @@
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
+import {
+  EnumSelect,
+  OptionalEnumSelect,
+} from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
 import type { ModelOperationContentType } from "../../../../api/generated/openapi";
 import {
-  Label,
   FormDescription,
   FormError,
   Input,
+  Label,
 } from "../../../../components/ui";
 import { FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES } from "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { updateEditableModelInvokeBindingDraft } from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
-import type { WorkstationDetailCardProps } from "../lib/keys/detail-card-types";
 import { resolveModelInvokeBindingInputSlots } from "../lib/editable-workstation-model-invoke-options";
+import type { WorkstationDetailCardProps } from "../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 type ReadyEditableConfigurationState = Extract<
@@ -269,9 +272,7 @@ function EditableConfigurationModelInvokeBindingSlotCard({
           </Label>
           <OptionalEnumSelect
             aria-label={messages.modelInvokeBindingSelectorTypeFieldLabel}
-            emptyOptionLabel={
-              messages.modelInvokeBindingSelectorTypeNoneOption
-            }
+            emptyOptionLabel={messages.modelInvokeBindingSelectorTypeNoneOption}
             id={`editable-workstation-binding-${inputSlot.name}-type`}
             onValueChange={(nextValue) =>
               updateBindingSelector(

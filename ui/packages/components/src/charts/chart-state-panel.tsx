@@ -24,8 +24,10 @@ const CHART_STATE_PANEL_STANDALONE_SHELL_CLASS =
   "grid min-h-60 items-start gap-1.5 rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-5 [&_h3]:m-0";
 const CHART_STATE_PANEL_TITLE_CLASS =
   "m-0 text-title-medium font-semibold text-on-surface";
-const CHART_STATE_PANEL_DESCRIPTION_CLASS = "m-0 text-body-medium text-on-surface-variant";
-const CHART_STATE_PANEL_SKELETON_CLASS = "animate-pulse rounded-xl bg-af-overlay";
+const CHART_STATE_PANEL_DESCRIPTION_CLASS =
+  "m-0 text-body-medium text-on-surface-variant";
+const CHART_STATE_PANEL_SKELETON_CLASS =
+  "animate-pulse rounded-xl bg-af-overlay";
 
 function chartStateRole(status: ChartStateStatus): "alert" | "status" {
   return status === "error" ? "alert" : "status";
@@ -54,7 +56,9 @@ export function ChartStatePanel({
       {loading ? (
         <div aria-hidden="true" className="grid w-full gap-3">
           <div className={cn(CHART_STATE_PANEL_SKELETON_CLASS, "h-4 w-32")} />
-          <div className={cn(CHART_STATE_PANEL_SKELETON_CLASS, "h-28 w-full")} />
+          <div
+            className={cn(CHART_STATE_PANEL_SKELETON_CLASS, "h-28 w-full")}
+          />
         </div>
       ) : null}
       <h3 className={CHART_STATE_PANEL_TITLE_CLASS}>{title}</h3>

@@ -33,9 +33,9 @@ import {
   submitWorkCardControls,
 } from "./stories/dashboardStorySupport";
 import { defaultFactorySessionSummary } from "./testing/app-shell-session-stream-test-utils";
-import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries";
-import { selectComboboxOption } from "./testing/select-test-helpers";
 import { editableConfigurationPromptTemplateContractResponse } from "./testing/editable-configuration-prompt-template-contract";
+import { selectComboboxOption } from "./testing/select-test-helpers";
+import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries";
 
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
@@ -480,9 +480,7 @@ async function prepareEditableConfigurationReadyToSave(
   await expect(
     screen.getByRole("option", { name: "Inference run" }),
   ).toBeVisible();
-  await expect(
-    screen.getByRole("option", { name: "Agent run" }),
-  ).toBeVisible();
+  await expect(screen.getByRole("option", { name: "Agent run" })).toBeVisible();
   await userEvent.keyboard("{Escape}");
 }
 
@@ -560,9 +558,7 @@ async function expectEditableConfigurationBrowserFlow(
     "Model workstation (legacy)",
   );
   await userEvent.click(planWorkstationTypeField);
-  await expect(
-    screen.getByRole("option", { name: "Agent run" }),
-  ).toBeVisible();
+  await expect(screen.getByRole("option", { name: "Agent run" })).toBeVisible();
   await expect(
     screen.getByRole("option", { name: "Inference run" }),
   ).toBeVisible();

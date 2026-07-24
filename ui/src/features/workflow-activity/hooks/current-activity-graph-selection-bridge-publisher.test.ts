@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createEmptyFactoryGraphEditorSelection } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection";
+import { useFactoryGraphEditorSelectionBridge } from "../state/factory-graph-editor-selection-bridge";
 import {
   createCurrentActivityGraphSelectionBridgePublisher,
   publishCurrentActivityGraphSelectionBridgeState,
   syncCurrentActivityGraphSelectionToDashboard,
 } from "./current-activity-graph-selection-bridge-publisher";
-import { useFactoryGraphEditorSelectionBridge } from "../state/factory-graph-editor-selection-bridge";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: bridge publish and dashboard sync contract cases stay together.
 describe("current-activity-graph-selection-bridge-publisher", () => {
@@ -203,7 +203,8 @@ describe("current-activity-graph-selection-bridge-publisher", () => {
 
     expect(onSelectWorker).toHaveBeenCalledWith("writer");
     expect(
-      useFactoryGraphEditorSelectionBridge.getState().selection?.selectedNodeIds,
+      useFactoryGraphEditorSelectionBridge.getState().selection
+        ?.selectedNodeIds,
     ).toEqual(["worker:writer"]);
   });
 });

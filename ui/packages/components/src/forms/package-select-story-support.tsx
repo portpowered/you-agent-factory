@@ -1,6 +1,6 @@
 import type { Decorator } from "@storybook/react-vite";
-import { useId, useState, type ReactNode } from "react";
-
+import { type ReactNode, useId, useState } from "react";
+import { EnumSelect } from "./package-enum-select";
 import {
   Select,
   SelectContent,
@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./package-select";
-import { EnumSelect } from "./package-enum-select";
 
 export const MOBILE_STORY_WIDTH = "320px";
 export const PACKAGE_SELECT_STORY_LABEL = "Work type";
@@ -106,7 +105,10 @@ export function ControlledSelectStoryExample() {
     <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
       {(controlProps) => (
         <Select onValueChange={setValue} value={value}>
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -134,7 +136,10 @@ export function ControlledOpenSelectStoryExample() {
           open={open}
           value={value}
         >
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -156,7 +161,10 @@ export function KeyboardSelectStoryExample() {
     >
       {(controlProps) => (
         <Select onValueChange={setValue} value={value}>
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -173,7 +181,10 @@ export function EmptyOptionsSelectStoryExample() {
     <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
       {(controlProps) => (
         <Select>
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -217,7 +228,10 @@ export function ErrorStateSelectStoryExample() {
     >
       {(controlProps) => (
         <Select>
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>
@@ -245,7 +259,10 @@ export function LongLabelSelectStoryExample() {
     <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
       {(controlProps) => (
         <Select defaultValue="long-story">
-          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+          <SelectTrigger
+            aria-label={PACKAGE_SELECT_STORY_LABEL}
+            {...controlProps}
+          >
             <SelectValue placeholder="Select a work type" />
           </SelectTrigger>
           <SelectContent>

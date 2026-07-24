@@ -4,10 +4,10 @@ import { type ReactNode, useId } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  Label,
-  Text,
   FormWarning,
   Input,
+  Label,
+  Text,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
@@ -487,10 +487,7 @@ function ResourceEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <Text
-        className="m-0 text-on-surface-subtle"
-        variant="supporting"
-      >
+      <Text className="m-0 text-on-surface-subtle" variant="supporting">
         {messages.editableConfigurationSaveDisabledValidationDetail}
       </Text>
     </CurrentSelectionFormField>

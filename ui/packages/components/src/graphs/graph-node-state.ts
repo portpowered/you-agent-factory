@@ -95,7 +95,9 @@ export function graphNodeButtonIsDisabled(
   return disabled === true || state === "disabled" || state === "loading";
 }
 
-export function defaultGraphNodeStateLabel(state: GraphNodeState): string | undefined {
+export function defaultGraphNodeStateLabel(
+  state: GraphNodeState,
+): string | undefined {
   switch (state) {
     case "selected":
       return "Selected node";

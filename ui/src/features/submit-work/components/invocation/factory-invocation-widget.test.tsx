@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 
 import { SessionFactoryInvocationError } from "../../../../api/session-factory";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { FactoryInvocationWidget } from "./factory-invocation-widget";
 
 const invokeSessionFactory = vi.fn();
@@ -31,7 +31,7 @@ vi.mock("../../../current-factory-definition/public", async () => {
 
   return {
     ...actual,
-  useCurrentFactoryDefinition: () => useCurrentFactoryDefinition(),
+    useCurrentFactoryDefinition: () => useCurrentFactoryDefinition(),
   };
 });
 
@@ -77,7 +77,10 @@ describe("FactoryInvocationWidget", () => {
           parameters: [
             {
               aliases: ["body"],
-              bindings: [{ kind: "POSITIONAL", position: 1 }, { kind: "STDIN" }],
+              bindings: [
+                { kind: "POSITIONAL", position: 1 },
+                { kind: "STDIN" },
+              ],
               description: "Source input",
               name: "input",
               required: true,
@@ -113,7 +116,10 @@ describe("FactoryInvocationWidget", () => {
 
     renderFactoryInvocationWidget();
 
-    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await user.type(
+      screen.getByRole("textbox", { name: /input/i }),
+      "hello world",
+    );
     await selectLabeledComboboxOption(user, /effort/i, "high");
     await user.click(screen.getByRole("button", { name: "True" }));
     await user.type(screen.getByRole("textbox", { name: /tag/i }), "alpha");
@@ -159,7 +165,9 @@ describe("FactoryInvocationWidget", () => {
       ),
     ).toBeVisible();
     expect(screen.getByText("Accepts stdin input.")).toBeVisible();
-    expect(screen.getByText("Factory invocation started. Trace ID: trace-1.")).toBeVisible();
+    expect(
+      screen.getByText("Factory invocation started. Trace ID: trace-1."),
+    ).toBeVisible();
     expect(screen.getByText("Primary result")).toBeVisible();
     expect(screen.getByText("Fusion complete.")).toBeVisible();
   });
@@ -253,7 +261,10 @@ describe("FactoryInvocationWidget", () => {
 
     const { rerender } = renderFactoryInvocationWidget();
 
-    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await user.type(
+      screen.getByRole("textbox", { name: /input/i }),
+      "hello world",
+    );
     await user.click(screen.getByRole("button", { name: "Run factory" }));
 
     await waitFor(() => {
@@ -396,7 +407,8 @@ describe("FactoryInvocationWidget", () => {
 
     await waitFor(() => {
       expect(
-        screen.getAllByText('required invocation parameter "input" is missing').length,
+        screen.getAllByText('required invocation parameter "input" is missing')
+          .length,
       ).toBeGreaterThan(0);
     });
   });
@@ -428,7 +440,9 @@ describe("FactoryInvocationWidget", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("We couldn't invoke this factory. Try again in a moment."),
+        screen.getByText(
+          "We couldn't invoke this factory. Try again in a moment.",
+        ),
       ).toBeVisible();
     });
   });
@@ -459,7 +473,10 @@ describe("FactoryInvocationWidget", () => {
 
     const { rerender } = renderFactoryInvocationWidget();
 
-    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await user.type(
+      screen.getByRole("textbox", { name: /input/i }),
+      "hello world",
+    );
     await user.click(screen.getByRole("button", { name: "Run factory" }));
 
     await waitFor(() => {

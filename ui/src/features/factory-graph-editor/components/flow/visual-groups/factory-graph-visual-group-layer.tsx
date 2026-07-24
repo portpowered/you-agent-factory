@@ -1,18 +1,17 @@
 import { useReactFlow, useStore } from "@xyflow/react";
 import { useCallback, useRef, useState } from "react";
-
-import { GraphNodeButton } from "../../../../graphs/public";
 import { cn } from "../../../../../lib/cn";
+import { GraphNodeButton } from "../../../../graphs/public";
+import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
 import {
   type FactoryLayoutGroup,
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
 } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
-import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
 import {
-  type ResizeCorner,
-  RESIZE_CORNERS,
   isDragBeyondClickThreshold,
+  RESIZE_CORNERS,
+  type ResizeCorner,
   resizeBoundsFromCorner,
   resizeHandleStyle,
 } from "./factory-graph-visual-group-layer-geometry";
@@ -128,16 +127,15 @@ export function FactoryGraphVisualGroupLayer({
   );
 
   const handleGroupKeyDown = useCallback(
-    (groupId: string) =>
-      (event: React.KeyboardEvent<HTMLDivElement>) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
+    (groupId: string) => (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
 
-        event.preventDefault();
-        event.stopPropagation();
-        onSelectGroup(groupId);
-      },
+      event.preventDefault();
+      event.stopPropagation();
+      onSelectGroup(groupId);
+    },
     [onSelectGroup],
   );
 

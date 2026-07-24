@@ -275,32 +275,29 @@ describe("previewFactory", () => {
         resultConstraints: null,
       },
     ],
-  ])(
-    "rejects preview payloads with malformed %s",
-    async (_label, payload) => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(JSON.stringify(payload), {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-            statusText: "OK",
-          }),
-        ),
-      );
-
-      await expect(
-        previewFactory({
-          sourceKind: "WORKFLOW_NAME",
-          projectRoot: "/tmp/project",
-          sourceValue: "review",
+  ])("rejects preview payloads with malformed %s", async (_label, payload) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
         }),
-      ).rejects.toMatchObject({
-        message: factoryPreviewAPIErrorMessages.invalidResponse,
-        code: "INTERNAL_ERROR",
-      });
-    },
-  );
+      ),
+    );
+
+    await expect(
+      previewFactory({
+        sourceKind: "WORKFLOW_NAME",
+        projectRoot: "/tmp/project",
+        sourceValue: "review",
+      }),
+    ).rejects.toMatchObject({
+      message: factoryPreviewAPIErrorMessages.invalidResponse,
+      code: "INTERNAL_ERROR",
+    });
+  });
 
   it("rejects non-object preview payloads", async () => {
     vi.stubGlobal(

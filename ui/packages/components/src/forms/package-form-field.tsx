@@ -1,7 +1,7 @@
 import {
   type ElementType,
-  forwardRef,
   type FieldsetHTMLAttributes,
+  forwardRef,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
@@ -75,7 +75,9 @@ export const FormDescription = forwardRef<HTMLElement, FormDescriptionProps>(
     return (
       <Component
         className={cn(
-          variant === "body" ? FORM_BODY_TEXT_CLASS : FORM_SUPPORTING_TEXT_CLASS,
+          variant === "body"
+            ? FORM_BODY_TEXT_CLASS
+            : FORM_SUPPORTING_TEXT_CLASS,
           className,
         )}
         ref={ref}
@@ -90,10 +92,7 @@ export interface FormHelperTextProps extends HTMLAttributes<HTMLElement> {
 }
 
 export const FormHelperText = forwardRef<HTMLElement, FormHelperTextProps>(
-  function FormHelperText(
-    { as: Component = "p", className, ...props },
-    ref,
-  ) {
+  function FormHelperText({ as: Component = "p", className, ...props }, ref) {
     return (
       <Component
         className={cn(FORM_SUPPORTING_TEXT_CLASS, className)}
@@ -178,17 +177,18 @@ export const FormSuccess = forwardRef<HTMLElement, FormSuccessProps>(
 
 export type FormFieldGroupProps = FieldsetHTMLAttributes<HTMLFieldSetElement>;
 
-export const FormFieldGroup = forwardRef<HTMLFieldSetElement, FormFieldGroupProps>(
-  function FormFieldGroup({ className, ...props }, ref) {
-    return (
-      <fieldset
-        className={cn("m-0 space-y-2 border-0 p-0", className)}
-        ref={ref}
-        {...props}
-      />
-    );
-  },
-);
+export const FormFieldGroup = forwardRef<
+  HTMLFieldSetElement,
+  FormFieldGroupProps
+>(function FormFieldGroup({ className, ...props }, ref) {
+  return (
+    <fieldset
+      className={cn("m-0 space-y-2 border-0 p-0", className)}
+      ref={ref}
+      {...props}
+    />
+  );
+});
 
 export type FormFieldGroupLabelProps = HTMLAttributes<HTMLLegendElement>;
 
@@ -197,6 +197,10 @@ export const FormFieldGroupLabel = forwardRef<
   FormFieldGroupLabelProps
 >(function FormFieldGroupLabel({ className, ...props }, ref) {
   return (
-    <legend className={cn(FORM_LABEL_CLASS, "px-0", className)} ref={ref} {...props} />
+    <legend
+      className={cn(FORM_LABEL_CLASS, "px-0", className)}
+      ref={ref}
+      {...props}
+    />
   );
 });

@@ -387,9 +387,7 @@ describe("factory graph editor toolbar action-row composition", () => {
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
-    const sections = toolbar.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    const sections = toolbar.querySelectorAll("[data-action-row-section]");
 
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
@@ -414,9 +412,7 @@ describe("factory graph editor toolbar action-row composition", () => {
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
-    const sections = toolbar.querySelectorAll(
-      "[data-action-row-section]",
-    );
+    const sections = toolbar.querySelectorAll("[data-action-row-section]");
     const discardButton = within(toolbar).getByRole("button", {
       name: "Discard changes",
     });

@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { components, operations, paths } from "./openapi";
 
-type FactoryLayoutEmptyState =
-  components["schemas"]["FactoryLayoutEmptyState"];
+type FactoryLayoutEmptyState = components["schemas"]["FactoryLayoutEmptyState"];
 type ProviderCatalog = components["schemas"]["ProviderCatalog"];
 
 describe("generated session factory OpenAPI types", () => {

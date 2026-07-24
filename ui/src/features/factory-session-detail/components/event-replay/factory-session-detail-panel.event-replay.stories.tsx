@@ -21,7 +21,8 @@ import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import { renderFactorySessionDetailPanel } from "../factory-session-detail-panel.stories.shared";
 
 export default {
-  title: "you-agent-factory/Current Selection/Factory Session Detail Panel/Event Replay",
+  title:
+    "you-agent-factory/Current Selection/Factory Session Detail Panel/Event Replay",
   component: FactorySessionDetailPanel,
 };
 
@@ -121,7 +122,9 @@ export const DurableReplayDisclosureAwaitingApproval = {
       name: "Expand Factory Event replay",
     });
     await user.click(trigger);
-    await expect(canvas.findByText("Showing 2 Factory Events.")).resolves.toBeTruthy();
+    await expect(
+      canvas.findByText("Showing 2 Factory Events."),
+    ).resolves.toBeTruthy();
     await expect(canvas.getByText("Session result updated")).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
@@ -167,7 +170,9 @@ export const DurableReplayDisclosureWarning = {
     });
     await userEvent.click(trigger);
     await canvas.findByText("Checkpoint recorded");
-    expect(canvas.getByText("Provider session timed out · Retry planned")).toBeTruthy();
+    expect(
+      canvas.getByText("Provider session timed out · Retry planned"),
+    ).toBeTruthy();
     expect(canvas.getByText("Release verification failed.")).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(warningReplaySessionID),
@@ -209,9 +214,7 @@ export const DurableReplayDisclosureEmpty = {
       "No durable Factory Events are available for this session.",
     );
     expect(
-      canvas
-        .queryAllByRole("list")
-        .some((element) => element.tagName === "OL"),
+      canvas.queryAllByRole("list").some((element) => element.tagName === "OL"),
     ).toBe(false);
   },
   render: () => renderFactorySessionDetailPanel(emptyReplaySessionID),

@@ -1,19 +1,24 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
-
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
-import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
 } from "../lib/detail-card-types";
-import { WorkerDetailCard } from "./worker-detail-card";
 import { EditableWorkerConfigurationHeaderActions } from "./editable/worker-save-controls";
+import { WorkerDetailCard } from "./worker-detail-card";
 
 const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
 
@@ -218,9 +223,7 @@ describe("WorkerDetailCard", () => {
         .getAttribute("aria-expanded"),
     ).toBe("true");
     expect(
-      screen.getByText(
-        "Loading editable worker configuration.",
-      ),
+      screen.getByText("Loading editable worker configuration."),
     ).toBeTruthy();
   });
 

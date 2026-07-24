@@ -13,7 +13,9 @@ describe("IconButtonShell", () => {
       </IconButtonShell>,
     );
 
-    expect(screen.getByRole("button", { name: "Remove item" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove item" }),
+    ).toBeInTheDocument();
   });
 
   it("provides a stable dashboard toolbar touch target", () => {

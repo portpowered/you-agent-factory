@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "./api/events";
-import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   failureAnalysisTimelineEvents,
   graphStateSmokeTimelineEvents,
@@ -15,6 +14,7 @@ import {
   resourceCountBackendWorldViewCountsByTick,
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   baselineSnapshot,
   MockEventSource,
@@ -121,8 +121,7 @@ function withTopologyFactoryChange(events: FactoryEvent[]): FactoryEvent[] {
         ...(structureEvent.context.sessionSequence === undefined
           ? {}
           : {
-              sessionSequence:
-                structureEvent.context.sessionSequence + 1,
+              sessionSequence: structureEvent.context.sessionSequence + 1,
             }),
       },
       id: `${structureEvent.id}/factory-change`,
@@ -355,9 +354,7 @@ describe("App streamed replay rendering flows", () => {
       ),
     ).toBeNull();
 
-    fireEvent.click(
-      await screen.findByLabelText("Select new work-state"),
-    );
+    fireEvent.click(await screen.findByLabelText("Select new work-state"));
 
     const currentPositionDetail = await screen.findByRole("article", {
       name: "Current selection",
@@ -471,12 +468,8 @@ describe("App streamed replay rendering flows", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByLabelText("Select Review workstation"),
-      ).toBeTruthy();
-      expect(
-        screen.queryByLabelText("Select QA workstation"),
-      ).toBeNull();
+      expect(screen.getByLabelText("Select Review workstation")).toBeTruthy();
+      expect(screen.queryByLabelText("Select QA workstation")).toBeNull();
       expect(screen.getByLabelText("Select writer worker")).toBeTruthy();
     });
 
@@ -514,9 +507,7 @@ describe("App streamed replay rendering flows", () => {
       expectWorkStateCount("story:failed", 1);
     });
 
-    fireEvent.click(
-      screen.getByLabelText("Select done work-state"),
-    );
+    fireEvent.click(screen.getByLabelText("Select done work-state"));
 
     const completedDetail = await within(dashboardGrid).findByRole("article", {
       name: "Current selection",
@@ -538,9 +529,7 @@ describe("App streamed replay rendering flows", () => {
       2,
     );
 
-    fireEvent.click(
-      screen.getByLabelText("Select failed work-state"),
-    );
+    fireEvent.click(screen.getByLabelText("Select failed work-state"));
 
     await waitFor(() => {
       const failedDetail = screen.getByRole("article", {
@@ -553,9 +542,7 @@ describe("App streamed replay rendering flows", () => {
       expect(within(failedDetail).queryAllByText(/^Started at /)).toHaveLength(
         1,
       );
-      expect(
-        within(failedDetail).getByText("throttled"),
-      ).toBeTruthy();
+      expect(within(failedDetail).getByText("throttled")).toBeTruthy();
       expect(
         within(failedDetail).queryByText(
           "No current work is occupying this place.",

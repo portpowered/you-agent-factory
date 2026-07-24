@@ -1,13 +1,18 @@
 // @vitest-environment node
 
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import {
-  assertScopedComponentsResolved,
-} from "./verify-fresh-npm-install.mjs";
+import { assertScopedComponentsResolved } from "./verify-fresh-npm-install.mjs";
 
 async function createResolvedInstallFixture() {
   const installRoot = await mkdtemp(
@@ -44,7 +49,9 @@ describe("assertScopedComponentsResolved", () => {
         path.join(installRoot, "packages", "components"),
       );
 
-      await expect(assertScopedComponentsResolved(installRoot)).resolves.toEqual({
+      await expect(
+        assertScopedComponentsResolved(installRoot),
+      ).resolves.toEqual({
         packageName: "@you-agent-factory/components",
         resolvedPath: expectedResolvedPath,
       });
@@ -59,10 +66,22 @@ describe("assertScopedComponentsResolved", () => {
 
     try {
       await mkdir(wrongTarget, { recursive: true });
-      await rm(path.join(installRoot, "node_modules", "@you-agent-factory", "components"));
+      await rm(
+        path.join(
+          installRoot,
+          "node_modules",
+          "@you-agent-factory",
+          "components",
+        ),
+      );
       await symlink(
         wrongTarget,
-        path.join(installRoot, "node_modules", "@you-agent-factory", "components"),
+        path.join(
+          installRoot,
+          "node_modules",
+          "@you-agent-factory",
+          "components",
+        ),
         process.platform === "win32" ? "junction" : "dir",
       );
 

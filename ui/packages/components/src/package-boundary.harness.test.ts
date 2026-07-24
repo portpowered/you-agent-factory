@@ -13,7 +13,11 @@ const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const scriptPath = path.join(packageRoot, "scripts", "check-package-boundary.mjs");
+const scriptPath = path.join(
+  packageRoot,
+  "scripts",
+  "check-package-boundary.mjs",
+);
 const dashboardSrcDir = path.resolve(packageRoot, "..", "..", "src");
 
 async function createPackageTree(
@@ -48,7 +52,9 @@ describe("package boundary harness", () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempRoots.map((tempRoot) => rm(tempRoot, { force: true, recursive: true })),
+      tempRoots.map((tempRoot) =>
+        rm(tempRoot, { force: true, recursive: true }),
+      ),
     );
     tempRoots = [];
   });
@@ -217,7 +223,8 @@ describe("package boundary harness", () => {
       {
         "allowed/primitive.tsx":
           'import { cn } from "../utilities/cn";\nexport function AllowedPrimitive({ className }: { className?: string }) { return <span className={cn("text-body-medium", className)} />; }\n',
-        "utilities/cn.ts": 'export function cn(...values: string[]) { return values.join(" "); }\n',
+        "utilities/cn.ts":
+          'export function cn(...values: string[]) { return values.join(" "); }\n',
       },
       tempRoot,
     );
@@ -238,7 +245,8 @@ describe("package boundary harness", () => {
 
     const packageSrcDir = await createPackageTree(
       {
-        "widgets/bad.ts": 'import { apiClient } from "../../dashboard-src/api";\nexport const bad = apiClient;\n',
+        "widgets/bad.ts":
+          'import { apiClient } from "../../dashboard-src/api";\nexport const bad = apiClient;\n',
       },
       tempRoot,
     );
@@ -264,38 +272,34 @@ describe("package boundary harness", () => {
     ]);
   });
 
-  it(
-    "CLI fails with actionable output for boundary violations",
-    async () => {
-      const tempRoot = await mkdtemp(
-        path.join(os.tmpdir(), "package-boundary-cli-failure-"),
-      );
-      tempRoots.push(tempRoot);
+  it("CLI fails with actionable output for boundary violations", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "package-boundary-cli-failure-"),
+    );
+    tempRoots.push(tempRoot);
 
-      const packageSrcDir = await createPackageTree(
-        {
-          "widgets/bad.tsx":
-            'import { toast } from "sonner";\nexport function BadWidget() { toast("nope"); return null; }\n',
+    const packageSrcDir = await createPackageTree(
+      {
+        "widgets/bad.tsx":
+          'import { toast } from "sonner";\nexport function BadWidget() { toast("nope"); return null; }\n',
+      },
+      tempRoot,
+    );
+
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: path.dirname(packageSrcDir),
+        env: {
+          ...process.env,
+          AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
+          AGENT_FACTORY_DASHBOARD_SRC_DIR: path.join(tempRoot, "dashboard-src"),
         },
-        tempRoot,
-      );
-
-      await expect(
-        execFileAsync(process.execPath, [scriptPath], {
-          cwd: path.dirname(packageSrcDir),
-          env: {
-            ...process.env,
-            AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
-            AGENT_FACTORY_DASHBOARD_SRC_DIR: path.join(tempRoot, "dashboard-src"),
-          },
-        }),
-      ).rejects.toMatchObject({
-        code: 1,
-        stderr: expect.stringContaining(
-          "@you-agent-factory/components package boundary check failed:",
-        ),
-      });
-    },
-    60_000,
-  );
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining(
+        "@you-agent-factory/components package boundary check failed:",
+      ),
+    });
+  }, 60_000);
 });

@@ -1,6 +1,4 @@
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { MetadataSectionProps } from "../../../base/components/detail-card/detail-card-types";
 import {
   CurrentSelectionDescriptionList,

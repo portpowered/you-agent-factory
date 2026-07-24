@@ -10,7 +10,11 @@ import {
 export const phaseLogPrefix = "[ui-browser-integration]";
 export const browserIntegrationPhaseName = "Browser integration Vitest pass";
 
-const browserIntegrationWorkerArgs = ["--no-file-parallelism", "--maxWorkers", "1"];
+const browserIntegrationWorkerArgs = [
+  "--no-file-parallelism",
+  "--maxWorkers",
+  "1",
+];
 
 export function buildBrowserIntegrationVitestArgs() {
   return ["run", "--dir", "integration", ...browserIntegrationWorkerArgs];

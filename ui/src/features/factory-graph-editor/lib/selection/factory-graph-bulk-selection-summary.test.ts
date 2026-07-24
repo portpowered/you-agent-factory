@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-
-import { createEmptyFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 import {
   buildFactoryGraphBulkSelectionSummary,
   factoryGraphEditorSelectionSignature,
   resolveFactoryGraphNodeKindFromNodeId,
   resolveGraphSelectionDashboardSyncAction,
 } from "./factory-graph-bulk-selection-summary";
+import { createEmptyFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 
 describe("factory-graph-bulk-selection-summary", () => {
   it("resolves factory graph node kinds from canonical node ids", () => {

@@ -1,13 +1,6 @@
+import { WidgetSubtitle } from "@you-agent-factory/components/recipes";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
-import {
-  DescriptionList,
-  Label,
-  SurfacePanel,
-} from "../../../components/ui";
-import {
-  WidgetSubtitle,
-} from "@you-agent-factory/components/recipes";
+import { DescriptionList, Label, SurfacePanel } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 
 export function TrendSummaryGrid({

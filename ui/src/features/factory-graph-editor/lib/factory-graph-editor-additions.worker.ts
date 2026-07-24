@@ -4,15 +4,15 @@ import {
   isPollerWorkerType,
   isScriptWorkerType,
 } from "../../current-factory-definition/public";
-import {
-  buildCanonicalModelOperationsFromDraft,
-  validateFactoryGraphAddModelOperationsDraft,
-} from "./factory-graph-add-model-operation-draft";
+import type { FactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
 } from "./editor/factory-graph-editor-additions";
-import type { FactoryGraphDraft } from "./draft/factory-graph-draft-types";
+import {
+  buildCanonicalModelOperationsFromDraft,
+  validateFactoryGraphAddModelOperationsDraft,
+} from "./factory-graph-add-model-operation-draft";
 
 type CanonicalWorker = NonNullable<
   FactoryGraphDraft["additions"]["workers"][number]

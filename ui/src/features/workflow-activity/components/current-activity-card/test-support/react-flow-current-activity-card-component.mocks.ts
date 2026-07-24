@@ -50,10 +50,13 @@ vi.mock(
 );
 
 vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@you-agent-factory/components/overlays")
-  >();
-  const mockDialog = await import("../../../../../testing/mock-dashboard-dialog");
+  const actual =
+    await importOriginal<
+      typeof import("@you-agent-factory/components/overlays")
+    >();
+  const mockDialog = await import(
+    "../../../../../testing/mock-dashboard-dialog"
+  );
 
   return {
     ...actual,

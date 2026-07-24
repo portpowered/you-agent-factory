@@ -1,12 +1,9 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-
 import {
   DashboardActionButton,
   surfacePanelVariants,
 } from "../../../components/ui";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { cn } from "../../../lib/cn";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/presentation/current-selection-pill";

@@ -10,13 +10,13 @@ import {
   defaultGraphDocumentScopeKey,
   renderEditableFactoryGraphHook,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
-import { currentFactoryDocument } from "../lib/draft/factory-graph-draft.test-helpers";
 import {
   createHookTestGraphEditorDraftState,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
 import { currentFactoryDocumentQueryKey } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { currentFactoryDocument } from "../lib/draft/factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 
 const hookState = vi.hoisted(() => ({

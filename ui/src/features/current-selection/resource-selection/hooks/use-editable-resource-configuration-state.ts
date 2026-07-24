@@ -104,9 +104,7 @@ function buildReadyEditableResourceConfigurationState({
   setSessionState,
   selectedEditableValues,
 }: {
-  editableDefinition: NonNullable<
-    CurrentFactoryDocument
-  >;
+  editableDefinition: NonNullable<CurrentFactoryDocument>;
   resourceName: string;
   sessionState: EditableResourceSessionState;
   setSessionState: (

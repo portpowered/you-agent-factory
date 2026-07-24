@@ -1,10 +1,9 @@
-import type { HTMLAttributes, ReactNode } from "react";
-
 import {
   WIDGET_FRAME_MIN_WIDTH_CLASS,
   WIDGET_FRAME_WIDE_BODY_CLASS,
   widgetFrameDetailCardClass,
 } from "@you-agent-factory/components/recipes";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../../../../lib/cn";
 import { AgentBentoCard } from "../agent-bento";

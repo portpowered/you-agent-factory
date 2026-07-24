@@ -32,14 +32,17 @@ describe("getCurrentSelectionGraphDraftConflictMessages", () => {
       "图草稿可能已过期",
       "当前选择保存已更新工厂拓扑。在保存图之前，请查看或放弃未保存的图草稿。",
     ],
-  ] as const)("resolves %s graph-draft conflict warning copy", (locale, expectedTitle, expectedDescription) => {
-    const messages = getCurrentSelectionGraphDraftConflictMessages(locale);
+  ] as const)(
+    "resolves %s graph-draft conflict warning copy",
+    (locale, expectedTitle, expectedDescription) => {
+      const messages = getCurrentSelectionGraphDraftConflictMessages(locale);
 
-    expect(messages.graphDraftConflictWarningTitle).toBe(expectedTitle);
-    expect(messages.graphDraftConflictWarningDescription).toBe(
-      expectedDescription,
-    );
-  });
+      expect(messages.graphDraftConflictWarningTitle).toBe(expectedTitle);
+      expect(messages.graphDraftConflictWarningDescription).toBe(
+        expectedDescription,
+      );
+    },
+  );
 
   it("does not claim the graph draft was discarded or merged", () => {
     for (const locale of SUPPORTED_LOCALES) {

@@ -27,11 +27,7 @@ export function createComponentsPackageAliases(
   for (const categoryPath of COMPONENT_CATEGORY_EXPORT_PATHS) {
     aliases.push({
       find: `@you-agent-factory/components/${categoryPath}`,
-      replacement: path.join(
-        componentsPackageRoot,
-        categoryPath,
-        "index.ts",
-      ),
+      replacement: path.join(componentsPackageRoot, categoryPath, "index.ts"),
     });
   }
 

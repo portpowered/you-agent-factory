@@ -115,9 +115,7 @@ describe("WorkstationRequestDetailCard agent run inspection", () => {
   }
 
   function getAgentRunInspectionRegion() {
-    return within(
-      screen.getByRole("region", { name: "Agent run inspection" }),
-    );
+    return within(screen.getByRole("region", { name: "Agent run inspection" }));
   }
 
   it("renders an explicit empty state for AGENT_RUN requests without inspection metadata", () => {

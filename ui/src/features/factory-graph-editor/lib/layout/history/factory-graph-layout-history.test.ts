@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import { createDefaultFactoryLayout } from "../factory-graph-layout-operations";
 import {
   applyFactoryLayoutCommand,
   createMoveFactoryLayoutNodeCommand,
@@ -17,9 +17,10 @@ import {
   redoFactoryLayoutHistory,
   undoFactoryLayoutHistory,
 } from "./factory-graph-layout-history";
-import { createDefaultFactoryLayout } from "../factory-graph-layout-operations";
 
-function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
+function requireCommand(
+  command: FactoryLayoutCommand | null,
+): FactoryLayoutCommand {
   expect(command).not.toBeNull();
   if (!command) {
     throw new Error("Expected layout command to be created.");
@@ -76,7 +77,10 @@ describe("factory graph layout history", () => {
       }),
     );
     const history = pushFactoryLayoutHistoryCommand(
-      pushFactoryLayoutHistoryCommand(createFactoryLayoutHistoryState(), moveCommand),
+      pushFactoryLayoutHistoryCommand(
+        createFactoryLayoutHistoryState(),
+        moveCommand,
+      ),
       viewportCommand,
     );
 

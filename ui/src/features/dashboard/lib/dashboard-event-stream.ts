@@ -77,7 +77,8 @@ function cachedFactoryWithBundledFiles(
   sessionID: string,
   streamIdentity?: StreamDerivedCacheIdentity | null,
 ): CanonicalFactoryDefinition | null | undefined {
-  const resolvedStreamIdentity = resolveStreamDerivedCacheIdentity(streamIdentity);
+  const resolvedStreamIdentity =
+    resolveStreamDerivedCacheIdentity(streamIdentity);
   return (
     queryClient.getQueryData<CurrentFactoryDocument>(
       currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
@@ -101,7 +102,8 @@ export function syncCurrentFactoryDefinition(
   if (payloadFactory == null) {
     return;
   }
-  const resolvedStreamIdentity = resolveStreamDerivedCacheIdentity(streamIdentity);
+  const resolvedStreamIdentity =
+    resolveStreamDerivedCacheIdentity(streamIdentity);
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
     const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(

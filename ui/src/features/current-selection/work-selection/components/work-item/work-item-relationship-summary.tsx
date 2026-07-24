@@ -33,9 +33,7 @@ export function FocusedRelationshipSummary({
       })}
     >
       <div className="grid gap-1">
-        <Label>
-          {messages.relationshipFocusSummaryHeading}
-        </Label>
+        <Label>{messages.relationshipFocusSummaryHeading}</Label>
         <Code className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {node.label}
         </Code>

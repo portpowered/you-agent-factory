@@ -75,8 +75,8 @@ describe("factory-preview generated types", () => {
         },
       },
     };
-    expect(
-      canonicalRequest.content["application/json"].sourceKind,
-    ).toBe("WORKFLOW_NAME");
+    expect(canonicalRequest.content["application/json"].sourceKind).toBe(
+      "WORKFLOW_NAME",
+    );
   });
 });

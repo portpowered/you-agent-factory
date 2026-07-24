@@ -36,30 +36,32 @@ describe("doc-editable-values", () => {
       ],
     });
 
-    expect(resolveEditableDocValues(factory, "factory/docs/overview.md")).toEqual(
-      {
-        fileName: "overview.md",
-        inlineContent: "# Overview\n",
-        targetPath: "factory/docs/overview.md",
-      },
-    );
+    expect(
+      resolveEditableDocValues(factory, "factory/docs/overview.md"),
+    ).toEqual({
+      fileName: "overview.md",
+      inlineContent: "# Overview\n",
+      targetPath: "factory/docs/overview.md",
+    });
   });
 
   it("preserves the original extension when the rename omits one", () => {
+    expect(resolveFileNameWithExtensionPreserved("guide", ".md")).toBe(
+      "guide.md",
+    );
     expect(
-      resolveFileNameWithExtensionPreserved("guide", ".md"),
-    ).toBe("guide.md");
-    expect(resolveDocTargetPathFromDraft({
-      fileName: "guide",
-      inlineContent: "body",
-      originalExtension: ".md",
-    })).toBe("factory/docs/guide.md");
+      resolveDocTargetPathFromDraft({
+        fileName: "guide",
+        inlineContent: "body",
+        originalExtension: ".md",
+      }),
+    ).toBe("factory/docs/guide.md");
   });
 
   it("keeps an explicitly changed extension", () => {
-    expect(
-      resolveFileNameWithExtensionPreserved("guide.txt", ".md"),
-    ).toBe("guide.txt");
+    expect(resolveFileNameWithExtensionPreserved("guide.txt", ".md")).toBe(
+      "guide.txt",
+    );
   });
 
   it("applies draft edits to the selected bundled doc only", () => {
@@ -78,15 +80,11 @@ describe("doc-editable-values", () => {
       ],
     });
 
-    const pending = applyEditableDocDraft(
-      factory,
-      "factory/docs/overview.md",
-      {
-        fileName: "guide.md",
-        inlineContent: "# Guide\n",
-        originalExtension: ".md",
-      },
-    );
+    const pending = applyEditableDocDraft(factory, "factory/docs/overview.md", {
+      fileName: "guide.md",
+      inlineContent: "# Guide\n",
+      originalExtension: ".md",
+    });
 
     expect(pending?.supportingFiles?.bundledFiles).toEqual([
       {
@@ -121,7 +119,12 @@ describe("doc-editable-values", () => {
     );
     expect(extractFileExtension("README")).toBeNull();
     expect(extractFileExtension("notes.")).toBeNull();
-    expect(resolveEditableDocValues(factoryWithBundledFiles(undefined), "factory/docs/missing.md")).toBeNull();
+    expect(
+      resolveEditableDocValues(
+        factoryWithBundledFiles(undefined),
+        "factory/docs/missing.md",
+      ),
+    ).toBeNull();
   });
 
   it("lists doc target paths and rejects invalid apply targets", () => {

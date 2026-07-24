@@ -5,28 +5,28 @@ import {
   type FactoryGraphLargeEditorFixture,
   factoryGraphLargeEditorFixtures,
 } from "../../fixtures/factory-graph-large-editor-fixtures";
+import { applyFactoryGraphPendingEdits } from "../../operations/factory-graph-operations";
 import {
   addFactoryLayoutEdgeWaypoint,
   moveFactoryLayoutEdgeWaypoint,
   removeFactoryLayoutEdgeWaypoint,
 } from "../factory-graph-layout-edge-waypoints";
 import {
-  applyFactoryLayoutCommand,
-  createUpdateFactoryLayoutEdgeWaypointsCommand,
-  invertFactoryLayoutCommand,
-} from "../history/factory-graph-layout-commands";
-import {
   applyPendingFactoryLayout,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
 } from "../factory-graph-layout-operations";
+import { projectFactoryGraphWithCanonicalLayout } from "../factory-graph-layout-projection";
+import {
+  applyFactoryLayoutCommand,
+  createUpdateFactoryLayoutEdgeWaypointsCommand,
+  invertFactoryLayoutCommand,
+} from "../history/factory-graph-layout-commands";
 import {
   FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS,
   measureMedianOperationMs,
 } from "./factory-graph-layout-performance-budgets";
-import { projectFactoryGraphWithCanonicalLayout } from "../factory-graph-layout-projection";
-import { applyFactoryGraphPendingEdits } from "../../operations/factory-graph-operations";
 
 const MULTI_NODE_DRAG_SELECTION_SIZE = 20;
 
@@ -149,10 +149,7 @@ async function expectFixtureWithinBudget(
       throw new Error("Expected waypoint command to be created.");
     }
     const nextLayout = applyFactoryLayoutCommand(layout, command);
-    applyFactoryLayoutCommand(
-      nextLayout,
-      invertFactoryLayoutCommand(command),
-    );
+    applyFactoryLayoutCommand(nextLayout, invertFactoryLayoutCommand(command));
   });
   expect(waypointHistoryMedianMs).toBeLessThanOrEqual(budget.waypointHistoryMs);
 

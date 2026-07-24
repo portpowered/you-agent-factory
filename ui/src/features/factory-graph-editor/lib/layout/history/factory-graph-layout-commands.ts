@@ -5,6 +5,13 @@ import {
   setFactoryLayoutEdgeWaypoints,
 } from "../factory-graph-layout-edge-waypoints";
 import {
+  type FactoryLayout,
+  type FactoryLayoutPoint,
+  type FactoryLayoutViewport,
+  factoryLayoutNodePosition,
+  moveFactoryLayoutNode,
+} from "../factory-graph-layout-operations";
+import {
   addFactoryLayoutGroup,
   type FactoryLayoutGroup,
   factoryLayoutGroupById,
@@ -13,13 +20,6 @@ import {
   removeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../visual-groups/factory-graph-layout-groups";
-import {
-  type FactoryLayout,
-  type FactoryLayoutPoint,
-  type FactoryLayoutViewport,
-  factoryLayoutNodePosition,
-  moveFactoryLayoutNode,
-} from "../factory-graph-layout-operations";
 
 export type FactoryLayoutGroupSnapshot =
   | { kind: "absent" }
@@ -372,7 +372,9 @@ export function createResetFactoryLayoutCommand(input: {
   toLayout: FactoryLayout;
 }): FactoryLayoutCommand | null {
   if (
-    JSON.stringify(normalizeFactoryLayoutForCommandComparison(input.fromLayout)) ===
+    JSON.stringify(
+      normalizeFactoryLayoutForCommandComparison(input.fromLayout),
+    ) ===
     JSON.stringify(normalizeFactoryLayoutForCommandComparison(input.toLayout))
   ) {
     return null;
@@ -556,11 +558,7 @@ export function applyFactoryLayoutCommand(
     case "reset-layout":
       return structuredClone(command.toLayout);
     case "update-edge-waypoints":
-      return setFactoryLayoutEdgeWaypoints(
-        layout,
-        command.edgeId,
-        command.to,
-      );
+      return setFactoryLayoutEdgeWaypoints(layout, command.edgeId, command.to);
     case "create-group":
       return addFactoryLayoutGroup(layout, command.group);
     case "update-group": {

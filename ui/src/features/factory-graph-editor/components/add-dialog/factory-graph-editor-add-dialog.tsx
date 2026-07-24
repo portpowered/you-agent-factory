@@ -25,12 +25,12 @@ import type {
   FactoryGraphAddWorkerType,
 } from "../../lib/editor/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
+import { FactoryGraphEditorAddWorkerModelOperationsFields } from "../factory-graph-editor-add-worker-model-operations-fields";
 import {
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextareaField,
   FactoryGraphEditorTextField,
 } from "./factory-graph-editor-add-dialog-fields";
-import { FactoryGraphEditorAddWorkerModelOperationsFields } from "../factory-graph-editor-add-worker-model-operations-fields";
 import { FactoryGraphEditorAddWorkstationFields } from "./factory-graph-editor-add-workstation-fields";
 
 export function FactoryGraphEditorAddEntityDialog({

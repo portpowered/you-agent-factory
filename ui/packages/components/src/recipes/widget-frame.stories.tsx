@@ -1,17 +1,17 @@
-import { expect, within } from "storybook/test";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import { expect, within } from "storybook/test";
 
 import {
   WidgetDetailCopy,
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
+  WidgetErrorState,
   WidgetFrame,
   WidgetFrameDisclosure,
   WidgetFrameDisclosurePanel,
   WidgetFrameDisclosureTrigger,
-  WidgetErrorState,
   WidgetLoadingState,
   WidgetSubtitle,
   WidgetSuccessState,
@@ -47,7 +47,10 @@ function ResponsiveWidgetFrameRecipeExample() {
     <WidgetFrame
       className={WIDGET_FRAME_RESPONSIVE_SHELL_CLASS}
       headerAction={
-        <button className="shrink-0 rounded-lg border border-outline px-3 py-2 text-body-medium" type="button">
+        <button
+          className="shrink-0 rounded-lg border border-outline px-3 py-2 text-body-medium"
+          type="button"
+        >
           Refresh
         </button>
       }
@@ -132,24 +135,22 @@ async function expectResponsiveWidgetFrameRecipeContract(
 
   await expect(title).toBeVisible();
   await expect(refreshButton).toBeVisible();
-  await expect(
-    within(frame).getByText("42 host-provided items"),
-  ).toBeVisible();
-  await expect(
-    within(frame).getByRole("alert"),
-  ).toBeVisible();
+  await expect(within(frame).getByText("42 host-provided items")).toBeVisible();
+  await expect(within(frame).getByRole("alert")).toBeVisible();
   await expect(expandButton).toBeVisible();
 
   const titleBox = title.getBoundingClientRect();
   const refreshBox = refreshButton.getBoundingClientRect();
 
   expect(
-    titleBox.bottom <= refreshBox.top + 1 || titleBox.right <= refreshBox.left + 1,
+    titleBox.bottom <= refreshBox.top + 1 ||
+      titleBox.right <= refreshBox.left + 1,
   ).toBe(true);
   expect((frame.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
-  expect(expandButton.getBoundingClientRect().right <= (shell?.getBoundingClientRect().right ?? 0) + 1).toBe(
-    true,
-  );
+  expect(
+    expandButton.getBoundingClientRect().right <=
+      (shell?.getBoundingClientRect().right ?? 0) + 1,
+  ).toBe(true);
 }
 
 export const ResponsiveCompact: Story = {
@@ -223,7 +224,9 @@ export const LoadingState: Story = {
       <WidgetFrame title="Example widget">
         <WidgetLoadingState>
           <WidgetEmptyStateTitle>Loading content</WidgetEmptyStateTitle>
-          <WidgetEmptyStateText>Host-provided loading message.</WidgetEmptyStateText>
+          <WidgetEmptyStateText>
+            Host-provided loading message.
+          </WidgetEmptyStateText>
         </WidgetLoadingState>
       </WidgetFrame>
     </div>
@@ -231,7 +234,10 @@ export const LoadingState: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
-    await expect(canvas.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    await expect(canvas.getByRole("status")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
     await expect(
       canvas.getByRole("heading", { name: "Loading content" }),
     ).toBeVisible();
@@ -244,7 +250,9 @@ export const ErrorState: Story = {
       <WidgetFrame title="Example widget">
         <WidgetErrorState>
           <WidgetEmptyStateTitle>Request failed</WidgetEmptyStateTitle>
-          <WidgetEmptyStateText>Host-provided error message.</WidgetEmptyStateText>
+          <WidgetEmptyStateText>
+            Host-provided error message.
+          </WidgetEmptyStateText>
         </WidgetErrorState>
       </WidgetFrame>
     </div>
@@ -265,7 +273,9 @@ export const SuccessState: Story = {
       <WidgetFrame title="Example widget">
         <WidgetSuccessState>
           <WidgetEmptyStateTitle>Action completed</WidgetEmptyStateTitle>
-          <WidgetEmptyStateText>Host-provided success message.</WidgetEmptyStateText>
+          <WidgetEmptyStateText>
+            Host-provided success message.
+          </WidgetEmptyStateText>
         </WidgetSuccessState>
       </WidgetFrame>
     </div>
@@ -355,10 +365,7 @@ export const ExpandedDisclosure: Story = {
               <WidgetEmptyStateTitle as="h3" className="m-0">
                 Details section
               </WidgetEmptyStateTitle>
-              <WidgetFrameDisclosureTrigger
-                controlsID={panelID}
-                expanded
-              >
+              <WidgetFrameDisclosureTrigger controlsID={panelID} expanded>
                 Collapse details
               </WidgetFrameDisclosureTrigger>
             </div>

@@ -147,9 +147,7 @@ export function ResourceReferencingWorkersSection({
       }
     >
       {workerNames.length > 0 ? (
-        <Text className="m-0 text-on-surface">
-          {formatList(workerNames)}
-        </Text>
+        <Text className="m-0 text-on-surface">{formatList(workerNames)}</Text>
       ) : (
         <CurrentSelectionSupportingText>
           {messages.referencingWorkersEmpty}

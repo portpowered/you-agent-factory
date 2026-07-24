@@ -77,9 +77,9 @@ describe("workstation model invoke type helpers", () => {
         (operation) => operation.name,
       ),
     ).toEqual(["TTS"]);
-    expect(resolveModelWorkerOperations(modelInvokeFactory, "reviewer")).toEqual(
-      [],
-    );
+    expect(
+      resolveModelWorkerOperations(modelInvokeFactory, "reviewer"),
+    ).toEqual([]);
     expect(resolveModelOperationsByWorkerName(modelInvokeFactory)).toEqual({
       "tts-worker": resolveModelWorkerOperations(
         modelInvokeFactory,
@@ -100,7 +100,6 @@ describe("workstation model invoke type helpers", () => {
       ),
     ).toBeUndefined();
   });
-
 });
 
 describe("workstation model invoke binding projection", () => {
@@ -150,7 +149,6 @@ describe("workstation model invoke binding projection", () => {
       },
     ]);
   });
-
 });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: binding validation cases share one operation fixture.
@@ -175,9 +173,11 @@ describe("workstation model invoke binding validation", () => {
         selector: { label: "utterance", type: "TEXT" },
       },
     ]);
-    expect(modelInvokeBindingDraftHasContent(bindings[1] as NonNullable<typeof bindings[1]>)).toBe(
-      false,
-    );
+    expect(
+      modelInvokeBindingDraftHasContent(
+        bindings[1] as NonNullable<(typeof bindings)[1]>,
+      ),
+    ).toBe(false);
   });
 
   it("accepts valid model-invoke bindings without validation errors", () => {

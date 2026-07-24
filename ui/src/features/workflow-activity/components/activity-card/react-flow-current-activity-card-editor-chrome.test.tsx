@@ -36,7 +36,9 @@ describe("CurrentActivityGraphHeaderActions", () => {
         }),
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: messages.modeLeaveEditor })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: messages.modeLeaveEditor }),
+    ).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 

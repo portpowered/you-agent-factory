@@ -174,7 +174,8 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -216,7 +217,8 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
-          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
+          currentFactoryDefinition:
+            buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}

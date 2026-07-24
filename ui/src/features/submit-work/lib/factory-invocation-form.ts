@@ -2,7 +2,8 @@ import type { components } from "../../../api/generated/openapi";
 
 type FactoryInvocationOutputContract =
   components["schemas"]["FactoryInvocationOutputContract"];
-type FactoryInvocationParameter = components["schemas"]["FactoryInvocationParameter"];
+type FactoryInvocationParameter =
+  components["schemas"]["FactoryInvocationParameter"];
 type FactoryInvocationSignature =
   components["schemas"]["FactoryInvocationSignature"];
 
@@ -131,7 +132,8 @@ function projectInvocationField(
     defaultValues,
     description: parameter.description,
     externalName: parameter.externalName,
-    hasNamedBinding: hasBinding(parameter, "NAMED") || hasBinding(parameter, "NAMED_REST"),
+    hasNamedBinding:
+      hasBinding(parameter, "NAMED") || hasBinding(parameter, "NAMED_REST"),
     hasStdinBinding: hasBinding(parameter, "STDIN"),
     kind: resolveInvocationFieldKind(parameter),
     label: parameter.externalName?.trim() || parameter.name,
@@ -145,7 +147,10 @@ function projectInvocationField(
 function resolveInvocationFieldKind(
   parameter: FactoryInvocationParameter,
 ): InvocationFieldModel["kind"] {
-  if (parameter.valueMode === "REPEATED" || parameter.valueMode === "VARIADIC") {
+  if (
+    parameter.valueMode === "REPEATED" ||
+    parameter.valueMode === "VARIADIC"
+  ) {
     return "repeated";
   }
   if (parameter.choices && parameter.choices.length > 0) {

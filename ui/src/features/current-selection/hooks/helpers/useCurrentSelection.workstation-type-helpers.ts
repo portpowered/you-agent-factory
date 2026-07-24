@@ -1,8 +1,8 @@
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type {
   DashboardSnapshot,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 
 export function resolveWorkstationTypeForRequest(
   workstationName: string | undefined,

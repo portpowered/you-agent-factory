@@ -9,7 +9,11 @@ import {
   userEvent,
   within,
 } from "../testing/render";
-import { EnumSelect, OptionalEnumSelect, ResetEnumSelect } from "./package-enum-select";
+import {
+  EnumSelect,
+  OptionalEnumSelect,
+  ResetEnumSelect,
+} from "./package-enum-select";
 import { NativeSelect } from "./package-native-select";
 
 const priorityOptions = [

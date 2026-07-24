@@ -314,9 +314,7 @@ describe("WorkflowActivityBentoCard", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(graphHeader as HTMLElement).getByText(
-        editorMessages.modeObserve,
-      ),
+      within(graphHeader as HTMLElement).getByText(editorMessages.modeObserve),
     ).toBeTruthy();
     expect(
       within(graphCard).queryByRole("heading", { name: "当前活动" }),

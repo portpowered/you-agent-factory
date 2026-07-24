@@ -1,8 +1,7 @@
 import { useReactFlow, useStore, type XYPosition } from "@xyflow/react";
 import { useCallback, useRef, useState } from "react";
-
-import { GraphNodeButton } from "../../../graphs/public";
 import { cn } from "../../../../lib/cn";
+import { GraphNodeButton } from "../../../graphs/public";
 import type { FactoryLayoutPoint } from "../../lib/layout/factory-graph-layout-operations";
 
 type DragSession = {
@@ -24,10 +23,7 @@ export function FactoryGraphEdgeWaypointLayer({
     waypointIndex: number,
     position: FactoryLayoutPoint,
   ) => void;
-  onRemoveWaypoint?: (
-    edgeId: string,
-    waypointIndex: number,
-  ) => void;
+  onRemoveWaypoint?: (edgeId: string, waypointIndex: number) => void;
   waypoints: readonly FactoryLayoutPoint[];
 }) {
   const { screenToFlowPosition } = useReactFlow();
@@ -50,36 +46,36 @@ export function FactoryGraphEdgeWaypointLayer({
   const handlePointerDown = useCallback(
     (waypointIndex: number) =>
       (event: React.PointerEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      dragSessionRef.current = {
-        pointerId: event.pointerId,
-        waypointIndex,
-      };
-      setPreviewPositions(waypoints.map((point) => ({ ...point })));
-      event.currentTarget.setPointerCapture(event.pointerId);
-    },
+        event.stopPropagation();
+        event.preventDefault();
+        dragSessionRef.current = {
+          pointerId: event.pointerId,
+          waypointIndex,
+        };
+        setPreviewPositions(waypoints.map((point) => ({ ...point })));
+        event.currentTarget.setPointerCapture(event.pointerId);
+      },
     [waypoints],
   );
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
-        const dragSession = dragSessionRef.current;
-        if (!dragSession || dragSession.pointerId !== event.pointerId) {
-          return;
-        }
+      const dragSession = dragSessionRef.current;
+      if (!dragSession || dragSession.pointerId !== event.pointerId) {
+        return;
+      }
 
-        const nextPosition = screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
-        setPreviewPositions((current) => {
-          const base = current ?? waypoints.map((point) => ({ ...point }));
-          return base.map((point, index) =>
-            index === dragSession.waypointIndex ? nextPosition : point,
-          );
-        });
-      },
+      const nextPosition = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      setPreviewPositions((current) => {
+        const base = current ?? waypoints.map((point) => ({ ...point }));
+        return base.map((point, index) =>
+          index === dragSession.waypointIndex ? nextPosition : point,
+        );
+      });
+    },
     [screenToFlowPosition, waypoints],
   );
 

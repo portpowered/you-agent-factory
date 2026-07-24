@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: submit-work interaction cases share one form and invocation fixture harness.
 import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
@@ -176,7 +177,9 @@ describe("SubmitWorkCard work type selector", () => {
     const workType = screen.getByRole("combobox", {
       name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
     });
-    const error = screen.getByText(messages.validationMessages.workTypeRequired);
+    const error = screen.getByText(
+      messages.validationMessages.workTypeRequired,
+    );
 
     expect(workType).toHaveAttribute("aria-invalid", "true");
     expect(workType).toHaveAttribute("aria-describedby", error.id);
@@ -291,7 +294,9 @@ describe("SubmitWorkCard form-level status", () => {
     expect(
       screen.queryByText(messages.validationMessages.bothMissing),
     ).toBeNull();
-    expect(screen.queryByRole("alert", { name: /before submitting/i })).toBeNull();
+    expect(
+      screen.queryByRole("alert", { name: /before submitting/i }),
+    ).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -322,7 +327,6 @@ describe("SubmitWorkCard form-level status", () => {
       }),
     ).not.toHaveAttribute("aria-invalid");
   });
-
 });
 
 describe("SubmitWorkCard submission outcomes", () => {
@@ -427,9 +431,12 @@ describe("SubmitWorkCard submission textarea", () => {
       },
     });
 
-    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: messages.requestItemLabel(1),
-    });
+    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>(
+      "textbox",
+      {
+        name: messages.requestItemLabel(1),
+      },
+    );
 
     expect(submissionTextarea.className).toContain("min-h-28");
     expect(submissionTextarea.className).toContain("max-h-52");
@@ -460,9 +467,12 @@ describe("SubmitWorkCard submission textarea", () => {
       onItemTextChange,
     });
 
-    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: messages.requestItemLabel(1),
-    });
+    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>(
+      "textbox",
+      {
+        name: messages.requestItemLabel(1),
+      },
+    );
 
     fireEvent.change(submissionTextarea, {
       target: { value: "Driver review details" },

@@ -101,9 +101,7 @@ describe("buildModelProviderReferenceInput", () => {
 
   it("rejects duplicate identities and reference paths", () => {
     const invalidCatalog = cloneCatalog();
-    invalidCatalog.providers.push(
-      structuredClone(invalidCatalog.providers[0]),
-    );
+    invalidCatalog.providers.push(structuredClone(invalidCatalog.providers[0]));
 
     expect(() =>
       buildModelProviderReferenceInput({ catalog: invalidCatalog }),
@@ -121,10 +119,8 @@ describe("buildModelProviderReferenceInput", () => {
 
   it("rejects impossible capability combinations", () => {
     const invalidCatalog = cloneCatalog();
-    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.messageDeltas =
-      true;
-    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.nativeStreaming =
-      false;
+    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.messageDeltas = true;
+    invalidCatalog.providers[0].maximumResponseFidelityCapabilities.nativeStreaming = false;
 
     expect(() =>
       buildModelProviderReferenceInput({ catalog: invalidCatalog }),

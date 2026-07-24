@@ -1,6 +1,9 @@
 import type { FactoryGraphEditorSelectionState } from "./factory-graph-editor-selection";
 
-export type FactoryGraphEditorToolbarSelectionMode = "none" | "single" | "multi";
+export type FactoryGraphEditorToolbarSelectionMode =
+  | "none"
+  | "single"
+  | "multi";
 
 export type FactoryGraphEditorToolbarSelectionState = {
   mode: FactoryGraphEditorToolbarSelectionMode;
@@ -75,8 +78,7 @@ export function resolveFactoryGraphEditorToolbarDeleteAction(options: {
   return {
     kind: "disabled",
     reason: "non-deletable-selection",
-    selectionMode:
-      options.selectionState.mode === "multi" ? "multi" : "single",
+    selectionMode: options.selectionState.mode === "multi" ? "multi" : "single",
     selectedItemCount: options.selectionState.selectedItemCount,
   };
 }

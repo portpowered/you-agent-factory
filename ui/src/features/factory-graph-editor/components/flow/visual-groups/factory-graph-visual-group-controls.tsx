@@ -69,7 +69,10 @@ export function FactoryGraphVisualGroupControls({
         {selectedGroupLabel}
       </p>
       <div className="mt-3 grid gap-2">
-        <label className="grid gap-1 text-sm text-on-surface" htmlFor={labelFieldId}>
+        <label
+          className="grid gap-1 text-sm text-on-surface"
+          htmlFor={labelFieldId}
+        >
           <span className="text-on-surface-subtle">{labelFieldLabel}</span>
           <input
             aria-invalid={labelError !== null}
@@ -174,10 +177,7 @@ export function FactoryGraphVisualGroupControls({
             })}
             {staleMemberNodeIds.map((nodeId) => (
               <li key={nodeId}>
-                <p
-                  className="m-0 text-sm text-on-error-container"
-                  role="alert"
-                >
+                <p className="m-0 text-sm text-on-error-container" role="alert">
                   {membershipStaleNodeLabel(nodeId)}
                 </p>
               </li>

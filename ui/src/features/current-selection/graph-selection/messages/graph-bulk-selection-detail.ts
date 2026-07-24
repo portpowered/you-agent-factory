@@ -79,10 +79,7 @@ const graphBulkSelectionDetailMessagesByLocale = {
 } satisfies LocalizedMessages<GraphBulkSelectionDetailMessages>;
 
 export const getGraphBulkSelectionDetailMessages = (locale?: string | null) =>
-  resolveLocalizedMessages(
-    graphBulkSelectionDetailMessagesByLocale,
-    locale,
-  );
+  resolveLocalizedMessages(graphBulkSelectionDetailMessagesByLocale, locale);
 
 export function graphBulkSelectionKindLabel(
   messages: GraphBulkSelectionDetailMessages,

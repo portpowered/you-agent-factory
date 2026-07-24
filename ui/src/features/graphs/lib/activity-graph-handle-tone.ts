@@ -1,8 +1,6 @@
 import type { GraphNodeHandleTone } from "@you-agent-factory/components/graphs";
 
-export function graphHandleToneFromId(
-  handleId: string,
-): GraphNodeHandleTone {
+export function graphHandleToneFromId(handleId: string): GraphNodeHandleTone {
   if (handleId.includes("resource")) {
     return "resource";
   }

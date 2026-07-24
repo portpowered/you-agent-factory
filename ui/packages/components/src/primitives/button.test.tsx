@@ -132,7 +132,9 @@ describe("Button loading behavior", () => {
     expect(button).toBeDisabled();
     const spinner = button.querySelector("svg.animate-spin");
     expect(spinner).toBeTruthy();
-    expect(spinner?.querySelector("circle.text-on-surface-disabled")).toBeTruthy();
+    expect(
+      spinner?.querySelector("circle.text-on-surface-disabled"),
+    ).toBeTruthy();
     expect(
       button.querySelector("span.pointer-events-none.absolute.inset-0"),
     ).toBeTruthy();

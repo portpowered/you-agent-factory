@@ -1,8 +1,5 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkOperationHistoryItem } from "../../../hooks/helpers/selected-work-operation-history";

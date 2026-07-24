@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   Button,
   ButtonLink,
@@ -11,9 +9,10 @@ import {
 import {
   Button as PrimitiveButton,
   ButtonLink as PrimitiveButtonLink,
-  buttonVariants as primitiveButtonVariants,
   IconButtonShell as PrimitiveIconButtonShell,
+  buttonVariants as primitiveButtonVariants,
 } from "@you-agent-factory/components/primitives";
+import { describe, expect, it } from "vitest";
 import { renderPackageComponent, screen } from "./testing/render";
 
 describe("@you-agent-factory/components button exports", () => {
@@ -28,12 +27,16 @@ describe("@you-agent-factory/components button exports", () => {
       </>,
     );
 
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save changes" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open docs" })).toHaveAttribute(
       "href",
       "/docs",
     );
-    expect(screen.getByRole("button", { name: "Remove item" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove item" }),
+    ).toBeInTheDocument();
     expect(typeof buttonVariants).toBe("function");
   });
 
@@ -53,7 +56,9 @@ describe("@you-agent-factory/components button exports", () => {
       "href",
       "/settings",
     );
-    expect(screen.getByRole("button", { name: "Close panel" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Close panel" }),
+    ).toBeInTheDocument();
     expect(typeof primitiveButtonVariants).toBe("function");
   });
 });

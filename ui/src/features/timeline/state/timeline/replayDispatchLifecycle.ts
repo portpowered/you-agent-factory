@@ -15,11 +15,15 @@ function stringValue(value: string | null | undefined): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-function dispatchLifecyclePhase(context: FactoryEvent["context"]): string | undefined {
+function dispatchLifecyclePhase(
+  context: FactoryEvent["context"],
+): string | undefined {
   return stringValue(context.phaseName) ?? stringValue(context.phaseId);
 }
 
-function ensureJavaScriptRuntime(state: ReplayWorldState): ReplayJavaScriptRuntime {
+function ensureJavaScriptRuntime(
+  state: ReplayWorldState,
+): ReplayJavaScriptRuntime {
   if (!state.javascriptRuntime) {
     state.javascriptRuntime = {
       checkpoints: [],
@@ -49,7 +53,9 @@ function upsertJavaScriptDispatch(
   runtime: ReplayJavaScriptRuntime,
   dispatch: ReplayJavaScriptDispatch,
 ): void {
-  const index = runtime.dispatches.findIndex((entry) => entry.id === dispatch.id);
+  const index = runtime.dispatches.findIndex(
+    (entry) => entry.id === dispatch.id,
+  );
   if (index >= 0) {
     runtime.dispatches[index] = mergeJavaScriptDispatch(
       runtime.dispatches[index],
@@ -61,7 +67,9 @@ function upsertJavaScriptDispatch(
   recountJavaScriptDispatchTotals(runtime);
 }
 
-function recountJavaScriptDispatchTotals(runtime: ReplayJavaScriptRuntime): void {
+function recountJavaScriptDispatchTotals(
+  runtime: ReplayJavaScriptRuntime,
+): void {
   let queued = 0;
   let running = 0;
   let completed = 0;
@@ -84,7 +92,10 @@ function recountJavaScriptDispatchTotals(runtime: ReplayJavaScriptRuntime): void
   runtime.child_dispatch_counts = { completed, queued, running };
 }
 
-function applyDispatchQueued(state: ReplayWorldState, event: FactoryEvent): void {
+function applyDispatchQueued(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
   const payload = event.payload as Record<string, unknown>;
   const dispatchID = stringValue(event.context.dispatchId);
   if (!dispatchID) {
@@ -114,7 +125,8 @@ function applyDispatchInterrupted(
     id: dispatchID,
     phase: dispatchLifecyclePhase(event.context),
     status:
-      stringValue(payload.observedStatus as string | undefined) ?? "INTERRUPTED",
+      stringValue(payload.observedStatus as string | undefined) ??
+      "INTERRUPTED",
   });
 }
 
@@ -128,8 +140,12 @@ function applyDispatchReconciled(
     return;
   }
   const runtime = ensureJavaScriptRuntime(state);
-  const artifactIDs = [...(payload.artifactIds as string[] | undefined ?? [])];
-  const resultArtifactRef = payload.resultArtifactRef as { id?: string } | undefined;
+  const artifactIDs = [
+    ...((payload.artifactIds as string[] | undefined) ?? []),
+  ];
+  const resultArtifactRef = payload.resultArtifactRef as
+    | { id?: string }
+    | undefined;
   if (resultArtifactRef?.id) {
     artifactIDs.push(resultArtifactRef.id);
   }
@@ -138,7 +154,8 @@ function applyDispatchReconciled(
     id: dispatchID,
     phase: dispatchLifecyclePhase(event.context),
     status:
-      stringValue(payload.reconciledStatus as string | undefined) ?? "RECONCILED",
+      stringValue(payload.reconciledStatus as string | undefined) ??
+      "RECONCILED",
   });
 }
 
@@ -154,9 +171,14 @@ function artifactContentType(
   );
 }
 
-function applyArtifactCreated(state: ReplayWorldState, event: FactoryEvent): void {
+function applyArtifactCreated(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
   const payload = event.payload as Record<string, unknown>;
-  const artifactPayload = payload.artifact as Record<string, unknown> | undefined;
+  const artifactPayload = payload.artifact as
+    | Record<string, unknown>
+    | undefined;
   if (!artifactPayload) {
     return;
   }

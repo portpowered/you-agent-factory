@@ -19,9 +19,7 @@ export function factoryBundledDocNodeId(targetPath: string): string {
 
 export function factoryBundledDocDisplayLabel(targetPath: string): string {
   const normalizedPath = targetPath.replace(/\\/g, "/");
-  const fileName = normalizedPath.slice(
-    normalizedPath.lastIndexOf("/") + 1,
-  );
+  const fileName = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
   return fileName.length > 0 ? fileName : normalizedPath;
 }
 

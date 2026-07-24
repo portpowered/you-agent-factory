@@ -1,10 +1,9 @@
 import { render, screen } from "@testing-library/react";
-
+import { Code, Heading, Label, Text } from "../components/ui";
 import {
   DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES,
   DASHBOARD_TYPOGRAPHY_CONTRACT,
 } from "../components/ui/dashboard-typography";
-import { Code, Heading, Label, Text } from "../components/ui";
 
 describe("dashboard typography role behavior", () => {
   it("renders contract typography roles on representative dashboard primitives", () => {

@@ -47,26 +47,34 @@ export async function verifyExportFactoryDialogValidation({
   const imageInput = dialog.getByLabel("Cover image");
   const imageError = dialog.getByText("Choose a cover image before exporting.");
 
-  await nameInput.evaluate((element, errorId) => {
-    if (element.getAttribute("aria-invalid") !== "true") {
-      throw new Error("expected export factory name input to be aria-invalid");
-    }
-    if (element.getAttribute("aria-describedby") !== errorId) {
-      throw new Error(
-        "expected export factory name input aria-describedby to reference the validation message",
-      );
-    }
-  }, await nameError.getAttribute("id"));
-  await imageInput.evaluate((element, errorId) => {
-    if (element.getAttribute("aria-invalid") !== "true") {
-      throw new Error("expected export cover image input to be aria-invalid");
-    }
-    if (element.getAttribute("aria-describedby") !== errorId) {
-      throw new Error(
-        "expected export cover image input aria-describedby to reference the validation message",
-      );
-    }
-  }, await imageError.getAttribute("id"));
+  await nameInput.evaluate(
+    (element, errorId) => {
+      if (element.getAttribute("aria-invalid") !== "true") {
+        throw new Error(
+          "expected export factory name input to be aria-invalid",
+        );
+      }
+      if (element.getAttribute("aria-describedby") !== errorId) {
+        throw new Error(
+          "expected export factory name input aria-describedby to reference the validation message",
+        );
+      }
+    },
+    await nameError.getAttribute("id"),
+  );
+  await imageInput.evaluate(
+    (element, errorId) => {
+      if (element.getAttribute("aria-invalid") !== "true") {
+        throw new Error("expected export cover image input to be aria-invalid");
+      }
+      if (element.getAttribute("aria-describedby") !== errorId) {
+        throw new Error(
+          "expected export cover image input aria-describedby to reference the validation message",
+        );
+      }
+    },
+    await imageError.getAttribute("id"),
+  );
 
   await expectNoOverflow(
     page,
@@ -106,26 +114,36 @@ export async function verifySubmitWorkCardValidationAlignment({
     "Choose a work type before submitting.",
   );
 
-  await requestName.evaluate((element, errorId) => {
-    if (element.getAttribute("aria-invalid") !== "true") {
-      throw new Error("expected submit work request name input to be aria-invalid");
-    }
-    if (element.getAttribute("aria-describedby") !== errorId) {
-      throw new Error(
-        "expected submit work request name aria-describedby to reference the validation message",
-      );
-    }
-  }, await requestError.getAttribute("id"));
-  await workType.evaluate((element, errorId) => {
-    if (element.getAttribute("aria-invalid") !== "true") {
-      throw new Error("expected submit work type combobox to be aria-invalid");
-    }
-    if (element.getAttribute("aria-describedby") !== errorId) {
-      throw new Error(
-        "expected submit work type aria-describedby to reference the validation message",
-      );
-    }
-  }, await workTypeError.getAttribute("id"));
+  await requestName.evaluate(
+    (element, errorId) => {
+      if (element.getAttribute("aria-invalid") !== "true") {
+        throw new Error(
+          "expected submit work request name input to be aria-invalid",
+        );
+      }
+      if (element.getAttribute("aria-describedby") !== errorId) {
+        throw new Error(
+          "expected submit work request name aria-describedby to reference the validation message",
+        );
+      }
+    },
+    await requestError.getAttribute("id"),
+  );
+  await workType.evaluate(
+    (element, errorId) => {
+      if (element.getAttribute("aria-invalid") !== "true") {
+        throw new Error(
+          "expected submit work type combobox to be aria-invalid",
+        );
+      }
+      if (element.getAttribute("aria-describedby") !== errorId) {
+        throw new Error(
+          "expected submit work type aria-describedby to reference the validation message",
+        );
+      }
+    },
+    await workTypeError.getAttribute("id"),
+  );
 
   await expectNoOverflow(
     page,

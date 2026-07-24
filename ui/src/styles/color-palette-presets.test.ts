@@ -47,20 +47,21 @@ describe("color-palette-presets (US-008)", () => {
     ]);
   });
 
-  it.each(
-    COLOR_PALETTE_IDS,
-  )("defines foundation overrides for palette %s", (paletteId) => {
-    expect(palettePresetsSource).toContain(
-      `[data-color-palette="${paletteId}"]`,
-    );
-
-    for (const key of REQUIRED_FOUNDATION_KEYS) {
-      const selectorPattern = new RegExp(
-        `\\[data-color-palette="${paletteId}"\\][\\s\\S]*?${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*#[0-9a-fA-F]{6}`,
+  it.each(COLOR_PALETTE_IDS)(
+    "defines foundation overrides for palette %s",
+    (paletteId) => {
+      expect(palettePresetsSource).toContain(
+        `[data-color-palette="${paletteId}"]`,
       );
-      expect(palettePresetsSource).toMatch(selectorPattern);
-    }
-  });
+
+      for (const key of REQUIRED_FOUNDATION_KEYS) {
+        const selectorPattern = new RegExp(
+          `\\[data-color-palette="${paletteId}"\\][\\s\\S]*?${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*#[0-9a-fA-F]{6}`,
+        );
+        expect(palettePresetsSource).toMatch(selectorPattern);
+      }
+    },
+  );
 
   it("keeps yellow primary accent across all palette presets", () => {
     for (const paletteId of COLOR_PALETTE_IDS) {

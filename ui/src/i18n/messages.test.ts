@@ -47,11 +47,12 @@ describe("resolveLocalizedMessages", () => {
 });
 
 describe("validateRequiredLocaleMessages", () => {
-  it.each(
-    Object.entries(featureCatalogs),
-  )("finds complete required locale messages for %s", (_catalogName, catalog) => {
-    expect(validateRequiredLocaleMessages(catalog)).toEqual([]);
-  });
+  it.each(Object.entries(featureCatalogs))(
+    "finds complete required locale messages for %s",
+    (_catalogName, catalog) => {
+      expect(validateRequiredLocaleMessages(catalog)).toEqual([]);
+    },
+  );
 
   it("reports missing nested fields from required locale catalogs", () => {
     const messages = {

@@ -32,11 +32,9 @@ describe("deletePersistedTimelineCheckpoint", () => {
     records.set(persisted.storageKey, persisted);
     const controller = new AbortController();
 
-    const deletion = deletePersistedTimelineCheckpoint(
-      indexedDB,
-      persisted,
-      { signal: controller.signal },
-    );
+    const deletion = deletePersistedTimelineCheckpoint(indexedDB, persisted, {
+      signal: controller.signal,
+    });
     await flushPromiseContinuations();
     controls.succeed("open");
     await flushPromiseContinuations();

@@ -146,15 +146,13 @@ export function requestResponseText(request: SelectedWorkRequestHistoryItem) {
 
 export function requestFailureReason(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? (request.failure_reason ??
-        request.response_view?.failureDetail?.reason)
+    ? (request.failure_reason ?? request.response_view?.failureDetail?.reason)
     : request.response?.failureDetail?.reason;
 }
 
 export function requestFailureMessage(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? (request.failure_message ??
-        request.response_view?.failureDetail?.message)
+    ? (request.failure_message ?? request.response_view?.failureDetail?.message)
     : request.response?.failureDetail?.message;
 }
 

@@ -1,8 +1,8 @@
 import {
   buildFactoryGraphBulkSelectionSummary,
   factoryGraphEditorSelectionSignature,
-  resolveGraphSelectionDashboardSyncAction,
   type GraphSelectionDashboardSyncAction,
+  resolveGraphSelectionDashboardSyncAction,
 } from "../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
 import {
   type FactoryGraphEditorSelectionState,

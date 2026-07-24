@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
-
 import {
-  GraphNodeShell,
   type GraphNodeHandle,
+  GraphNodeShell,
 } from "@you-agent-factory/components/graphs";
+import type { ReactNode } from "react";
 
 import { cn } from "../../../lib/cn";
 import { graphHandleToneFromId } from "../lib/activity-graph-handle-tone";

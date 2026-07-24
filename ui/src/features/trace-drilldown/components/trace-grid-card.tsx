@@ -1,4 +1,14 @@
 import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@you-agent-factory/components/data-display";
+import { Button } from "@you-agent-factory/components/primitives";
+import {
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
@@ -12,10 +22,9 @@ import type {
 import {
   Code,
   DescriptionList,
-  Label,
   ExpandablePanelTrigger,
+  Label,
 } from "../../../components/ui";
-import { Button } from "@you-agent-factory/components/primitives";
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,15 +35,6 @@ import {
   formatTypedWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@you-agent-factory/components/data-display";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
@@ -230,9 +230,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <Label as="dt">
-            {messages.batchRelationsLabel}
-          </Label>
+          <Label as="dt">{messages.batchRelationsLabel}</Label>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
@@ -348,9 +346,7 @@ function SelectableWorkList({
               {formatTypedWorkItemLabel(workItem)}
             </Button>
           ) : (
-            <Code size="supporting">
-              {formatTypedWorkItemLabel(workItem)}
-            </Code>
+            <Code size="supporting">{formatTypedWorkItemLabel(workItem)}</Code>
           )}
         </li>
       ))}

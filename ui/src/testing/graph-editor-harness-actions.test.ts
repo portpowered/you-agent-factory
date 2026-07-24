@@ -33,7 +33,9 @@ describe("graph-editor-harness graph actions", () => {
   });
 
   it("createMockEditableFactoryGraph returns false from save when draft validation fails", async () => {
-    const draftState = createHookTestGraphEditorDraftState({ hasChanges: true });
+    const draftState = createHookTestGraphEditorDraftState({
+      hasChanges: true,
+    });
     const graph = createMockEditableFactoryGraph(
       { factoryDocumentScopeKey: "session-default" },
       draftState,
@@ -67,7 +69,9 @@ describe("graph-editor-harness graph actions", () => {
   });
 
   it("createHookTestGraphEditorDraftState resets draft through resetDraft", () => {
-    const draftState = createHookTestGraphEditorDraftState({ hasChanges: true });
+    const draftState = createHookTestGraphEditorDraftState({
+      hasChanges: true,
+    });
 
     draftState.resetDraft();
 

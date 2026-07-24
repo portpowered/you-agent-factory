@@ -12,10 +12,10 @@ import type {
   FactoryGraphNode,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
+import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -88,7 +88,10 @@ type BuildCurrentActivityGraphStateValueArgs = {
     y: number;
     zoom: number;
   }) => void;
-  createVisualGroup: (center: { x: number; y: number }) => { id: string } | null;
+  createVisualGroup: (center: {
+    x: number;
+    y: number;
+  }) => { id: string } | null;
   renameVisualGroup: (groupId: string, label: string) => void;
   setVisualGroupColor: (
     groupId: string,

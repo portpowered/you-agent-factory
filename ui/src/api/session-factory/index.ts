@@ -3,7 +3,6 @@
  * prompt-template contract and validation routes (same `/factory-sessions/...` prefix).
  */
 export * from "./api";
-export * from "./invocation";
 export {
   normalizeSessionFactoryAPIErrorCode,
   SessionFactoryAPIError,
@@ -11,5 +10,6 @@ export {
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
 export * from "./import-activation";
+export * from "./invocation";
 export * from "./operator-errors";
 export * from "./prompt-template";

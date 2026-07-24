@@ -11,11 +11,7 @@ export function FactoryGraphEditorMenuItemCopy({
 }) {
   return (
     <span className="grid justify-items-start gap-0.5">
-      <Text
-        as="span"
-        className="font-semibold text-on-surface"
-        variant="body"
-      >
+      <Text as="span" className="font-semibold text-on-surface" variant="body">
         {label}
       </Text>
       {description ? (

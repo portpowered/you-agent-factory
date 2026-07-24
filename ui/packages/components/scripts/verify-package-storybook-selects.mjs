@@ -221,10 +221,7 @@ export async function verifyPackageSelectEdgeStateStories({
         waitUntil: "networkidle",
       });
       await waitForStoryRender(page);
-      await expectNoHorizontalOverflow(
-        page,
-        `${storyId} (${viewport.label})`,
-      );
+      await expectNoHorizontalOverflow(page, `${storyId} (${viewport.label})`);
       await expectVisibleLabelWithinViewport(
         page,
         PACKAGE_SELECT_STORY_LABEL,
@@ -257,7 +254,9 @@ export async function verifyPackageSelectEdgeStateStories({
           ariaInvalid: element.getAttribute("aria-invalid"),
         }));
         if (errorState.ariaInvalid !== "true") {
-          throw new Error(`Expected ${storyId} to expose aria-invalid on trigger.`);
+          throw new Error(
+            `Expected ${storyId} to expose aria-invalid on trigger.`,
+          );
         }
         const alertText = await page.getByRole("alert").textContent();
         if (!alertText?.toLowerCase().includes("required")) {
@@ -294,7 +293,10 @@ export async function verifyPackageSelectEdgeStateStories({
         if (!triggerBox) {
           throw new Error(`Could not measure trigger bounds for ${storyId}.`);
         }
-        if (triggerBox.x + triggerBox.width > viewport.width + OVERFLOW_TOLERANCE_PX) {
+        if (
+          triggerBox.x + triggerBox.width >
+          viewport.width + OVERFLOW_TOLERANCE_PX
+        ) {
           throw new Error(
             `${storyId} trigger exceeded the ${viewport.label} viewport width.`,
           );

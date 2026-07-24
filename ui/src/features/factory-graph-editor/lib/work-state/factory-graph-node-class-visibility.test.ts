@@ -53,25 +53,26 @@ describe("projectFactoryGraphByHiddenNodeClasses", () => {
     );
   });
 
-  it.each(
-    FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS,
-  )("hides %s nodes and incident edges when that class is hidden", (kind) => {
-    const projected = projectFactoryGraphByHiddenNodeClasses(
-      runtimeTopology,
-      hiddenSet(kind),
-    );
+  it.each(FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS)(
+    "hides %s nodes and incident edges when that class is hidden",
+    (kind) => {
+      const projected = projectFactoryGraphByHiddenNodeClasses(
+        runtimeTopology,
+        hiddenSet(kind),
+      );
 
-    expect(projected.nodes.every((node) => node.kind !== kind)).toBe(true);
-    const hiddenNodeIds = new Set(nodesByKind(kind).map((node) => node.id));
-    expect(
-      projected.edges.every(
-        (edge) =>
-          !hiddenNodeIds.has(edge.sourceId) &&
-          !hiddenNodeIds.has(edge.targetId),
-      ),
-    ).toBe(true);
-    expect(projected.nodes.length).toBeLessThan(runtimeTopology.nodes.length);
-  });
+      expect(projected.nodes.every((node) => node.kind !== kind)).toBe(true);
+      const hiddenNodeIds = new Set(nodesByKind(kind).map((node) => node.id));
+      expect(
+        projected.edges.every(
+          (edge) =>
+            !hiddenNodeIds.has(edge.sourceId) &&
+            !hiddenNodeIds.has(edge.targetId),
+        ),
+      ).toBe(true);
+      expect(projected.nodes.length).toBeLessThan(runtimeTopology.nodes.length);
+    },
+  );
 
   it("hides multiple node classes together", () => {
     const projected = projectFactoryGraphByHiddenNodeClasses(

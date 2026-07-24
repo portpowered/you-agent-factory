@@ -9,8 +9,8 @@ import type {
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
+import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 
 export type GraphEditorTransientControllerReset = {
   setBlockedRemovalReason: (reason: string | null) => void;

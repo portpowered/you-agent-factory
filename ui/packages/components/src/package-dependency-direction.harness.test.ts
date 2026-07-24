@@ -40,7 +40,9 @@ describe("package dependency-direction harness", () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempRoots.map((tempRoot) => rm(tempRoot, { force: true, recursive: true })),
+      tempRoots.map((tempRoot) =>
+        rm(tempRoot, { force: true, recursive: true }),
+      ),
     );
     tempRoots = [];
   });
@@ -65,7 +67,7 @@ describe("package dependency-direction harness", () => {
         "primitives/bad-primitive.tsx":
           'import { SettingsSection } from "../recipes/settings-section";\nexport function BadPrimitive() { return <SettingsSection />; }\n',
         "recipes/settings-section.tsx":
-          'export function SettingsSection() { return <section />; }\n',
+          "export function SettingsSection() { return <section />; }\n",
         "tokens/bad-tokens.ts":
           'import { cn } from "../utilities/cn";\nexport const tokenValue = cn("x");\n',
         "utilities/cn.ts":
@@ -116,7 +118,9 @@ describe("package dependency-direction harness", () => {
       tempRoot,
     );
 
-    await expect(scanPackageDependencyDirection(packageSrcDir)).resolves.toEqual({
+    await expect(
+      scanPackageDependencyDirection(packageSrcDir),
+    ).resolves.toEqual({
       packageDir: path.dirname(packageSrcDir),
       violations: [],
     });
@@ -133,7 +137,7 @@ describe("package dependency-direction harness", () => {
         "primitives/bad-primitive.tsx":
           'import { renderPackageComponent } from "../testing/render";\nexport function BadPrimitive() { return renderPackageComponent(<span />); }\n',
         "testing/render.tsx":
-          'export function renderPackageComponent(node: unknown) { return node; }\n',
+          "export function renderPackageComponent(node: unknown) { return node; }\n",
       },
       tempRoot,
     );
@@ -159,8 +163,10 @@ describe("package dependency-direction harness", () => {
 
     const packageSrcDir = await createPackageTree(
       {
-        "primitives/bad.ts": 'import { SettingsSection } from "../recipes";\nexport const bad = SettingsSection;\n',
-        "recipes/index.ts": 'export function SettingsSection() { return null; }\n',
+        "primitives/bad.ts":
+          'import { SettingsSection } from "../recipes";\nexport const bad = SettingsSection;\n',
+        "recipes/index.ts":
+          "export function SettingsSection() { return null; }\n",
       },
       tempRoot,
     );
@@ -178,38 +184,35 @@ describe("package dependency-direction harness", () => {
     ]);
   });
 
-  it(
-    "CLI fails with actionable output for dependency-direction violations",
-    async () => {
-      const tempRoot = await mkdtemp(
-        path.join(os.tmpdir(), "package-dependency-direction-cli-failure-"),
-      );
-      tempRoots.push(tempRoot);
+  it("CLI fails with actionable output for dependency-direction violations", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "package-dependency-direction-cli-failure-"),
+    );
+    tempRoots.push(tempRoot);
 
-      const packageSrcDir = await createPackageTree(
-        {
-          "primitives/bad.tsx":
-            'import { SettingsSection } from "@you-agent-factory/components/recipes";\nexport function Bad() { return <SettingsSection />; }\n',
-          "recipes/index.ts": 'export function SettingsSection() { return null; }\n',
+    const packageSrcDir = await createPackageTree(
+      {
+        "primitives/bad.tsx":
+          'import { SettingsSection } from "@you-agent-factory/components/recipes";\nexport function Bad() { return <SettingsSection />; }\n',
+        "recipes/index.ts":
+          "export function SettingsSection() { return null; }\n",
+      },
+      tempRoot,
+    );
+
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: path.dirname(packageSrcDir),
+        env: {
+          ...process.env,
+          AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
         },
-        tempRoot,
-      );
-
-      await expect(
-        execFileAsync(process.execPath, [scriptPath], {
-          cwd: path.dirname(packageSrcDir),
-          env: {
-            ...process.env,
-            AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
-          },
-        }),
-      ).rejects.toMatchObject({
-        code: 1,
-        stderr: expect.stringContaining(
-          "@you-agent-factory/components package dependency-direction check failed:",
-        ),
-      });
-    },
-    60_000,
-  );
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining(
+        "@you-agent-factory/components package dependency-direction check failed:",
+      ),
+    });
+  }, 60_000);
 });

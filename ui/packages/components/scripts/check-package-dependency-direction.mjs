@@ -118,7 +118,9 @@ function classifyPackageLayerForRelativePath(relativeToPackageSrc) {
 }
 
 function classifyPackageLayerForFile(filePath, packageSrcDir) {
-  const relativeToPackageSrc = toPosixPath(path.relative(packageSrcDir, filePath));
+  const relativeToPackageSrc = toPosixPath(
+    path.relative(packageSrcDir, filePath),
+  );
 
   if (infrastructureSourceFiles.has(relativeToPackageSrc)) {
     return "infrastructure";
@@ -154,7 +156,9 @@ function classifyPackageImport(specifier) {
 }
 
 function classifyResolvedPackagePath(resolvedPath, packageSrcDir) {
-  const relativeToPackageSrc = toPosixPath(path.relative(packageSrcDir, resolvedPath));
+  const relativeToPackageSrc = toPosixPath(
+    path.relative(packageSrcDir, resolvedPath),
+  );
 
   if (relativeToPackageSrc.startsWith("..")) {
     return null;
@@ -193,10 +197,7 @@ function classifyDependencyViolation(sourceLayer, targetLayer) {
     return null;
   }
 
-  if (
-    sourceLayer !== testingLayerName &&
-    targetLayer === testingLayerName
-  ) {
+  if (sourceLayer !== testingLayerName && targetLayer === testingLayerName) {
     return {
       kind: "testing-support-import",
       message:

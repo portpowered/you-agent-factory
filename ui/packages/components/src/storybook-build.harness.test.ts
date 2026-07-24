@@ -68,26 +68,22 @@ export const Default: Story = {};
 }
 
 describe("package Storybook build harness", () => {
-  it(
-    "exits non-zero when a story imports a missing module",
-    () => {
-      const { storybookDir } = createIsolatedStorybookFixture();
-      const outputDir = mkdtempSync(
-        path.join(os.tmpdir(), "youagentfactory-components-storybook-output-"),
-      );
-      tempRoots.push(outputDir);
+  it("exits non-zero when a story imports a missing module", () => {
+    const { storybookDir } = createIsolatedStorybookFixture();
+    const outputDir = mkdtempSync(
+      path.join(os.tmpdir(), "youagentfactory-components-storybook-output-"),
+    );
+    tempRoots.push(outputDir);
 
-      expect(() => {
-        execSync(
-          `bun run build-storybook -- --config-dir "${storybookDir}" --output-dir "${outputDir}" --loglevel error`,
-          {
-            cwd: packageRoot,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        );
-      }).toThrow();
-    },
-    120_000,
-  );
+    expect(() => {
+      execSync(
+        `bun run build-storybook -- --config-dir "${storybookDir}" --output-dir "${outputDir}" --loglevel error`,
+        {
+          cwd: packageRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+    }).toThrow();
+  }, 120_000);
 });

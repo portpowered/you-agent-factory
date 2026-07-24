@@ -1,10 +1,10 @@
-import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("../../../node_modules/playwright");
