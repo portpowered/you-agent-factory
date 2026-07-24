@@ -21,6 +21,14 @@ var allowedLanes = map[string]struct{}{
 	"PSS-I04": {},
 }
 
+// protocolFamilyToLane is the exclusive shared-composition lane for each
+// customer-facing protocol family. OpenAPI/HTTP surfaces must use PSS-I02.
+var protocolFamilyToLane = map[string]string{
+	"openapi-http": "PSS-I02",
+	"cli":          "PSS-I03",
+	"mcp":          "PSS-I04",
+}
+
 // ValidateDocument schema-validates and semantically checks one inventory document.
 func ValidateDocument(document string, payload []byte) []Diagnostic {
 	root, err := decodeObject(payload)
@@ -171,6 +179,16 @@ func surfaceDiagnostics(document, key string, surface map[string]any) []Diagnost
 			"inventory.unknown_serial_integrator",
 			base+"/serialIntegratorLaneId",
 			fmt.Sprintf("serial integrator lane %s is not one of PSS-I02, PSS-I03, or PSS-I04", strconv.Quote(lane)),
+			document,
+		))
+	}
+
+	protocolFamily, _ := surface["protocolFamily"].(string)
+	if requiredLane, ok := protocolFamilyToLane[protocolFamily]; ok && lane != "" && lane != requiredLane {
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.protocol_lane_mismatch",
+			base+"/serialIntegratorLaneId",
+			fmt.Sprintf("protocol family %s requires serial integrator lane %s; got %s", strconv.Quote(protocolFamily), strconv.Quote(requiredLane), strconv.Quote(lane)),
 			document,
 		))
 	}

@@ -38,6 +38,29 @@ Every shared-surface record includes:
 - Owner-local adapter work outside the exclusive shared paths remains
   **unblocked**.
 
+## PSS-I02 OpenAPI / HTTP shared surfaces
+
+`openapi-http` surfaces serialize exclusively under **PSS-I02**. Required shared
+surfaces cover:
+
+- authored OpenAPI entrypoint and fragments (`api/openapi-main.yaml`,
+  `api/components/**`)
+- bundled OpenAPI output (`api/openapi.yaml`)
+- generated Go server and client artifacts
+- generated TypeScript OpenAPI client when regenerated with the same contract
+  lane
+- top-level HTTP server/route composition
+
+Accepted `HTTP-*` / service-owned adapter cutovers queue on those surfaces;
+this inventory does not perform any cutover by itself.
+
+Owner-local **service-owned** HTTP adapters under service transport paths remain
+**concurrent-safe** relative to PSS-I02 as long as they do not edit the exclusive
+shared composition paths above.
+
+OpenAPI and generated output changes occur only for **approved public contract**
+changes, not package motion.
+
 ## Scope boundary
 
 This model is **integration metadata only**. Publishing or updating the

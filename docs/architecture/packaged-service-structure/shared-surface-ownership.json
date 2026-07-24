@@ -10,6 +10,52 @@
     "activationPolicy": "head-of-queue-only",
     "ownerLocalOutsideExclusivePaths": "unblocked"
   },
-  "surfaces": {},
+  "surfaces": {
+    "http.toplevel.server-route-composition": {
+      "surfaceId": "http.toplevel.server-route-composition",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "pkg/transports/http top-level server/route composition and application wiring (shared composition only; excludes service-owned HTTP adapters)",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "openapi.authored.entrypoint-and-fragments": {
+      "surfaceId": "openapi.authored.entrypoint-and-fragments",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "api/openapi-main.yaml authored entrypoint and api/components/** fragments",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "openapi.bundled.output": {
+      "surfaceId": "openapi.bundled.output",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "api/openapi.yaml bundled published OpenAPI output",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "openapi.generated.go-server-and-client": {
+      "surfaceId": "openapi.generated.go-server-and-client",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "pkg/transports/http/generated/server.gen.go and pkg/transports/http/client/client.gen.go",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    },
+    "openapi.generated.typescript-client": {
+      "surfaceId": "openapi.generated.typescript-client",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "ui/src/api/generated/openapi.ts regenerated with the same OpenAPI contract lane",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    }
+  },
   "holds": {}
 }

@@ -14,21 +14,10 @@
     "openapi.authored.entrypoint-and-fragments": {
       "surfaceId": "openapi.authored.entrypoint-and-fragments",
       "protocolFamily": "openapi-http",
-      "exclusiveChangedPathSummary": "api/openapi-main.yaml and api/components/** authorship",
-      "serialIntegratorLaneId": "PSS-I02",
+      "exclusiveChangedPathSummary": "api/openapi-main.yaml and api/components/**",
+      "serialIntegratorLaneId": "PSS-I03",
       "activeHolder": null,
-      "ownerRequestQueue": [
-        {
-          "requestId": "req-http-definitions-001",
-          "queuePosition": 0,
-          "ownerPacketId": "HTTP-DEF-01"
-        },
-        {
-          "requestId": "req-http-sessions-001",
-          "queuePosition": 1,
-          "ownerPacketId": "HTTP-SES-01"
-        }
-      ],
+      "ownerRequestQueue": [],
       "holdConditionRefs": []
     }
   },

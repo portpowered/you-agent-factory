@@ -9,6 +9,16 @@ const (
 	CanonicalModelDocRelPath  = "docs/architecture/packaged-service-structure/shared-surface-ownership-model.md"
 )
 
+// RequiredPSSI02SurfaceIDs are the shared OpenAPI/HTTP composition surfaces that
+// must be inventoried under serial integrator lane PSS-I02.
+var RequiredPSSI02SurfaceIDs = []string{
+	"openapi.authored.entrypoint-and-fragments",
+	"openapi.bundled.output",
+	"openapi.generated.go-server-and-client",
+	"openapi.generated.typescript-client",
+	"http.toplevel.server-route-composition",
+}
+
 // Diagnostic is one maintainer-readable validation finding.
 type Diagnostic struct {
 	Rule     string
