@@ -31,30 +31,38 @@ func newRootContractTestFactory(t *testing.T) *factoryImpl {
 	return impl
 }
 
+func requireRootErrIs(t *testing.T, err error, want error, label string) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("%s error = %v, want %v", label, err, want)
+	}
+}
+
+func requireNoRootErr(t *testing.T, err error, label string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("%s error = %v, want nil", label, err)
+	}
+}
+
 func TestFactoryImpl_Terminate_MapsLifecycleStates(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
 
 	impl.state = interfaces.FactoryStateRunning
 	got, err := impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
-	if err != nil {
-		t.Fatalf("Terminate(running) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "Terminate(running)")
 	if got.Outcome != factory.ControlOutcomeAccepted {
 		t.Fatalf("Terminate(running) outcome = %q, want ACCEPTED", got.Outcome)
 	}
 
 	impl.state = interfaces.FactoryStateCompleted
 	_, err = impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
-	if !errors.Is(err, factory.ErrAlreadyStopped) {
-		t.Fatalf("Terminate(completed) error = %v, want ErrAlreadyStopped", err)
-	}
+	requireRootErrIs(t, err, factory.ErrAlreadyStopped, "Terminate(completed)")
 
 	impl.state = interfaces.FactoryState("unknown")
 	_, err = impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("Terminate(unknown) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "Terminate(unknown)")
 }
 
 func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
@@ -63,9 +71,7 @@ func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 
 	impl.state = interfaces.FactoryStateIdle
 	got, err := impl.Observe(ctx, factory.ObserveRequest{Scope: factory.ObservationScopeStatus})
-	if err != nil {
-		t.Fatalf("Observe(idle) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "Observe(idle)")
 	if got.Observation.Status == "" {
 		t.Fatal("Observe(idle) status is empty, want projected status")
 	}
@@ -78,9 +84,7 @@ func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 
 	impl.state = interfaces.FactoryState("unknown")
 	_, err = impl.Observe(ctx, factory.ObserveRequest{})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("Observe(unknown) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "Observe(unknown)")
 }
 
 func TestFactoryImpl_PlanAndAcceptDispatch_MapsLifecycleAvailability(t *testing.T) {
@@ -92,9 +96,7 @@ func TestFactoryImpl_PlanAndAcceptDispatch_MapsLifecycleAvailability(t *testing.
 		DispatchID:    "dispatch-1",
 		CorrelationID: "corr-1",
 	})
-	if err != nil {
-		t.Fatalf("PlanDispatch(running) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "PlanDispatch(running)")
 	if planned != (factory.PlanDispatchResult{
 		Outcome:       factory.DispatchPlanOutcomeAccepted,
 		DispatchID:    "dispatch-1",
@@ -107,43 +109,31 @@ func TestFactoryImpl_PlanAndAcceptDispatch_MapsLifecycleAvailability(t *testing.
 		DispatchID:    "dispatch-1",
 		CorrelationID: "corr-1",
 	})
-	if err != nil {
-		t.Fatalf("AcceptDispatchResult(running) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "AcceptDispatchResult(running)")
 	if accepted.Outcome != factory.DispatchPlanOutcomeRetired {
 		t.Fatalf("AcceptDispatchResult outcome = %q, want RETIRED", accepted.Outcome)
 	}
 
 	impl.state = interfaces.FactoryStateFailed
 	_, err = impl.PlanDispatch(ctx, factory.PlanDispatchRequest{DispatchID: "dispatch-2", CorrelationID: "corr-2"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("PlanDispatch(failed) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "PlanDispatch(failed)")
 	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{DispatchID: "dispatch-2", CorrelationID: "corr-2"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("AcceptDispatchResult(failed) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "AcceptDispatchResult(failed)")
 
 	impl.state = interfaces.FactoryState("unknown")
 	_, err = impl.PlanDispatch(ctx, factory.PlanDispatchRequest{DispatchID: "dispatch-3", CorrelationID: "corr-3"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("PlanDispatch(unknown) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "PlanDispatch(unknown)")
 	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{DispatchID: "dispatch-3", CorrelationID: "corr-3"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("AcceptDispatchResult(unknown) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "AcceptDispatchResult(unknown)")
 }
 
-func TestFactoryImpl_CheckpointContracts_MapLifecycleAndOpaquePayload(t *testing.T) {
+func TestFactoryImpl_CaptureCheckpoint_ReturnsOpaquePayload(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
-
 	impl.state = interfaces.FactoryStatePaused
+
 	captured, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{})
-	if err != nil {
-		t.Fatalf("CaptureCheckpoint(paused) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "CaptureCheckpoint(paused)")
 	if captured.Outcome != factory.CheckpointOutcomeCaptured {
 		t.Fatalf("CaptureCheckpoint outcome = %q, want CAPTURED", captured.Outcome)
 	}
@@ -152,62 +142,55 @@ func TestFactoryImpl_CheckpointContracts_MapLifecycleAndOpaquePayload(t *testing
 	}
 
 	named, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
-	if err != nil {
-		t.Fatalf("CaptureCheckpoint(named) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "CaptureCheckpoint(named)")
 	if named.Checkpoint.CheckpointID != "cp-1" {
 		t.Fatalf("CaptureCheckpoint named id = %q, want cp-1", named.Checkpoint.CheckpointID)
 	}
+}
 
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
-	if !errors.Is(err, factory.ErrCheckpointNotFound) {
-		t.Fatalf("LoadCheckpoint(empty) error = %v, want ErrCheckpointNotFound", err)
-	}
+func TestFactoryImpl_LoadCheckpoint_MapsMissingAndLifecycle(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	ctx := context.Background()
+	impl.state = interfaces.FactoryStatePaused
+
+	_, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
+	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(empty)")
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "missing"})
-	if !errors.Is(err, factory.ErrCheckpointNotFound) {
-		t.Fatalf("LoadCheckpoint(missing) error = %v, want ErrCheckpointNotFound", err)
-	}
+	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(missing)")
+
+	impl.state = interfaces.FactoryStateCompleted
+	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-2"})
+	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(completed)")
+
+	impl.state = interfaces.FactoryState("unknown")
+	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-3"})
+	requireRootErrIs(t, err, factory.ErrNotRunning, "LoadCheckpoint(unknown)")
+}
+
+func TestFactoryImpl_RestoreCheckpoint_MapsLifecycle(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	ctx := context.Background()
+	impl.state = interfaces.FactoryStatePaused
 
 	restored, err := impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
 		Checkpoint: factory.Checkpoint{CheckpointID: "cp-1", SchemaVersion: 1, Payload: []byte(`{}`)},
 	})
-	if err != nil {
-		t.Fatalf("RestoreCheckpoint(paused) error = %v, want nil", err)
-	}
+	requireNoRootErr(t, err, "RestoreCheckpoint(paused)")
 	if restored.Outcome != factory.CheckpointOutcomeRestored || restored.CheckpointID != "cp-1" {
 		t.Fatalf("RestoreCheckpoint result = %#v, want restored cp-1", restored)
 	}
 
 	impl.state = interfaces.FactoryStateCompleted
 	_, err = impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-2"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("CaptureCheckpoint(completed) error = %v, want ErrNotRunning", err)
-	}
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-2"})
-	if !errors.Is(err, factory.ErrCheckpointNotFound) {
-		t.Fatalf("LoadCheckpoint(completed) error = %v, want ErrCheckpointNotFound", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "CaptureCheckpoint(completed)")
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
 		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{}`)},
 	})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("RestoreCheckpoint(completed) error = %v, want ErrNotRunning", err)
-	}
-
-	impl.state = interfaces.FactoryState("unknown")
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-3"})
-	if !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("LoadCheckpoint(unknown) error = %v, want ErrNotRunning", err)
-	}
+	requireRootErrIs(t, err, factory.ErrNotRunning, "RestoreCheckpoint(completed)")
 }
 
-func TestProjectRootObservation_OmitsPetriVocabularyAndHonorsScope(t *testing.T) {
-	empty := projectRootObservation(nil, factory.ObservationScopeFull)
-	if empty.Status != "" || empty.Progress != (factory.ObservationProgress{}) || len(empty.InFlightDispatches) != 0 || len(empty.Results) != 0 {
-		t.Fatalf("projectRootObservation(nil) = %#v, want empty", empty)
-	}
-
-	snap := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+func sampleRootObservationSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus:          interfaces.RuntimeStatusActive,
 		InFlightCount:          1,
 		TickCount:              7,
@@ -235,8 +218,17 @@ func TestProjectRootObservation_OmitsPetriVocabularyAndHonorsScope(t *testing.T)
 			},
 		},
 	}
+}
 
-	full := projectRootObservation(snap, factory.ObservationScopeFull)
+func TestProjectRootObservation_NilSnapshotIsEmpty(t *testing.T) {
+	empty := projectRootObservation(nil, factory.ObservationScopeFull)
+	if empty.Status != "" || empty.Progress != (factory.ObservationProgress{}) || len(empty.InFlightDispatches) != 0 || len(empty.Results) != 0 {
+		t.Fatalf("projectRootObservation(nil) = %#v, want empty", empty)
+	}
+}
+
+func TestProjectRootObservation_FullProjectionOmitsNilDispatch(t *testing.T) {
+	full := projectRootObservation(sampleRootObservationSnapshot(), factory.ObservationScopeFull)
 	if full.Status != factory.ObservationStatusActive {
 		t.Fatalf("status = %q, want ACTIVE", full.Status)
 	}
@@ -255,37 +247,58 @@ func TestProjectRootObservation_OmitsPetriVocabularyAndHonorsScope(t *testing.T)
 	if full.Health.StreamGenerationID != "gen-1" {
 		t.Fatalf("health = %#v, want gen-1", full.Health)
 	}
+}
 
-	if statusOnly := projectRootObservation(snap, factory.ObservationScopeStatus); statusOnly.Status != factory.ObservationStatusActive || statusOnly.Progress != (factory.ObservationProgress{}) {
+func TestProjectRootObservation_ScopeFilters(t *testing.T) {
+	snap := sampleRootObservationSnapshot()
+
+	statusOnly := projectRootObservation(snap, factory.ObservationScopeStatus)
+	if statusOnly.Status != factory.ObservationStatusActive || statusOnly.Progress != (factory.ObservationProgress{}) {
 		t.Fatalf("STATUS scope = %#v, want status-only", statusOnly)
 	}
-	if progressOnly := projectRootObservation(snap, factory.ObservationScopeProgress); progressOnly.Progress.TickCount != 7 || progressOnly.Status != "" {
+
+	progressOnly := projectRootObservation(snap, factory.ObservationScopeProgress)
+	if progressOnly.Progress.TickCount != 7 || progressOnly.Status != "" {
 		t.Fatalf("PROGRESS scope = %#v, want progress-only", progressOnly)
 	}
-	if dispatchOnly := projectRootObservation(snap, factory.ObservationScopeDispatches); len(dispatchOnly.InFlightDispatches) != 1 || dispatchOnly.Status != "" {
+
+	dispatchOnly := projectRootObservation(snap, factory.ObservationScopeDispatches)
+	if len(dispatchOnly.InFlightDispatches) != 1 || dispatchOnly.Status != "" {
 		t.Fatalf("DISPATCHES scope = %#v, want dispatches-only", dispatchOnly)
 	}
-	if resultsOnly := projectRootObservation(snap, factory.ObservationScopeResults); len(resultsOnly.Results) != 1 || resultsOnly.Status != "" {
+
+	resultsOnly := projectRootObservation(snap, factory.ObservationScopeResults)
+	if len(resultsOnly.Results) != 1 || resultsOnly.Status != "" {
 		t.Fatalf("RESULTS scope = %#v, want results-only", resultsOnly)
 	}
-	if resourcesOnly := projectRootObservation(snap, factory.ObservationScopeResources); resourcesOnly.Status != "" || len(resourcesOnly.Resources) != 0 {
+
+	resourcesOnly := projectRootObservation(snap, factory.ObservationScopeResources)
+	if resourcesOnly.Status != "" || len(resourcesOnly.Resources) != 0 {
 		t.Fatalf("RESOURCES scope = %#v, want resources-only empty", resourcesOnly)
 	}
-	if healthOnly := projectRootObservation(snap, factory.ObservationScopeHealth); healthOnly.Health.FactoryState == "" || healthOnly.Status != "" {
+
+	healthOnly := projectRootObservation(snap, factory.ObservationScopeHealth)
+	if healthOnly.Health.FactoryState == "" || healthOnly.Status != "" {
 		t.Fatalf("HEALTH scope = %#v, want health-only", healthOnly)
 	}
-	if unknownScope := projectRootObservation(snap, factory.ObservationScope("OTHER")); unknownScope.Status != factory.ObservationStatusActive {
+
+	unknownScope := projectRootObservation(snap, factory.ObservationScope("OTHER"))
+	if unknownScope.Status != factory.ObservationStatusActive {
 		t.Fatalf("unknown scope = %#v, want full observation fallback", unknownScope)
 	}
+}
 
+func TestProjectRootObservation_MapsRuntimeStatus(t *testing.T) {
 	idleSnap := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle}
 	if got := projectRootObservation(idleSnap, ""); got.Status != factory.ObservationStatusIdle {
 		t.Fatalf("idle status = %q, want IDLE", got.Status)
 	}
+
 	finishedSnap := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusFinished}
 	if got := projectRootObservation(finishedSnap, factory.ObservationScopeFull); got.Status != factory.ObservationStatusFinished {
 		t.Fatalf("finished status = %q, want FINISHED", got.Status)
 	}
+
 	unknownStatus := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatus("weird")}
 	if got := projectRootObservation(unknownStatus, factory.ObservationScopeFull); got.Status != factory.ObservationStatusIdle {
 		t.Fatalf("unknown runtime status = %q, want IDLE default", got.Status)
