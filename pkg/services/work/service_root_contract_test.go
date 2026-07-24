@@ -203,7 +203,7 @@ func newRootSeamExerciseFake() *rootServiceFake {
 	}
 }
 
-func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
+func TestServiceRootContract_FakeImplementsAndExercisesAdmissionAndMove(t *testing.T) {
 	fake := newRootSeamExerciseFake()
 	// Peers consume only the singular root Service seam.
 	var service work.Service = fake
@@ -231,6 +231,12 @@ func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 	if move.WorkID != "work-1" || move.ToState != "review" {
 		t.Fatalf("move result = %#v, want work-1 -> review", move)
 	}
+}
+
+func TestServiceRootContract_FakeImplementsAndExercisesListGetAndMoveAndRead(t *testing.T) {
+	fake := newRootSeamExerciseFake()
+	var service work.Service = fake
+	ctx := context.Background()
 
 	listed, err := service.ListWork(ctx, "session-1", work.ListOptions{WorkTypeName: "story"})
 	if err != nil {
@@ -514,8 +520,8 @@ func assertDetachedReadModel(
 	}
 }
 
-func TestServiceRootContract_ContentStagingAndMaterializationSuccess(t *testing.T) {
-	fake := &rootServiceFake{
+func newRootContentSliceSuccessFake() *rootServiceFake {
+	return &rootServiceFake{
 		stageResult: work.StageContentResult{
 			StagedFileRef: "submit-work-stage:v1:opaque-ref",
 			FileName:      "photo.png",
@@ -533,6 +539,10 @@ func TestServiceRootContract_ContentStagingAndMaterializationSuccess(t *testing.
 		},
 		materializePath: "/tmp/materialized/photo.png",
 	}
+}
+
+func TestServiceRootContract_ContentStagingLifecycleSuccess(t *testing.T) {
+	fake := newRootContentSliceSuccessFake()
 	var service work.Service = fake
 	ctx := context.Background()
 
@@ -582,6 +592,12 @@ func TestServiceRootContract_ContentStagingAndMaterializationSuccess(t *testing.
 	if !fake.cleanupCalled {
 		t.Fatal("CleanupContent was not routed through the root Service")
 	}
+}
+
+func TestServiceRootContract_ContentMaterializationSuccess(t *testing.T) {
+	fake := newRootContentSliceSuccessFake()
+	var service work.Service = fake
+	ctx := context.Background()
 
 	localPath, cleanup, err := service.MaterializeContentURL(ctx, "file:///fixtures/photo.png")
 	if err != nil {
@@ -654,7 +670,7 @@ func TestServiceRootContract_ContentTypedFailures(t *testing.T) {
 	}
 }
 
-func TestServiceRootContract_InvocationAndReturnPolicySliceSuccess(t *testing.T) {
+func TestServiceRootContract_PrepareInvocationInputSuccess(t *testing.T) {
 	stdin := "ship from pipe"
 	fake := &rootServiceFake{
 		prepareInvocationResult: work.PreparedInvocationInput{
@@ -663,18 +679,6 @@ func TestServiceRootContract_InvocationAndReturnPolicySliceSuccess(t *testing.T)
 				Source: work.InputSourceStdinText,
 				Text:   stdin,
 			},
-		},
-		primaryResult: work.PrimaryResultSelection{
-			RequestID:     "request-inv-1",
-			Policy:        work.ReturnPolicySubmittedWorkTerminal,
-			WorkID:        "work-terminal-1",
-			WorkTypeName:  "task",
-			WorkName:      "root",
-			TerminalState: "task:complete",
-			PrimaryResult: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
-				Text: "terminal output",
-			}},
 		},
 	}
 	var service work.Service = fake
@@ -693,6 +697,25 @@ func TestServiceRootContract_InvocationAndReturnPolicySliceSuccess(t *testing.T)
 	if len(fake.lastInvocationReq.Arguments) != 1 || fake.lastInvocationReq.Arguments[0] != "-" {
 		t.Fatalf("prepare request = %#v, want dash argv", fake.lastInvocationReq)
 	}
+}
+
+func TestServiceRootContract_ResolvePrimaryResultSubmittedTerminalSuccess(t *testing.T) {
+	fake := &rootServiceFake{
+		primaryResult: work.PrimaryResultSelection{
+			RequestID:     "request-inv-1",
+			Policy:        work.ReturnPolicySubmittedWorkTerminal,
+			WorkID:        "work-terminal-1",
+			WorkTypeName:  "task",
+			WorkName:      "root",
+			TerminalState: "task:complete",
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "terminal output",
+			}},
+		},
+	}
+	var service work.Service = fake
+	ctx := context.Background()
 
 	submittedTerminal, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
 		RequestID: "request-inv-1",
@@ -712,19 +735,26 @@ func TestServiceRootContract_InvocationAndReturnPolicySliceSuccess(t *testing.T)
 	if fake.lastPrimaryInput.RequestID != "request-inv-1" {
 		t.Fatalf("primary input requestID = %q, want request-inv-1", fake.lastPrimaryInput.RequestID)
 	}
+}
 
-	fake.primaryResult = work.PrimaryResultSelection{
-		RequestID:     "request-inv-2",
-		Policy:        work.ReturnPolicyExplicit,
-		WorkID:        "work-summary-1",
-		WorkTypeName:  "summary",
-		WorkName:      "summary",
-		TerminalState: "summary:complete",
-		PrimaryResult: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: "explicit summary",
-		}},
+func TestServiceRootContract_ResolvePrimaryResultExplicitSuccess(t *testing.T) {
+	fake := &rootServiceFake{
+		primaryResult: work.PrimaryResultSelection{
+			RequestID:     "request-inv-2",
+			Policy:        work.ReturnPolicyExplicit,
+			WorkID:        "work-summary-1",
+			WorkTypeName:  "summary",
+			WorkName:      "summary",
+			TerminalState: "summary:complete",
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "explicit summary",
+			}},
+		},
 	}
+	var service work.Service = fake
+	ctx := context.Background()
+
 	explicit, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
 		RequestID: "request-inv-2",
 		InvocationReturn: &work.InvocationReturnConfig{

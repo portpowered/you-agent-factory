@@ -237,18 +237,13 @@ func (s *recordingContentStaging) CleanupContent(_ context.Context, ref string) 
 	return nil
 }
 
-func TestNewServiceDelegatesContentStagingAndMaterializationSlice(t *testing.T) {
+func TestNewServiceDelegatesContentStagingSlice(t *testing.T) {
 	staging := &recordingContentStaging{}
-	materialized := ""
-	materializer := work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
-		materialized = rawURL
-		return "/tmp/materialized/svc.png", func() {}, nil
-	})
 	service := workservice.NewService(
 		workRuntimeResolver{runtime: &recordingFactory{}},
 		os.ReadFile,
 		staging,
-		materializer,
+		nil,
 	)
 	ctx := context.Background()
 
@@ -277,6 +272,21 @@ func TestNewServiceDelegatesContentStagingAndMaterializationSlice(t *testing.T) 
 	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil || staging.cleanupRef != staged.StagedFileRef {
 		t.Fatalf("CleanupContent = (%v, %q)", err, staging.cleanupRef)
 	}
+}
+
+func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
+	materialized := ""
+	materializer := work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
+		materialized = rawURL
+		return "/tmp/materialized/svc.png", func() {}, nil
+	})
+	service := workservice.NewService(
+		workRuntimeResolver{runtime: &recordingFactory{}},
+		os.ReadFile,
+		nil,
+		materializer,
+	)
+	ctx := context.Background()
 
 	path, cleanup, err := service.MaterializeContentURL(ctx, "file:///fixtures/svc.png")
 	if err != nil || path == "" || cleanup == nil || materialized != "file:///fixtures/svc.png" {
