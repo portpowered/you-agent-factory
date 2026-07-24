@@ -211,8 +211,8 @@ func TestCommittedManifestDeclaresClosedVocabulary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifest() error = %v", err)
 	}
-	if err := validateManifest(manifest); err != nil {
-		t.Fatalf("committed manifest validateManifest() error = %v", err)
+	if err := validateManifestAt(repoRoot, manifest); err != nil {
+		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
 	}
 	assertExactStrings(t, "productOwners", manifest.DestinationVocabulary.ProductOwners, closedDestinationVocabulary().ProductOwners)
 	assertExactStrings(t, "nonServiceFamilies", manifest.DestinationVocabulary.NonServiceFamilies, closedDestinationVocabulary().NonServiceFamilies)

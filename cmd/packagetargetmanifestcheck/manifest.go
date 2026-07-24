@@ -40,7 +40,11 @@ type Manifest struct {
 	Stage                      string                `json:"stage"`
 	DestinationVocabulary      DestinationVocabulary `json:"destinationVocabulary"`
 	ArchitectureExceptionNotes map[string]string     `json:"architectureExceptionNotes"`
-	Packages                   []PackageMapping      `json:"packages"`
+	// Inventory is the stable-sorted ledger seed of every production pkg package
+	// path (repository-relative, slash-separated). Package destination rows are
+	// filled separately under Packages.
+	Inventory []string         `json:"inventory"`
+	Packages  []PackageMapping `json:"packages"`
 }
 
 func closedDestinationVocabulary() DestinationVocabulary {
@@ -101,6 +105,18 @@ func loadManifest(relativePath string) (Manifest, error) {
 }
 
 func validateManifest(manifest Manifest) error {
+	// Schema-only validation used by unit fixtures that do not bind a repo tree.
+	return validateManifestSchema(manifest)
+}
+
+func validateManifestAt(repoRoot string, manifest Manifest) error {
+	if err := validateManifestSchema(manifest); err != nil {
+		return err
+	}
+	return validateInventory(repoRoot, manifest.Inventory)
+}
+
+func validateManifestSchema(manifest Manifest) error {
 	if manifest.Version != 1 {
 		return fmt.Errorf("manifest version %d is unsupported; want 1", manifest.Version)
 	}
