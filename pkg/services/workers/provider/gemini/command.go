@@ -12,8 +12,7 @@ import (
 )
 
 // Adapter owns Gemini command construction, environment handling, and native
-// failure/timeout classification for the registry-backed migration path. Later
-// stories extend decoding, conformance, and full conductor wiring on this type.
+// failure/timeout classification for the registry-backed conductor path.
 type Adapter struct{}
 
 // NewAdapter constructs the stateless Gemini adapter.

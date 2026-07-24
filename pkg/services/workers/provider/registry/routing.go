@@ -104,6 +104,9 @@ func (r *Registry) RunnerID(identity string) (string, error) {
 
 // UsesNativeRunner reports whether the resolved identity still executes through
 // the retained provider-native runner path rather than the conductor.
+// Bundled providers remain native only while their Integration still advertises
+// the native-runtime compatibility marker; migrated Integrations route through
+// the conductor without naming a concrete provider in shared orchestration.
 func (r *Registry) UsesNativeRunner(identity string) bool {
 	if r == nil {
 		return false
@@ -112,7 +115,18 @@ func (r *Registry) UsesNativeRunner(identity string) bool {
 	if err != nil {
 		return false
 	}
-	return entry.Manifest().ImplementationAvailability == ImplementationBundled
+	if entry.Manifest().ImplementationAvailability != ImplementationBundled {
+		return false
+	}
+	integration, err := r.Integration(identity)
+	if err != nil {
+		return true
+	}
+	type nativeRuntimeCompatibility interface {
+		UsesProviderNativeRuntime() bool
+	}
+	marker, ok := integration.(nativeRuntimeCompatibility)
+	return ok && marker.UsesProviderNativeRuntime()
 }
 
 // RunnerMetadata projects manifest-authoritative execution capabilities onto

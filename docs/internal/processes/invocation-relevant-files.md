@@ -120,14 +120,16 @@ primary-result behavior.
   from the same authoritative registry: `NewRuntimeWithSelection` constructs
   `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
   retained provider-native runner with `conductorInvocationRunner` when
-  `ProviderOverride` is absent.   Externally supplied selectable identities
-  resolve onto their canonical conductor identity; bundled built-ins continue
-  on the provider-native Infer/command path without migrating Gemini, Kiro,
-  Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
-  dispatch/failure branches and `ProviderOverride` remain intact and bypass
-  the registry/conductor decorators. Concurrent cancel, overlapping dispatch,
-  and destination write-failure/backpressure evidence lives in
-  `conductor/concurrency_test.go`: cancelled closes still reject late writes,
+  `ProviderOverride` is absent. Externally supplied selectable identities
+  resolve onto their canonical conductor identity. Bundled built-ins remain on
+  the provider-native Infer/command path until their package-owned Integration
+  replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
+  stub on the native path and routes migrated Integrations (currently Gemini)
+  through the conductor without a concrete-provider switch in shared
+  orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
+  remain intact and bypass the registry/conductor decorators. Concurrent cancel,
+  overlapping dispatch, and destination write-failure/backpressure evidence lives
+  in `conductor/concurrency_test.go`: cancelled closes still reject late writes,
   shared-conductor dispatch keeps per-invocation correlation/order/terminals
   isolated, and sink backpressure remains the sole terminal for the affected
   invocation without leaking unsafe provider detail into sibling successes.
@@ -860,7 +862,12 @@ response-stream output.
   story. Move Gemini-native failure and timeout parsing into the same package
   (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
   the conductor path consumes provider-owned normalized facts; aggregate exit
-  and timeout bridges may only thin-delegate until legacy deletion. Native
+  and timeout bridges may only thin-delegate until legacy deletion. Bind the
+  migrated provider as a registry catalog Integration
+  (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
+  `UsesNativeRunner` route Integrations that no longer advertise the
+  native-runtime compatibility marker through `conductor.Invoke` without adding
+  a concrete-provider switch in shared orchestration. Native
   JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.

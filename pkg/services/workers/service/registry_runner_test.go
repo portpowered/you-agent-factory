@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
@@ -243,6 +244,46 @@ func TestConductorInvocationRunnerPreservesNativeBuiltInPath(t *testing.T) {
 	}
 }
 
+func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	commandRunner := &geminiConductorCommandRunner{
+		result: workers.CommandResult{Stdout: []byte("gemini via conductor")},
+	}
+	providers := geminiConductorRegistry(t, commandRunner)
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:    work.WorkDispatch{DispatchID: "dispatch-gemini-conductor"},
+		RunnerID:    "gemini",
+		Model:       "gemini-2.5-flash",
+		UserMessage: "hello gemini",
+	})
+	if err != nil {
+		t.Fatalf("Execute(gemini) error = %v", err)
+	}
+	if result.Content != "gemini via conductor" {
+		t.Fatalf("Execute(gemini) content = %q, want gemini via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Gemini", native.calls)
+	}
+	if commandRunner.calls != 1 {
+		t.Fatalf("gemini command runner calls = %d, want 1", commandRunner.calls)
+	}
+	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
+		t.Fatal("UsesNativeRunner(codex) = false, want unmigrated built-ins retained")
+	}
+	if providers.UsesNativeRunner("gemini") {
+		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route")
+	}
+}
+
 func TestConductorInvocationRunnerBypassedWhenProviderOverrideDisablesRegistryDecorators(t *testing.T) {
 	t.Parallel()
 
@@ -366,4 +407,38 @@ func externalConductorManifest(t *testing.T, identity, alias string) providerreg
 	}
 	manifest.MaximumResponseFidelityCapabilities = providerregistry.ResponseFidelityCapabilities{}
 	return manifest
+}
+
+func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *providerregistry.Registry {
+	t.Helper()
+	builtIns, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	replaced, err := providerregistry.ReplaceCatalogIntegration(
+		builtIns,
+		"gemini",
+		gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner}),
+	)
+	if err != nil {
+		t.Fatalf("ReplaceCatalogIntegration(gemini) error = %v", err)
+	}
+	providers, err := providerregistry.New(replaced...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	return providers
+}
+
+type geminiConductorCommandRunner struct {
+	calls  int
+	result workers.CommandResult
+}
+
+func (r *geminiConductorCommandRunner) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	r.calls++
+	return r.result, nil
 }
