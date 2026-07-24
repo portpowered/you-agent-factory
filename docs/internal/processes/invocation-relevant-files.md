@@ -791,7 +791,12 @@ response-stream output.
   `pkg/workers/provider/commandenv` so provider variables retain the established
   non-interactive Git/editor safeguards, and the production mode-selection
   boundary must preserve provider input validation before starting either
-  runner. Native JSONL fixture tests should
+  runner. When migrating a built-in out of aggregate `provider_behavior`, move
+  argv construction, optional-capability rejection, and
+  `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
+  first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
+  keep only a thin aggregate delegate until the later legacy-branch deletion
+  story. Native JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
   Provider retry and compaction records should publish only bounded typed facts

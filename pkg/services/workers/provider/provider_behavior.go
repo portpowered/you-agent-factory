@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
+	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 
 	"sync"
 )
@@ -259,20 +260,11 @@ func BuildCodexStructuredCommand(
 }
 
 func (b geminiProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateGeminiOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"--prompt", req.UserMessage}
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	if req.SessionID != "" {
-		args = append(args, "--resume", req.SessionID)
-	}
-	if skipPermissions {
-		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
-	}
-	return args, nil
+	return geminipkg.BuildArgs(req, skipPermissions)
+}
+
+func (geminiProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
+	return geminipkg.BuildCommandRequest(req, args)
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -420,25 +412,6 @@ func (b piProviderBehavior) BuildArgs(_ context.Context, req workerexecution.Pro
 	}
 	args = append(args, req.UserMessage)
 	return args, nil
-}
-
-func validateGeminiOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
-	}
-	if req.SessionID != "" {
-		return errors.New("session resume is not supported by the gemini runner in v1")
-	}
-	return nil
 }
 
 func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
