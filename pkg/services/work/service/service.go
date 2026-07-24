@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -23,8 +24,10 @@ type RuntimeResolver interface {
 }
 
 type applicationService struct {
-	runtimes          work.RuntimeResolver
-	readSubmittedFile work.SubmittedFileReader
+	runtimes            work.RuntimeResolver
+	readSubmittedFile   work.SubmittedFileReader
+	contentStaging      work.ContentStagingService
+	contentMaterializer work.ContentMaterializer
 }
 
 // New constructs the canonical Work application service.
@@ -32,9 +35,21 @@ func New(sessions RuntimeResolver) *Service {
 	return &Service{sessions: sessions}
 }
 
-// NewService constructs the Work root contract for composition.
-func NewService(runtimes work.RuntimeResolver, readSubmittedFile work.SubmittedFileReader) work.FileSubmissionService {
-	return &applicationService{runtimes: runtimes, readSubmittedFile: readSubmittedFile}
+// NewService constructs the Work root contract for composition. Content staging
+// and materialization may be nil when a caller only needs admission/state-access
+// slices; content methods then return a deterministic configuration error.
+func NewService(
+	runtimes work.RuntimeResolver,
+	readSubmittedFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) work.FileSubmissionService {
+	return &applicationService{
+		runtimes:            runtimes,
+		readSubmittedFile:   readSubmittedFile,
+		contentStaging:      contentStaging,
+		contentMaterializer: contentMaterializer,
+	}
 }
 
 func (s *applicationService) SubmitFileForSession(
@@ -96,6 +111,79 @@ func (s *applicationService) MoveWorkForSession(
 		work.WorkStateChangeSourceAPI,
 		requestID,
 	)
+}
+
+func (s *applicationService) StageContent(
+	ctx context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	if s == nil || s.contentStaging == nil {
+		return work.StageContentResult{}, fmt.Errorf("Work content staging is required")
+	}
+	return s.contentStaging.StageContent(ctx, request)
+}
+
+func (s *applicationService) PrepareContent(
+	ctx context.Context,
+	items []work.StagedSubmissionItem,
+) ([]work.WorkContentPart, error) {
+	if s == nil || s.contentStaging == nil {
+		return nil, fmt.Errorf("Work content staging is required")
+	}
+	return s.contentStaging.PrepareContent(ctx, items)
+}
+
+func (s *applicationService) ResolveContent(
+	ctx context.Context,
+	ref string,
+) (work.ResolvedStagedContent, error) {
+	if s == nil || s.contentStaging == nil {
+		return work.ResolvedStagedContent{}, fmt.Errorf("Work content staging is required")
+	}
+	return s.contentStaging.ResolveContent(ctx, ref)
+}
+
+func (s *applicationService) CleanupContent(ctx context.Context, ref string) error {
+	if s == nil || s.contentStaging == nil {
+		return fmt.Errorf("Work content staging is required")
+	}
+	return s.contentStaging.CleanupContent(ctx, ref)
+}
+
+func (s *applicationService) MaterializeContentURL(
+	ctx context.Context,
+	rawURL string,
+) (string, work.ContentCleanup, error) {
+	if s == nil || s.contentMaterializer == nil {
+		return "", nil, fmt.Errorf("Work content materializer is required")
+	}
+	return s.contentMaterializer.MaterializeContentURL(ctx, rawURL)
+}
+
+func (s *applicationService) PrepareInvocationInput(
+	ctx context.Context,
+	request work.InvocationInputPreparationRequest,
+) (work.PreparedInvocationInput, error) {
+	prepared, err := work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return work.PreparedInvocationInput{}, err
+		}
+		return work.PreparedInvocationInput{}, fmt.Errorf("%w: %w", work.ErrInvalidInvocationInput, err)
+	}
+	return prepared, nil
+}
+
+func (s *applicationService) ResolvePrimaryResult(
+	ctx context.Context,
+	input work.PrimaryResultSelectionInput,
+) (work.PrimaryResultSelection, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return work.PrimaryResultSelection{}, err
+		}
+	}
+	return work.ResolvePrimaryResult(input)
 }
 
 // SubmitFile reads and submits one canonical Work Request file. It is used for

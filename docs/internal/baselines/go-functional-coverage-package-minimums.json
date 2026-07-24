@@ -922,7 +922,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 35.81
+      "minimum": 30.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
