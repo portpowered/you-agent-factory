@@ -2,15 +2,14 @@ package service_test
 
 import (
 	"context"
+	"go.uber.org/zap"
 	"testing"
 	"time"
-
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
-	"go.uber.org/zap"
 )
 
 type modelServiceFixture struct {
@@ -109,4 +108,29 @@ func (externalConstructionHost) AcquireLease(context.Context, *modelRuntimeConfi
 func (externalConstructionHost) ReleaseLease(context.Context, string) error { return nil }
 func (externalConstructionHost) Unload(context.Context, *modelRuntimeConfig, string) error {
 	return nil
+}
+
+type modelRuntimeConfig = models.RuntimeConfig
+type modelRuntimeWorker = models.RuntimeWorker
+type modelRuntimeResource = models.RuntimeResource
+
+type testFactoryConfig struct {
+	Name             string
+	Workers          []modelRuntimeWorker
+	Resources        []modelRuntimeResource
+	ResourceManifest *testResourceManifest
+}
+
+type testResourceManifest struct{ RequiredTools []testRequiredTool }
+type testRequiredTool struct{ Name, Command string }
+
+func projectTestModelsRuntimeConfig(factoryDir string, cfg *testFactoryConfig) *modelRuntimeConfig {
+	if cfg == nil {
+		return nil
+	}
+	return &modelRuntimeConfig{
+		FactoryDirectory: factoryDir,
+		Workers:          append([]modelRuntimeWorker(nil), cfg.Workers...),
+		Resources:        append([]modelRuntimeResource(nil), cfg.Resources...),
+	}
 }

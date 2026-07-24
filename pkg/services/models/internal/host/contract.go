@@ -75,17 +75,10 @@ type PullSnapshot struct {
 }
 
 // LeaseOptions configures lease acquisition.
-type LeaseOptions struct {
-	Holder string
-}
+type LeaseOptions = models.HostLeaseOptions
 
 // Lease grants disposable call capacity for one loaded managed runtime.
-type Lease struct {
-	ID       string
-	Identity Identity
-	Endpoint string
-	Holder   string
-}
+type Lease = models.HostLease
 
 // SourceResolution classifies which backend source satisfies one managed runtime.
 type SourceResolution struct {

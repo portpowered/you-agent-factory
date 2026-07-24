@@ -8,13 +8,18 @@ import (
 var (
 	// ErrNotFound reports that a requested model is absent from configuration.
 	ErrNotFound = errors.New("model not found")
-	// ErrMissing reports that invocation requires uninstalled runtime assets.
+	// ErrMissing reports that infer/local invocation requires uninstalled
+	// runtime assets. Distinct from ErrLoading, ErrFailed, and ErrUnsupported.
 	ErrMissing = errors.New("managed runtime missing")
-	// ErrLoading reports that invocation must wait for runtime preparation.
+	// ErrLoading reports that infer/local invocation must wait for runtime
+	// preparation. Distinct from ErrMissing, ErrFailed, and ErrUnsupported.
 	ErrLoading = errors.New("managed runtime loading")
-	// ErrFailed reports that invocation is blocked by a failed runtime.
+	// ErrFailed reports that infer/local invocation is blocked by a failed
+	// runtime. Distinct from ErrMissing, ErrLoading, and ErrUnsupported.
 	ErrFailed = errors.New("managed runtime failed")
-	// ErrUnsupported reports that invocation targets an unsupported runtime.
+	// ErrUnsupported reports that infer/local invocation targets an unsupported
+	// runtime. Distinct from ErrMissing, ErrLoading, ErrFailed, and
+	// ErrUnsupportedResponseMode.
 	ErrUnsupported = errors.New("managed runtime unsupported")
 )
 
