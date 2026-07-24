@@ -154,3 +154,42 @@ func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
 		}
 	})
 }
+
+func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
+	service := workservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	ctx := context.Background()
+
+	stdin := "from service root"
+	prepared, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: []string{"-"},
+		StdinText: &stdin,
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != stdin {
+		t.Fatalf("prepared = %#v, want stdin text", prepared)
+	}
+
+	_, err = service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: []string{""},
+	})
+	if !errors.Is(err, work.ErrInvalidInvocationInput) {
+		t.Fatalf("PrepareInvocationInput error = %v, want ErrInvalidInvocationInput", err)
+	}
+
+	_, err = service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &work.InvocationReturnConfig{
+			Policy: "NOT_A_POLICY",
+		},
+		WorldState: work.InvocationWorldState{
+			WorkRequestsByID: map[string]work.InvocationWorkRequest{
+				"request-1": {WorkItems: []work.FactoryWorkItem{{ID: "work-1"}}},
+			},
+		},
+	})
+	if !errors.Is(err, work.ErrUnsupportedReturnPolicy) {
+		t.Fatalf("ResolvePrimaryResult error = %v, want ErrUnsupportedReturnPolicy", err)
+	}
+}

@@ -84,6 +84,20 @@ type Service interface {
 	// ErrContentURLInaccessible. Callers do not supply HTTP or filesystem effect
 	// interfaces on the request shape.
 	MaterializeContentURL(context.Context, string) (string, ContentCleanup, error)
+
+	// PrepareInvocationInput is part of the published invocation/return-policy
+	// slice. Peers supply already-collected edge values through plain
+	// InvocationInputPreparationRequest and receive detached PreparedInvocationInput,
+	// or a typed failure such as ErrInvalidInvocationInput (including structured
+	// *InputError values). Peers are not required to construct a separate
+	// InvocationInputPreparation helper for this published slice.
+	PrepareInvocationInput(context.Context, InvocationInputPreparationRequest) (PreparedInvocationInput, error)
+	// ResolvePrimaryResult is part of the published invocation/return-policy
+	// slice. Peers supply PrimaryResultSelectionInput (request identity, authored
+	// return policy, and Work-owned world-state projection) and receive detached
+	// PrimaryResultSelection for SUBMITTED_WORK_TERMINAL and EXPLICIT policies, or
+	// a typed failure such as ErrUnsupportedReturnPolicy or *PrimaryResultError.
+	ResolvePrimaryResult(context.Context, PrimaryResultSelectionInput) (PrimaryResultSelection, error)
 }
 
 // FileSubmissionService is the exact Work role for path-backed submission.

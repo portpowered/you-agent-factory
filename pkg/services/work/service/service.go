@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -157,6 +158,32 @@ func (s *applicationService) MaterializeContentURL(
 		return "", nil, fmt.Errorf("Work content materializer is required")
 	}
 	return s.contentMaterializer.MaterializeContentURL(ctx, rawURL)
+}
+
+func (s *applicationService) PrepareInvocationInput(
+	ctx context.Context,
+	request work.InvocationInputPreparationRequest,
+) (work.PreparedInvocationInput, error) {
+	prepared, err := work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return work.PreparedInvocationInput{}, err
+		}
+		return work.PreparedInvocationInput{}, fmt.Errorf("%w: %w", work.ErrInvalidInvocationInput, err)
+	}
+	return prepared, nil
+}
+
+func (s *applicationService) ResolvePrimaryResult(
+	ctx context.Context,
+	input work.PrimaryResultSelectionInput,
+) (work.PrimaryResultSelection, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return work.PrimaryResultSelection{}, err
+		}
+	}
+	return work.ResolvePrimaryResult(input)
 }
 
 // SubmitFile reads and submits one canonical Work Request file. It is used for

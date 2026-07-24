@@ -33,17 +33,24 @@ type rootServiceFake struct {
 	materializeClean work.ContentCleanup
 	materializeErr   error
 
-	lastSessionID     string
-	lastRequest       work.WorkRequest
-	lastListOpts      work.ListOptions
-	lastWorkID        string
-	lastStateName     string
-	lastRequestID     string
-	lastStageRequest  work.StageContentRequest
-	lastPrepareItems  []work.StagedSubmissionItem
-	lastStagedRef     string
-	lastContentURL    string
-	cleanupCalled     bool
+	prepareInvocationResult work.PreparedInvocationInput
+	prepareInvocationErr    error
+	primaryResult           work.PrimaryResultSelection
+	primaryResultErr        error
+
+	lastSessionID      string
+	lastRequest        work.WorkRequest
+	lastListOpts       work.ListOptions
+	lastWorkID         string
+	lastStateName      string
+	lastRequestID      string
+	lastStageRequest   work.StageContentRequest
+	lastPrepareItems   []work.StagedSubmissionItem
+	lastStagedRef      string
+	lastContentURL     string
+	lastInvocationReq  work.InvocationInputPreparationRequest
+	lastPrimaryInput   work.PrimaryResultSelectionInput
+	cleanupCalled      bool
 	materializeCleaned bool
 }
 
@@ -145,6 +152,22 @@ func (f *rootServiceFake) MaterializeContentURL(
 		cleanup = func() { f.materializeCleaned = true }
 	}
 	return f.materializePath, cleanup, f.materializeErr
+}
+
+func (f *rootServiceFake) PrepareInvocationInput(
+	_ context.Context,
+	request work.InvocationInputPreparationRequest,
+) (work.PreparedInvocationInput, error) {
+	f.lastInvocationReq = request
+	return f.prepareInvocationResult, f.prepareInvocationErr
+}
+
+func (f *rootServiceFake) ResolvePrimaryResult(
+	_ context.Context,
+	input work.PrimaryResultSelectionInput,
+) (work.PrimaryResultSelection, error) {
+	f.lastPrimaryInput = input
+	return f.primaryResult, f.primaryResultErr
 }
 
 var _ work.Service = (*rootServiceFake)(nil)
@@ -637,6 +660,144 @@ func TestServiceRootContract_ContentTypedFailures(t *testing.T) {
 			fake := &rootServiceFake{
 				resolveErr:     tc.want,
 				materializeErr: tc.want,
+			}
+			var service work.Service = fake
+			if err := tc.call(service); !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestServiceRootContract_InvocationAndReturnPolicySliceSuccess(t *testing.T) {
+	stdin := "ship from pipe"
+	fake := &rootServiceFake{
+		prepareInvocationResult: work.PreparedInvocationInput{
+			Source: work.InputSourceStdinText,
+			ResolvedInput: &work.ResolvedInput{
+				Source: work.InputSourceStdinText,
+				Text:   stdin,
+			},
+		},
+		primaryResult: work.PrimaryResultSelection{
+			RequestID:     "request-inv-1",
+			Policy:        work.ReturnPolicySubmittedWorkTerminal,
+			WorkID:        "work-terminal-1",
+			WorkTypeName:  "task",
+			WorkName:      "root",
+			TerminalState: "task:complete",
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "terminal output",
+			}},
+		},
+	}
+	var service work.Service = fake
+	ctx := context.Background()
+
+	prepared, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: []string{"-"},
+		StdinText: &stdin,
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != stdin {
+		t.Fatalf("prepared input = %#v, want detached stdin text", prepared)
+	}
+	if len(fake.lastInvocationReq.Arguments) != 1 || fake.lastInvocationReq.Arguments[0] != "-" {
+		t.Fatalf("prepare request = %#v, want dash argv", fake.lastInvocationReq)
+	}
+
+	submittedTerminal, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
+		RequestID: "request-inv-1",
+		InvocationReturn: &work.InvocationReturnConfig{
+			Policy: work.ReturnPolicySubmittedWorkTerminal,
+		},
+		WorldState: work.InvocationWorldState{},
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult submitted-terminal: %v", err)
+	}
+	if submittedTerminal.Policy != work.ReturnPolicySubmittedWorkTerminal ||
+		submittedTerminal.WorkID != "work-terminal-1" ||
+		len(submittedTerminal.PrimaryResult) != 1 {
+		t.Fatalf("submitted-terminal result = %#v, want detached primary content", submittedTerminal)
+	}
+	if fake.lastPrimaryInput.RequestID != "request-inv-1" {
+		t.Fatalf("primary input requestID = %q, want request-inv-1", fake.lastPrimaryInput.RequestID)
+	}
+
+	fake.primaryResult = work.PrimaryResultSelection{
+		RequestID:     "request-inv-2",
+		Policy:        work.ReturnPolicyExplicit,
+		WorkID:        "work-summary-1",
+		WorkTypeName:  "summary",
+		WorkName:      "summary",
+		TerminalState: "summary:complete",
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "explicit summary",
+		}},
+	}
+	explicit, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
+		RequestID: "request-inv-2",
+		InvocationReturn: &work.InvocationReturnConfig{
+			Policy:        work.ReturnPolicyExplicit,
+			WorkTypeName:  "summary",
+			TerminalState: "summary:complete",
+		},
+		WorldState: work.InvocationWorldState{},
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult explicit: %v", err)
+	}
+	if explicit.Policy != work.ReturnPolicyExplicit ||
+		explicit.WorkID != "work-summary-1" ||
+		len(explicit.PrimaryResult) != 1 ||
+		explicit.PrimaryResult[0].Text != "explicit summary" {
+		t.Fatalf("explicit result = %#v, want configured summary primary content", explicit)
+	}
+}
+
+func TestServiceRootContract_InvocationAndReturnPolicyTypedFailures(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		call func(work.Service) error
+		want error
+	}{
+		{
+			name: "invalid invocation input",
+			call: func(service work.Service) error {
+				_, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+					Arguments: []string{""},
+				})
+				return err
+			},
+			want: work.ErrInvalidInvocationInput,
+		},
+		{
+			name: "unsupported return policy",
+			call: func(service work.Service) error {
+				_, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
+					RequestID: "request-bad-policy",
+					InvocationReturn: &work.InvocationReturnConfig{
+						Policy: "NOT_A_POLICY",
+					},
+					WorldState: work.InvocationWorldState{},
+				})
+				return err
+			},
+			want: work.ErrUnsupportedReturnPolicy,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &rootServiceFake{
+				prepareInvocationErr: work.ErrInvalidInvocationInput,
+				primaryResultErr:     work.ErrUnsupportedReturnPolicy,
 			}
 			var service work.Service = fake
 			if err := tc.call(service); !errors.Is(err, tc.want) {
