@@ -143,6 +143,18 @@ func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *te
 	}
 }
 
+func TestModelProviderForExecutionProjectsCanonicalCursorIdentityToNativeCommand(t *testing.T) {
+	t.Parallel()
+
+	got := modelProviderForExecution("cursor", workerexecution.ResolvedRunnerSelection{
+		RunnerID: workerexecution.RunnerIDCodex,
+		Source:   workerexecution.RunnerSelectionSourceDefault,
+	})
+	if got != "agent" {
+		t.Fatalf("modelProviderForExecution(cursor) = %q, want agent", got)
+	}
+}
+
 type wsMockExecutor struct {
 	dispatch workerexecution.WorkstationExecutionRequest
 	called   bool
