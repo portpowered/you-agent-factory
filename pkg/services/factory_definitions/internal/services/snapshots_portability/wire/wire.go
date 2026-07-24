@@ -10,6 +10,9 @@ import (
 )
 
 // NewService constructs the private snapshots_portability implementation.
+// Construction takes no peer collaborators, Runtime/Petri types, or Wire/root
+// composition ownership: detached capture/import/materialize need no host
+// effects beyond the CTR-DEF Definitions-owned request/result vocabulary.
 func NewService() (snapshotsportability.Service, error) {
 	service := internalservice.New()
 	if service == nil {

@@ -3,6 +3,8 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -630,4 +632,181 @@ func TestRootService_SnapshotSlice_CTRDEFEquivalenceThroughPrivateOwner(t *testi
 
 	assertCTRDEFRootSnapshotSuccessVocabulary(t, root)
 	assertCTRDEFRootSnapshotTypedFailureVocabulary(t, root)
+}
+
+func TestSnapshotsPortabilityPublicSurfaceRejectsForbiddenOwnershipLeaks(t *testing.T) {
+	t.Parallel()
+
+	// Service contract is snapshot/portability-only: no catalog, authoring,
+	// compilation, validation, or distribution ownership methods.
+	serviceType := reflect.TypeOf((*snapshotsportability.Service)(nil)).Elem()
+	// reflect reports interface methods in lexicographic order.
+	wantMethods := []string{
+		"CaptureFactorySnapshot",
+		"MaterializeFactorySnapshot",
+		"PrepareFactorySnapshotImport",
+	}
+	gotMethods := make([]string, 0, serviceType.NumMethod())
+	for i := 0; i < serviceType.NumMethod(); i++ {
+		method := serviceType.Method(i)
+		gotMethods = append(gotMethods, method.Name)
+		assertSnapshotsPortabilitySurfaceTypesAllowed(t, "Service."+method.Name, method.Type)
+	}
+	if !reflect.DeepEqual(gotMethods, wantMethods) {
+		t.Fatalf("Service methods = %v, want portability-only %v", gotMethods, wantMethods)
+	}
+	for _, forbidden := range []string{
+		"ListNamedFactories",
+		"DeleteNamedFactory",
+		"SetCurrentNamedFactoryPointer",
+		"PrepareFactoryLayout",
+		"FlattenFactoryLayout",
+		"ExpandFactoryLayout",
+		"CreateNamedFactory",
+		"ReplaceNamedFactory",
+		"CompileEffectiveFactorySource",
+		"ValidateStructuralFactoryDefinition",
+		"ValidateEffectiveFactoryDefinition",
+		"InstallPackagedFactory",
+		"CreateFactoryScaffold",
+		"ListBuiltInPackagedFactories",
+		"ActivateNamedFactory",
+		"Save",
+	} {
+		if _, ok := serviceType.MethodByName(forbidden); ok {
+			t.Fatalf("Service exposes out-of-lease method %q", forbidden)
+		}
+	}
+
+	// Construction takes no peer collaborators, Runtime/Petri types, or
+	// Wire/root composition ownership — detached snapshot ops need no host
+	// effects beyond Definitions-owned request/result vocabulary.
+	ctorType := reflect.TypeOf(snapshotsportabilitywire.NewService)
+	if ctorType.NumIn() != 0 {
+		t.Fatalf("NewService inputs = %v, want zero injected peer/Wire collaborators", ctorType)
+	}
+	if ctorType.NumOut() != 2 ||
+		ctorType.Out(0) != serviceType ||
+		ctorType.Out(1) != reflect.TypeOf((*error)(nil)).Elem() {
+		t.Fatalf("NewService outputs = %v, want (Service, error)", ctorType)
+	}
+
+	// Observable runtime proof: construct and complete capture → prepare →
+	// materialize with no peer/Wire/root collaborator injected.
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService without peer/Wire collaborators: %v", err)
+	}
+	payload := []byte(`{
+		"name": "surface",
+		"factoryDirectory": "/factories/surface",
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+	captured, err := portability.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{
+			FactoryDir: "/factories/surface",
+			Canonical:  payload,
+			Name:       "surface",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot through portability-only surface: %v", err)
+	}
+	prepared, err := portability.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport through portability-only surface: %v", err)
+	}
+	materialized, err := portability.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "/factories/surface",
+			Snapshot:  captured.Snapshot,
+		},
+	)
+	if err != nil {
+		t.Fatalf("MaterializeFactorySnapshot through portability-only surface: %v", err)
+	}
+	if prepared.Name != "surface" ||
+		prepared.Portable.FactoryDir != "/factories/surface" ||
+		len(prepared.Portable.Assets) == 0 ||
+		materialized.Portable.FactoryDir != "/factories/surface" ||
+		len(materialized.Portable.Assets) == 0 {
+		t.Fatalf(
+			"portability-only round trip prepared=%#v materialized=%#v",
+			prepared,
+			materialized,
+		)
+	}
+}
+
+func assertSnapshotsPortabilitySurfaceTypesAllowed(t *testing.T, path string, typ reflect.Type) {
+	t.Helper()
+	switch typ.Kind() {
+	case reflect.Func:
+		for i := 0; i < typ.NumIn(); i++ {
+			assertSnapshotsPortabilitySurfaceTypesAllowed(t, path+".in", typ.In(i))
+		}
+		for i := 0; i < typ.NumOut(); i++ {
+			assertSnapshotsPortabilitySurfaceTypesAllowed(t, path+".out", typ.Out(i))
+		}
+		return
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan, reflect.Map:
+		if typ.Kind() == reflect.Map {
+			assertSnapshotsPortabilitySurfaceTypesAllowed(t, path+".key", typ.Key())
+		}
+		assertSnapshotsPortabilitySurfaceTypesAllowed(t, path+".elem", typ.Elem())
+		return
+	case reflect.Interface:
+		if typ == reflect.TypeOf((*error)(nil)).Elem() ||
+			typ == reflect.TypeOf((*context.Context)(nil)).Elem() {
+			return
+		}
+		if snapshotsPortabilitySurfacePackageAllowed(typ.PkgPath()) {
+			return
+		}
+		t.Fatalf("%s exposes interface type %v outside Definitions-owned portability vocabulary", path, typ)
+		return
+	}
+
+	pkg := typ.PkgPath()
+	if snapshotsPortabilitySurfacePackageAllowed(pkg) {
+		// Definitions-owned value types are opaque here; do not walk nested fields.
+		return
+	}
+	for _, forbiddenPrefix := range []string{
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions",
+		"github.com/portpowered/infinite-you/pkg/services/workers",
+		"github.com/portpowered/infinite-you/pkg/services/automations",
+		"github.com/portpowered/infinite-you/pkg/services/recordings",
+		"github.com/portpowered/infinite-you/pkg/wire",
+		"github.com/portpowered/infinite-you/pkg/root",
+	} {
+		if pkg == forbiddenPrefix || strings.HasPrefix(pkg, forbiddenPrefix+"/") {
+			t.Fatalf("%s exposes type %v from forbidden ownership package %q", path, typ, pkg)
+		}
+	}
+	t.Fatalf("%s exposes type %v from non-Definitions package %q", path, typ, pkg)
+}
+
+func snapshotsPortabilitySurfacePackageAllowed(pkg string) bool {
+	const definitionsRoot = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	const definitionsContracts = definitionsRoot + "/contracts"
+	const snapshotsPortabilityPkg = definitionsRoot + "/internal/services/snapshots_portability"
+	switch {
+	case pkg == "", pkg == "context", pkg == definitionsRoot, pkg == snapshotsPortabilityPkg:
+		return true
+	case pkg == definitionsContracts, strings.HasPrefix(pkg, definitionsContracts+"/"):
+		return true
+	default:
+		return false
+	}
 }
