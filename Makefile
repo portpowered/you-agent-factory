@@ -119,7 +119,7 @@ endef
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
-.PHONY: fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines
+.PHONY: fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines fnd-12-visualization-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
@@ -272,6 +272,11 @@ fnd-12-mcp-behavior-baselines:
 # docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
 fnd-12-replay-behavior-baselines:
 	$(GO) test ./pkg/services/recordings/replay -run '^TestSideEffects_(InferReturnsRecordedProviderResponse|UnmatchedRequestFailsClearly)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured visualization activation success + typed-failure pair (see
+# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+fnd-12-visualization-behavior-baselines:
+	$(GO) test ./pkg/services/factory_visualization -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
