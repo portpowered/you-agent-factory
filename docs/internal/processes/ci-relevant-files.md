@@ -72,6 +72,13 @@
   `go list ./tests/functional/...` result, the shared-support exclusion, and
   required provider-destination validation in both callers. Required package
   validation protects topology but must not become an execution allowlist.
+  Durable top-level `Test*` inventory for functional-test visualization lives in
+  `internal/functionaltestmetadata`: walk `*_test.go` with `go/parser` /
+  `go/ast`, emit slash-normalized file/package/name/line metadata, take the
+  first Go-doc sentence through `go/doc.Synopsis`, and fail closed with a
+  file-scoped error on malformed source. Later FND cells consume that package
+  for build tags, golden refs, customer-versus-harness classification, and the
+  undocumented baseline; do not reintroduce regex or line-scraping inventories.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
