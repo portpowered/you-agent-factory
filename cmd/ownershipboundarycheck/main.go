@@ -35,6 +35,7 @@ const (
 	ruleInitializerTransport             = "initializer-transport-import"
 	ruleInitializerConstruction          = "initializer-product-construction"
 	rulePlatformDomainImport             = "platform-domain-service-import"
+	rulePeerServiceImplementation        = "peer-service-implementation-import"
 	ruleMappingFilesystem                = "mapping-filesystem-behavior"
 	ruleMappingProcess                   = "mapping-process-behavior"
 	ruleMappingTimer                     = "mapping-timer-behavior"
@@ -46,6 +47,7 @@ var deletionGates = map[string]string{
 	ruleInitializerTransport:             "inject an already-constructed transport operation and remove the transport import from Initializer",
 	ruleInitializerConstruction:          "construct the product dependency in pkg/wire and inject its exact operation into Initializer",
 	rulePlatformDomainImport:             "move domain policy to its owning service and leave Platform implementing an exact external-effect port",
+	rulePeerServiceImplementation:        "import only the peer service root contract (pkg/services/<peer>) instead of a peer implementation or nested subservice",
 	ruleMappingFilesystem:                "move filesystem behavior behind an injected service or exact external-effect port",
 	ruleMappingProcess:                   "move process discovery or execution behind an injected service-owned port",
 	ruleMappingTimer:                     "move timer lifecycle behind an injected clock or owning service",
@@ -213,6 +215,11 @@ func scan(repoRoot string) ([]finding, error) {
 			return nil, fmt.Errorf("scan %s: %w", scanRoot, err)
 		}
 	}
+	peerFindings, err := scanPeerServiceImports(repoRoot, inventory)
+	if err != nil {
+		return nil, fmt.Errorf("scan peer service imports: %w", err)
+	}
+	findings = append(findings, peerFindings...)
 	findings = uniqueFindings(findings)
 	sort.Slice(findings, func(i, j int) bool { return findingKey(findings[i]) < findingKey(findings[j]) })
 	return findings, nil
