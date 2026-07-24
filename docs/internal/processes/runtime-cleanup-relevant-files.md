@@ -519,7 +519,11 @@ capability in Factory Sessions-local Wire, bind its stores and registries only
 after an explicit runtime clock is available, and delegate outer-service
 subscriptions through it. Keep transport consumers on the Factory Sessions root
 cursor contract; they must not construct stores or import this private
-capability.
+capability. That nested owner retains/publishes/filters/completes response
+events only: HTTP/CLI/MCP codecs and writers, Recordings ledger storage,
+identity, live-runtime, invocation, and runtime-opening stay with their own
+owners, and the response_stream surface must not expose Petri orchestrator
+types.
 
 Live Factory Session opening, ordered registry reads, runtime snapshots,
 pause/resume decisions, lifecycle diagnostics, and stop coordination are owned

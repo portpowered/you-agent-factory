@@ -104,7 +104,7 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	if err != nil {
 		t.Fatalf("construct event store: %v", err)
 	}
-	first, err := store.Publish(responseevents.FactoryResponseEvent{
+	first, err := responseService.Publish(store, responseevents.FactoryResponseEvent{
 		RunID: "run-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
 		Provenance: responseevents.Provenance{
 			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
@@ -117,7 +117,7 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	}
 	secondInput := first
 	secondInput.Payload = json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"second"}`)
-	second, err := store.Publish(secondInput)
+	second, err := responseService.Publish(store, secondInput)
 	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}
@@ -144,6 +144,79 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	})
 	if !errors.Is(err, factorysessions.ErrInvalidResponseEventCursor) {
 		t.Fatalf("invalid cursor error = %v, want ErrInvalidResponseEventCursor", err)
+	}
+}
+
+func TestService_SubscribeFactoryResponseEvents_PreservesFilterSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-filter" })
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store, err := responseService.NewEventStore("session-filter", serviceTestClock)
+	if err != nil {
+		t.Fatalf("construct event store: %v", err)
+	}
+
+	message, err := responseService.Publish(store, responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-1",
+		RunID:      "run-1",
+		Kind:       responseevents.KindMessage,
+		Phase:      responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta, Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"keep"}`),
+	})
+	if err != nil {
+		t.Fatalf("publish message: %v", err)
+	}
+	_, err = responseService.Publish(store, responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-1",
+		RunID:      "run-1",
+		Kind:       responseevents.KindReasoning,
+		Phase:      responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta, Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"summaryDelta":"skip"}`),
+	})
+	if err != nil {
+		t.Fatalf("publish reasoning: %v", err)
+	}
+
+	host := &openTestHost{sessions: map[string]*livesession.LiveSession{
+		"session-filter": {ID: "session-filter", ResponseEvents: store},
+	}}
+	gateway := newResponseServiceTestGateway(t, host)
+
+	cursor, err := gateway.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: "session-filter",
+		Kinds:     []factorysessions.ResponseEventKind{factorysessions.ResponseEventKindMessage},
+	})
+	if err != nil {
+		t.Fatalf("SubscribeFactoryResponseEvents filter success: %v", err)
+	}
+	defer cursor.Detach()
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 1 || events[0].Sequence != message.Sequence || events[0].Kind != responseevents.KindMessage {
+		t.Fatalf("filtered events = %#v, want only message sequence %d", events, message.Sequence)
+	}
+
+	_, err = gateway.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: "session-filter",
+		Kinds:     []factorysessions.ResponseEventKind{factorysessions.ResponseEventKind("not-a-supported-kind")},
+	})
+	if !errors.Is(err, factorysessions.ErrInvalidResponseEventFilter) {
+		t.Fatalf("invalid filter error = %v, want ErrInvalidResponseEventFilter", err)
+	}
+	if errors.Is(err, factorysessions.ErrInvalidResponseEventCursor) {
+		t.Fatal("invalid filter must stay distinct from invalid cursor")
 	}
 }
 
