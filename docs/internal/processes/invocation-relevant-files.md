@@ -163,7 +163,16 @@ primary-result behavior.
   worker executor factories (for example `WithCommandRunners`) must preserve
   registry-backed runner selection and provider-identity resolution wiring
   through `construction.Service.WithExecutionFactories` rather than constructing
-  a fresh builder that drops those resolvers.
+  a fresh builder that drops those resolvers. When those resolvers stay wired,
+  authored public provider vocabulary such as `CODEX` canonicalizes to the
+  internal command identity (`codex` / `models.ProviderCodex`) before native
+  Infer; packaged-quorum and other built-in smoke assertions must expect that
+  canonical command, not the public enum spelling. Fake custom Integration E2E
+  proof belongs in `tests/functional/providers/contract/` and must register
+  Integrations constructed inside Workers (for example
+  `inferencecontract.ProgressingExternalIntegration`) rather than
+  calling `inferencecontract.NewDiscovery` / `NewEventDraft` / `NewResponse`
+  from the functional package.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
