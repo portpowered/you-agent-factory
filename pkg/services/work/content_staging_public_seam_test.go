@@ -14,8 +14,10 @@ import (
 )
 
 type publicSeamFileSystem struct {
-	root    string
-	written map[string][]byte
+	root     string
+	writeErr error
+	removed  []string
+	written  map[string][]byte
 }
 
 func (f *publicSeamFileSystem) MkdirTemp(_ string, pattern string) (string, error) {
@@ -23,6 +25,9 @@ func (f *publicSeamFileSystem) MkdirTemp(_ string, pattern string) (string, erro
 }
 
 func (f *publicSeamFileSystem) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
 	if f.written == nil {
 		f.written = make(map[string][]byte)
 	}
@@ -32,7 +37,10 @@ func (f *publicSeamFileSystem) WriteFile(path string, data []byte, mode fs.FileM
 
 func (f *publicSeamFileSystem) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
-func (f *publicSeamFileSystem) RemoveAll(path string) error { return os.RemoveAll(path) }
+func (f *publicSeamFileSystem) RemoveAll(path string) error {
+	f.removed = append(f.removed, path)
+	return os.RemoveAll(path)
+}
 
 type publicSeamRandom struct{ value byte }
 
@@ -162,6 +170,58 @@ func TestPublicWorkRootStagingSeamRejectsTamperedExpiredAndMissingReferences(t *
 		_, err = staging.ResolveContent(ctx, staged.StagedFileRef)
 		if !errors.Is(err, work.ErrStagedContentNotFound) {
 			t.Fatalf("missing ResolveContent error = %v, want ErrStagedContentNotFound", err)
+		}
+	})
+}
+
+func TestPublicWorkRootStagingSeamCleansUpStagedAndPartialStages(t *testing.T) {
+	ctx := context.Background()
+	validRequest := work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "ui.png",
+		MediaType: "image/png",
+		Content:   []byte("png-bytes"),
+	}
+
+	t.Run("explicit cleanup removes directory", func(t *testing.T) {
+		staging := newPublicWorkRootStaging(t, nil)
+		staged, err := staging.StageContent(ctx, validRequest)
+		if err != nil {
+			t.Fatalf("StageContent: %v", err)
+		}
+		resolved, err := staging.ResolveContent(ctx, staged.StagedFileRef)
+		if err != nil {
+			t.Fatalf("ResolveContent: %v", err)
+		}
+		stageDir := filepath.Dir(resolved.Path)
+		if err := staging.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+			t.Fatalf("CleanupContent: %v", err)
+		}
+		if _, err := os.Stat(stageDir); !os.IsNotExist(err) {
+			t.Fatalf("cleaned stage directory stat = %v, want not-exist", err)
+		}
+	})
+
+	t.Run("partial stage cleanup on write failure", func(t *testing.T) {
+		writeErr := errors.New("disk full")
+		filesystem := &publicSeamFileSystem{root: t.TempDir(), writeErr: writeErr}
+		staging, err := workwire.NewContentStagingService(
+			filesystem,
+			publicSeamRandom{value: 0x11},
+			&publicSeamClock{now: time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)},
+			time.Minute,
+		)
+		if err != nil {
+			t.Fatalf("work wire.NewContentStagingService: %v", err)
+		}
+		if _, err := staging.StageContent(ctx, validRequest); !errors.Is(err, writeErr) {
+			t.Fatalf("StageContent error = %v, want write failure", err)
+		}
+		if len(filesystem.removed) != 1 {
+			t.Fatalf("removed paths = %#v, want partial stage cleanup", filesystem.removed)
+		}
+		if _, err := os.Stat(filesystem.removed[0]); !os.IsNotExist(err) {
+			t.Fatalf("partial stage directory stat = %v, want not-exist", err)
 		}
 	})
 }
