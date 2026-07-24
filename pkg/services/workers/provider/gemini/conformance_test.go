@@ -22,12 +22,24 @@ func TestGeminiIntegrationSatisfiesSharedContractSurface(t *testing.T) {
 	integration := geminipkg.NewIntegration(geminipkg.IntegrationDependencies{
 		CommandRunner: &conformanceCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("unused")}},
 	})
+	assertGeminiContractIdentity(t, integration)
+	maximum := assertGeminiContractMaximumCapabilities(t, integration)
+	assertGeminiContractDiscovery(t, integration)
+	assertGeminiContractNegotiatedCapabilities(t, integration, maximum)
+}
+
+func assertGeminiContractIdentity(t *testing.T, integration inference.Integration) {
+	t.Helper()
 	if err := inference.ValidateIdentity(integration.Identity()); err != nil {
 		t.Fatalf("ValidateIdentity() error = %v", err)
 	}
 	if integration.Identity() != inference.Identity("gemini") {
 		t.Fatalf("Identity() = %q, want gemini", integration.Identity())
 	}
+}
+
+func assertGeminiContractMaximumCapabilities(t *testing.T, integration inference.Integration) inference.CapabilitySet {
+	t.Helper()
 	maximum := integration.MaximumCapabilities()
 	if err := inference.ValidateMaximumCapabilities(maximum); err != nil {
 		t.Fatalf("ValidateMaximumCapabilities() error = %v", err)
@@ -40,7 +52,11 @@ func TestGeminiIntegrationSatisfiesSharedContractSurface(t *testing.T) {
 		maximum.Has(inference.CapabilityToolLifecycle) {
 		t.Fatalf("MaximumCapabilities() = %v, must not advertise streaming or tool lifecycle", maximum.Values())
 	}
+	return maximum
+}
 
+func assertGeminiContractDiscovery(t *testing.T, integration inference.Integration) {
+	t.Helper()
 	discovery, err := integration.Discover(context.Background())
 	if err != nil {
 		t.Fatalf("Discover() error = %v", err)
@@ -51,7 +67,10 @@ func TestGeminiIntegrationSatisfiesSharedContractSurface(t *testing.T) {
 	if discovery.Readiness() != inference.ReadinessReady {
 		t.Fatalf("Discover() readiness = %q, want %q", discovery.Readiness(), inference.ReadinessReady)
 	}
+}
 
+func assertGeminiContractNegotiatedCapabilities(t *testing.T, integration inference.Integration, maximum inference.CapabilitySet) {
+	t.Helper()
 	request := conformanceRequest(
 		"inv-gemini-contract",
 		inference.CapabilityPromptSubmission,
@@ -103,17 +122,17 @@ func TestGeminiSuccessConformanceThroughRegistryAndExecuteInvocation(t *testing.
 	assertConformanceSuccessEvents(t, destination.events, request.InvocationID(), content)
 }
 
-func TestGeminiFailureConformanceThroughExecuteInvocation(t *testing.T) {
-	t.Parallel()
+type geminiFailureConformanceCase struct {
+	name        string
+	result      workerprocess.CommandResult
+	err         error
+	wantKind    inference.FailureKind
+	wantMessage string
+	reject      []string
+}
 
-	testCases := []struct {
-		name        string
-		result      workerprocess.CommandResult
-		err         error
-		wantKind    inference.FailureKind
-		wantMessage string
-		reject      []string
-	}{
+func geminiFailureConformanceCases() []geminiFailureConformanceCase {
+	return []geminiFailureConformanceCase{
 		{
 			name: "Authentication",
 			result: workerprocess.CommandResult{
@@ -173,41 +192,49 @@ func TestGeminiFailureConformanceThroughExecuteInvocation(t *testing.T) {
 			reject:      []string{".gemini/tmp/", "private-report"},
 		},
 	}
+}
 
-	for _, tc := range testCases {
+func assertGeminiFailureConformance(t *testing.T, tc geminiFailureConformanceCase) {
+	t.Helper()
+	runner := &conformanceCommandRunner{result: tc.result, err: tc.err}
+	integration := geminipkg.NewIntegration(geminipkg.IntegrationDependencies{CommandRunner: runner})
+	destination := &conformanceDestination{}
+	request := conformanceRequest("inv-gemini-failure-"+strings.ToLower(tc.name), inference.CapabilityPromptSubmission)
+
+	if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
+		t.Fatalf("ExecuteInvocation() error = %v", err)
+	}
+	if destination.closes != 1 || destination.completion == nil {
+		t.Fatalf("destination closes = %d completion = %#v, want exactly one close", destination.closes, destination.completion)
+	}
+	failure := destination.completion.Failure()
+	if failure == nil || destination.completion.Response() != nil {
+		t.Fatalf("completion = %#v, want normalized failure only", destination.completion)
+	}
+	if failure.Kind() != tc.wantKind {
+		t.Fatalf("failure kind = %q, want %q", failure.Kind(), tc.wantKind)
+	}
+	if failure.Message() != tc.wantMessage {
+		t.Fatalf("failure message = %q, want %q", failure.Message(), tc.wantMessage)
+	}
+	for _, rejected := range tc.reject {
+		if strings.Contains(failure.Message(), rejected) {
+			t.Fatalf("failure message leaked %q: %q", rejected, failure.Message())
+		}
+	}
+	if len(destination.events) != 0 {
+		t.Fatalf("failure path emitted progress events: %#v", destination.events)
+	}
+}
+
+func TestGeminiFailureConformanceThroughExecuteInvocation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range geminiFailureConformanceCases() {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			runner := &conformanceCommandRunner{result: tc.result, err: tc.err}
-			integration := geminipkg.NewIntegration(geminipkg.IntegrationDependencies{CommandRunner: runner})
-			destination := &conformanceDestination{}
-			request := conformanceRequest("inv-gemini-failure-"+strings.ToLower(tc.name), inference.CapabilityPromptSubmission)
-
-			if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
-				t.Fatalf("ExecuteInvocation() error = %v", err)
-			}
-			if destination.closes != 1 || destination.completion == nil {
-				t.Fatalf("destination closes = %d completion = %#v, want exactly one close", destination.closes, destination.completion)
-			}
-			failure := destination.completion.Failure()
-			if failure == nil || destination.completion.Response() != nil {
-				t.Fatalf("completion = %#v, want normalized failure only", destination.completion)
-			}
-			if failure.Kind() != tc.wantKind {
-				t.Fatalf("failure kind = %q, want %q", failure.Kind(), tc.wantKind)
-			}
-			if failure.Message() != tc.wantMessage {
-				t.Fatalf("failure message = %q, want %q", failure.Message(), tc.wantMessage)
-			}
-			for _, rejected := range tc.reject {
-				if strings.Contains(failure.Message(), rejected) {
-					t.Fatalf("failure message leaked %q: %q", rejected, failure.Message())
-				}
-			}
-			if len(destination.events) != 0 {
-				t.Fatalf("failure path emitted progress events: %#v", destination.events)
-			}
+			assertGeminiFailureConformance(t, tc)
 		})
 	}
 }

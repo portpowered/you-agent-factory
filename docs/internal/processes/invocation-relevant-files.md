@@ -875,10 +875,11 @@ response-stream output.
   passes the shared `ProviderCommandRunner` edge into
   `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
   Integrations and native executors share one command boundary; functional
-  provider packages under `tests/functional/providers/<name>` prove success and
+  provider packages under `tests/functional/workers/<name>` prove success and
   safe native-failure postures through `root.BuildProcess` /
   `support.RunFactoryToCompletionWithEdges` without importing provider package
-  internals. Prove each migrated
+  internals (leave legacy `tests/functional/providers/<name>/doc.go` placeholders
+  until that domain is an approved `pkg-structure` noun). Prove each migrated
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:

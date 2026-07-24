@@ -138,16 +138,17 @@ func TestAdapterClassifyFailure_SuccessNeedsNoClassification(t *testing.T) {
 	}
 }
 
-func TestAdapterClassifyFailure_MapsNativeSignalsToConductorFacts(t *testing.T) {
-	adapterInstance := geminipkg.NewAdapter()
-	testCases := []struct {
-		name        string
-		input       adapter.FailureContext
-		wantType    workerexecution.WorkFailureType
-		wantFamily  workerexecution.WorkFailureFamily
-		wantMessage string
-		wantRetry   bool
-	}{
+type classifyFailureCase struct {
+	name        string
+	input       adapter.FailureContext
+	wantType    workerexecution.WorkFailureType
+	wantFamily  workerexecution.WorkFailureFamily
+	wantMessage string
+	wantRetry   bool
+}
+
+func geminiClassifyFailureCases() []classifyFailureCase {
+	return []classifyFailureCase{
 		{
 			name: "StructuredAuth",
 			input: adapter.FailureContext{
@@ -223,25 +224,33 @@ func TestAdapterClassifyFailure_MapsNativeSignalsToConductorFacts(t *testing.T) 
 			wantMessage: "gemini exited with code 17",
 		},
 	}
+}
 
-	for _, tc := range testCases {
+func assertGeminiClassifyFailure(t *testing.T, adapterInstance *geminipkg.Adapter, tc classifyFailureCase) {
+	t.Helper()
+	got := adapterInstance.ClassifyFailure(context.Background(), tc.input)
+	if got.Failure == nil {
+		t.Fatal("ClassifyFailure() returned no failure")
+	}
+	if got.Failure.Type != tc.wantType ||
+		got.Failure.Family != tc.wantFamily ||
+		got.Failure.Message != tc.wantMessage ||
+		got.Failure.Retry.Retryable != tc.wantRetry {
+		t.Fatalf("ClassifyFailure() = %#v, want type=%q family=%q message=%q retryable=%v",
+			got.Failure, tc.wantType, tc.wantFamily, tc.wantMessage, tc.wantRetry)
+	}
+	if strings.Contains(strings.ToLower(got.Failure.Message), "token=") ||
+		strings.Contains(got.Failure.Message, "customer") ||
+		strings.Contains(got.Failure.Message, ".gemini/tmp/") {
+		t.Fatalf("ClassifyFailure message leaked unsafe detail: %q", got.Failure.Message)
+	}
+}
+
+func TestAdapterClassifyFailure_MapsNativeSignalsToConductorFacts(t *testing.T) {
+	adapterInstance := geminipkg.NewAdapter()
+	for _, tc := range geminiClassifyFailureCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			got := adapterInstance.ClassifyFailure(context.Background(), tc.input)
-			if got.Failure == nil {
-				t.Fatal("ClassifyFailure() returned no failure")
-			}
-			if got.Failure.Type != tc.wantType ||
-				got.Failure.Family != tc.wantFamily ||
-				got.Failure.Message != tc.wantMessage ||
-				got.Failure.Retry.Retryable != tc.wantRetry {
-				t.Fatalf("ClassifyFailure() = %#v, want type=%q family=%q message=%q retryable=%v",
-					got.Failure, tc.wantType, tc.wantFamily, tc.wantMessage, tc.wantRetry)
-			}
-			if strings.Contains(strings.ToLower(got.Failure.Message), "token=") ||
-				strings.Contains(got.Failure.Message, "customer") ||
-				strings.Contains(got.Failure.Message, ".gemini/tmp/") {
-				t.Fatalf("ClassifyFailure message leaked unsafe detail: %q", got.Failure.Message)
-			}
+			assertGeminiClassifyFailure(t, adapterInstance, tc)
 		})
 	}
 }

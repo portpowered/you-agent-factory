@@ -16,6 +16,13 @@ import (
 
 const privateGeminiToken = "sk-gemini-fixture-secret"
 
+func TestAdapterIdentity(t *testing.T) {
+	t.Parallel()
+	if got := geminipkg.NewAdapter().Identity(); got != adapter.Identity(modelprovider.ProviderGemini) {
+		t.Fatalf("Identity() = %q, want %q", got, modelprovider.ProviderGemini)
+	}
+}
+
 func TestBuildArgs_BasicPromptAndSkipPermissions(t *testing.T) {
 	t.Parallel()
 
