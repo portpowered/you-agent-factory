@@ -72,6 +72,13 @@ type RuntimeBinding struct {
 // as plain root vocabulary on the singular Service aggregate; peers must not
 // import private invocation subservice types and must not depend on a separately
 // published peer-facing invoker interface.
+// The published response-stream slice uses ResponseStreamSubscriptionRequest,
+// ResponseStreamCursor, ResponseStreamEvent, ResponseStreamGap,
+// ResponseStreamKindGap, ResponseStreamCompletionKind,
+// ResponseStreamCompletionPhase, ErrResponseStreamStaleCursor, and
+// ErrResponseStreamSubscriptionClosed on SubscribeFactoryResponseEvents; peers
+// must not import private response-stream store or manager types and must not
+// depend on a nested stream interface for peer import.
 // The process-scoped root uses ForRuntime to create an isolated runtime view; a
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.
