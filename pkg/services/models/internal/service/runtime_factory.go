@@ -132,6 +132,9 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if o == nil {
 		return nil, missingDependencyError("Models service")
 	}
+	if err := models.ValidateRuntimeBinding(binding); err != nil {
+		return nil, err
+	}
 	assets, err := localmodels.NewAssetPuller(
 		binding.CacheDirectory, o.assetPlatform, o.assetHTTP, o.assetEndpoints,
 		o.assetMkdirAll, o.assetStat, o.assetHome, o.assetWriteFile, o.assetRename,
@@ -168,6 +171,14 @@ func (o *Root) PullModel(context.Context, string) (models.PullResult, error) {
 
 func (o *Root) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, missingDependencyError("Models runtime binding")
+}
+
+func (o *Root) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, missingDependencyError("Models runtime binding")
+}
+
+func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return missingDependencyError("Models runtime binding")
 }
 
 func (o *Root) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
@@ -265,5 +276,8 @@ func (s *runtimeService) ForRuntime(models.RuntimeBinding) (models.Service, erro
 }
 
 func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	if err := models.ValidateLocalInvocationRequest(request); err != nil {
+		return models.LocalInvocationResult{}, err
+	}
 	return s.local.InvokeLocal(ctx, request)
 }

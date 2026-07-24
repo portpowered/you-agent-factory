@@ -56,6 +56,7 @@ type WorkstationExecutor struct {
 	RuntimeConfig           interfaces.RuntimeConfigLookup
 	DefaultRunnerID         string
 	ResolveRunnerSelection  workerexecution.RunnerSelectionResolver
+	ResolveProviderIdentity workerexecution.ProviderIdentityResolver
 	WorkflowContext         *workerexecution.Context
 	Executor                WorkstationRequestExecutor
 	Interpolation           factorydefinitions.InvocationInterpolationService
@@ -188,6 +189,14 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			}, nil
 		}
 		workerDef = &interpolatedWorker
+		if failed := we.resolveInvocationProvider(
+			dispatch,
+			workerDef,
+			invocationDiagnostics,
+			start,
+		); failed != nil {
+			return *failed, nil
+		}
 	}
 
 	resolvedContext, failed := we.resolveWorkstationExecutionContext(dispatch, workstationDef, start, logger)
@@ -213,6 +222,31 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return normalizeClassifierWorkResult(result), nil
 	}
 	return result, nil
+}
+
+func (we *WorkstationExecutor) resolveInvocationProvider(
+	dispatch work.WorkDispatch,
+	worker *factorydefinitions.FactoryWorkerConfig,
+	diagnostics *workerexecution.WorkDiagnostics,
+	start time.Time,
+) *workerexecution.WorkResult {
+	if we.ResolveProviderIdentity == nil || worker == nil ||
+		strings.TrimSpace(worker.ModelProvider) == "" {
+		return nil
+	}
+	canonical, err := we.ResolveProviderIdentity(worker.ModelProvider)
+	if err == nil {
+		worker.ModelProvider = canonical
+		return nil
+	}
+	return &workerexecution.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeFailed,
+		Error:        "invocation modelProvider selection failed: " + err.Error(),
+		Diagnostics:  diagnostics,
+		Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+	}
 }
 
 func invocationDiagnosticsForDispatch(

@@ -9,6 +9,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 // TestDispatcherLifecycle_ExecutorFailure verifies that when the executor fails,
@@ -25,8 +27,8 @@ func TestDispatcherLifecycle_ExecutorFailure(t *testing.T) {
 		"executor": {{Content: "failed", Error: errors.New("failed executors")}},
 	})
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 30*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 30*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"idea:init": 0, "prd:failed": 1, "code-change:init": 0, "code-change:archived": 0,
 	})
 }

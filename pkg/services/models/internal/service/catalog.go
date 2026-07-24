@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
@@ -45,6 +46,9 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 
 // GetModel returns inspect detail for one configured model with managed-runtime readiness projection.
 func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.Detail, error) {
+	if err := models.ValidateGetModelRequest(models.GetModelRequest{Name: modelName}); err != nil {
+		return modelcatalog.Detail{}, err
+	}
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
 		return modelcatalog.Detail{}, fmt.Errorf("factory service runtime is not available")

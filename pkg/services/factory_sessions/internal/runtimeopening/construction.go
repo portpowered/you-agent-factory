@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -63,6 +64,7 @@ func PrepareRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	replayFiles fileeffects.ReplayRecordingReader,
+	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (
 	prepared preparedRuntime,
 	root RuntimeRoot,
@@ -130,6 +132,15 @@ func PrepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
+	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
+		load.LoadedFactoryCfg,
+		providerIdentities,
+	); err != nil {
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
+			"validate Factory provider selections: %w",
+			err,
+		)
+	}
 	if factoryDefinitionValidator == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
 			"Factory Definition validator is required",
@@ -175,6 +186,7 @@ func NewDurableExecution(
 	clock factoryruntime.Clock,
 	providerOverride workerprovider.Provider,
 	executionFactory FactorySessionExecutionFactory,
+	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (factorysessions.ExecutionService, error) {
 	if executionFactory == nil {
 		return nil, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
@@ -188,14 +200,35 @@ func NewDurableExecution(
 	if err != nil {
 		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
 	}
+	if providerIdentities == nil {
+		return nil, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
+	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
 	workerPresets := make(map[string]factoryruntime.JavaScriptWorkerPreset, len(operatorConfig.WorkerPresets))
-	for _, preset := range operatorConfig.WorkerPresets {
+	for index, preset := range operatorConfig.WorkerPresets {
+		canonicalProvider, err := providerIdentities(preset.ModelProvider)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"compose durable session worker presets: workerPresets[%d].modelProvider: %w",
+				index,
+				err,
+			)
+		}
 		workerPresetIDs[preset.ID] = struct{}{}
 		workerPresets[preset.ID] = factoryruntime.JavaScriptWorkerPreset{
-			ModelProvider:   preset.ModelProvider,
+			ModelProvider:   canonicalProvider,
 			Model:           preset.Model,
 			ReasoningEffort: preset.ReasoningEffort,
+		}
+	}
+	defaultProvider := operatorConfig.Defaults.WorkerModelProvider
+	if strings.TrimSpace(defaultProvider) != "" {
+		defaultProvider, err = providerIdentities(defaultProvider)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"compose durable session worker presets: defaults.workerModelProvider: %w",
+				err,
+			)
 		}
 	}
 	execution, err := executionFactory(
@@ -206,7 +239,7 @@ func NewDurableExecution(
 		workerPresetIDs,
 		factoryruntime.JavaScriptWorkerSettings{
 			Presets:              workerPresets,
-			DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider,
+			DefaultModelProvider: defaultProvider,
 			DefaultModel:         operatorConfig.Defaults.WorkerModel,
 		},
 	)

@@ -180,6 +180,12 @@ func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T
 	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != interfaces.FactorySessionLifecycleStatusPaused {
 		t.Fatalf("paused = %q, want PAUSED", got)
 	}
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateCompleted); got != interfaces.FactorySessionLifecycleStatusSucceeded {
+		t.Fatalf("completed = %q, want SUCCEEDED", got)
+	}
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateFailed); got != interfaces.FactorySessionLifecycleStatusFailed {
+		t.Fatalf("failed = %q, want FAILED", got)
+	}
 	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != interfaces.FactorySessionLifecycleStatusRunning {
 		t.Fatalf("running = %q, want RUNNING", got)
 	}

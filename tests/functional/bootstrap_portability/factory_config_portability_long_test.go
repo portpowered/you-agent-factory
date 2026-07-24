@@ -118,10 +118,10 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 			`{"type":"result","subtype":"success","is_error":false,"result":"Finished from flattened split config. DONE COMPLETE","session_id":"portable-split"}` + "\n",
 		)},
 	)
-	session := support.RunFactoryToCompletionWithEdges(t, standaloneDir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, standaloneDir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertPortableTaskCompleted(t, session)
+	assertPortableTaskCompleted(t, listed)
 }
 
 func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *testing.T) {
@@ -172,8 +172,8 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Finished from inline config. DONE COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertPortableTaskCompleted(t, session)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertPortableTaskCompleted(t, listed)
 
 	if provider.CallCount() != 1 {
 		t.Fatalf("expected provider called once, got %d", provider.CallCount())
@@ -385,20 +385,20 @@ func assertLoadedInlineScriptBackedStandalone(t *testing.T, standaloneDir string
 func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir string) {
 	t.Helper()
 
-	session := support.RunFactoryToCompletionWithEdges(t, standaloneDir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, standaloneDir, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("flattened inline script accepted"),
 	}, 10*time.Second)
-	assertPortableTaskCompleted(t, session)
+	assertPortableTaskCompleted(t, listed)
 }
 
-func assertPortableTaskCompleted(t *testing.T, session factoryapi.FactorySession) {
+func assertPortableTaskCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
 	t.Helper()
 	for placeID, want := range map[string]int{
 		"task:complete": 1,
 		"task:init":     0,
 		"task:failed":   0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

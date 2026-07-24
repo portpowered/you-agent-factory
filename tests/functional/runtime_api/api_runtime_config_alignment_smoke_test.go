@@ -231,14 +231,15 @@ func assertRuntimeConfigAlignmentFinalState(
 	t.Helper()
 
 	session := support.GetDefaultSession(t, server.URL())
-	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
-		t.Fatalf("completed task token count = %d, want 1; marking=%#v", got, session.Runtime.Petri)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("completed task token count = %d, want 1; work=%#v", got, listed.Results)
 	}
-	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 0 {
-		t.Fatalf("failed task token count = %d, want 0; marking=%#v", got, session.Runtime.Petri)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed task token count = %d, want 0; work=%#v", got, listed.Results)
 	}
-	if got := support.SessionPlaceTokenCount(session, "scheduled:complete"); got != 1 {
-		t.Fatalf("completed scheduled token count = %d, want 1; marking=%#v", got, session.Runtime.Petri)
+	if got := support.CountWorkAtCustomerState(listed, "scheduled:complete"); got != 1 {
+		t.Fatalf("completed scheduled token count = %d, want 1; work=%#v", got, listed.Results)
 	}
 	if available, total, ok := runtimeConfigAlignmentResourceUsage(session, "agent-slot"); !ok || available != 1 || total != 1 {
 		t.Fatalf("agent-slot usage after completion = available:%d total:%d found:%t, want 1/1", available, total, ok)

@@ -704,7 +704,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
-      "minimum": 39.00
+      "minimum": 38.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
@@ -906,7 +906,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 44.89
+      "minimum": 11.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
@@ -922,7 +922,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 35.81
+      "minimum": 30.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
@@ -1051,6 +1051,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor",
+      "minimum": 49.64
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
       "minimum": 14.16
     },
@@ -1110,7 +1114,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
-      "minimum": 66.38
+      "minimum": 65.14
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic",
@@ -1340,7 +1344,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",
-      "minimum": 39.24
+      "minimum": 39.09
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",

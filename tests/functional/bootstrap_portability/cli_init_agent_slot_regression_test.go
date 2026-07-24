@@ -10,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 // TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers proves the default
@@ -55,15 +57,22 @@ func TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers(t *testing.T)
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
 	for placeID, want := range map[string]int{
 		defaultInitFactoryWorkType + ":complete": 1,
 		defaultInitFactoryWorkType + ":init":     0,
 		defaultInitFactoryWorkType + ":failed":   0,
-		"agent-slot:available":                   1,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+	for _, usage := range session.Runtime.Usage.Resources {
+		if usage.Name == "agent-slot" {
+			if usage.Available != 1 || usage.Total != 1 {
+				t.Errorf("agent-slot resource usage = %#v, want 1 available and total", usage)
+			}
+			break
 		}
 	}
 

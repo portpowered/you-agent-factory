@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -60,11 +59,11 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	})
 	waitForPublicWorkInPlace(t, server.URL(), "task:failed", "world-view-failed", time.Second)
 
-	session := support.GetDefaultSession(t, server.URL())
-	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("task:complete token count = %d, want 1", got)
 	}
-	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 1 {
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("task:failed token count = %d, want 1", got)
 	}
 	assertFunctionalProviderSessionsInEvents(t, server.GetFactoryEvents(t))
@@ -109,13 +108,18 @@ func writeDashboardWorldViewAgents(t *testing.T, dir string, agentType string) {
 
 func submitDashboardWorldViewFunctionalWork(t *testing.T, baseURL string, workID string, traceID string) {
 	t.Helper()
-	support.UpsertDefaultSessionWorkRequest(t, baseURL, work.WorkRequest{
-		RequestID: "request-" + workID,
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{{
-			Name: workID, WorkID: workID, WorkTypeID: "task", TraceID: traceID,
-			Payload: map[string]any{"item": "dashboard-world-view-functional"},
-		}},
+	workType := "task"
+	works := []factoryapi.Work{{
+		Name:         workID,
+		WorkId:       &workID,
+		WorkTypeName: &workType,
+		TraceId:      &traceID,
+		Payload:      map[string]any{"item": "dashboard-world-view-functional"},
+	}}
+	support.UpsertDefaultSessionWorkRequest(t, baseURL, factoryapi.WorkRequest{
+		RequestId: "request-" + workID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works:     &works,
 	})
 }
 

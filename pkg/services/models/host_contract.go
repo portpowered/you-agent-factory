@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -14,17 +15,27 @@ var (
 	ErrHostCancelled = errors.New("model host operation cancelled")
 	// ErrHostUnsupportedRuntime reports that the managed runtime identity is unsupported.
 	ErrHostUnsupportedRuntime = errors.New("model host unsupported runtime")
-	// ErrHostMissingAssets reports that required local model assets are not installed.
+	// ErrHostMissingAssets reports that required local model assets are not
+	// installed. Distinct from loading-timeout, capacity, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostMissingAssets = errors.New("model host missing assets")
-	// ErrHostLoadingTimeout reports that readiness did not complete before timeout.
+	// ErrHostLoadingTimeout reports that readiness did not complete before
+	// timeout. Distinct from missing-assets, capacity, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostLoadingTimeout = errors.New("model host loading timeout")
 	// ErrHostProcessCrash reports that the supervised runtime process exited unexpectedly.
 	ErrHostProcessCrash = errors.New("model host process crash")
 	// ErrHostCapacityExhausted reports that lease capacity is exhausted.
+	// Distinct from missing-assets, loading-timeout, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostCapacityExhausted = errors.New("model host capacity exhausted")
 	// ErrHostLeaseNotFound reports that a lease identifier is unknown.
+	// Distinct from missing-assets, loading-timeout, capacity, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostLeaseNotFound = errors.New("model host lease not found")
-	// ErrHostRuntimeNotReady reports that lease acquisition requires a ready runtime.
+	// ErrHostRuntimeNotReady reports that lease acquisition requires a ready
+	// runtime. Distinct from missing-assets, loading-timeout, capacity, and
+	// lease-not-found outcomes on the host/lease root slice.
 	ErrHostRuntimeNotReady = errors.New("model host runtime not ready")
 )
 
@@ -100,11 +111,77 @@ const (
 	HostFailureClassCapacityExhausted  HostFailureClass = "capacity_exhausted"
 )
 
-// LocalRuntimeHooks observes model resource and load lifecycle activity.
+// LocalRuntimeHooks observes model resource and load lifecycle activity for
+// Wire/construction-time ProcessDependencies. It is not a peer-facing host/lease
+// or infer contract; peers use Service.InspectRuntime, AcquireLease,
+// ReleaseLease, and InvokeLocal with plain request/result vocabulary instead.
 type LocalRuntimeHooks struct {
 	MarkResourceWaitStarted  func(context.Context, time.Time)
 	MarkResourceWaitFinished func(context.Context, time.Time, bool)
 	MarkLoadRequested        func(context.Context, time.Time)
 	MarkLoadFinished         func(context.Context, time.Time)
 	MarkLoadReused           func(context.Context)
+}
+
+// InspectRuntimeRequest is the plain host readiness-inspect request. Peers
+// identify a model by Name without importing models/internal/host.
+type InspectRuntimeRequest struct {
+	Name string
+}
+
+// ValidateInspectRuntimeRequest checks the plain readiness-inspect request.
+// Empty names fail closed as ErrNotFound without touching nested host packages.
+func ValidateInspectRuntimeRequest(request InspectRuntimeRequest) error {
+	if strings.TrimSpace(request.Name) == "" {
+		return fmt.Errorf("%w: empty model name", ErrNotFound)
+	}
+	return nil
+}
+
+// AcquireLeaseRequest is the plain host/lease acquire request. Peers identify a
+// model and optional holder without importing nested host supervisor or
+// lease-manager implementation types.
+type AcquireLeaseRequest struct {
+	ModelName string
+	Holder    string
+}
+
+// ValidateAcquireLeaseRequest checks the plain lease-acquire request. Empty
+// model names fail closed as ErrNotFound without touching nested host packages.
+func ValidateAcquireLeaseRequest(request AcquireLeaseRequest) error {
+	if strings.TrimSpace(request.ModelName) == "" {
+		return fmt.Errorf("%w: empty model name", ErrNotFound)
+	}
+	return nil
+}
+
+// ReleaseLeaseRequest is the plain host/lease release request. Peers identify a
+// lease by LeaseID without importing nested host supervisor types.
+type ReleaseLeaseRequest struct {
+	LeaseID string
+}
+
+// ValidateReleaseLeaseRequest checks the plain lease-release request. Empty
+// lease identifiers fail closed as ErrHostLeaseNotFound.
+func ValidateReleaseLeaseRequest(request ReleaseLeaseRequest) error {
+	if strings.TrimSpace(request.LeaseID) == "" {
+		return fmt.Errorf("%w: empty lease id", ErrHostLeaseNotFound)
+	}
+	return nil
+}
+
+// HostLeaseOptions configures lease acquisition on the Models root host/lease
+// slice. Peers supply Holder without nested lease-manager types.
+type HostLeaseOptions struct {
+	Holder string
+}
+
+// HostLease grants disposable call capacity for one loaded managed runtime.
+// Peers consume this Models-owned vocabulary without importing
+// models/internal/host supervisor, process, or lease-manager types.
+type HostLease struct {
+	ID       string
+	Identity HostIdentity
+	Endpoint string
+	Holder   string
 }

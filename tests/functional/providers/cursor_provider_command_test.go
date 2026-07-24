@@ -20,10 +20,10 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	writeCursorProviderSmokeWork(t, dir)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
@@ -45,10 +45,10 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	writeCursorProviderSmokeWork(t, dir)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
@@ -75,10 +75,10 @@ Process the input task.
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	writeCursorProviderSmokeWork(t, dir)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 	req := runner.LastRequest()
 	if req.Command != string(modelprovider.ProviderCursor) {
 		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
@@ -96,17 +96,17 @@ func writeCursorProviderSmokeWork(t *testing.T, dir string) {
 	})
 }
 
-func assertCursorProviderCompleted(t *testing.T, session factoryapi.FactorySession) {
+func assertCursorProviderCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
 	t.Helper()
-	assertSessionPlaces(t, session, map[string]int{
+	assertSessionPlaces(t, listed, map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 }
 
-func assertSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+func assertSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

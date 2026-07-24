@@ -108,6 +108,7 @@ type DurableExecutionFactory func(
 	factoryruntime.Clock,
 	workerprovider.Provider,
 	FactorySessionExecutionFactory,
+	factorysessions.ProviderIdentityResolver,
 ) (factorysessions.ExecutionService, error)
 
 type WorkerExecutionFactory func(

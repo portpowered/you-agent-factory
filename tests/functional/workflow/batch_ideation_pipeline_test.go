@@ -57,7 +57,7 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"story:complete": 3, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
 	})
 	assertCompletedStoryTraces(t, listedWork, traceIDs)
@@ -97,7 +97,7 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 30*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"story:complete": 3, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
 	})
 	assertCompletedStoryTraces(t, listedWork, traceIDs)

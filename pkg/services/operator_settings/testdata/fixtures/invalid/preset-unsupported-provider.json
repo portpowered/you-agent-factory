@@ -2,7 +2,7 @@
   "workerPresets": [
     {
       "id": "build",
-      "modelProvider": "other"
+      "modelProvider": "Other_Provider"
     }
   ]
 }

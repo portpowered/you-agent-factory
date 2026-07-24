@@ -28,8 +28,8 @@ func TestExecutorFailure_NoFailureArcs(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
 	for _, event := range server.GetFactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
@@ -54,10 +54,10 @@ func TestExecutorFailure_OutcomeFailed_NoFailureArcs(t *testing.T) {
 		Stderr:   []byte("provider unavailable"),
 		ExitCode: 1,
 	})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 5*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:processing": 0})
 }
 
 func TestExecutorFailure_WithFailureArcs(t *testing.T) {
@@ -67,10 +67,10 @@ func TestExecutorFailure_WithFailureArcs(t *testing.T) {
 		Stderr:   []byte("intentional failure"),
 		ExitCode: 1,
 	})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 5*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 }
 
 func TestExecutorSuccess_TokenAtOutputPlace(t *testing.T) {
@@ -80,6 +80,6 @@ func TestExecutorSuccess_TokenAtOutputPlace(t *testing.T) {
 	provider := testutil.NewMockProvider(
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 5*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 5*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0})
 }

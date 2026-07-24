@@ -101,12 +101,12 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 	}
 
 	submitted := submitGeneratedGoalWork(t, server.URL(), "paused-goal-submit", "customer goal request text")
-	session := support.GetDefaultSession(t, server.URL())
-	if support.SessionHasWorkAtPlace(session, stringPointerValue(submitted.WorkId), "goal:init") {
-		t.Fatalf("paused submit reached goal:init while session was paused: %#v", session.Runtime.Petri)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if support.HasWorkAtCustomerState(listed, stringPointerValue(submitted.WorkId), "goal:init") {
+		t.Fatalf("paused submit reached goal:init while session was paused: %#v", listed.Results)
 	}
-	if support.SessionHasWorkAtPlace(session, stringPointerValue(submitted.WorkId), "goal:complete") {
-		t.Fatalf("paused submit reached goal:complete before resume: %#v", session.Runtime.Petri)
+	if support.HasWorkAtCustomerState(listed, stringPointerValue(submitted.WorkId), "goal:complete") {
+		t.Fatalf("paused submit reached goal:complete before resume: %#v", listed.Results)
 	}
 
 	resume := postJSON[factoryapi.FactorySessionLifecycleControlResponse](

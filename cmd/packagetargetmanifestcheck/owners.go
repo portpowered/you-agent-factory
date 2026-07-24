@@ -1,0 +1,325 @@
+package main
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// committedNestedSubservices is the plan's closed nested destination set for
+// each product owner. Destinations may only use these <owner>/internal/services/<subservice>
+// names; deeper nesting is recorded under the parent subservice destination.
+var committedNestedSubservices = map[string][]string{
+	"factory_definitions": {
+		"catalog",
+		"authoring_layout",
+		"compilation",
+		"validation",
+		"snapshots_portability",
+		"distribution",
+	},
+	"factory_sessions": {
+		"identity",
+		"live_runtime",
+		"durable_execution",
+		"invocation",
+		"response_stream",
+		"runtime_opening",
+	},
+	"factory_runtime": {
+		"orchestration",
+		"instance_host",
+		"dispatch_planning",
+		"checkpoint_recovery",
+	},
+	"work": {
+		"admission",
+		"content_staging",
+		"content_materialization",
+		"state_access",
+	},
+	"workers": {
+		"runtime_assembly",
+		"workstations",
+		"runners",
+	},
+	"providers": {
+		"catalog",
+		"execution",
+	},
+	"provider_sessions": {
+		"codex_reader",
+		"cursor_reader",
+	},
+	"models": {
+		"runtime_scopes",
+		"catalog",
+		"assets",
+		"runtime_host",
+		"inference",
+	},
+	"automations": {
+		"reconciliation",
+		"cron",
+		"script_pollers",
+		"filesystem_watchers",
+		"hosted_sources",
+	},
+	"recordings": {
+		"canonical_ledger",
+		"projection_query",
+		"recording_lifecycle",
+		"replay",
+		"artifacts_export",
+	},
+	"factory_visualization": {
+		"activation_lifecycle",
+		"live_view_projection",
+		"response_event_presentation",
+	},
+	"operator_settings": {
+		"document",
+		"resolution",
+	},
+	"system_initialization": {},
+}
+
+func productOwnerSet() map[string]struct{} {
+	owners := closedDestinationVocabulary().ProductOwners
+	set := make(map[string]struct{}, len(owners))
+	for _, owner := range owners {
+		set[owner] = struct{}{}
+	}
+	return set
+}
+
+func isCommittedNestedSubservice(owner, subservice string) bool {
+	allowed, ok := committedNestedSubservices[owner]
+	if !ok {
+		return false
+	}
+	return slices.Contains(allowed, subservice)
+}
+
+// mapCommittedOwnerPackage maps one inventory path that belongs to a committed
+// product owner (including Providers extraction sources under workers) to its
+// plan-tree destination. Returns ok=false for non-owner residuals (edges,
+// platform, transports, wire, root, initializer).
+func mapCommittedOwnerPackage(packagePath string) (PackageMapping, bool) {
+	packagePath = strings.TrimSpace(packagePath)
+	if packagePath == "" {
+		return PackageMapping{}, false
+	}
+
+	if mapping, ok := mapProvidersExtraction(packagePath); ok {
+		return mapping, true
+	}
+
+	owner, rest, ok := splitServicesOwnerPath(packagePath)
+	if !ok {
+		return PackageMapping{}, false
+	}
+	if _, isOwner := productOwnerSet()[owner]; !isOwner {
+		return PackageMapping{}, false
+	}
+
+	if mapping, ok := mapKnownNestedOwnerPackage(owner, packagePath, rest); ok {
+		return mapping, true
+	}
+
+	return PackageMapping{
+		PackagePath: packagePath,
+		Disposition: DispositionRetain,
+		Destination: owner,
+	}, true
+}
+
+func splitServicesOwnerPath(packagePath string) (owner, rest string, ok bool) {
+	const prefix = "pkg/services/"
+	if !strings.HasPrefix(packagePath, prefix) {
+		return "", "", false
+	}
+	remainder := strings.TrimPrefix(packagePath, prefix)
+	parts := strings.SplitN(remainder, "/", 2)
+	if parts[0] == "" {
+		return "", "", false
+	}
+	owner = parts[0]
+	if len(parts) == 1 {
+		return owner, "", true
+	}
+	return owner, parts[1], true
+}
+
+func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
+	switch {
+	case packagePath == "pkg/services/workers/agypty",
+		packagePath == "pkg/services/workers/cliprovider",
+		packagePath == "pkg/services/workers/provider",
+		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"):
+		destination := "providers/internal/services/execution"
+		if packagePath == "pkg/services/workers/provider/registry" {
+			destination = "providers/internal/services/catalog"
+		}
+		return PackageMapping{
+			PackagePath: packagePath,
+			Disposition: DispositionMove,
+			Destination: destination,
+		}, true
+	default:
+		return PackageMapping{}, false
+	}
+}
+
+func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping, bool) {
+	if rest == "" {
+		return PackageMapping{}, false
+	}
+
+	// Packages already under the committed private subservice container retain
+	// that nested destination.
+	if strings.HasPrefix(rest, "internal/services/") {
+		sub := strings.TrimPrefix(rest, "internal/services/")
+		subservice, _, _ := strings.Cut(sub, "/")
+		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
+			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
+		}
+	}
+
+	destination, ok := nestedOwnerMoveDestination(owner, rest)
+	if !ok {
+		return PackageMapping{}, false
+	}
+	return moveOrRetainMapping(packagePath, destination, DispositionMove), true
+}
+
+func moveOrRetainMapping(packagePath, destination, disposition string) PackageMapping {
+	return PackageMapping{
+		PackagePath: packagePath,
+		Disposition: disposition,
+		Destination: destination,
+	}
+}
+
+type nestedPathRule struct {
+	exact  string
+	prefix string
+	dest   string
+}
+
+func nestedOwnerMoveDestination(owner, rest string) (destination string, ok bool) {
+	rules, exists := nestedOwnerMoveRules[owner]
+	if !exists {
+		return "", false
+	}
+	for _, rule := range rules {
+		if rest == rule.exact || (rule.prefix != "" && strings.HasPrefix(rest, rule.prefix)) {
+			return rule.dest, true
+		}
+	}
+	return "", false
+}
+
+// nestedOwnerMoveRules encodes plan-tree move destinations for packages that
+// are not yet under <owner>/internal/services/<subservice>.
+var nestedOwnerMoveRules = map[string][]nestedPathRule{
+	"factory_sessions": {
+		{exact: "internal/runtimeopening", prefix: "internal/runtimeopening/", dest: "factory_sessions/internal/services/runtime_opening"},
+	},
+	"factory_runtime": {
+		{exact: "javascript", prefix: "javascript/", dest: "factory_runtime/internal/services/orchestration"},
+		{prefix: "internal/orchestrators/", dest: "factory_runtime/internal/services/orchestration"},
+		{prefix: "tooling/javascript/", dest: "factory_runtime/internal/services/orchestration"},
+	},
+	"work": {
+		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
+	},
+	"workers": {
+		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
+		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},
+		{exact: "services/testing", prefix: "services/testing/", dest: "workers/internal/services/runners"},
+	},
+	"provider_sessions": {
+		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
+		{exact: "cursor", prefix: "cursor/", dest: "provider_sessions/internal/services/cursor_reader"},
+	},
+	"models": {
+		{exact: "internal/catalog", prefix: "internal/catalog/", dest: "models/internal/services/catalog"},
+		{exact: "internal/assets", prefix: "internal/assets/", dest: "models/internal/services/assets"},
+		{exact: "internal/host", prefix: "internal/host/", dest: "models/internal/services/runtime_host"},
+		{exact: "internal/inference", prefix: "internal/inference/", dest: "models/internal/services/inference"},
+	},
+	"recordings": {
+		{exact: "events", prefix: "events/", dest: "recordings/internal/services/canonical_ledger"},
+		{exact: "projections", prefix: "projections/", dest: "recordings/internal/services/projection_query"},
+		{exact: "replay", prefix: "replay/", dest: "recordings/internal/services/replay"},
+		{exact: "artifacts", prefix: "artifacts/", dest: "recordings/internal/services/artifacts_export"},
+	},
+	"automations": {
+		{exact: "timework", prefix: "timework/", dest: "automations/internal/services/cron"},
+	},
+}
+
+func buildCommittedOwnerPackages(inventory []string) ([]PackageMapping, error) {
+	rows := make([]PackageMapping, 0, len(inventory))
+	for _, packagePath := range inventory {
+		mapping, ok := mapCommittedOwnerPackage(packagePath)
+		if !ok {
+			continue
+		}
+		rows = append(rows, mapping)
+	}
+	if err := ensureAllProductOwnersPresent(rows); err != nil {
+		return nil, err
+	}
+	slices.SortFunc(rows, func(a, b PackageMapping) int {
+		return strings.Compare(a.PackagePath, b.PackagePath)
+	})
+	return rows, nil
+}
+
+func ensureAllProductOwnersPresent(rows []PackageMapping) error {
+	seen := make(map[string]struct{}, len(closedDestinationVocabulary().ProductOwners))
+	for _, row := range rows {
+		root, _, ok := splitDestination(row.Destination)
+		if !ok {
+			continue
+		}
+		if _, isOwner := productOwnerSet()[root]; isOwner {
+			seen[root] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, owner := range closedDestinationVocabulary().ProductOwners {
+		if _, ok := seen[owner]; !ok {
+			missing = append(missing, owner)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("committed owner mappings missing destinations for: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping) []PackageMapping {
+	ownerPaths := make(map[string]struct{}, len(ownerRows))
+	for _, row := range ownerRows {
+		ownerPaths[row.PackagePath] = struct{}{}
+	}
+	merged := make([]PackageMapping, 0, len(existing)+len(ownerRows))
+	for _, row := range existing {
+		if _, isOwnerRow := ownerPaths[row.PackagePath]; isOwnerRow {
+			continue
+		}
+		if _, ok := mapCommittedOwnerPackage(row.PackagePath); ok {
+			// Drop stale owner rows that are no longer emitted.
+			continue
+		}
+		merged = append(merged, row)
+	}
+	merged = append(merged, ownerRows...)
+	slices.SortFunc(merged, func(a, b PackageMapping) int {
+		return strings.Compare(a.PackagePath, b.PackagePath)
+	})
+	return merged
+}

@@ -56,7 +56,7 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 			exitCode: 0,
 		}, rollingConfig)
 
-		assertSessionPlaces(t, result.session, map[string]int{
+		assertSessionPlaces(t, result.listed, map[string]int{
 			"task:done": 1, "task:init": 0, "task:failed": 0,
 		})
 
@@ -86,7 +86,7 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 			exitCode: 23,
 		}, rollingConfig)
 
-		assertSessionPlaces(t, result.session, map[string]int{
+		assertSessionPlaces(t, result.listed, map[string]int{
 			"task:failed": 1, "task:init": 0, "task:done": 0,
 		})
 
@@ -191,7 +191,7 @@ func requireRuntimeTelemetryJSONLine(t *testing.T, path string) map[string]any {
 }
 
 type runtimeLoggingSmokeResult struct {
-	session  factoryapi.FactorySession
+	listed   factoryapi.ListWorkResponse
 	records  []map[string]any
 	artifact *interfaces.ReplayArtifact
 	logPath  string
@@ -231,12 +231,12 @@ func runRuntimeLoggingSmoke(t *testing.T, runner platformprocess.CommandRunner, 
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	server.Stop(t)
 
 	logPath := requireAnyRuntimeLogPath(t, logDir)
 	return runtimeLoggingSmokeResult{
-		session:  session,
+		listed:   listed,
 		records:  readRuntimeLoggingSmokeRecords(t, logPath),
 		artifact: testutil.LoadReplayArtifact(t, recordPath),
 		logPath:  logPath,

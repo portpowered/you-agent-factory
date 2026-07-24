@@ -30,7 +30,7 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 
 func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 	runtime := &recordingFactory{}
-	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile)
+	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil)
 
 	request := work.WorkRequest{RequestID: "request-root-contract"}
 	if _, err := service.SubmitWorkRequestForSession(
@@ -76,7 +76,7 @@ func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot,
 }
 
 func TestNewServicePropagatesRuntimeResolverError(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile)
+	service := workservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil)
 	_, err := service.SubmitWorkRequestForSession(context.Background(), "missing", work.WorkRequest{})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
@@ -108,7 +108,7 @@ func TestSubmitFileForSessionUsesInjectedReaderAndRuntime(t *testing.T) {
 	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, func(path string) ([]byte, error) {
 		readPath = path
 		return []byte(`{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[]}`), nil
-	})
+	}, nil, nil)
 
 	result, err := service.SubmitFileForSession(context.Background(), "session-1", "edge.json")
 	if err != nil {
@@ -153,4 +153,165 @@ func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
 			t.Fatalf("error = %v, want runtime unavailable failure", err)
 		}
 	})
+}
+
+func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
+	service := workservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	ctx := context.Background()
+
+	stdin := "from service root"
+	prepared, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: []string{"-"},
+		StdinText: &stdin,
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != stdin {
+		t.Fatalf("prepared = %#v, want stdin text", prepared)
+	}
+
+	_, err = service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: []string{""},
+	})
+	if !errors.Is(err, work.ErrInvalidInvocationInput) {
+		t.Fatalf("PrepareInvocationInput error = %v, want ErrInvalidInvocationInput", err)
+	}
+
+	_, err = service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &work.InvocationReturnConfig{
+			Policy: "NOT_A_POLICY",
+		},
+		WorldState: work.InvocationWorldState{
+			WorkRequestsByID: map[string]work.InvocationWorkRequest{
+				"request-1": {WorkItems: []work.FactoryWorkItem{{ID: "work-1"}}},
+			},
+		},
+	})
+	if !errors.Is(err, work.ErrUnsupportedReturnPolicy) {
+		t.Fatalf("ResolvePrimaryResult error = %v, want ErrUnsupportedReturnPolicy", err)
+	}
+}
+
+type recordingContentStaging struct {
+	stageReq   work.StageContentRequest
+	prepareIn  []work.StagedSubmissionItem
+	resolveRef string
+	cleanupRef string
+}
+
+func (s *recordingContentStaging) StageContent(
+	_ context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	s.stageReq = request
+	return work.StageContentResult{
+		StagedFileRef: "submit-work-stage:v1:svc",
+		FileName:      request.FileName,
+		MediaType:     request.MediaType,
+		URL:           "file:///tmp/svc.png",
+	}, nil
+}
+
+func (s *recordingContentStaging) PrepareContent(
+	_ context.Context,
+	items []work.StagedSubmissionItem,
+) ([]work.WorkContentPart, error) {
+	s.prepareIn = items
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeImage, URL: "file:///tmp/svc.png", ContentType: "image/png",
+	}}, nil
+}
+
+func (s *recordingContentStaging) ResolveContent(
+	_ context.Context,
+	ref string,
+) (work.ResolvedStagedContent, error) {
+	s.resolveRef = ref
+	return work.ResolvedStagedContent{Path: "/tmp/svc.png", URL: "file:///tmp/svc.png"}, nil
+}
+
+func (s *recordingContentStaging) CleanupContent(_ context.Context, ref string) error {
+	s.cleanupRef = ref
+	return nil
+}
+
+func TestNewServiceDelegatesContentStagingSlice(t *testing.T) {
+	staging := &recordingContentStaging{}
+	service := workservice.NewService(
+		workRuntimeResolver{runtime: &recordingFactory{}},
+		os.ReadFile,
+		staging,
+		nil,
+	)
+	ctx := context.Background()
+
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
+		ItemType: "image", FileName: "svc.png", MediaType: "image/png", Content: []byte("png"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef != "submit-work-stage:v1:svc" || staging.stageReq.FileName != "svc.png" {
+		t.Fatalf("stage = (%#v, %#v)", staged, staging.stageReq)
+	}
+
+	parts, err := service.PrepareContent(ctx, []work.StagedSubmissionItem{{
+		ItemType: "image", StagedFileRef: staged.StagedFileRef, FileName: staged.FileName, MediaType: staged.MediaType,
+	}})
+	if err != nil || len(parts) != 1 || staging.prepareIn[0].StagedFileRef != staged.StagedFileRef {
+		t.Fatalf("PrepareContent = (%#v, %v, %#v)", parts, err, staging.prepareIn)
+	}
+
+	resolved, err := service.ResolveContent(ctx, staged.StagedFileRef)
+	if err != nil || resolved.Path == "" || staging.resolveRef != staged.StagedFileRef {
+		t.Fatalf("ResolveContent = (%#v, %v, %q)", resolved, err, staging.resolveRef)
+	}
+
+	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil || staging.cleanupRef != staged.StagedFileRef {
+		t.Fatalf("CleanupContent = (%v, %q)", err, staging.cleanupRef)
+	}
+}
+
+func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
+	materialized := ""
+	materializer := work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
+		materialized = rawURL
+		return "/tmp/materialized/svc.png", func() {}, nil
+	})
+	service := workservice.NewService(
+		workRuntimeResolver{runtime: &recordingFactory{}},
+		os.ReadFile,
+		nil,
+		materializer,
+	)
+	ctx := context.Background()
+
+	path, cleanup, err := service.MaterializeContentURL(ctx, "file:///fixtures/svc.png")
+	if err != nil || path == "" || cleanup == nil || materialized != "file:///fixtures/svc.png" {
+		t.Fatalf("MaterializeContentURL = (%q, %v, %v, %q)", path, cleanup, err, materialized)
+	}
+	cleanup()
+}
+
+func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
+	service := workservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	ctx := context.Background()
+
+	if _, err := service.StageContent(ctx, work.StageContentRequest{}); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("StageContent error = %v, want staging required", err)
+	}
+	if _, err := service.PrepareContent(ctx, nil); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("PrepareContent error = %v, want staging required", err)
+	}
+	if _, err := service.ResolveContent(ctx, "ref"); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("ResolveContent error = %v, want staging required", err)
+	}
+	if err := service.CleanupContent(ctx, "ref"); err == nil || !strings.Contains(err.Error(), "content staging is required") {
+		t.Fatalf("CleanupContent error = %v, want staging required", err)
+	}
+	if _, _, err := service.MaterializeContentURL(ctx, "file:///x"); err == nil || !strings.Contains(err.Error(), "content materializer is required") {
+		t.Fatalf("MaterializeContentURL error = %v, want materializer required", err)
+	}
 }

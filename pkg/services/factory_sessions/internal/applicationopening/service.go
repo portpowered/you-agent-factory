@@ -7,18 +7,18 @@ import (
 	"errors"
 	"fmt"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"go.uber.org/zap"
 )
 
 // RuntimeInputs are the resolved operation inputs selected by the canonical
-// injector. They contain values and external edges only.
+// injector. They contain values and exact external effects only.
 type RuntimeInputs struct {
 	Request *factorysessions.RuntimeOpeningRequest
-	Edges   serviceedges.Edges
+	Effects runtimeopening.ExternalEffects
 	Logger  *zap.Logger
 }
 
@@ -33,7 +33,7 @@ type RuntimeOpener interface {
 	OpenApplicationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		serviceedges.Edges,
+		runtimeopening.ExternalEffects,
 		*zap.Logger,
 	) (roles.OpenedApplicationRuntime, error)
 }
@@ -43,12 +43,12 @@ type RuntimeOpener interface {
 // lifecycle selection or ordering policy.
 type RuntimeAdapter func(
 	roles.OpenedApplicationRuntime,
-	serviceedges.Edges,
+	runtimeopening.ExternalEffects,
 	factoryvisualization.Sink,
 ) (factorysessions.BoundProcessComponents, error)
 
 // Service is constructed once by Wire. OpenApplication supplies only
-// invocation values and external-edge replacements to the already-selected
+// invocation values and exact external-effect replacements to the already-selected
 // runtime-opening and application-binding operations.
 type Service struct {
 	resolveInputs RuntimeInputResolver
@@ -96,12 +96,12 @@ func (service *Service) OpenApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(
-		ctx, inputs.Request, inputs.Edges, inputs.Logger,
+		ctx, inputs.Request, inputs.Effects, inputs.Logger,
 	)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
-	components, err := service.adaptRuntime(opened, inputs.Edges, visualizationSink)
+	components, err := service.adaptRuntime(opened, inputs.Effects, visualizationSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)

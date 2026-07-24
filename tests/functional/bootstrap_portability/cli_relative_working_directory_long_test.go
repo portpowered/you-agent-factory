@@ -61,7 +61,7 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 	)
 
-	session := support.RunFactoryToCompletionWithEdges(t, factoryDir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, factoryDir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
 	for placeID, want := range map[string]int{
@@ -69,7 +69,7 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 		"task:init":     0,
 		"task:failed":   0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

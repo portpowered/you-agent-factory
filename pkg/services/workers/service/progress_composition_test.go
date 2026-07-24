@@ -225,6 +225,14 @@ func (testModelsService) InspectRuntime(context.Context, string) (models.Runtime
 	return models.Runtime{}, nil
 }
 
+func (testModelsService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, nil
+}
+
+func (testModelsService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return nil
+}
+
 func (testModelsService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{}, nil
 }
