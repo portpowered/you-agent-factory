@@ -77,7 +77,8 @@ type Target struct {
 	Project    string
 }
 
-// OpenResult is the internal outcome of opening or validating a session folder.
+// OpenResult is the plain live-control open outcome of opening or validating a
+// session folder. Peers read SessionID and Session for stable live identity.
 type OpenResult struct {
 	SessionID       string
 	Session         *ScopedLiveSessionSummary

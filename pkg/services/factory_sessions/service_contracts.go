@@ -54,6 +54,11 @@ type RuntimeBinding struct {
 // identity slice uses plain IdentityNormalizeRequest,
 // IdentityNormalizeProviderRequest, ResolvedIdentity, and the logical-target
 // typed errors; peers must not import the private identity subservice.
+// The published live-control slice uses OpenRequest/OpenResult,
+// ReadProjection, SessionProjection, ControlRequest, LifecycleControlResult,
+// ErrSessionNotFound, and *ControlError on these Service methods; peers must
+// not import private live-runtime registry or host types and must not depend
+// on a second peer-facing live-session interface.
 // The process-scoped root uses ForRuntime to create an isolated runtime view; a
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.
