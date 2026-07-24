@@ -99,11 +99,15 @@
   `gocoveragecheck` coverage-summary JSON file (never a second `.out`
   profile parser), attaches golden manifest provenance fail-closed, and
   writes `.artifacts/functional-test-viz/functional-tests.md` by default
-  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library;
-  Make/CI upload wiring remains a later cell (`make functional-test-viz` is
-  intentionally not owned here). Prove rendering with focused package/cmd
-  golden fixtures under `internal/functionaltestviz/testdata/` rather than
-  executing the full functional suite.
+  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library.
+  Maintainer/CI composition is `make functional-test-viz`: boundary check,
+  one short functional coverage lane with
+  `GO_FUNCTIONAL_COVERAGE_PROFILE` / `GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT`
+  under `.artifacts/functional-test-viz/`, then `cmd/functionaltestviz`.
+  Prove rendering with focused package/cmd golden fixtures under
+  `internal/functionaltestviz/testdata/` rather than executing the full
+  functional suite. Later FND-005 cells still own required-CI boundary
+  enforcement, artifact uploads, and Makefile contract proofs.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions

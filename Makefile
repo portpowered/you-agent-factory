@@ -68,6 +68,11 @@ GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/baselines/go-unit-coverage-package-mi
 GO_FUNCTIONAL_COVERAGE_MANIFEST ?= docs/internal/baselines/go-functional-coverage-package-minimums.json
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
+GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
+FUNCTIONAL_TEST_VIZ_DIR ?= .artifacts/functional-test-viz
+FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
+FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
+FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
@@ -103,7 +108,7 @@ endef
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check
+.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
@@ -304,6 +309,20 @@ test-functional:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
+# functional-test-viz runs the boundary check, then the required short functional
+# coverage lane exactly once (profile + gocoveragecheck -json-output), then the
+# FND-004 Markdown catalog generator. Artifacts land under
+# .artifacts/functional-test-viz/.
+functional-test-viz:
+	$(MAKE) functional-boundary-check
+	@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)
+	GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
+		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
+		$(MAKE) test-functional-coverage
+	$(GO) run ./cmd/functionaltestviz \
+		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
+		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
+
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
@@ -388,7 +407,7 @@ test-unit-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
 
 test-functional-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
+	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

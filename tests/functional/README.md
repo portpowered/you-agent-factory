@@ -10,6 +10,7 @@
 - Release-package lane: `make test-release`
 - Independent functional coverage report: `make test-functional-coverage`
 - Independent backend unit coverage report: `make test-unit-coverage`
+- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz`
 - Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`
