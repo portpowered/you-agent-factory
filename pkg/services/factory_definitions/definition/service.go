@@ -148,6 +148,85 @@ func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir, name string) (i
 	return s.currentFactoryDefinitionVersionAtRoot(rootDir, name)
 }
 
+// ListNamedFactories satisfies the root catalog slice. Nested catalog wiring
+// remains an IMP-DEF concern; this method keeps the root Service assignable.
+func (s *Service) ListNamedFactories(
+	context.Context,
+	factoryroot.ListNamedFactoriesRequest,
+) (factoryroot.ListNamedFactoriesResult, error) {
+	return factoryroot.ListNamedFactoriesResult{}, fmt.Errorf("named factory catalog collaborator is required")
+}
+
+// GetNamedFactory satisfies the root catalog slice.
+func (s *Service) GetNamedFactory(
+	context.Context,
+	factoryroot.GetNamedFactoryRequest,
+) (factoryroot.GetNamedFactoryResult, error) {
+	return factoryroot.GetNamedFactoryResult{}, factoryroot.ErrNamedFactoryNotFound
+}
+
+// ResolveNamedFactory satisfies the root catalog slice.
+func (s *Service) ResolveNamedFactory(
+	context.Context,
+	factoryroot.ResolveNamedFactoryRequest,
+) (factoryroot.ResolveNamedFactoryResult, error) {
+	return factoryroot.ResolveNamedFactoryResult{}, factoryroot.ErrNamedFactoryNotFound
+}
+
+// DeleteNamedFactory satisfies the root catalog slice.
+func (s *Service) DeleteNamedFactory(
+	context.Context,
+	factoryroot.DeleteNamedFactoryRequest,
+) (factoryroot.DeleteNamedFactoryResult, error) {
+	return factoryroot.DeleteNamedFactoryResult{}, factoryroot.ErrNamedFactoryNotFound
+}
+
+// GetCurrentFactoryPointer satisfies the root catalog slice using the host
+// pointer reader when available.
+func (s *Service) GetCurrentFactoryPointer(
+	_ context.Context,
+	request factoryroot.GetCurrentFactoryPointerRequest,
+) (factoryroot.GetCurrentFactoryPointerResult, error) {
+	if s == nil || s.host == nil {
+		return factoryroot.GetCurrentFactoryPointerResult{}, fmt.Errorf("factory definition service is required")
+	}
+	name, err := readCurrentFactoryPointerFromHost(s.host, request.RootDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return factoryroot.GetCurrentFactoryPointerResult{}, ErrCurrentFactoryNotFound
+		}
+		return factoryroot.GetCurrentFactoryPointerResult{}, err
+	}
+	factoryDir, resolveErr := resolveExistingFactoryDirFromHost(s.host, request.RootDir, name)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, factoryroot.ErrNamedFactoryNotFound) ||
+			errors.Is(resolveErr, factoryroot.ErrInvalidNamedFactoryName) {
+			return factoryroot.GetCurrentFactoryPointerResult{}, resolveErr
+		}
+		return factoryroot.GetCurrentFactoryPointerResult{Name: name}, nil
+	}
+	return factoryroot.GetCurrentFactoryPointerResult{Name: name, FactoryDir: factoryDir}, nil
+}
+
+// SetCurrentFactoryPointer satisfies the root catalog slice using the host
+// pointer writer when available.
+func (s *Service) SetCurrentFactoryPointer(
+	_ context.Context,
+	request factoryroot.SetCurrentFactoryPointerRequest,
+) (factoryroot.SetCurrentFactoryPointerResult, error) {
+	if s == nil || s.host == nil {
+		return factoryroot.SetCurrentFactoryPointerResult{}, fmt.Errorf("factory definition service is required")
+	}
+	if err := writeCurrentFactoryPointerFromHost(s.host, request.RootDir, request.Name); err != nil {
+		if errors.Is(err, factoryroot.ErrInvalidNamedFactoryName) ||
+			errors.Is(err, factoryroot.ErrNamedFactoryNotFound) {
+			return factoryroot.SetCurrentFactoryPointerResult{}, err
+		}
+		return factoryroot.SetCurrentFactoryPointerResult{}, err
+	}
+	return factoryroot.SetCurrentFactoryPointerResult{Name: request.Name}, nil
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

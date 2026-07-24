@@ -16,6 +16,83 @@ type Service interface {
 	GetCurrentNamedFactory(context.Context) (*FactorySnapshot, error)
 	GetCurrentFactoryForSession(context.Context, string) (EditableFactory, error)
 	CurrentFactoryDefinitionVersionAtRoot(string, string) (FactoryVersion, error)
+
+	// Catalog slice: list, get/resolve, delete, and current-pointer read/write.
+	ListNamedFactories(context.Context, ListNamedFactoriesRequest) (ListNamedFactoriesResult, error)
+	GetNamedFactory(context.Context, GetNamedFactoryRequest) (GetNamedFactoryResult, error)
+	ResolveNamedFactory(context.Context, ResolveNamedFactoryRequest) (ResolveNamedFactoryResult, error)
+	DeleteNamedFactory(context.Context, DeleteNamedFactoryRequest) (DeleteNamedFactoryResult, error)
+	GetCurrentFactoryPointer(context.Context, GetCurrentFactoryPointerRequest) (GetCurrentFactoryPointerResult, error)
+	SetCurrentFactoryPointer(context.Context, SetCurrentFactoryPointerRequest) (SetCurrentFactoryPointerResult, error)
+}
+
+// ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
+type ListNamedFactoriesRequest struct {
+	RootDir string
+}
+
+// ListNamedFactoriesResult carries detached catalog entries peers can consume
+// without importing catalog storage implementation types.
+type ListNamedFactoriesResult struct {
+	Entries []NamedFactoryListEntry
+}
+
+// GetNamedFactoryRequest identifies one named Factory under a single root.
+type GetNamedFactoryRequest struct {
+	RootDir string
+	Name    string
+}
+
+// GetNamedFactoryResult carries identity facts for one catalog entry.
+type GetNamedFactoryResult struct {
+	Entry NamedFactoryListEntry
+}
+
+// ResolveNamedFactoryRequest resolves one named Factory across project-local
+// and global catalog roots using Definitions precedence policy.
+type ResolveNamedFactoryRequest struct {
+	ProjectRoot string
+	GlobalRoot  string
+	Name        string
+}
+
+// ResolveNamedFactoryResult carries the detached cross-root resolution facts.
+type ResolveNamedFactoryResult struct {
+	Resolution NamedFactoryResolution
+}
+
+// DeleteNamedFactoryRequest identifies one named Factory to remove from a root.
+type DeleteNamedFactoryRequest struct {
+	RootDir string
+	Name    string
+}
+
+// DeleteNamedFactoryResult confirms the deleted Factory identity.
+type DeleteNamedFactoryResult struct {
+	Name       string
+	FactoryDir string
+}
+
+// GetCurrentFactoryPointerRequest selects the root whose current pointer to read.
+type GetCurrentFactoryPointerRequest struct {
+	RootDir string
+}
+
+// GetCurrentFactoryPointerResult carries the current named-Factory identity.
+type GetCurrentFactoryPointerResult struct {
+	Name       string
+	FactoryDir string
+}
+
+// SetCurrentFactoryPointerRequest updates the current pointer under one root.
+type SetCurrentFactoryPointerRequest struct {
+	RootDir string
+	Name    string
+}
+
+// SetCurrentFactoryPointerResult confirms the written current-pointer identity.
+type SetCurrentFactoryPointerResult struct {
+	Name string
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped

@@ -641,6 +641,17 @@ baseline target for that package. Characterization proof for the seam belongs
 in a root-package external test that implements `Service` using only
 `pkg/services/factory_definitions` imports.
 
+When publishing additive CTR-DEF catalog (or later) slices on that root
+`Service`, declare plain request/result value types beside the interface,
+keep catalog methods on the singular `Service` rather than elevating
+`NamedFactoryCatalog` as a peer-facing authority, and extend the same
+external fake-peer characterization test with representative success and
+distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
+vs `ErrNamedFactoryNotFound`). Avoid adding a new root Go file when the
+package is already over the file-count baseline; grow `service_contract.go`
+and `service_contract_test.go` instead, and ratchet
+`backend-package-file-count.json` only for unavoidable prior growth.
+
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
 contract when that does not create a cycle; implementation capabilities needed
