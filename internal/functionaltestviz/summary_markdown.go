@@ -7,7 +7,8 @@ import (
 
 // RenderCatalogMarkdown renders the functional-test Markdown catalog.
 // Golden-backed records must already carry attached provenance; missing
-// provenance fails closed. Later stories append package coverage.
+// provenance fails closed. Package coverage is rendered from summary JSON
+// fields only.
 func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
 	if err := RequireGoldenProvenance(inputs.Records); err != nil {
 		return "", err
@@ -19,6 +20,8 @@ func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
 	b.WriteString(RenderDetailCatalogMarkdown(BuildDetailCatalog(inputs.Records)))
 	b.WriteString("\n")
 	b.WriteString(RenderDebtMarkdown(BuildDebtReport(inputs.Records)))
+	b.WriteString("\n")
+	b.WriteString(RenderPackageCoverageMarkdown(inputs.Coverage))
 	return b.String(), nil
 }
 

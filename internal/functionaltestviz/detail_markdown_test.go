@@ -149,11 +149,15 @@ func TestRenderCatalogMarkdownAppendsDetailAfterDomainSummaries(t *testing.T) {
 	summaryIdx := strings.Index(catalog, "## Domain summaries\n")
 	detailIdx := strings.Index(catalog, "## Test catalog\n")
 	debtIdx := strings.Index(catalog, "## Documentation debt\n")
+	coverageIdx := strings.Index(catalog, "## Package coverage\n")
 	if summaryIdx < 0 || detailIdx < 0 || detailIdx <= summaryIdx {
 		t.Fatalf("catalog must contain domain summaries before detail catalog:\n%s", catalog)
 	}
 	if debtIdx < 0 || debtIdx <= detailIdx {
 		t.Fatalf("catalog must append documentation debt after detail catalog:\n%s", catalog)
+	}
+	if coverageIdx < 0 || coverageIdx <= debtIdx {
+		t.Fatalf("catalog must append package coverage after documentation debt:\n%s", catalog)
 	}
 	if !strings.Contains(catalog, "- **TestHelp** — scenario\n") {
 		t.Fatalf("customer detail row missing:\n%s", catalog)

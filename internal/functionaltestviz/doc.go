@@ -6,4 +6,5 @@
 //
 // Golden-backed rows require AttachGoldenProvenance (or equivalent fixture
 // setup) before RenderCatalogMarkdown; missing manifests fail closed.
+// Package coverage is rendered from CoverageSummary JSON fields only.
 package functionaltestviz
