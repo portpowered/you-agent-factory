@@ -82,6 +82,8 @@ func (c *Conductor) Capabilities(
 // Invoke validates requested capabilities against the selected integration's
 // registry/manifest maximum before any provider Invoke I/O, then invokes
 // through the structured response writer composed with ExecuteInvocation.
+// The destination receives exactly one terminal success or safe normalized
+// failure, unless a destination write failure is preserved as the sole signal.
 func (c *Conductor) Invoke(
 	ctx context.Context,
 	identity string,
@@ -95,7 +97,9 @@ func (c *Conductor) Invoke(
 	if err != nil {
 		return err
 	}
-	return inference.ExecuteInvocation(ctx, correlatingIntegration{Integration: integration}, request, destination)
+	guard := newTerminalGuard(destination)
+	invokeErr := inference.ExecuteInvocation(ctx, correlatingIntegration{Integration: integration}, request, guard)
+	return guard.finalize(ctx, invokeErr)
 }
 
 func (c *Conductor) preflight(identity string, required inference.CapabilitySet) error {

@@ -66,8 +66,14 @@ func TestConductorRejectsInvalidWorkersDraftContract(t *testing.T) {
 	if err == nil {
 		t.Fatal("Invoke() error = nil, want Draft contract rejection")
 	}
-	if len(destination.drafts) != 0 || destination.closes != 0 {
-		t.Fatalf("destination received output after invalid draft: drafts=%d closes=%d", len(destination.drafts), destination.closes)
+	if len(destination.drafts) != 0 {
+		t.Fatalf("destination received drafts after invalid draft: drafts=%d", len(destination.drafts))
+	}
+	if destination.closes != 1 || destination.completion == nil || destination.completion.Failure() == nil {
+		t.Fatalf("destination closes=%d completion=%#v, want one collapsed safe failure terminal", destination.closes, destination.completion)
+	}
+	if validateErr := inference.ValidateFailure(*destination.completion.Failure()); validateErr != nil {
+		t.Fatalf("collapsed failure is not customer-safe: %v", validateErr)
 	}
 }
 

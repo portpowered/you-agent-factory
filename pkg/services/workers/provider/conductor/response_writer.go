@@ -56,7 +56,7 @@ func (w *structuredResponseWriter) Close(ctx context.Context, completion inferen
 		return err
 	}
 	w.closed = true
-	if err := w.next.Close(ctx, completion); err != nil {
+	if err := w.next.Close(ctx, sanitizeCompletion(completion)); err != nil {
 		w.terminalErr = err
 		return err
 	}

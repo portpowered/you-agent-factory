@@ -107,8 +107,11 @@ primary-result behavior.
   response writer that stamps conductor correlation (`RunID` = invocation ID)
   before leaf Draft validation, preserves emission order, stops immediately on
   destination write failure, and rejects late writes or closes after close.
-  Keep terminal exclusivity, cancel/timeout, and Factory Session routing
-  follow-on work in later conductor stories.
+  Invoke wraps the orchestration destination in a terminal guard that sanitizes
+  normalized failures before publication, collapses missing/contradictory
+  terminals into exactly one safe failure close, and preserves destination
+  write failures without publishing a competing close. Keep cancel/timeout and
+  Factory Session routing follow-on work in later conductor stories.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
