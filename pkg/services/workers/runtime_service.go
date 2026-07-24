@@ -25,9 +25,14 @@ type ModelEventRecorder func(ModelEvent)
 // AgentRunEventRecorder receives one Worker-owned agent-run event.
 type AgentRunEventRecorder func(AgentRunResponseEvent)
 
-// RuntimeService is the Worker service role used while constructing a Factory
-// Runtime. Provider factories, executor builders, and runner decorators remain
-// private to the Workers implementation.
+// RuntimeService is the Worker construction/composition role used while
+// opening a Factory Session runtime. It embeds Service so constructed runtimes
+// still satisfy the singular Workers root, but its clone/progress/injection
+// helpers are not the peer source of truth for the published runtime-build,
+// workstation-dispatch, or Runner-neutral root slices. Peers that need those
+// slices depend on Service, not on a second Workers authority interface.
+// Provider factories, executor builders, and runner decorators remain private
+// to the Workers implementation.
 type RuntimeService interface {
 	Service
 
