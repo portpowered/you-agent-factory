@@ -157,8 +157,19 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 		return err
 	}
 
-	var problems []string
+	problems := reconcileLiveAndLedger(live, ledger, checklist)
+	problems = append(problems, checkLaneSummary(ledger)...)
+	problems = append(problems, checkDeletionOnlyBatches(ledger)...)
+	problems = append(problems, checkSpecialtyTargets(ledger)...)
+	if len(problems) > 0 {
+		slices.Sort(problems)
+		return fmt.Errorf("migration ledger completeness check failed (%d problems):\n- %s", len(problems), strings.Join(problems, "\n- "))
+	}
+	return nil
+}
 
+func reconcileLiveAndLedger(live []LiveScenario, ledger *Ledger, checklist map[string]struct{}) []string {
+	var problems []string
 	liveByKey := map[ScenarioKey]LiveScenario{}
 	for _, scenario := range live {
 		key := ScenarioKey{SourcePath: scenario.SourcePath, Scenario: scenario.Scenario}
@@ -200,14 +211,17 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 			problems = append(problems, fmt.Sprintf("stale ledger row not in live tree: %s", key))
 		}
 	}
-
 	if len(live) != len(ledger.Rows) {
 		problems = append(problems, fmt.Sprintf("row count mismatch: live=%d ledger=%d", len(live), len(ledger.Rows)))
 	}
 	if len(live) != ledger.Summary.CustomerTopLevelTestScenarios {
 		problems = append(problems, fmt.Sprintf("summary customer count mismatch: live=%d summary=%d", len(live), ledger.Summary.CustomerTopLevelTestScenarios))
 	}
+	return problems
+}
 
+func checkLaneSummary(ledger *Ledger) []string {
+	var problems []string
 	shortCount, longCount := 0, 0
 	for _, row := range ledger.Rows {
 		switch row.Lane {
@@ -225,7 +239,11 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 	if longCount != ledger.Summary.LaneFunctionallong {
 		problems = append(problems, fmt.Sprintf("summary long lane mismatch: rows=%d summary=%d", longCount, ledger.Summary.LaneFunctionallong))
 	}
+	return problems
+}
 
+func checkDeletionOnlyBatches(ledger *Ledger) []string {
+	var problems []string
 	batchCounts := map[string]int{}
 	for _, row := range ledger.Rows {
 		if row.DeletionOnlyBatch == "" || row.DeletionOnlyBatch == "n/a" {
@@ -243,12 +261,34 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 			problems = append(problems, fmt.Sprintf("unexpected deletion-only batch id %q", batchID))
 		}
 	}
+	return problems
+}
 
-	if len(problems) > 0 {
-		slices.Sort(problems)
-		return fmt.Errorf("migration ledger completeness check failed (%d problems):\n- %s", len(problems), strings.Join(problems, "\n- "))
+func checkSpecialtyTargets(ledger *Ledger) []string {
+	var problems []string
+	for _, row := range ledger.Rows {
+		for _, target := range specialtyTargetTokens(row.SpecialtyTargets) {
+			if !slices.Contains(RequiredSpecialtyTargets, target) {
+				problems = append(problems, fmt.Sprintf("unknown specialty target %q on %s", target, row.Scenario))
+			}
+		}
 	}
-	return nil
+	return problems
+}
+
+func specialtyTargetTokens(value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed == "none" {
+		return nil
+	}
+	var tokens []string
+	for _, part := range strings.Split(trimmed, ",") {
+		token := strings.TrimSpace(part)
+		if token != "" && token != "none" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
 }
 
 // LoadLedger reads the machine-readable migration ledger companion.

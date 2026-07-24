@@ -78,6 +78,38 @@ func TestCheckRejectsUnmappedDestination(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsUnknownSpecialtyTarget(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFixtureTree(t, root)
+	ledgerPath := filepath.Join(root, "ledger.json")
+	checklistPath := filepath.Join(root, "checklist.md")
+	writeFixture(t, checklistPath, "- [ ] `tests/functional/example/dest_test.go`\n")
+	writeFixture(t, ledgerPath, `{
+  "rows": [{
+    "source_path": "tests/functional/example/source_test.go",
+    "package": "you-agent-factory/tests/functional/example",
+    "scenario": "TestExample",
+    "lane": "short",
+    "destination": "tests/functional/example/dest_test.go",
+    "catch_all": "none",
+    "specialty_targets": "not-a-real-specialty-target",
+    "deletion_only_batch": "n/a"
+  }],
+  "summary": {
+    "customer_top_level_Test_scenarios": 1,
+    "lane_short": 1,
+    "lane_functionallong": 0
+  }
+}`)
+
+	err := Check(root, "ledger.json", "checklist.md")
+	if err == nil || !strings.Contains(err.Error(), "unknown specialty target") {
+		t.Fatalf("Check() error = %v, want unknown specialty target", err)
+	}
+}
+
 func findRepoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
