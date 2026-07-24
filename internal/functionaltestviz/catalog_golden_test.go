@@ -14,7 +14,36 @@ import (
 func TestRenderCatalogMarkdownFullReportGolden(t *testing.T) {
 	t.Parallel()
 
-	floor := 66.66
+	inputs := functionaltestviz.CatalogInputs{
+		Records:  fullReportFixtureRecords(),
+		Coverage: fullReportCoverageSummary(),
+	}
+
+	first, err := functionaltestviz.RenderCatalogMarkdown(inputs)
+	if err != nil {
+		t.Fatalf("RenderCatalogMarkdown first: %v", err)
+	}
+	second, err := functionaltestviz.RenderCatalogMarkdown(inputs)
+	if err != nil {
+		t.Fatalf("RenderCatalogMarkdown second: %v", err)
+	}
+	if first != second {
+		t.Fatalf("repeated full-report renders diverged:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	assertFullReportCoversRepresentativeSections(t, first)
+
+	goldenPath := filepath.Join("testdata", "full-report", "functional-tests.md")
+	golden, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", goldenPath, err)
+	}
+	if !bytes.Equal([]byte(first), golden) {
+		t.Fatalf("full-report markdown differs from golden %s:\ngot:\n%s\nwant:\n%s", goldenPath, first, golden)
+	}
+}
+
+func fullReportFixtureRecords() []functionaltestviz.ClassifiedRecord {
 	records := functionaltestviz.ClassifyRecords([]functionaltestmetadata.Record{
 		{
 			File:           "transport/cli/process/help_test.go",
@@ -73,59 +102,37 @@ func TestRenderCatalogMarkdownFullReportGolden(t *testing.T) {
 		ID:            "openai-invoke",
 		ManifestPath:  "testdata/goldens/openai/invoke/manifest.json",
 	}
+	return records
+}
 
-	inputs := functionaltestviz.CatalogInputs{
-		Records: records,
-		Coverage: functionaltestviz.CoverageSummary{
-			CoveredStatements:    8,
-			MeasurableStatements: 10,
-			CoveragePercent:      80.0,
-			Packages: []functionaltestviz.PackageCoverage{
-				{
-					Package:              "github.com/portpowered/infinite-you/pkg/service",
-					CoveredStatements:    0,
-					MeasurableStatements: 0,
-					CoveragePercent:      0.0,
-					MeasurementException: &functionaltestviz.MeasurementException{
-						Kind:          "measurement",
-						Justification: "no measurable statements",
-						Owner:         "backend-quality",
-						Deadline:      "2027-07-15",
-						RemovalGate:   "profile reports measurable statements",
-					},
-				},
-				{
-					Package:              "github.com/portpowered/infinite-you/pkg/config",
-					CoveredStatements:    3,
-					MeasurableStatements: 3,
-					CoveragePercent:      100.0,
-					PackageFloor:         &floor,
+func fullReportCoverageSummary() functionaltestviz.CoverageSummary {
+	floor := 66.66
+	return functionaltestviz.CoverageSummary{
+		CoveredStatements:    8,
+		MeasurableStatements: 10,
+		CoveragePercent:      80.0,
+		Packages: []functionaltestviz.PackageCoverage{
+			{
+				Package:              "github.com/portpowered/infinite-you/pkg/service",
+				CoveredStatements:    0,
+				MeasurableStatements: 0,
+				CoveragePercent:      0.0,
+				MeasurementException: &functionaltestviz.MeasurementException{
+					Kind:          "measurement",
+					Justification: "no measurable statements",
+					Owner:         "backend-quality",
+					Deadline:      "2027-07-15",
+					RemovalGate:   "profile reports measurable statements",
 				},
 			},
+			{
+				Package:              "github.com/portpowered/infinite-you/pkg/config",
+				CoveredStatements:    3,
+				MeasurableStatements: 3,
+				CoveragePercent:      100.0,
+				PackageFloor:         &floor,
+			},
 		},
-	}
-
-	first, err := functionaltestviz.RenderCatalogMarkdown(inputs)
-	if err != nil {
-		t.Fatalf("RenderCatalogMarkdown first: %v", err)
-	}
-	second, err := functionaltestviz.RenderCatalogMarkdown(inputs)
-	if err != nil {
-		t.Fatalf("RenderCatalogMarkdown second: %v", err)
-	}
-	if first != second {
-		t.Fatalf("repeated full-report renders diverged:\nfirst:\n%s\nsecond:\n%s", first, second)
-	}
-
-	assertFullReportCoversRepresentativeSections(t, first)
-
-	goldenPath := filepath.Join("testdata", "full-report", "functional-tests.md")
-	golden, err := os.ReadFile(goldenPath)
-	if err != nil {
-		t.Fatalf("read golden %s: %v", goldenPath, err)
-	}
-	if !bytes.Equal([]byte(first), golden) {
-		t.Fatalf("full-report markdown differs from golden %s:\ngot:\n%s\nwant:\n%s", goldenPath, first, golden)
 	}
 }
 
