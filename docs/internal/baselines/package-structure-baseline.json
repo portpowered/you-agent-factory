@@ -1568,6 +1568,176 @@
       "target": "workflow"
     },
     {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
+      "target": "bootstrap_portability"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/events/javascript_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/output/failure_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/output/output_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/input_contract/generic_constructor_helpers_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/serve_runtime_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/mcp_resume/stdio_client_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/named_invocation/named_invocation_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/root_discovery/root_discovery_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session/session_enumeration_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session_resume/resume_non_regression_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/session_resume/resume_smoke_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
+      "target": "operator_settings"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/agy/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/claude/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/codex/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/codex/process_harness_test.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/contract/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/cursor/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/gemini/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/kiro/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/mock_workers/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/observability/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/opencode/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/pi/doc.go",
+      "target": "providers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/script/doc.go",
+      "target": "providers"
+    },
+    {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/edges/definition.go",
       "target": "Merge"
@@ -2400,7 +2570,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
@@ -2455,27 +2625,27 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/hosted_logic",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/scripts",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-unexpected-directory",

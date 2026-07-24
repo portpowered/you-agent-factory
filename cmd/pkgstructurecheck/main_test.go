@@ -83,6 +83,71 @@ func TestScanStillRequiresSubsectionDepthForApprovedDomains(t *testing.T) {
 	})
 }
 
+func TestScanRejectsNewShallowCatchAllAndUnclassifiedPackages(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/smoke/new_smoke_test.go", "package smoke_test\nfunc TestNewSmoke() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/workflow/new_workflow_test.go", "package workflow_test\nfunc TestNewWorkflow() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/cli/session/new_cli_test.go", "package session_test\nfunc TestNewCLI() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/providers/contract/new_provider_test.go", "package contract_test\nfunc TestNewProvider() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/legacy_bucket/orphan_test.go", "package legacy_bucket_test\nfunc TestOrphan() {}\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleFunctionalShallowFile + "|tests/functional/legacy_bucket/orphan_test.go|legacy_bucket",
+		ruleFunctionalShallowFile + "|tests/functional/smoke/new_smoke_test.go|smoke",
+		ruleFunctionalShallowFile + "|tests/functional/workflow/new_workflow_test.go|workflow",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/cli/session/new_cli_test.go|cli",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/providers/contract/new_provider_test.go|providers",
+	})
+	for _, item := range findings {
+		remediation := deletionGates[item.Rule]
+		if !strings.Contains(remediation, "tests/functional/<domain>/<subsection>/...") {
+			t.Fatalf("remediation for %s = %q, want domain/subsection guidance", item.Rule, remediation)
+		}
+	}
+}
+
+func TestRunRejectsUnrecordedUnclassifiedDebtAndStaleBaseline(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/cli/session/existing_test.go", "package session_test\nfunc TestExisting() {}\n")
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	writeBaseline(t, repoRoot, findings)
+
+	if err := run(config{root: repoRoot}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() with baselined unclassified debt error = %v", err)
+	}
+
+	writeTestFile(t, repoRoot, "tests/functional/cli/session/extra_test.go", "package session_test\nfunc TestExtra() {}\n")
+	stderr := &bytes.Buffer{}
+	err = run(config{root: repoRoot}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "new violation") || !strings.Contains(stderr.String(), ruleFunctionalUnclassifiedDomain) {
+		t.Fatalf("run() with new unclassified debt error = %v, stderr = %q", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "tests/functional/<domain>/<subsection>/...") {
+		t.Fatalf("new violation remediation missing domain guidance: %q", stderr.String())
+	}
+
+	if err := os.Remove(filepath.Join(repoRoot, "tests", "functional", "cli", "session", "extra_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(repoRoot, "tests", "functional", "cli", "session", "existing_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	err = run(config{root: repoRoot}, &bytes.Buffer{}, stderr)
+	if err == nil || !strings.Contains(stderr.String(), "stale baseline") {
+		t.Fatalf("run() with stale unclassified debt error = %v, stderr = %q", err, stderr.String())
+	}
+}
+
 func TestScanFindsServiceRootContractAndDirectoryViolations(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()

@@ -27,19 +27,21 @@ const (
 	ruleServiceExportedFunction = "service-root-exported-function"
 	ruleServiceUnexpectedDir    = "service-root-unexpected-directory"
 	ruleServiceContainerGoFile  = "service-container-go-file"
-	ruleFunctionalShallowFile   = "functional-test-missing-subsection"
-	ruleRuntimeAPIFile          = "deprecated-runtime-api-file"
-	ruleRuntimeAPITest          = "deprecated-runtime-api-test"
+	ruleFunctionalShallowFile         = "functional-test-missing-subsection"
+	ruleFunctionalUnclassifiedDomain  = "functional-test-unclassified-domain"
+	ruleRuntimeAPIFile                = "deprecated-runtime-api-file"
+	ruleRuntimeAPITest                = "deprecated-runtime-api-test"
 )
 
 var deletionGates = map[string]string{
-	ruleServiceInterfaceCount:   "reduce the service root to exactly one named interface and delete this exact entry",
-	ruleServiceExportedFunction: "move the exported function behind the service interface or into internal implementation and delete this exact entry",
-	ruleServiceUnexpectedDir:    "move the package under wire, internal, transports/<protocol>, or services/<subservice> and delete this exact entry",
-	ruleServiceContainerGoFile:  "move the Go file into a named subservice below services and delete this exact entry",
-	ruleFunctionalShallowFile:   "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
-	ruleRuntimeAPIFile:          "move the runtime_api source to its durable domain/subsection owner and delete this exact entry",
-	ruleRuntimeAPITest:          "move the runtime_api scenario to its durable domain/subsection owner and delete this exact entry",
+	ruleServiceInterfaceCount:        "reduce the service root to exactly one named interface and delete this exact entry",
+	ruleServiceExportedFunction:      "move the exported function behind the service interface or into internal implementation and delete this exact entry",
+	ruleServiceUnexpectedDir:         "move the package under wire, internal, transports/<protocol>, or services/<subservice> and delete this exact entry",
+	ruleServiceContainerGoFile:       "move the Go file into a named subservice below services and delete this exact entry",
+	ruleFunctionalShallowFile:        "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
+	ruleFunctionalUnclassifiedDomain: "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
+	ruleRuntimeAPIFile:               "move the runtime_api source to its durable domain/subsection owner and delete this exact entry",
+	ruleRuntimeAPITest:               "move the runtime_api scenario to its durable domain/subsection owner and delete this exact entry",
 }
 
 var allowedServiceRootDirectories = map[string]struct{}{
@@ -354,8 +356,9 @@ func scanFunctionalTests(repoRoot string) ([]finding, error) {
 		if isAllowedFunctionalDomain(domain) {
 			return nil
 		}
-		// Deep paths under historical non-domain roots remain accepted until
-		// unclassified/catch-all rejection is enabled; new shallow debt still fails above.
+		// Deep paths under catch-all or unclassified roots are deletion-only debt.
+		// New files under those roots fail immediately rather than becoming durable owners.
+		findings = append(findings, finding{Rule: ruleFunctionalUnclassifiedDomain, FilePath: relative, Target: domain})
 		return nil
 	})
 	if err != nil {

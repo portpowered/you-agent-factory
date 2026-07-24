@@ -80,7 +80,7 @@
   rejects all service implementation and composition subpackage imports from
   dedicated provider packages, while retaining service-root contracts and the
   exact public external-effect ports used by typed `edges.Edges` replacements.
-  Wave 0 functional-tests-expansion planning authority lives under
+Wave 0 functional-tests-expansion planning authority lives under
   `docs/temp/functional-tests-expansion/` and is durable via a narrow
   `.gitignore` exception for that directory. Existing-scenario source→destination
   mapping is owned by `migration-ledger.md` (planning-only; later move batches
@@ -90,6 +90,13 @@
   rules remain `plan.md`. `cmd/migrationledgercheck` validates live
   `tests/functional` inventory coverage, checklist destination validity, and
   lane preservation against the companion JSON.
+  `make pkg-structure` enforces the domain-mirrored functional layout
+  `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
+  unclassified scenario packages are blocking, while existing nonconforming
+  paths and `runtime_api` remain exact deletion-only debt in
+  `docs/internal/baselines/package-structure-baseline.json`. When enabling a
+  new layout rule, baseline the current repository debt in the same change so
+  `make pkg-structure` stays green.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
