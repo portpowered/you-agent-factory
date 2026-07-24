@@ -3,6 +3,18 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Factory Sessions invocation prepare/command-Work/observe-completion is owned
+  as the FND-02 parent-private nested subservice under
+  `pkg/services/factory_sessions/internal/services/invocation`: one named
+  `Service` interface at the subservice root, one implementation under
+  `invocation/internal/service`, and construction only through
+  `invocation/wire`. Outer Sessions composition binds that contract via
+  `NewInvocationOwner` / `invocationwire.New` and must not introduce a second
+  competing invocation authority. Compatibility-content prepare currently
+  resolves to `work.ArgumentSourceKindCompatibilityContent`
+  (`COMPATIBILITY_CONTENT`); completed success outcomes keep request/trace
+  identity on the result while session scoping is proven by the session ID
+  passed through prepare/command/observe ports.
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and

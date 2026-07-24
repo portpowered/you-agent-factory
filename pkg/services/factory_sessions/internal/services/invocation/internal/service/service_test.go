@@ -62,6 +62,103 @@ func TestNewIsInert(t *testing.T) {
 	}
 }
 
+func TestService_PrepareOwnsResolvedInvocationInput(t *testing.T) {
+	t.Parallel()
+
+	service, err := New(validDependencies(nil))
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	cfg := &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+		Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+	}}}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	resolved, err := service.ResolveInvocationInput(cfg, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "prepare-me"}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveInvocationInput(): %v", err)
+	}
+	wantSource := work.InputSourceLabel(work.ArgumentSourceKindCompatibilityContent)
+	if resolved.Source != wantSource {
+		t.Fatalf("resolved source = %q, want %q", resolved.Source, wantSource)
+	}
+	if len(resolved.Content) != 1 || resolved.Content[0].Text != "prepare-me" {
+		t.Fatalf("resolved content = %#v, want prepared text content", resolved.Content)
+	}
+}
+
+func TestService_InvokeFactorySessionOwnsPrepareCommandObserve(t *testing.T) {
+	t.Parallel()
+
+	deps := validDependencies(nil)
+	factoryConfigCalls := 0
+	submitCalls := 0
+	observeCalls := 0
+	var submitted work.SubmitRequest
+	var observedInput legacyinvocation.SessionInvocationWaitInput
+
+	deps.FactoryConfig = func(sessionID string) (*factorydefinitions.FactoryConfig, error) {
+		factoryConfigCalls++
+		if sessionID != "session-owned-1" {
+			t.Fatalf("FactoryConfig session ID = %q, want session-owned-1", sessionID)
+		}
+		return &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+			Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+		}}}, nil
+	}
+	deps.SubmitWork = func(_ context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+		submitCalls++
+		if sessionID != "session-owned-1" {
+			t.Fatalf("SubmitWork session ID = %q, want session-owned-1", sessionID)
+		}
+		submitted = request
+		return work.WorkRequestSubmitResult{RequestID: "request-owned-1", TraceID: "trace-owned-1"}, nil
+	}
+	deps.Observe = func(_ context.Context, sessionID string, input legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		observeCalls++
+		if sessionID != "session-owned-1" {
+			t.Fatalf("Observe session ID = %q, want session-owned-1", sessionID)
+		}
+		observedInput = input
+		return completedObservation("request-owned-1", "trace-owned-1", "owned-result"), nil
+	}
+
+	var owned invocationservice.Service
+	owned, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	result, err := owned.InvokeFactorySession(context.Background(), "session-owned-1", factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello-owned"}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession(): %v", err)
+	}
+	if result.Status != factorydefinitions.InvocationTerminalStatusCompleted ||
+		result.RequestID != "request-owned-1" ||
+		result.TraceID != "trace-owned-1" {
+		t.Fatalf("result = %#v, want completed owned outcome", result)
+	}
+	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "owned-result" {
+		t.Fatalf("primary result = %#v, want owned-result from observe path", result.PrimaryResult)
+	}
+	if factoryConfigCalls != 1 || submitCalls != 1 || observeCalls != 1 {
+		t.Fatalf("prepare/command/observe calls = config:%d submit:%d observe:%d, want 1 each", factoryConfigCalls, submitCalls, observeCalls)
+	}
+	if submitted.WorkTypeID != "task" || len(submitted.Content) != 1 || submitted.Content[0].Text != "hello-owned" {
+		t.Fatalf("commanded Work = %#v, want prepared task content", submitted)
+	}
+	if observedInput.RequestID != "request-owned-1" || observedInput.TraceID != "trace-owned-1" {
+		t.Fatalf("observe input = %#v, want commanded request/trace identity", observedInput)
+	}
+}
+
 func TestServiceCoordinatesSubmissionAndTerminalResult(t *testing.T) {
 	t.Parallel()
 

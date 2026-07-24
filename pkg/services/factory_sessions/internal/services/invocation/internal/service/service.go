@@ -1,5 +1,5 @@
 // Package service implements the owner-private Factory Session invocation
-// capability.
+// capability under the FND-02 nested subservice internal path.
 package service
 
 import (
@@ -12,10 +12,11 @@ import (
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 )
 
-// Service is the private capability implementation. Keeping the legacy engine
-// behind this boundary lets the package migration preserve its established
-// validation, wait, and telemetry behavior while consumers depend only on the
-// capability contract.
+// Service is the sole private implementation of prepare, command-Work, and
+// observe-completion. Keeping the legacy engine behind this boundary lets the
+// package migration preserve established validation, wait, and telemetry
+// behavior while outer Sessions composition depends only on the named
+// invocation subservice contract.
 type Service struct {
 	owner *legacyinvocation.SessionOwner
 }
