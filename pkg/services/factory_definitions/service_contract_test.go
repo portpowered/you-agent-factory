@@ -227,6 +227,79 @@ func (p fakeDefinitionsPeer) CompileEffectiveFactorySource(
 	}, nil
 }
 
+func (fakeDefinitionsPeer) ValidateStructuralFactoryDefinition(
+	_ context.Context,
+	request factorydefinitions.ValidateStructuralFactoryDefinitionRequest,
+) (factorydefinitions.ValidateStructuralFactoryDefinitionResult, error) {
+	canonical := strings.TrimSpace(string(request.Canonical))
+	if canonical == "" || canonical == "{" {
+		return factorydefinitions.ValidateStructuralFactoryDefinitionResult{}, factorydefinitions.ErrInvalidFactoryDefinitionPayload
+	}
+	if strings.Contains(canonical, `"invalidTopology"`) ||
+		strings.Contains(canonical, `"invalidTool"`) ||
+		strings.Contains(canonical, `"invalidStrategy"`) ||
+		strings.Contains(canonical, `"invalidLayout"`) {
+		code := factorydefinitions.ValidationCodeFactoryPayloadInvalid
+		switch {
+		case strings.Contains(canonical, `"invalidLayout"`):
+			code = factorydefinitions.ValidationCodeLayoutInvalidValue
+		case strings.Contains(canonical, `"invalidTopology"`):
+			code = "factory.topology.invalid"
+		case strings.Contains(canonical, `"invalidTool"`):
+			code = "factory.tool.required"
+		case strings.Contains(canonical, `"invalidStrategy"`):
+			code = "factory.strategy.invalid"
+		}
+		return factorydefinitions.ValidateStructuralFactoryDefinitionResult{}, &factorydefinitions.FactoryDefinitionValidationFailure{
+			Validation: factorydefinitions.ValidationResult{
+				Targets: []factorydefinitions.ValidationTarget{{
+					Code:     code,
+					Severity: factorydefinitions.ValidationSeverityError,
+					Message:  "definition validation failed",
+					Subject: factorydefinitions.ValidationSubject{
+						Type:     factorydefinitions.ValidationSubjectTypeFactory,
+						Location: factorydefinitions.ValidationSubjectLocationDefinition,
+					},
+				}},
+			},
+		}
+	}
+	return factorydefinitions.ValidateStructuralFactoryDefinitionResult{
+		Validation: factorydefinitions.ValidationResult{},
+	}, nil
+}
+
+func (fakeDefinitionsPeer) ValidateEffectiveFactoryDefinition(
+	_ context.Context,
+	request factorydefinitions.ValidateEffectiveFactoryDefinitionRequest,
+) (factorydefinitions.ValidateEffectiveFactoryDefinitionResult, error) {
+	canonical := strings.TrimSpace(string(request.Canonical))
+	if canonical == "" {
+		canonical = strings.TrimSpace(request.Effective.ContentIdentity)
+	}
+	if canonical == "" || canonical == "{" {
+		return factorydefinitions.ValidateEffectiveFactoryDefinitionResult{}, factorydefinitions.ErrInvalidFactoryDefinitionPayload
+	}
+	if strings.Contains(canonical, `"invalidTopology"`) {
+		return factorydefinitions.ValidateEffectiveFactoryDefinitionResult{}, &factorydefinitions.FactoryDefinitionValidationFailure{
+			Validation: factorydefinitions.ValidationResult{
+				Targets: []factorydefinitions.ValidationTarget{{
+					Code:     "factory.topology.invalid",
+					Severity: factorydefinitions.ValidationSeverityError,
+					Message:  "effective definition validation failed",
+					Subject: factorydefinitions.ValidationSubject{
+						Type:     factorydefinitions.ValidationSubjectTypeFactory,
+						Location: factorydefinitions.ValidationSubjectLocationDefinition,
+					},
+				}},
+			},
+		}
+	}
+	return factorydefinitions.ValidateEffectiveFactoryDefinitionResult{
+		Validation: factorydefinitions.ValidationResult{},
+	}, nil
+}
+
 func TestRootService_FakePeerReadPath_TypedNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -516,5 +589,100 @@ func TestRootService_CompileSlice_TypedInvalidSourceAndUnresolvedReference(t *te
 	}
 	if errors.Is(unresolvedErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
 		t.Fatal("unresolved definition reference must not also match ErrInvalidAuthoredFactorySource")
+	}
+}
+
+func TestRootService_ValidateSlice_ValidDefinitionNoErrorFindings(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{}
+	payload := []byte(`{"name":"alpha"}`)
+
+	structural, err := service.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factorydefinitions.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: payload,
+			Profile:   factorydefinitions.ValidationProfilePrePersist,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ValidateStructuralFactoryDefinition: %v", err)
+	}
+	if structural.Validation.HasBlockingTargets() {
+		t.Fatalf("ValidateStructuralFactoryDefinition findings = %#v, want none", structural.Validation)
+	}
+
+	effective, err := service.ValidateEffectiveFactoryDefinition(
+		context.Background(),
+		factorydefinitions.ValidateEffectiveFactoryDefinitionRequest{
+			Canonical: payload,
+			Effective: factorydefinitions.EffectiveFactorySource{
+				FactoryDir:      "/factories/alpha",
+				RuntimeBaseDir:  "/factories/alpha",
+				ContentIdentity: string(payload),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ValidateEffectiveFactoryDefinition: %v", err)
+	}
+	if effective.Validation.HasBlockingTargets() {
+		t.Fatalf("ValidateEffectiveFactoryDefinition findings = %#v, want none", effective.Validation)
+	}
+}
+
+func TestRootService_ValidateSlice_TypedInvalidPayloadAndFindings(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{}
+
+	_, invalidErr := service.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factorydefinitions.ValidateStructuralFactoryDefinitionRequest{Canonical: []byte("{")},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
+		t.Fatalf(
+			"ValidateStructuralFactoryDefinition invalid-payload error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidFactoryDefinitionPayload,
+		)
+	}
+
+	_, findingsErr := service.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factorydefinitions.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"invalidLayout":true}`),
+			Profile:   factorydefinitions.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factorydefinitions.FactoryDefinitionValidationFailure
+	if !errors.As(findingsErr, &validationFailure) {
+		t.Fatalf("ValidateStructuralFactoryDefinition error = %v, want FactoryDefinitionValidationFailure", findingsErr)
+	}
+	if !errors.Is(findingsErr, factorydefinitions.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf(
+			"ValidateStructuralFactoryDefinition error = %v, want %v",
+			findingsErr,
+			factorydefinitions.ErrFactoryDefinitionValidationFailed,
+		)
+	}
+	if errors.Is(findingsErr, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
+		t.Fatal("validation findings must not also match ErrInvalidFactoryDefinitionPayload")
+	}
+	if len(validationFailure.Validation.Targets) == 0 {
+		t.Fatal("FactoryDefinitionValidationFailure must carry validation targets")
+	}
+	hasErrorFinding := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Severity == factorydefinitions.ValidationSeverityError {
+			hasErrorFinding = true
+		}
+		if strings.Contains(strings.ToLower(target.Code), "petri") ||
+			strings.Contains(strings.ToLower(target.Message), "petri") {
+			t.Fatalf("published validation findings must not use Petri vocabulary: %#v", target)
+		}
+	}
+	if !hasErrorFinding {
+		t.Fatal("FactoryDefinitionValidationFailure must carry at least one error-severity finding")
 	}
 }

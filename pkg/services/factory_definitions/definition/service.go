@@ -285,6 +285,24 @@ func (s *Service) CompileEffectiveFactorySource(
 	return factoryroot.CompileEffectiveFactorySourceResult{}, factoryroot.ErrInvalidAuthoredFactorySource
 }
 
+// ValidateStructuralFactoryDefinition satisfies the root validate slice.
+// Nested validator wiring remains an IMP-DEF concern; this method keeps the
+// root Service assignable.
+func (s *Service) ValidateStructuralFactoryDefinition(
+	context.Context,
+	factoryroot.ValidateStructuralFactoryDefinitionRequest,
+) (factoryroot.ValidateStructuralFactoryDefinitionResult, error) {
+	return factoryroot.ValidateStructuralFactoryDefinitionResult{}, factoryroot.ErrInvalidFactoryDefinitionPayload
+}
+
+// ValidateEffectiveFactoryDefinition satisfies the root validate slice.
+func (s *Service) ValidateEffectiveFactoryDefinition(
+	context.Context,
+	factoryroot.ValidateEffectiveFactoryDefinitionRequest,
+) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error) {
+	return factoryroot.ValidateEffectiveFactoryDefinitionResult{}, factoryroot.ErrInvalidFactoryDefinitionPayload
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

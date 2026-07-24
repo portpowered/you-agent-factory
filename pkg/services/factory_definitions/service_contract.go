@@ -36,6 +36,10 @@ type Service interface {
 
 	// Compile slice: authored/canonical source into one normalized effective source.
 	CompileEffectiveFactorySource(context.Context, CompileEffectiveFactorySourceRequest) (CompileEffectiveFactorySourceResult, error)
+
+	// Validate slice: structural/pre-persist and effective-definition validation.
+	ValidateStructuralFactoryDefinition(context.Context, ValidateStructuralFactoryDefinitionRequest) (ValidateStructuralFactoryDefinitionResult, error)
+	ValidateEffectiveFactoryDefinition(context.Context, ValidateEffectiveFactoryDefinitionRequest) (ValidateEffectiveFactoryDefinitionResult, error)
 }
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
@@ -241,6 +245,84 @@ type EffectiveFactorySource struct {
 	FactoryDir      string
 	RuntimeBaseDir  string
 	ContentIdentity string
+}
+
+// ErrInvalidFactoryDefinitionPayload reports that validation input could not
+// be interpreted as one Factory definition aggregate.
+var ErrInvalidFactoryDefinitionPayload = errors.New("invalid factory definition payload")
+
+// ErrFactoryDefinitionValidationFailed reports that structural or effective
+// validation produced blocking findings.
+var ErrFactoryDefinitionValidationFailed = errors.New("factory definition validation failed")
+
+// FactoryDefinitionValidationFailure carries typed validation findings without
+// Petri vocabulary or Runtime/peer storage implementation types.
+type FactoryDefinitionValidationFailure struct {
+	Validation ValidationResult
+	Cause      error
+}
+
+func (e *FactoryDefinitionValidationFailure) Error() string {
+	if e == nil {
+		return ErrFactoryDefinitionValidationFailed.Error()
+	}
+	if e.Cause != nil {
+		return fmt.Sprintf("%v: %v", ErrFactoryDefinitionValidationFailed, e.Cause)
+	}
+	if e.Validation.HasTargets() {
+		errorCount := 0
+		for _, target := range e.Validation.Targets {
+			if target.Severity == ValidationSeverityError {
+				errorCount++
+			}
+		}
+		if errorCount > 0 {
+			return fmt.Sprintf(
+				"%v: %d error findings",
+				ErrFactoryDefinitionValidationFailed,
+				errorCount,
+			)
+		}
+	}
+	return ErrFactoryDefinitionValidationFailed.Error()
+}
+
+func (e *FactoryDefinitionValidationFailure) Unwrap() error {
+	if e != nil && e.Cause != nil {
+		return e.Cause
+	}
+	return ErrFactoryDefinitionValidationFailed
+}
+
+func (e *FactoryDefinitionValidationFailure) Is(target error) bool {
+	return target == ErrFactoryDefinitionValidationFailed
+}
+
+// ValidateStructuralFactoryDefinitionRequest carries authored/canonical Factory
+// bytes for structural or pre-persist validation. Callers do not supply
+// validator collaborators, filesystem effects, or Runtime implementation types.
+type ValidateStructuralFactoryDefinitionRequest struct {
+	Canonical []byte
+	Profile   ValidationProfile
+}
+
+// ValidateStructuralFactoryDefinitionResult carries a success-shaped
+// ValidationResult with no error findings for valid definitions.
+type ValidateStructuralFactoryDefinitionResult struct {
+	Validation ValidationResult
+}
+
+// ValidateEffectiveFactoryDefinitionRequest carries compiled/effective Factory
+// identity facts for effective-definition validation.
+type ValidateEffectiveFactoryDefinitionRequest struct {
+	Canonical []byte
+	Effective EffectiveFactorySource
+}
+
+// ValidateEffectiveFactoryDefinitionResult carries a success-shaped
+// ValidationResult with no error findings for valid effective definitions.
+type ValidateEffectiveFactoryDefinitionResult struct {
+	Validation ValidationResult
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped

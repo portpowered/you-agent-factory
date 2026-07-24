@@ -656,10 +656,17 @@ shapes that omit filesystem effects and mapping codecs; publish
 the singular `Service` via `CompileEffectiveFactorySource` returning a
 Definitions-owned `EffectiveFactorySource` value (not a separately published
 peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
-`ErrUnresolvedDefinitionReference`. Avoid adding a new root Go file when the
-package is already over the file-count baseline; grow `service_contract.go`
-and `service_contract_test.go` instead, and ratchet
-`backend-package-file-count.json` only for unavoidable prior growth.
+`ErrUnresolvedDefinitionReference`. Validate slices stay on the singular
+`Service` via `ValidateStructuralFactoryDefinition` and
+`ValidateEffectiveFactoryDefinition` returning Definitions-owned
+`ValidationResult` success shapes (not a peer-facing nested `Validator`
+interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
+`FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
+with blocking `ValidationTarget` findings and no Petri vocabulary). Avoid
+adding a new root Go file when the package is already over the file-count
+baseline; grow `service_contract.go` and `service_contract_test.go` instead,
+and ratchet `backend-package-file-count.json` only for unavoidable prior
+growth.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
