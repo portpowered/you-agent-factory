@@ -160,7 +160,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	subscribeCalls := 0
 	live := make(chan factorydefinitions.FactoryEvent)
 	source := &sourceStub{
-		stream: &factorydefinitions.FactoryEventStream{Events: live},
+		stream:   &factorydefinitions.FactoryEventStream{Events: live},
 		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
@@ -213,6 +213,81 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	_, err = root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive})
 	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorAlreadyActivated {
 		t.Fatalf("Activate already activated: error = %v, want AlreadyActivated", err)
+	}
+
+	cancel()
+	if _, err := root.StopDrain(context.Background(), StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+}
+
+func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 23, 21, 0, 0, 0, time.UTC)
+	live := make(chan factorydefinitions.FactoryEvent)
+	history := event("history", 3)
+	source := &sourceStub{
+		stream: &factorydefinitions.FactoryEventStream{
+			History: []factorydefinitions.FactoryEvent{history},
+			Events:  live,
+		},
+		snapshot: &factoryruntime.StateSnapshot{TickCount: 9},
+	}
+	service, err := New(
+		source,
+		projectionStub{},
+		fixedClock{now: now},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	var root Root = service
+
+	_, err = root.Observe(context.Background(), ObserveRequest{})
+	var projErr *ProjectionError
+	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorInvalidInput {
+		t.Fatalf("Observe missing parameters: error = %v, want InvalidInput", err)
+	}
+
+	source.snapshot = nil
+	_, err = root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
+	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorSnapshotUnavailable {
+		t.Fatalf("Observe unavailable snapshot: error = %v, want SnapshotUnavailable", err)
+	}
+
+	source.snapshot = &factoryruntime.StateSnapshot{TickCount: 9}
+	service.projections = projectionStub{
+		reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
+			return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+		},
+	}
+	_, err = root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
+	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorReconstructionFailed {
+		t.Fatalf("Observe reconstruction failure: error = %v, want ReconstructionFailed", err)
+	}
+
+	service.projections = projectionStub{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive}); err != nil {
+		t.Fatalf("Activate: error = %v", err)
+	}
+
+	result, err := root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
+	if err != nil {
+		t.Fatalf("Observe after Activate: error = %v", err)
+	}
+	if result.View.TickCount != 9 {
+		t.Fatalf("Observe TickCount = %d, want 9", result.View.TickCount)
+	}
+	if result.View.RetainedEventCount != 1 {
+		t.Fatalf("Observe RetainedEventCount = %d, want 1", result.View.RetainedEventCount)
+	}
+	if !result.View.ObservedAt.Equal(now) {
+		t.Fatalf("Observe ObservedAt = %v, want %v", result.View.ObservedAt, now)
 	}
 
 	cancel()
