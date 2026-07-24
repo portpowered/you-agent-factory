@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -207,5 +209,122 @@ func TestDistributionService_InstallAndScaffoldShareAggregateFacts(t *testing.T)
 			"CreateFactoryScaffold Definition = %#v, want CTR-DEF DistributedFactoryDefinitionFacts shape",
 			scaffoldedFacts,
 		)
+	}
+}
+
+func TestDistributionService_BuiltInListAndTypedDistributeFailures(t *testing.T) {
+	t.Parallel()
+
+	installer := &stubInstaller{
+		err: errors.New("installer refused creation"),
+	}
+	svc, err := distributionwire.NewService(
+		[]factorydefinitions.PackagedDefinition{{
+			Name:    "@you/goal",
+			Project: "builtin-goal",
+			JSON:    []byte(`{"name":"goal","secret":true}`),
+		}},
+		installer,
+		func(cfg factorydefinitions.ScaffoldConfig) error {
+			if strings.TrimSpace(cfg.Type) == "unsupported" {
+				return fmt.Errorf("unsupported scaffold type %q", cfg.Type)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+
+	listed, err := svc.ListBuiltInPackagedFactories(
+		ctx,
+		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ListBuiltInPackagedFactories: %v", err)
+	}
+	if len(listed.Entries) != 1 {
+		t.Fatalf("ListBuiltInPackagedFactories entries = %#v, want one detached entry", listed.Entries)
+	}
+	entry := listed.Entries[0]
+	if entry != (factorydefinitions.BuiltInPackagedFactoryEntry{
+		Name:    "@you/goal",
+		Project: "builtin-goal",
+	}) {
+		t.Fatalf(
+			"ListBuiltInPackagedFactories entry = %#v, want detached Name/Project without package payload fields",
+			entry,
+		)
+	}
+
+	_, unknownErr := svc.InstallPackagedFactory(
+		ctx,
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/factories",
+			Name:    "@you/missing",
+		},
+	)
+	if !errors.Is(unknownErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf(
+			"InstallPackagedFactory unknown identity = %v, want %v",
+			unknownErr,
+			factorydefinitions.ErrUnknownPackagedFactoryIdentity,
+		)
+	}
+	if errors.Is(unknownErr, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatal("unknown-identity failure must not also match ErrFactoryDistributeFailed")
+	}
+
+	_, emptyIdentityErr := svc.InstallPackagedFactory(
+		ctx,
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/factories",
+			Name:    "   ",
+		},
+	)
+	if !errors.Is(emptyIdentityErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf(
+			"InstallPackagedFactory empty identity = %v, want %v",
+			emptyIdentityErr,
+			factorydefinitions.ErrUnknownPackagedFactoryIdentity,
+		)
+	}
+
+	_, installFailedErr := svc.InstallPackagedFactory(
+		ctx,
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/factories",
+			Name:    "@you/goal",
+		},
+	)
+	if !errors.Is(installFailedErr, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatalf(
+			"InstallPackagedFactory distribute failure = %v, want %v",
+			installFailedErr,
+			factorydefinitions.ErrFactoryDistributeFailed,
+		)
+	}
+	if errors.Is(installFailedErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatal("install distribute failure must not also match ErrUnknownPackagedFactoryIdentity")
+	}
+
+	_, scaffoldFailedErr := svc.CreateFactoryScaffold(
+		ctx,
+		factorydefinitions.CreateFactoryScaffoldRequest{
+			TargetDir: filepath.Join("/factories", "alpha"),
+			Type:      "unsupported",
+		},
+	)
+	if !errors.Is(scaffoldFailedErr, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatalf(
+			"CreateFactoryScaffold distribute failure = %v, want %v",
+			scaffoldFailedErr,
+			factorydefinitions.ErrFactoryDistributeFailed,
+		)
+	}
+	if errors.Is(scaffoldFailedErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatal("scaffold distribute failure must not also match ErrUnknownPackagedFactoryIdentity")
 	}
 }
