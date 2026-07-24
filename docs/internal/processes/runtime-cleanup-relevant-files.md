@@ -336,8 +336,10 @@ outside `pkg/services/factory_runtime/internal/`. Authored Factory Definition
 `orchestrator.kind = PETRI` remains allowed as configuration. Focused fixtures
 in `petri_public_surface_test.go` cover vocabulary shapes and the required
 public-surface categories (public API, transport, integration contract, and
-functional test). Wiring onto the live lint path and any deletion-only baseline
-remain a follow-on gate for IMP-RUN-01.
+functional test). The prohibition runs on the `make lint` package-boundary path;
+pre-existing live-tree debt is inventory-only in
+`petri-public-surface-baseline.json` with an exact deletion gate pointing at
+Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
 
 ## Focused Verification
 
