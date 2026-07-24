@@ -263,6 +263,25 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
+`make ownership-boundary-check` (`cmd/ownershipboundarycheck`) classifies
+`pkg/services/<owner>` surfaces from the committed service tree: direct children
+of `pkg/services` form the owner inventory, `pkg/services/edges` is the Process
+Edges owner, each inventoried `pkg/services/<owner>` path is that owner's root
+contract surface, and any deeper path under that owner is non-root for
+cross-owner import decisions. Do not grow a hand-maintained private-subpackage
+catalog for the generic owner-derived rule. The same inventory drives the
+cross-owner peer rule: importing an inventoried peer root
+(`pkg/services/<peer>`) is allowed, and same-owner non-root imports do not fire
+the peer rule. Peer implementation and nested-subservice imports fail with a
+diagnostic that names the importer owner and peer owner and directs remediation
+to the peer root contract. Introducing a previously unlisted deeper path under
+an inventoried owner is rejected automatically; do not edit a private-root
+catalog to make that fail. Exact documented leaf-effect ports remain pairwise
+importer→import exceptions, not a private-root allowlist. Peer-import debt in
+`ownership-boundary-baseline.json` stays deletion-only/ratchet: clear the
+import (or delete the exact baseline entry), and do not relocate production
+service packages solely to satisfy the checker.
+
 The guard rejects new production imports from `pkg/factory/**`, `pkg/work/**`,
 `pkg/workers/**`, and `pkg/models/**` into `pkg/transports/**`. Generated OpenAPI
 values must be converted under `pkg/transports/mapping`, while domain packages

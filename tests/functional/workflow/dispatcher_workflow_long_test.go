@@ -30,10 +30,10 @@ func TestDispatcherWorkflow_SingleSeedFile(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"prd:complete": 1, "idea:init": 0, "idea:failed": 0,
 		"prd:init": 0, "prd:in-review": 0, "prd:failed": 0,
 	})
@@ -61,10 +61,10 @@ func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 2})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"prd:complete": 2})
 
 	if got := runner.CallCount(); got != 6 {
 		t.Errorf("expected six externally executed workflow steps, got %d", got)
@@ -81,10 +81,10 @@ func TestDispatcherWorkflow_MultipleSeedFiles(t *testing.T) {
 	}
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(n * 3)...)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": n})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"prd:complete": n})
 
 	if got := runner.CallCount(); got != n*3 {
 		t.Errorf("expected %d externally executed workflow steps, got %d", n*3, got)
@@ -107,7 +107,7 @@ func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
 
@@ -115,7 +115,7 @@ func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
 		t.Errorf("expected 2 distinct public terminal token IDs, got %d", got)
 	}
 
-	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 2})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"prd:complete": 2})
 }
 
 func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
@@ -138,10 +138,10 @@ func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
 		rejectTraceID: "trace-will-fail",
 		callCounts:    make(map[string]int),
 	}
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 15*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 1, "prd:failed": 1})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"prd:complete": 1, "prd:failed": 1})
 
 	runner.mu.Lock()
 	failCount := runner.callCounts["trace-will-fail"]

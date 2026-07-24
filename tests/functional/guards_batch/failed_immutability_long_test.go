@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
@@ -20,8 +22,8 @@ func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
 		[]workerexecution.InferenceResponse{{}},
 		[]error{errors.New("build error")},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"code-change:failed": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
 	})
 
@@ -47,8 +49,8 @@ func TestFailedImmutability_ReviewerFailure(t *testing.T) {
 			errors.New("critical security issue"),
 		},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"code-change:failed": 1, "code-change:complete": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"code-change:failed": 1, "code-change:complete": 0})
 
 	if got := len(support.ProviderCallsForWorker(provider, "reviewer")); got != 1 {
 		t.Errorf("expected reviewer called once, got %d", got)
@@ -67,8 +69,8 @@ func TestFailedImmutability_NoDuplicateTokens(t *testing.T) {
 			errors.New("crash"),
 		},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"code-change:failed": 2, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
 	})
 }

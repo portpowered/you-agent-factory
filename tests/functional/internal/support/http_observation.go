@@ -13,7 +13,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -144,7 +143,7 @@ func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkRes
 func UpsertDefaultSessionWorkRequest(
 	t testing.TB,
 	baseURL string,
-	request work.WorkRequest,
+	request factoryapi.WorkRequest,
 ) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
 
@@ -154,7 +153,7 @@ func UpsertDefaultSessionWorkRequest(
 	}
 	endpoint := DefaultSessionWorkURL(
 		baseURL,
-		"/work-requests/"+url.PathEscape(request.RequestID),
+		"/work-requests/"+url.PathEscape(request.RequestId),
 	)
 	httpRequest, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(payload))
 	if err != nil {

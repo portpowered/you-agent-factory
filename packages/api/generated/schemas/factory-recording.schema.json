@@ -1591,7 +1591,7 @@
         "modelProvider": {
           "allOf": [
             {
-              "$ref": "#/$defs/WorkerModelProvider"
+              "$ref": "#/$defs/ProviderIdentity"
             }
           ],
           "description": "Provider whose inference-throttle history controls this factory-level guard."
@@ -3738,6 +3738,13 @@
       },
       "type": "object"
     },
+    "ProviderIdentity": {
+      "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$",
+      "type": "string"
+    },
     "ProviderSessionMetadata": {
       "additionalProperties": false,
       "properties": {
@@ -5055,10 +5062,10 @@
           "description": "Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution."
         },
         "modelProvider": {
-          "description": "Canonical model-provider identifier used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.",
+          "description": "Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.",
           "oneOf": [
             {
-              "$ref": "#/$defs/WorkerModelProvider"
+              "$ref": "#/$defs/ProviderIdentity"
             },
             {
               "pattern": "^\\$\\{[A-Za-z0-9_.-]+\\}$",
@@ -5127,20 +5134,6 @@
       "enum": [
         "LOCAL",
         "CLOUD"
-      ],
-      "type": "string"
-    },
-    "WorkerModelProvider": {
-      "description": "Canonical model-provider identifiers supported by model workers in factory config.",
-      "enum": [
-        "CLAUDE",
-        "CODEX",
-        "CURSOR",
-        "GEMINI",
-        "KIRO",
-        "OPENCODE",
-        "PI",
-        "AGY"
       ],
       "type": "string"
     },

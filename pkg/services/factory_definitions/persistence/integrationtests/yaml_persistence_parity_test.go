@@ -75,6 +75,13 @@ func TestNamedFactoryPersistenceJSONAndYAMLParity(t *testing.T) {
 		if loaded.FactoryConfig().Project != "updated" {
 			t.Fatalf("persisted project = %q, want updated", loaded.FactoryConfig().Project)
 		}
+		worker, ok := loaded.Worker("executor")
+		if !ok {
+			t.Fatal("persisted executor worker is missing")
+		}
+		if worker.ModelProvider != "codex" {
+			t.Fatalf("persisted modelProvider = %q, want codex", worker.ModelProvider)
+		}
 	}
 }
 
@@ -247,6 +254,7 @@ func persistenceParityJSON(project string) string {
   "workers": [{
     "name": "executor",
     "type": "MODEL_WORKER",
+    "modelProvider": "openai",
     "body": "You are the executor."
   }],
   "workstations": [{
@@ -302,6 +310,7 @@ workTypes:
 workers:
   - name: executor
     type: MODEL_WORKER
+    modelProvider: openai
     body: You are the executor.
 workstations:
   - name: execute

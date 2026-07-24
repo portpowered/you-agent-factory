@@ -16,8 +16,8 @@ func TestRejectionPath_NoRejectionArcsFailsToken(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("work payload"))
 
 	provider := testutil.NewMockProvider(support.RejectedProviderResponse("not good enough"))
-	session := support.RunFactoryToCompletion(t, dir, provider, 5*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 5*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 }
 
 func TestRejectionPath_NoRejectionArcsReleasesResources(t *testing.T) {
@@ -30,8 +30,8 @@ func TestRejectionPath_NoRejectionArcsReleasesResources(t *testing.T) {
 		support.RejectedProviderResponse("not good enough"),
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:done": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:done": 1, "task:init": 0})
 }
 
 func TestRejectionPath_WithRejectionArcsRoutesViaArcs(t *testing.T) {
@@ -43,8 +43,8 @@ func TestRejectionPath_WithRejectionArcsRoutesViaArcs(t *testing.T) {
 		support.RejectedProviderResponse("needs work"),
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 }
 
 func TestRejectionPath_NoRejectionArcsFailureRecordSet(t *testing.T) {
@@ -60,8 +60,8 @@ func TestRejectionPath_NoRejectionArcsFailureRecordSet(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1})
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:failed": 1})
 	for _, event := range server.GetFactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
@@ -79,10 +79,10 @@ func TestRejectionPath_NoRejectionArcsFailureRecordSet(t *testing.T) {
 	t.Fatal("Factory Event history has no dispatch response")
 }
 
-func assertWorkflowSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+func assertWorkflowSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

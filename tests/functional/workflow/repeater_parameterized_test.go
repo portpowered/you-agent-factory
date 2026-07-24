@@ -8,6 +8,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestRepeater_YieldsBetweenIterations(t *testing.T) {
@@ -20,7 +22,7 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if provider.CallCount("exec-worker") < 3 {
 		t.Errorf("expected exec-worker called at least 3 times (interleaved), got %d", provider.CallCount("exec-worker"))
@@ -28,7 +30,7 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 	if provider.CallCount("finish-worker") < 2 {
 		t.Errorf("expected finish-worker called at least 2 times, got %d", provider.CallCount("finish-worker"))
 	}
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 2})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 2})
 }
 
 func TestParameterizedFields_WorkingDirectoryResolvesFromTags(t *testing.T) {
@@ -44,8 +46,8 @@ func TestParameterizedFields_WorkingDirectoryResolvesFromTags(t *testing.T) {
 		"exec-worker":   {{Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1})
 	calls := provider.Calls("exec-worker")
 	if len(calls) == 0 {
 		t.Fatal("exec-worker provider was never called")
@@ -72,8 +74,8 @@ func TestParameterizedFields_UnresolvedTemplateRoutesToFailure(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Should not reach COMPLETE"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:complete": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:complete": 0})
 
 	if provider.CallCount() != 0 {
 		t.Errorf("expected provider called 0 times (template error before invocation), got %d", provider.CallCount())
@@ -89,10 +91,10 @@ func TestRepeater_ResourceReleaseBetweenIterations(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if provider.CallCount("exec-worker") != 3 {
 		t.Errorf("expected exec-worker called 3 times, got %d", provider.CallCount("exec-worker"))
 	}
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }

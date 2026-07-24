@@ -25,8 +25,8 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	runner := newTimeoutThenSuccessCommandRunner()
-	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
-	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() < 2 {
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())

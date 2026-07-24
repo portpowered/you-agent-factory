@@ -247,6 +247,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator, configDecoder, configEncoder)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
 	v44 := provideFactorySessionReplayRecordingReader(edges2)
+	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(registry)
 	runtimeOpeningDependencies := wire.RuntimeOpeningDependencies{
 		ProviderSessions:                providersessionsService,
 		FactoryWorkflows:                javaScriptWorkflowDefinitions,
@@ -290,6 +291,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		GenerateRuntimeInstanceID:       runtimeInstanceIDGenerator,
 		ResolveHome:                     homeDirectoryResolver,
 		ReplayFiles:                     v44,
+		ProviderIdentities:              providerIdentityResolver,
 	}
 	v45, err := wire.NewRuntimeOpeningFactory(runtimeOpeningDependencies)
 	if err != nil {
@@ -514,7 +516,7 @@ var platformSet = wire2.NewSet(logging.NewDefaultLogger)
 var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
 var servicesSet = wire2.NewSet(
-	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,

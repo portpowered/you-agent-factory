@@ -69,6 +69,7 @@ func openRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	replayFiles fileeffects.ReplayRecordingReader,
+	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (runtimeProducts, error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -108,6 +109,7 @@ func openRuntime(
 		generateRuntimeInstanceID,
 		resolveHome,
 		replayFiles,
+		providerIdentities,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -142,6 +144,7 @@ func openRuntime(
 		clock,
 		edges.ProviderOverride,
 		factorySessionExecutionFactory,
+		providerIdentities,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
