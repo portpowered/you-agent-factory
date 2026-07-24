@@ -19,7 +19,25 @@ const (
 	// PublicFactoryEventKindInventoryPath is the Recordings-owned home of the
 	// public Factory Event kind inventory API.
 	PublicFactoryEventKindInventoryPath = "pkg/services/recordings/events/kinds/"
+
+	// PublicFactoryEventKindInventoryImportPath is the Go import path producers
+	// and consumers must resolve for the public Factory Event kind inventory.
+	PublicFactoryEventKindInventoryImportPath = "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds"
+
+	// RetiredPublicFactoryEventKindInventoryPath is the retired non-Recordings
+	// public kind inventory home tracked as deletion-only debt.
+	RetiredPublicFactoryEventKindInventoryPath = "pkg/factory/events/kinds/"
 )
+
+// PublicFactoryEventKindInventoryConsumerAPI names the sole import/API surface
+// producers and consumers compile against for the public Factory Event kind
+// inventory. PackagePath is the repo-relative ownership ledger identity;
+// ImportPath is the Go module import producers resolve.
+type PublicFactoryEventKindInventoryConsumerAPI struct {
+	PackagePath string
+	ImportPath  string
+	Symbols     []string
+}
 
 // EventContractOwnershipRow names one in-scope Factory Event schema or
 // vocabulary-inventory path together with its owner and retain/delete disposition.
@@ -60,7 +78,7 @@ func EventContractOwnershipInventory() []EventContractOwnershipRow {
 			Disposition: DispositionRetain,
 		},
 		{
-			Path:        "pkg/factory/events/kinds/",
+			Path:        RetiredPublicFactoryEventKindInventoryPath,
 			Owner:       OwnerRecordings,
 			Disposition: DispositionDelete,
 			Successor:   PublicFactoryEventKindInventoryPath,
@@ -99,7 +117,7 @@ func ValidateEventContractOwnershipInventory(rows []EventContractOwnershipRow) e
 		"api/components/schemas/events/payloads/",
 		"api/components/schemas/response-events/",
 		"pkg/services/factory_sessions/internal/responseevents/",
-		"pkg/factory/events/kinds/",
+		RetiredPublicFactoryEventKindInventoryPath,
 	}
 
 	seen := make(map[string]struct{}, len(rows))
@@ -166,4 +184,192 @@ func ValidateEventContractOwnershipInventory(rows []EventContractOwnershipRow) e
 	}
 
 	return nil
+}
+
+// PublicFactoryEventKindInventoryConsumerAPISurface returns the Recordings-owned
+// import/API identity that producers and consumers must compile against for the
+// public Factory Event kind inventory. Symbols are stable-sorted.
+func PublicFactoryEventKindInventoryConsumerAPISurface() PublicFactoryEventKindInventoryConsumerAPI {
+	symbols := []string{
+		"ContractOnlyFactoryEventKinds",
+		"CurrentFactoryEventKindInventory",
+		"ExcludedNonPublicFactoryEventKinds",
+		"PublicEmittableFactoryEventKinds",
+		"ValidateFactoryEventKindInventory",
+	}
+	sort.Strings(symbols)
+	return PublicFactoryEventKindInventoryConsumerAPI{
+		PackagePath: PublicFactoryEventKindInventoryPath,
+		ImportPath:  PublicFactoryEventKindInventoryImportPath,
+		Symbols:     symbols,
+	}
+}
+
+// ClaimedPublicFactoryEventKindInventoryPaths returns every path identity that
+// is or was a public Factory Event kind inventory package home. Paths are
+// stable-sorted. Competing homes outside Recordings must appear in
+// EventContractOwnershipInventory as delete debt with the Recordings successor;
+// adjacent response-stream vocabulary is intentionally omitted here.
+func ClaimedPublicFactoryEventKindInventoryPaths() []string {
+	paths := []string{
+		PublicFactoryEventKindInventoryPath,
+		RetiredPublicFactoryEventKindInventoryPath,
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// ValidateSolePublicFactoryEventKindInventoryOwnership proves producers and
+// consumers resolve to exactly one Recordings-owned public Factory Event kind
+// inventory. Competing claimed inventory paths either fail closed or must be
+// listed as deletion-only debt with the Recordings successor.
+func ValidateSolePublicFactoryEventKindInventoryOwnership(
+	rows []EventContractOwnershipRow,
+	claimedPaths []string,
+	consumerAPI PublicFactoryEventKindInventoryConsumerAPI,
+) error {
+	if err := ValidateEventContractOwnershipInventory(rows); err != nil {
+		return fmt.Errorf("event-contract ownership inventory: %w", err)
+	}
+
+	if strings.TrimSpace(consumerAPI.PackagePath) == "" {
+		return fmt.Errorf("public Factory Event kind inventory consumer API is missing package path")
+	}
+	if strings.TrimSpace(consumerAPI.ImportPath) == "" {
+		return fmt.Errorf("public Factory Event kind inventory consumer API is missing import path")
+	}
+	if consumerAPI.PackagePath != PublicFactoryEventKindInventoryPath {
+		return fmt.Errorf(
+			"public Factory Event kind inventory consumer API package path %q must resolve to %q",
+			consumerAPI.PackagePath,
+			PublicFactoryEventKindInventoryPath,
+		)
+	}
+	if consumerAPI.ImportPath != PublicFactoryEventKindInventoryImportPath {
+		return fmt.Errorf(
+			"public Factory Event kind inventory consumer API import path %q must resolve to %q",
+			consumerAPI.ImportPath,
+			PublicFactoryEventKindInventoryImportPath,
+		)
+	}
+	if len(consumerAPI.Symbols) == 0 {
+		return fmt.Errorf("public Factory Event kind inventory consumer API has empty symbols")
+	}
+	for i, symbol := range consumerAPI.Symbols {
+		if strings.TrimSpace(symbol) == "" {
+			return fmt.Errorf("public Factory Event kind inventory consumer API symbol %d is empty", i)
+		}
+		if i > 0 && consumerAPI.Symbols[i-1] >= symbol {
+			return fmt.Errorf(
+				"public Factory Event kind inventory consumer API symbols are not strictly sorted: %q then %q",
+				consumerAPI.Symbols[i-1],
+				symbol,
+			)
+		}
+	}
+
+	if len(claimedPaths) == 0 {
+		return fmt.Errorf("claimed public Factory Event kind inventory paths are empty")
+	}
+	claimedSeen := make(map[string]struct{}, len(claimedPaths))
+	for i, path := range claimedPaths {
+		if strings.TrimSpace(path) == "" {
+			return fmt.Errorf("claimed public Factory Event kind inventory path %d is empty", i)
+		}
+		if _, ok := claimedSeen[path]; ok {
+			return fmt.Errorf("claimed public Factory Event kind inventory paths contain duplicate %q", path)
+		}
+		claimedSeen[path] = struct{}{}
+		if i > 0 && claimedPaths[i-1] >= path {
+			return fmt.Errorf(
+				"claimed public Factory Event kind inventory paths are not strictly sorted: %q then %q",
+				claimedPaths[i-1],
+				path,
+			)
+		}
+	}
+	if _, ok := claimedSeen[PublicFactoryEventKindInventoryPath]; !ok {
+		return fmt.Errorf(
+			"claimed public Factory Event kind inventory paths missing canonical Recordings path %q",
+			PublicFactoryEventKindInventoryPath,
+		)
+	}
+
+	byPath := make(map[string]EventContractOwnershipRow, len(rows))
+	for _, row := range rows {
+		byPath[row.Path] = row
+	}
+
+	retainCount := 0
+	for _, path := range claimedPaths {
+		row, ok := byPath[path]
+		if !ok {
+			return fmt.Errorf(
+				"claimed public Factory Event kind inventory path %q is missing from ownership inventory; list it as delete debt with Recordings successor or remove the competing inventory",
+				path,
+			)
+		}
+		if path == PublicFactoryEventKindInventoryPath {
+			if row.Owner != OwnerRecordings || row.Disposition != DispositionRetain {
+				return fmt.Errorf(
+					"canonical public Factory Event kind inventory path %q must be owned by %q with disposition %q",
+					path,
+					OwnerRecordings,
+					DispositionRetain,
+				)
+			}
+			retainCount++
+			continue
+		}
+		if row.Disposition == DispositionRetain {
+			return fmt.Errorf(
+				"competing public Factory Event kind inventory path %q retains ownership; only %q may retain, or list %q as delete debt with Recordings successor",
+				path,
+				PublicFactoryEventKindInventoryPath,
+				path,
+			)
+		}
+		if row.Disposition != DispositionDelete {
+			return fmt.Errorf(
+				"competing public Factory Event kind inventory path %q must use delete disposition, got %q",
+				path,
+				row.Disposition,
+			)
+		}
+		if row.Successor != PublicFactoryEventKindInventoryPath {
+			return fmt.Errorf(
+				"competing public Factory Event kind inventory path %q delete successor %q must be %q",
+				path,
+				row.Successor,
+				PublicFactoryEventKindInventoryPath,
+			)
+		}
+		if strings.TrimSpace(row.Condition) == "" {
+			return fmt.Errorf(
+				"competing public Factory Event kind inventory path %q delete disposition requires condition",
+				path,
+			)
+		}
+	}
+
+	if retainCount != 1 {
+		return fmt.Errorf(
+			"expected exactly one retained public Factory Event kind inventory path (%q), found %d",
+			PublicFactoryEventKindInventoryPath,
+			retainCount,
+		)
+	}
+
+	return nil
+}
+
+// ValidateCurrentSolePublicFactoryEventKindInventoryOwnership validates the
+// checked-in ownership ledger, claimed inventory paths, and consumer API surface
+// against the sole Recordings-owned public Factory Event kind inventory rule.
+func ValidateCurrentSolePublicFactoryEventKindInventoryOwnership() error {
+	return ValidateSolePublicFactoryEventKindInventoryOwnership(
+		EventContractOwnershipInventory(),
+		ClaimedPublicFactoryEventKindInventoryPaths(),
+		PublicFactoryEventKindInventoryConsumerAPISurface(),
+	)
 }

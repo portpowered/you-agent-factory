@@ -22,6 +22,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedEventEnvelope(t, schemas)
 	assertFactoryEventTypePayloadDiscriminator(t, schemas)
 	assertPublicFactoryEventKindParityIsClosed(t)
+	assertSolePublicFactoryEventKindInventoryOwnership(t)
 	assertUnifiedEventContext(t, schemas)
 	assertUnifiedRunRequestEvent(t, schemas)
 	assertUnifiedFactorySchema(t, schemas)
@@ -47,6 +48,33 @@ func assertPublicFactoryEventKindParityIsClosed(t *testing.T) {
 	}
 	if err := factoryeventkinds.ValidateBundledFactoryEventKindParity(data); err != nil {
 		t.Fatalf("public FactoryEvent kind parity is not closed through Recordings inventory: %v", err)
+	}
+}
+
+// assertSolePublicFactoryEventKindInventoryOwnership proves this producer/consumer
+// contract package resolves the public Factory Event kind inventory import/API
+// surface to the sole Recordings-owned package, rejecting undeclared competing
+// inventory homes.
+func assertSolePublicFactoryEventKindInventoryOwnership(t *testing.T) {
+	t.Helper()
+
+	api := factoryeventkinds.PublicFactoryEventKindInventoryConsumerAPISurface()
+	if api.ImportPath != factoryeventkinds.PublicFactoryEventKindInventoryImportPath {
+		t.Fatalf(
+			"public Factory Event kind inventory consumer import path = %q, want Recordings-owned %q",
+			api.ImportPath,
+			factoryeventkinds.PublicFactoryEventKindInventoryImportPath,
+		)
+	}
+	if api.PackagePath != factoryeventkinds.PublicFactoryEventKindInventoryPath {
+		t.Fatalf(
+			"public Factory Event kind inventory consumer package path = %q, want Recordings-owned %q",
+			api.PackagePath,
+			factoryeventkinds.PublicFactoryEventKindInventoryPath,
+		)
+	}
+	if err := factoryeventkinds.ValidateCurrentSolePublicFactoryEventKindInventoryOwnership(); err != nil {
+		t.Fatalf("sole public Factory Event kind inventory ownership failed: %v", err)
 	}
 }
 

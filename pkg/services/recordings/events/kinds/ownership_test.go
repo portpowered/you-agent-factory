@@ -2,6 +2,7 @@ package factoryeventkinds
 
 import (
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestEventContractOwnershipInventory_NamesRequiredLeasePaths(t *testing.T) {
 		{"api/components/schemas/events/payloads/", OwnerRecordings, DispositionRetain},
 		{"api/components/schemas/response-events/", OwnerFactorySessions, DispositionRetain},
 		{"pkg/services/factory_sessions/internal/responseevents/", OwnerFactorySessions, DispositionRetain},
-		{"pkg/factory/events/kinds/", OwnerRecordings, DispositionDelete},
+		{RetiredPublicFactoryEventKindInventoryPath, OwnerRecordings, DispositionDelete},
 	}
 
 	for _, want := range required {
@@ -61,7 +62,7 @@ func TestEventContractOwnershipInventory_NamesRequiredLeasePaths(t *testing.T) {
 		}
 	}
 
-	retired := byPath["pkg/factory/events/kinds/"]
+	retired := byPath[RetiredPublicFactoryEventKindInventoryPath]
 	if retired.Successor != PublicFactoryEventKindInventoryPath {
 		t.Fatalf("retired inventory path successor = %q, want %q", retired.Successor, PublicFactoryEventKindInventoryPath)
 	}
@@ -128,6 +129,114 @@ func TestValidateEventContractOwnershipInventory_FailsClosed(t *testing.T) {
 	})
 }
 
+func TestValidateCurrentSolePublicFactoryEventKindInventoryOwnership_Passes(t *testing.T) {
+	t.Parallel()
+
+	if err := ValidateCurrentSolePublicFactoryEventKindInventoryOwnership(); err != nil {
+		t.Fatalf("canonical sole public kind inventory ownership must validate: %v", err)
+	}
+
+	api := PublicFactoryEventKindInventoryConsumerAPISurface()
+	if api.PackagePath != PublicFactoryEventKindInventoryPath {
+		t.Fatalf("consumer API package path = %q, want %q", api.PackagePath, PublicFactoryEventKindInventoryPath)
+	}
+	if api.ImportPath != PublicFactoryEventKindInventoryImportPath {
+		t.Fatalf("consumer API import path = %q, want %q", api.ImportPath, PublicFactoryEventKindInventoryImportPath)
+	}
+
+	claimed := ClaimedPublicFactoryEventKindInventoryPaths()
+	second := ClaimedPublicFactoryEventKindInventoryPaths()
+	if !slices.Equal(claimed, second) {
+		t.Fatal("ClaimedPublicFactoryEventKindInventoryPaths must return an identical ordered list on repeated calls")
+	}
+	if !slices.Contains(claimed, PublicFactoryEventKindInventoryPath) {
+		t.Fatalf("claimed paths must include canonical Recordings inventory %q", PublicFactoryEventKindInventoryPath)
+	}
+	if !slices.Contains(claimed, RetiredPublicFactoryEventKindInventoryPath) {
+		t.Fatalf("claimed paths must include retired competing inventory %q as delete debt", RetiredPublicFactoryEventKindInventoryPath)
+	}
+	for _, path := range claimed {
+		if strings.Contains(path, "response") {
+			t.Fatalf("response-stream path %q must not be treated as a competing public Factory Event kind inventory", path)
+		}
+	}
+}
+
+func TestValidateSolePublicFactoryEventKindInventoryOwnership_RejectsCompetingInventories(t *testing.T) {
+	t.Parallel()
+
+	canonicalRows := EventContractOwnershipInventory()
+	canonicalClaimed := ClaimedPublicFactoryEventKindInventoryPaths()
+	canonicalAPI := PublicFactoryEventKindInventoryConsumerAPISurface()
+
+	t.Run("competing_retain_path", func(t *testing.T) {
+		t.Parallel()
+		competitor := "pkg/other/events/kinds/"
+		rows := append([]EventContractOwnershipRow{}, canonicalRows...)
+		rows = append(rows, EventContractOwnershipRow{
+			Path:        competitor,
+			Owner:       OwnerFactorySessions,
+			Disposition: DispositionRetain,
+		})
+		sortOwnershipRows(rows)
+		claimed := append([]string{}, canonicalClaimed...)
+		claimed = append(claimed, competitor)
+		sort.Strings(claimed)
+		if err := ValidateSolePublicFactoryEventKindInventoryOwnership(rows, claimed, canonicalAPI); err == nil {
+			t.Fatal("expected competing retain inventory path to fail sole-ownership validation")
+		}
+	})
+
+	t.Run("competing_path_missing_from_ownership", func(t *testing.T) {
+		t.Parallel()
+		competitor := "pkg/other/events/kinds/"
+		claimed := append([]string{}, canonicalClaimed...)
+		claimed = append(claimed, competitor)
+		sort.Strings(claimed)
+		if err := ValidateSolePublicFactoryEventKindInventoryOwnership(canonicalRows, claimed, canonicalAPI); err == nil {
+			t.Fatal("expected undeclared competing inventory path to fail sole-ownership validation")
+		}
+	})
+
+	t.Run("competing_path_listed_as_delete_debt_ok", func(t *testing.T) {
+		t.Parallel()
+		competitor := "pkg/legacy/events/kinds/"
+		rows := append([]EventContractOwnershipRow{}, canonicalRows...)
+		rows = append(rows, EventContractOwnershipRow{
+			Path:        competitor,
+			Owner:       OwnerRecordings,
+			Disposition: DispositionDelete,
+			Successor:   PublicFactoryEventKindInventoryPath,
+			Condition:   "temporary dual inventory; delete after producers import Recordings inventory only",
+		})
+		sortOwnershipRows(rows)
+		claimed := append([]string{}, canonicalClaimed...)
+		claimed = append(claimed, competitor)
+		sort.Strings(claimed)
+		if err := ValidateSolePublicFactoryEventKindInventoryOwnership(rows, claimed, canonicalAPI); err != nil {
+			t.Fatalf("competing inventory listed as delete debt with Recordings successor must pass: %v", err)
+		}
+	})
+
+	t.Run("consumer_api_wrong_import_path", func(t *testing.T) {
+		t.Parallel()
+		api := canonicalAPI
+		api.ImportPath = "github.com/portpowered/infinite-you/pkg/factory/events/kinds"
+		if err := ValidateSolePublicFactoryEventKindInventoryOwnership(canonicalRows, canonicalClaimed, api); err == nil {
+			t.Fatal("expected non-Recordings consumer import path to fail sole-ownership validation")
+		}
+	})
+
+	t.Run("consumer_api_wrong_package_path", func(t *testing.T) {
+		t.Parallel()
+		api := canonicalAPI
+		api.PackagePath = RetiredPublicFactoryEventKindInventoryPath
+		if err := ValidateSolePublicFactoryEventKindInventoryOwnership(canonicalRows, canonicalClaimed, api); err == nil {
+			t.Fatal("expected non-Recordings consumer package path to fail sole-ownership validation")
+		}
+	})
+}
+
 func filterOutPath(rows []EventContractOwnershipRow, path string) []EventContractOwnershipRow {
 	filtered := make([]EventContractOwnershipRow, 0, len(rows))
 	for _, row := range rows {
@@ -137,4 +246,10 @@ func filterOutPath(rows []EventContractOwnershipRow, path string) []EventContrac
 		filtered = append(filtered, row)
 	}
 	return filtered
+}
+
+func sortOwnershipRows(rows []EventContractOwnershipRow) {
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].Path < rows[j].Path
+	})
 }
