@@ -27,8 +27,10 @@ type RuntimeOpeningRequest struct {
 	FlushInterval time.Duration
 }
 
-// Ledger is the append-ordered canonical Factory Event boundary used by
-// runtimes, sessions, replay, and projections.
+// Ledger is the append/subscribe capability surface embedded in the singular
+// Recordings root Service. Peers should depend on Service rather than treating
+// Ledger as a second peer-facing Recordings authority. Nested ledger storage
+// and event-history implementation packages remain out of the peer import path.
 type Ledger interface {
 	CanonicalEvents() []interfaces.FactoryEvent
 	Subscribe(
@@ -42,16 +44,27 @@ type Ledger interface {
 	AppendRecordedEvent(interfaces.FactoryEvent)
 }
 
-// Service is the independently injectable Recordings service. More specific
-// artifact, replay, and projection capabilities are exposed by public
-// subservice contracts as they acquire application operations.
+// Service is the singular Recordings root contract for cross-service peers.
+// Published slices (append/subscribe, projection query, recording lifecycle,
+// replay, and artifact export) are additive methods or embedded capability
+// surfaces on this one named interface and use plain Recordings-owned request,
+// result, value, and typed-error contracts. Existing append/subscribe and
+// projection query capabilities remain reachable through this singular root.
+// Peers must depend on Service rather than introducing a second peer-facing
+// Recordings authority. Nested IMP-REC-* implementation moves, event-backbone
+// leases beyond additive root publication, CLI-manifest/provider-conductor
+// ownership changes, and OpenAPI package-motion edits remain out of scope for
+// the root-contract packet.
 type Service interface {
 	Ledger
 	ProjectionService
 }
 
-// ProjectionService owns canonical replay reduction and dashboard projection
-// without exposing the concrete projections package.
+// ProjectionService is the projection-query capability surface embedded in the
+// singular Recordings root Service. Peers should depend on Service rather than
+// treating ProjectionService as a second peer-facing Recordings authority.
+// Canonical replay reduction and dashboard projection stay owned here without
+// exposing the concrete projections package.
 type ProjectionService interface {
 	ReconstructFactoryWorldState(
 		[]interfaces.FactoryEvent,
