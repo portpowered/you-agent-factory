@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "stage": "pss-fnd-01-package-target-manifest",
+  "destinationVocabulary": {
+    "productOwners": [
+      "factory_definitions",
+      "factory_sessions",
+      "factory_runtime",
+      "work",
+      "workers",
+      "providers",
+      "provider_sessions",
+      "models",
+      "automations",
+      "recordings",
+      "factory_visualization",
+      "operator_settings",
+      "system_initialization"
+    ],
+    "nonServiceFamilies": [
+      "initializer",
+      "root",
+      "wire",
+      "platform",
+      "transports"
+    ],
+    "architectureExceptions": [
+      "edges"
+    ]
+  },
+  "architectureExceptionNotes": {
+    "edges": "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
+  },
+  "packages": []
+}

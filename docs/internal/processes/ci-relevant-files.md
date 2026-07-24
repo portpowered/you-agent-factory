@@ -145,6 +145,16 @@ Wave 0 functional-tests-expansion planning authority lives under
   overrides directly and assert the runner is invoked, rather than supplying
   a prebuilt worker application that bypasses this composition boundary.
 
+- `cmd/packagetargetmanifestcheck` owns the Packaged Service Structure
+  package-to-target and deletion manifest schema. The committed inventory lives
+  at `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  may only use the closed destination vocabulary (13 product owners, approved
+  non-service families, and the `edges` architecture exception). Nested
+  destinations are limited to `<owner>/internal/services/<subservice>`. Keep
+  validators beside this checker rather than inventing alternate destination
+  trees; later FND stories fill package rows and coverage gates without
+  reopening that vocabulary.
+
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`
   aggregation: it requires exactly one root Factory document per authored
