@@ -154,7 +154,11 @@ primary-result behavior.
   path until provider-native execution migrates to the neutral conductor.
   Externally supplied registrations become selectable conductor identities
   through the same registry `ResolveRunnerSelection` precedence; they do not
-  use the provider-native executable LookPath path.
+  use the provider-native executable LookPath path. Runtime copies that rebuild
+  worker executor factories (for example `WithCommandRunners`) must preserve
+  registry-backed runner selection and provider-identity resolution wiring
+  through `construction.Service.WithExecutionFactories` rather than constructing
+  a fresh builder that drops those resolvers.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow

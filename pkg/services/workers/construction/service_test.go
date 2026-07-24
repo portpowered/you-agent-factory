@@ -139,6 +139,54 @@ func TestServiceWithRunnerSelectionReturnsConfiguredCopy(t *testing.T) {
 	}
 }
 
+func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testing.T) {
+	t.Parallel()
+
+	if configured := (*Service)(nil).WithExecutionFactories(nil, nil); configured != nil {
+		t.Fatalf("nil Service.WithExecutionFactories() = %#v, want nil", configured)
+	}
+
+	service := New(
+		nil, nil, nil, nil, testFactoryDocs, nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	)
+	resolveRunner := func(workstation, factory, worker string) (workers.ResolvedRunnerSelection, error) {
+		return workers.ResolvedRunnerSelection{
+			RunnerID: "customer.provider",
+			Source:   workers.RunnerSelectionSourceLegacyProvider,
+		}, nil
+	}
+	resolveProvider := func(identity string) (string, error) {
+		return "customer.provider", nil
+	}
+	configured := service.
+		WithRunnerSelection(resolveRunner).
+		WithProviderIdentityResolution(resolveProvider)
+	rebuilt := configured.WithExecutionFactories(nil, nil)
+	if rebuilt == configured {
+		t.Fatal("WithExecutionFactories() mutated the configured service")
+	}
+	if rebuilt.resolveRunner == nil || rebuilt.resolveProvider == nil {
+		t.Fatal("WithExecutionFactories() dropped registry selection wiring")
+	}
+	selection, err := rebuilt.resolveRunner("", "", "customer.provider")
+	if err != nil {
+		t.Fatalf("preserved resolver error = %v", err)
+	}
+	if selection.RunnerID != "customer.provider" {
+		t.Fatalf("preserved resolver selection = %#v", selection)
+	}
+	canonical, err := rebuilt.resolveProvider("customer")
+	if err != nil {
+		t.Fatalf("preserved identity resolver error = %v", err)
+	}
+	if canonical != "customer.provider" {
+		t.Fatalf("preserved identity resolver = %q, want customer.provider", canonical)
+	}
+}
+
 type providerStub struct{}
 
 func testClock() time.Time { return time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC) }
