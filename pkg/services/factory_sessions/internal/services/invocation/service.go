@@ -36,7 +36,10 @@ type WorkAdmission interface {
 // Dependencies are the exact runtime and effect ports needed by invocation.
 // They contain no process-wide service bag and are safe to bind independently
 // for each opened Factory Sessions runtime. Work is commanded only through the
-// injected CTR-WORK peer-root admission port.
+// injected CTR-WORK peer-root admission port. This public surface must not
+// declare Work implementation/module types, Runtime/Petri types, Wire/root
+// construction ownership, or sibling identity/live-runtime/durable-execution/
+// response-stream/opening ownership.
 type Dependencies struct {
 	FactoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
 	Work          WorkAdmission

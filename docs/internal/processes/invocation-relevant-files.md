@@ -31,7 +31,13 @@ primary-result behavior.
   `FactoryInvocationResult` vocabulary so private prepare/command/observe
   outcomes remain interchangeable with CTR-SES characterization; peers continue
   to consume only the Sessions root and must not import
-  `internal/services/invocation`.
+  `internal/services/invocation`. The nested invocation public surface
+  (`invocation` package root + `invocation/wire`) exposes only the named
+  `Service`, `WorkAdmission` / `Dependencies` ports, and `wire.New`; it must
+  not declare Work implementation modules, Runtime/Petri types, Wire/root
+  construction ownership, or sibling identity/live-runtime/durable-execution/
+  response-stream/opening constructors. One-shot opening stays on
+  `runtimeopening/invocation.NewOperation` via Sessions `wire.NewInvocationOperation`.
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and

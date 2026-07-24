@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -217,7 +217,10 @@ func NewInvocationOperation(
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (InvocationOperation, error) {
-	return invocationwire.NewOperation(
+	// One-shot opening stays on the runtime-opening owner. The nested
+	// invocation subservice public surface only constructs prepare/command/
+	// observe via invocation/wire.New and must not own opening behavior.
+	return legacyopening.NewOperation(
 		openRuntime,
 		effects,
 		workingDirectory,
