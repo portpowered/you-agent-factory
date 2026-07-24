@@ -187,6 +187,103 @@ func TestCommittedProgramMetadataManifestPassesCatalogValidation(t *testing.T) {
 	}
 }
 
+func TestValidateLeaseHoldersRejectsOverlappingActiveLeases(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-overlapping-active-leases.json")
+	err := psslease.ValidateLeaseHolders(manifest)
+	if err == nil {
+		t.Fatal("ValidateLeaseHolders() error = nil, want overlapping lease conflict")
+	}
+	message := err.Error()
+	for _, want := range []string{"PKT-A", "PKT-B", "pkg/services/factory_runtime/"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("ValidateLeaseHolders() error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+func TestValidateLeaseHoldersAcceptsDisjointActiveLeases(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-disjoint-active-leases.json")
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() error = %v, want nil for disjoint holders", err)
+	}
+}
+
+func TestValidateLeaseHoldersAllowsNonHoldingPathOverlap(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-blocked-ready-path-overlap.json")
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() error = %v, want nil while overlap is only among non-holders", err)
+	}
+}
+
+func TestValidateDispatchCandidateRejectsOverlapWithExistingHolder(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-blocked-ready-path-overlap.json")
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("precondition ValidateLeaseHolders() error = %v", err)
+	}
+
+	// Promote PKT-A to active first so it holds the overlapping prefix.
+	for i := range manifest.Packets {
+		if manifest.Packets[i].PacketID == "PKT-A" {
+			manifest.Packets[i].State = psslease.StateActive
+		}
+	}
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() after promoting PKT-A error = %v, want nil", err)
+	}
+
+	err := psslease.ValidateDispatchCandidate(manifest, "PKT-B", psslease.StateActive)
+	if err == nil {
+		t.Fatal("ValidateDispatchCandidate() error = nil, want rejection before PKT-B becomes active")
+	}
+	message := err.Error()
+	for _, want := range []string{"PKT-A", "PKT-B", "docs/internal/projects/packaged-service-structure/"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("ValidateDispatchCandidate() error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+func TestValidateDispatchCandidateAllowsDisjointActivation(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-disjoint-active-leases.json")
+	// Reset PKT-B to ready so we can ask whether it may become active.
+	for i := range manifest.Packets {
+		if manifest.Packets[i].PacketID == "PKT-B" {
+			manifest.Packets[i].State = psslease.StateReady
+		}
+	}
+
+	if err := psslease.ValidateDispatchCandidate(manifest, "PKT-B", psslease.StateActive); err != nil {
+		t.Fatalf("ValidateDispatchCandidate() error = %v, want nil for disjoint activation", err)
+	}
+}
+
+func TestCommittedProgramMetadataManifestPassesLeaseHolderValidation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "docs", "internal", "projects", "packaged-service-structure", "path-lease-packet-manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read committed manifest: %v", err)
+	}
+	manifest, err := psslease.DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest() error = %v", err)
+	}
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() error = %v, want nil", err)
+	}
+}
+
 func loadFixture(t *testing.T, name string) *psslease.Manifest {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))

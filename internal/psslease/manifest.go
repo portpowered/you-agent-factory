@@ -12,12 +12,12 @@ const (
 	// FormatVersion is the stable program-metadata format identifier.
 	FormatVersion = "pss-path-lease-packet-manifest/v1"
 
-	StateBlocked      = "blocked"
-	StateReady        = "ready"
-	StateActive       = "active"
-	StateReview       = "review"
-	StateIntegration  = "integration"
-	StateDone         = "done"
+	StateBlocked     = "blocked"
+	StateReady       = "ready"
+	StateActive      = "active"
+	StateReview      = "review"
+	StateIntegration = "integration"
+	StateDone        = "done"
 )
 
 // AllowedStates is the closed packet-state vocabulary from the PSS plan.
@@ -150,7 +150,159 @@ func ValidateCatalog(manifest *Manifest) error {
 			return fmt.Errorf("validate pss lease catalog: missing cataloged packet %q", packetID)
 		}
 	}
+	return ValidateLeaseHolders(manifest)
+}
+
+// ValidateLeaseHolders rejects overlapping exclusive path claims among packets
+// that are already in lease-holding states. Non-holding states never conflict
+// by path alone.
+//
+// Path overlap uses a documented prefix rule: after slash normalization, two
+// paths overlap when they are equal, or when one is a directory/file prefix of
+// the other (matched on path segment boundaries so "pkg/foo" does not collide
+// with "pkg/foobar").
+func ValidateLeaseHolders(manifest *Manifest) error {
+	if manifest == nil {
+		return fmt.Errorf("validate pss lease holders: manifest is nil")
+	}
+	if err := ValidateManifest(manifest); err != nil {
+		return err
+	}
+
+	holders := make([]Packet, 0, len(manifest.Packets))
+	for _, packet := range manifest.Packets {
+		if IsLeaseHoldingState(packet.State) {
+			holders = append(holders, packet)
+		}
+	}
+	for i := 0; i < len(holders); i++ {
+		for j := i + 1; j < len(holders); j++ {
+			left := holders[i]
+			right := holders[j]
+			overlap := overlappingExclusivePaths(left.ExclusivePaths, right.ExclusivePaths)
+			if len(overlap) == 0 {
+				continue
+			}
+			return fmt.Errorf(
+				"validate pss lease holders: overlapping exclusive paths between %q and %q: %s",
+				strings.TrimSpace(left.PacketID),
+				strings.TrimSpace(right.PacketID),
+				strings.Join(overlap, ", "),
+			)
+		}
+	}
 	return nil
+}
+
+// ValidateDispatchCandidate rejects promoting packetID into targetState when
+// that transition would create a lease-holding overlap with an existing holder.
+// Non-holding target states always pass the overlap gate.
+func ValidateDispatchCandidate(manifest *Manifest, packetID, targetState string) error {
+	if manifest == nil {
+		return fmt.Errorf("validate pss dispatch candidate: manifest is nil")
+	}
+	packetID = strings.TrimSpace(packetID)
+	if packetID == "" {
+		return fmt.Errorf("validate pss dispatch candidate: missing packetId")
+	}
+	if _, ok := AllowedStates[targetState]; !ok {
+		return fmt.Errorf("validate pss dispatch candidate: packet %q: unknown packet state %q", packetID, targetState)
+	}
+	if err := ValidateManifest(manifest); err != nil {
+		return err
+	}
+	if !IsLeaseHoldingState(targetState) {
+		return nil
+	}
+
+	var candidate *Packet
+	for index := range manifest.Packets {
+		if strings.TrimSpace(manifest.Packets[index].PacketID) == packetID {
+			candidate = &manifest.Packets[index]
+			break
+		}
+	}
+	if candidate == nil {
+		return fmt.Errorf("validate pss dispatch candidate: unknown packetId %q", packetID)
+	}
+
+	for _, packet := range manifest.Packets {
+		otherID := strings.TrimSpace(packet.PacketID)
+		if otherID == packetID {
+			continue
+		}
+		if !IsLeaseHoldingState(packet.State) {
+			continue
+		}
+		overlap := overlappingExclusivePaths(candidate.ExclusivePaths, packet.ExclusivePaths)
+		if len(overlap) == 0 {
+			continue
+		}
+		return fmt.Errorf(
+			"validate pss dispatch candidate: overlapping exclusive paths between %q and %q: %s",
+			packetID,
+			otherID,
+			strings.Join(overlap, ", "),
+		)
+	}
+	return nil
+}
+
+func overlappingExclusivePaths(left, right []string) []string {
+	leftPaths := normalizeExclusivePaths(left)
+	rightPaths := normalizeExclusivePaths(right)
+	overlap := make([]string, 0)
+	seen := make(map[string]struct{})
+	add := func(path string) {
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		overlap = append(overlap, path)
+	}
+	for _, leftPath := range leftPaths {
+		for _, rightPath := range rightPaths {
+			if !pathsOverlap(leftPath, rightPath) {
+				continue
+			}
+			// Include both claims so diagnostics name every overlapping path
+			// prefix/file involved in the conflict.
+			add(leftPath)
+			add(rightPath)
+		}
+	}
+	return overlap
+}
+
+// pathsOverlap reports whether two exclusive path claims collide under the
+// documented path-prefix rule.
+func pathsOverlap(left, right string) bool {
+	left = normalizePath(left)
+	right = normalizePath(right)
+	if left == "" || right == "" {
+		return false
+	}
+	if left == right {
+		return true
+	}
+	return isPathPrefix(left, right) || isPathPrefix(right, left)
+}
+
+func isPathPrefix(prefix, path string) bool {
+	if prefix == path {
+		return true
+	}
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	// Directory leases (trailing slash) cover everything beneath them.
+	if strings.HasSuffix(prefix, "/") {
+		return true
+	}
+	// File/directory segment boundary: "pkg/foo" covers "pkg/foo/..." but not
+	// "pkg/foobar".
+	remainder := path[len(prefix):]
+	return strings.HasPrefix(remainder, "/")
 }
 
 func normalizeExclusivePaths(paths []string) []string {
@@ -159,11 +311,19 @@ func normalizeExclusivePaths(paths []string) []string {
 	}
 	normalized := make([]string, 0, len(paths))
 	for _, path := range paths {
-		trimmed := strings.TrimSpace(path)
+		trimmed := normalizePath(path)
 		if trimmed == "" {
 			continue
 		}
 		normalized = append(normalized, trimmed)
 	}
 	return normalized
+}
+
+func normalizePath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.ReplaceAll(trimmed, "\\", "/")
 }

@@ -49,6 +49,16 @@ exclusive paths among lease holders must fail validation before a packet may be
 treated as dispatched/`active`. Non-holding states (`blocked`, `ready`, `done`)
 do not block other packets by path overlap alone.
 
+## Path-overlap rule
+
+`ValidateLeaseHolders` and `ValidateDispatchCandidate` treat exclusive paths as
+slash-normalized prefixes/files. Two claims overlap when they are equal, or when
+one is a path-segment prefix of the other (so `pkg/foo/` covers
+`pkg/foo/bar`, and `pkg/foo` covers `pkg/foo/bar`, but `pkg/foo` does not cover
+`pkg/foobar`). Before promoting a packet into a lease-holding state, call
+`ValidateDispatchCandidate` so overlapping holders are rejected before the
+packet is treated as active/dispatched.
+
 ## Scope fence
 
 FND-10 owns program metadata only. It does not migrate services, invent a
