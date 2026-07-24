@@ -90,6 +90,122 @@ func TestResolvedServeHandlerPreservesHomeResolutionFailure(t *testing.T) {
 	}
 }
 
+func TestResolvedServeHandlerReportsMissingCanonicalInputs(t *testing.T) {
+	handler := ResolvedServeHandler(ServeBinding{
+		InitializeStdio: func(context.Context, startupcli.MCPIntent) error {
+			t.Fatal("initializer must not run before canonical inputs resolve")
+			return nil
+		},
+	})
+	cases := []struct {
+		name    string
+		inputs  resolvedinput.Inputs
+		wantErr string
+	}{
+		{
+			name:    "fixture catalog",
+			inputs:  resolvedinput.Inputs{},
+			wantErr: "read MCP fixture catalog input",
+		},
+		{
+			name:    "runtime",
+			inputs:  resolvedServePartialInputs(t, true, false, false),
+			wantErr: "read MCP runtime input",
+		},
+		{
+			name:    "project root",
+			inputs:  resolvedServePartialInputs(t, true, true, false),
+			wantErr: "read MCP project root input",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := handler(&cobra.Command{Use: "serve"}, tc.inputs, resolvedinput.Inputs{})
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("handler error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestResolvedServeHandlerRequiresHomeResolverForRuntime(t *testing.T) {
+	handler := ResolvedServeHandler(ServeBinding{
+		InitializeStdio: func(context.Context, startupcli.MCPIntent) error {
+			t.Fatal("initializer must not run without a home resolver")
+			return nil
+		},
+	})
+	err := handler(
+		&cobra.Command{Use: "serve"},
+		resolvedServeInputs(t, "", true, "/workspace/project"),
+		resolvedinput.Inputs{},
+	)
+	if err == nil || !strings.Contains(err.Error(), "process home directory resolver is required") {
+		t.Fatalf("handler error = %v, want missing home resolver", err)
+	}
+}
+
+func TestResolvedServeHandlerPreservesInitializerFailure(t *testing.T) {
+	want := errors.New("stdio initialize failed")
+	handler := ResolvedServeHandler(ServeBinding{
+		InitializeStdio: func(context.Context, startupcli.MCPIntent) error { return want },
+	})
+	err := handler(
+		&cobra.Command{Use: "serve"},
+		resolvedServeInputs(t, "fixtures.json", false, ""),
+		resolvedinput.Inputs{},
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("handler error = %v, want initializer failure", err)
+	}
+}
+
+func resolvedServePartialInputs(
+	t *testing.T,
+	includeFixtureCatalog bool,
+	includeRuntime bool,
+	includeProjectRoot bool,
+) resolvedinput.Inputs {
+	t.Helper()
+	definitions := make([]resolvedinput.Definition, 0, 3)
+	candidates := make([]resolvedinput.Candidate, 0, 3)
+	if includeFixtureCatalog {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: fixtureCatalogInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: fixtureCatalogInputID, Source: resolvedinput.SourceManifestDefault,
+			Value: resolvedinput.StringValue("fixtures.json"),
+		})
+	}
+	if includeRuntime {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: runtimeInputID, Kind: resolvedinput.ValueKindBool,
+			Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: runtimeInputID, Source: resolvedinput.SourceManifestDefault,
+			Value: resolvedinput.BoolValue(false),
+		})
+	}
+	if includeProjectRoot {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: projectRootInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: projectRootInputID, Source: resolvedinput.SourceManifestDefault,
+			Value: resolvedinput.StringValue("/workspace/project"),
+		})
+	}
+	inputs, err := resolvedinput.Resolve(definitions, candidates)
+	if err != nil {
+		t.Fatalf("resolve partial serve inputs: %v", err)
+	}
+	return inputs
+}
+
 func resolvedServeInputs(
 	t *testing.T,
 	fixtureCatalog string,
