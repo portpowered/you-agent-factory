@@ -92,6 +92,18 @@
   fail; harness/internal helpers stay out of the ledger). Later FND cells
   wire that check into Make/CI; do not reintroduce regex or line-scraping
   inventories.
+  The maintainer-readable Markdown catalog generator lives in
+  `internal/functionaltestviz` with thin CLI entrypoint
+  `cmd/functionaltestviz`. It consumes inventoried
+  `functionaltestmetadata.Record` values plus an existing
+  `gocoveragecheck` coverage-summary JSON file (never a second `.out`
+  profile parser), attaches golden manifest provenance fail-closed, and
+  writes `.artifacts/functional-test-viz/functional-tests.md` by default
+  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library;
+  Make/CI upload wiring remains a later cell (`make functional-test-viz` is
+  intentionally not owned here). Prove rendering with focused package/cmd
+  golden fixtures under `internal/functionaltestviz/testdata/` rather than
+  executing the full functional suite.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
