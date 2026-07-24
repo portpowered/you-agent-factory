@@ -98,9 +98,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional/internal/support` is the only shared harness exception;
   other `tests/functional/internal/*` roots (for example `restclient`) are
   unclassified deletion-only debt, and new `runtime_api` files or top-level
-  `Test*` scenarios fail immediately. When enabling a
-  new layout rule, baseline the current repository debt in the same change so
-  `make pkg-structure` stays green.
+  `Test*` scenarios fail immediately. Prove accept/reject outcomes with
+  focused `cmd/pkgstructurecheck` tests (see
+  `TestDomainLayoutEnforcementProof`) plus `make pkg-structure` and
+  `make verify-fast`. When enabling a new layout rule, baseline the current
+  repository debt in the same change so `make pkg-structure` stays green.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing

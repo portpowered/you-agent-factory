@@ -331,6 +331,31 @@ func TestCreateBaselineRefusesOverwrite(t *testing.T) {
 	}
 }
 
+// TestDomainLayoutEnforcementProof consolidates the accept/reject outcomes required
+// by the domain-mirrored functional layout gate: conforming domain/subsection paths
+// and internal/support are allowed; new shallow, unclassified/catch-all, and
+// runtime_api scenarios are rejected.
+func TestDomainLayoutEnforcementProof(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/workers/script/execution_test.go", "package script_test\nfunc TestExecution() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/internal/support/process.go", "package support\n")
+	writeTestFile(t, repoRoot, "tests/functional/smoke/new_smoke_test.go", "package smoke_test\nfunc TestNewSmoke() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/cli/session/new_cli_test.go", "package session_test\nfunc TestNewCLI() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/new_scenario_test.go", "package runtime_api\nfunc TestNewScenario() {}\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleRuntimeAPIFile + "|tests/functional/runtime_api/new_scenario_test.go|tests/functional/runtime_api",
+		ruleRuntimeAPITest + "|tests/functional/runtime_api/new_scenario_test.go|TestNewScenario",
+		ruleFunctionalShallowFile + "|tests/functional/smoke/new_smoke_test.go|smoke",
+		ruleFunctionalUnclassifiedDomain + "|tests/functional/cli/session/new_cli_test.go|cli",
+	})
+}
+
 func assertFindingKeys(t *testing.T, findings []finding, want []string) {
 	t.Helper()
 	got := make([]string, 0, len(findings))
