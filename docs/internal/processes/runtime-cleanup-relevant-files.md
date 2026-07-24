@@ -736,7 +736,11 @@ Normalize and validate run through that nested Service and map validation
 failures to CTR-WORK typed sentinels (`ErrInvalidWorkRequest` /
 `ErrWorkRequestRejected`); the pure `work.NormalizeWorkRequest` helper remains
 available for shared shape parity while admission owns the admission-facing
-path. Cross-service peers continue to call the Work root `Service` admission
-slice (`SubmitWorkRequestForSession`); they must not import the nested
-admission package. Keep Session/Runtime/Petri types, filesystem/SQL/OS effect
-types, and Wire/root construction ownership off the admission public surface.
+path. Idempotent `Accept` records accepted request identities in-memory and
+returns `ErrWorkRequestConflict` for duplicate or incompatible replays and
+`ErrWorkRequestRejected` for rejection-shaped accept inputs, without taking
+content staging, materialization, or state-access leases. Cross-service peers
+continue to call the Work root `Service` admission slice
+(`SubmitWorkRequestForSession`); they must not import the nested admission
+package. Keep Session/Runtime/Petri types, filesystem/SQL/OS effect types, and
+Wire/root construction ownership off the admission public surface.

@@ -42,11 +42,14 @@ func TestNewReturnsAdmissionService(t *testing.T) {
 		t.Fatalf("Validate: %v", err)
 	}
 
-	accepted, err := svc.Accept(ctx, admission.AcceptRequest{RequestID: request.RequestID})
-	if err == nil {
-		t.Fatal("Accept shell should not claim full admission accept behavior yet")
+	accepted, err := svc.Accept(ctx, admission.AcceptRequest{
+		RequestID:  normalized.RequestID,
+		Normalized: normalized.Normalized,
+	})
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
 	}
-	if accepted.Accepted || accepted.RequestID != "" {
-		t.Fatalf("Accept shell result = %#v, want empty outcome on stub failure", accepted)
+	if !accepted.Accepted || accepted.RequestID != "shell-request-1" {
+		t.Fatalf("Accept result = %#v, want accepted shell-request-1", accepted)
 	}
 }
