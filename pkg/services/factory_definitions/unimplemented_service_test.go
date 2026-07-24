@@ -10,7 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func TestUnimplementedService_RootSliceTypedOutcomes(t *testing.T) {
+func TestUnimplementedService_CatalogTypedOutcomes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -34,6 +34,13 @@ func TestUnimplementedService_RootSliceTypedOutcomes(t *testing.T) {
 	if _, err := unimplemented.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{Name: "alpha"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
 		t.Fatalf("SetCurrentFactoryPointer: got %v, want ErrNamedFactoryNotFound", err)
 	}
+}
+
+func TestUnimplementedService_AuthoringTypedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var unimplemented factorydefinitions.UnimplementedService
 
 	if _, err := unimplemented.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{}); !errors.Is(err, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
 		t.Fatalf("PrepareFactoryLayout: got %v, want ErrMalformedFactoryLayoutPayload", err)
@@ -49,6 +56,13 @@ func TestUnimplementedService_RootSliceTypedOutcomes(t *testing.T) {
 	assertAtomicWriteFailure(t, createErr, true)
 	_, replaceErr := unimplemented.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{Name: "alpha"})
 	assertAtomicWriteFailure(t, replaceErr, true)
+}
+
+func TestUnimplementedService_CompileValidateTypedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var unimplemented factorydefinitions.UnimplementedService
 
 	if _, err := unimplemented.CompileEffectiveFactorySource(ctx, factorydefinitions.CompileEffectiveFactorySourceRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidAuthoredFactorySource) {
 		t.Fatalf("CompileEffectiveFactorySource: got %v, want ErrInvalidAuthoredFactorySource", err)
@@ -59,6 +73,13 @@ func TestUnimplementedService_RootSliceTypedOutcomes(t *testing.T) {
 	if _, err := unimplemented.ValidateEffectiveFactoryDefinition(ctx, factorydefinitions.ValidateEffectiveFactoryDefinitionRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
 		t.Fatalf("ValidateEffectiveFactoryDefinition: got %v, want ErrInvalidFactoryDefinitionPayload", err)
 	}
+}
+
+func TestUnimplementedService_SnapshotDistributeTypedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var unimplemented factorydefinitions.UnimplementedService
 
 	if _, err := unimplemented.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
 		t.Fatalf("CaptureFactorySnapshot: got %v, want ErrInvalidFactorySnapshotPayload", err)
