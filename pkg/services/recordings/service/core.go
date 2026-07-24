@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"strings"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -57,6 +59,27 @@ type combinedService struct {
 }
 
 var _ recordings.Service = (*combinedService)(nil)
+
+func (service *combinedService) Append(
+	request recordings.AppendRecordedEventRequest,
+) recordings.AppendRecordedEventResult {
+	service.AppendRecordedEvent(request.Event)
+	return recordings.AppendRecordedEventResult{}
+}
+
+func (service *combinedService) SubscribeFrom(
+	ctx context.Context,
+	request recordings.SubscribeRequest,
+) (recordings.SubscribeResult, error) {
+	if request.Scope.SessionID != "" && strings.TrimSpace(request.Scope.SessionID) == "" {
+		return recordings.SubscribeResult{}, recordings.ErrInvalidSubscribeScope
+	}
+	stream, err := service.Subscribe(ctx, request.Cursor, request.Scope)
+	if err != nil {
+		return recordings.SubscribeResult{}, err
+	}
+	return recordings.SubscribeResult{Stream: stream}, nil
+}
 
 func NewService(
 	ledger recordings.Ledger,

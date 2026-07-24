@@ -17,6 +17,10 @@ import (
 // identify an event in the selected ledger stream.
 var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
 
+// ErrInvalidSubscribeScope reports that a reconnect-aware subscribe request
+// carries a malformed scope (for example a whitespace-only SessionID).
+var ErrInvalidSubscribeScope = errors.New("invalid subscribe reconnect scope")
+
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -25,6 +29,39 @@ type RuntimeOpeningRequest struct {
 	ReplayPath    string
 	WorkflowID    string
 	FlushInterval time.Duration
+}
+
+// EventReconnectCursor is the plain reconnect cursor value published at the
+// Recordings root for the append/subscribe slice.
+type EventReconnectCursor = interfaces.FactoryEventReconnectCursor
+
+// EventReconnectScope is the plain reconnect scope value published at the
+// Recordings root for the append/subscribe slice.
+type EventReconnectScope = interfaces.FactoryEventReconnectScope
+
+// EventStream is the plain ordered event stream/result value published at the
+// Recordings root for the append/subscribe slice.
+type EventStream = interfaces.FactoryEventStream
+
+// AppendRecordedEventRequest is the plain ordered-append request peers send
+// through the Recordings root append/subscribe slice.
+type AppendRecordedEventRequest struct {
+	Event interfaces.FactoryEvent
+}
+
+// AppendRecordedEventResult is the plain ordered-append success outcome.
+type AppendRecordedEventResult struct{}
+
+// SubscribeRequest is the plain reconnect-aware subscribe request peers send
+// through the Recordings root append/subscribe slice.
+type SubscribeRequest struct {
+	Cursor *EventReconnectCursor
+	Scope  EventReconnectScope
+}
+
+// SubscribeResult is the plain reconnect-aware subscribe success outcome.
+type SubscribeResult struct {
+	Stream EventStream
 }
 
 // Ledger is the append/subscribe capability surface embedded in the singular
@@ -58,6 +95,13 @@ type Ledger interface {
 type Service interface {
 	Ledger
 	ProjectionService
+
+	// Append publishes one ordered Factory Event through the plain
+	// append/subscribe root-contract slice.
+	Append(AppendRecordedEventRequest) AppendRecordedEventResult
+	// SubscribeFrom opens a reconnect-aware event stream through the plain
+	// append/subscribe root-contract slice.
+	SubscribeFrom(context.Context, SubscribeRequest) (SubscribeResult, error)
 }
 
 // ProjectionService is the projection-query capability surface embedded in the

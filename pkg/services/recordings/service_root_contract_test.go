@@ -3,6 +3,7 @@ package recordings_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -17,7 +18,7 @@ type peerRootServiceFake struct {
 	events              []interfaces.FactoryEvent
 	streamGenerationID  string
 	subscribeErr        error
-	subscribeStream     interfaces.FactoryEventStream
+	subscribeStream     recordings.EventStream
 	reconstructState    interfaces.FactoryWorldState
 	reconstructErr      error
 	dashboardData       recordings.SimpleDashboardRenderData
@@ -61,6 +62,56 @@ func (fake *peerRootServiceFake) AddEventTypeRecorder(func(interfaces.FactoryEve
 
 func (fake *peerRootServiceFake) AppendRecordedEvent(event interfaces.FactoryEvent) {
 	fake.events = append(fake.events, event)
+}
+
+func (fake *peerRootServiceFake) Append(
+	request recordings.AppendRecordedEventRequest,
+) recordings.AppendRecordedEventResult {
+	fake.AppendRecordedEvent(request.Event)
+	return recordings.AppendRecordedEventResult{}
+}
+
+func (fake *peerRootServiceFake) SubscribeFrom(
+	ctx context.Context,
+	request recordings.SubscribeRequest,
+) (recordings.SubscribeResult, error) {
+	if err := invalidSubscribeScope(request.Scope); err != nil {
+		return recordings.SubscribeResult{}, err
+	}
+	if fake.subscribeErr != nil {
+		return recordings.SubscribeResult{}, fake.subscribeErr
+	}
+	if request.Cursor != nil && strings.TrimSpace(request.Cursor.AfterEventID) != "" {
+		ackIndex := -1
+		for index, event := range fake.events {
+			if event.Id == request.Cursor.AfterEventID {
+				ackIndex = index
+				break
+			}
+		}
+		if ackIndex < 0 {
+			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorNotFound
+		}
+		newer := append([]interfaces.FactoryEvent(nil), fake.events[ackIndex+1:]...)
+		return recordings.SubscribeResult{
+			Stream: recordings.EventStream{
+				StreamGenerationID: fake.streamGenerationID,
+				History:            newer,
+			},
+		}, nil
+	}
+	stream, err := fake.Subscribe(ctx, request.Cursor, interfaces.FactoryEventReconnectScope(request.Scope))
+	if err != nil {
+		return recordings.SubscribeResult{}, err
+	}
+	return recordings.SubscribeResult{Stream: stream}, nil
+}
+
+func invalidSubscribeScope(scope recordings.EventReconnectScope) error {
+	if scope.SessionID != "" && strings.TrimSpace(scope.SessionID) == "" {
+		return recordings.ErrInvalidSubscribeScope
+	}
+	return nil
 }
 
 func (fake *peerRootServiceFake) ReconstructFactoryWorldState(
@@ -151,5 +202,56 @@ func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 		interfaces.FactoryEventReconnectScope{},
 	); !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 		t.Fatalf("ValidateReconnectReplay error = %v, want ErrReconnectCursorNotFound", err)
+	}
+}
+
+func TestAppendSubscribeRootContract_SuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	fake := &peerRootServiceFake{streamGenerationID: "generation-append-subscribe"}
+	var service recordings.Service = fake
+	ctx := context.Background()
+
+	first := interfaces.FactoryEvent{Id: "event-1", Type: "WORK_REQUEST"}
+	second := interfaces.FactoryEvent{Id: "event-2", Type: "WORK_STATE_CHANGE"}
+	_ = service.Append(recordings.AppendRecordedEventRequest{Event: first})
+	_ = service.Append(recordings.AppendRecordedEventRequest{Event: second})
+
+	cursor := recordings.EventReconnectCursor{AfterEventID: "event-1"}
+	result, err := service.SubscribeFrom(ctx, recordings.SubscribeRequest{
+		Cursor: &cursor,
+		Scope:  recordings.EventReconnectScope{SessionID: "session-1"},
+	})
+	if err != nil {
+		t.Fatalf("SubscribeFrom success path: %v", err)
+	}
+	if got := len(result.Stream.History); got != 1 {
+		t.Fatalf("SubscribeFrom history len = %d, want 1 event newer than cursor", got)
+	}
+	if got := result.Stream.History[0].Id; got != "event-2" {
+		t.Fatalf("SubscribeFrom newer event id = %q, want event-2", got)
+	}
+	if got := result.Stream.StreamGenerationID; got != "generation-append-subscribe" {
+		t.Fatalf("SubscribeFrom stream generation = %q, want generation-append-subscribe", got)
+	}
+
+	stale := recordings.EventReconnectCursor{AfterEventID: "missing-cursor"}
+	_, err = service.SubscribeFrom(ctx, recordings.SubscribeRequest{
+		Cursor: &stale,
+		Scope:  recordings.EventReconnectScope{SessionID: "session-1"},
+	})
+	if !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		t.Fatalf("stale cursor error = %v, want ErrReconnectCursorNotFound", err)
+	}
+
+	_, err = service.SubscribeFrom(ctx, recordings.SubscribeRequest{
+		Cursor: &cursor,
+		Scope:  recordings.EventReconnectScope{SessionID: "   "},
+	})
+	if !errors.Is(err, recordings.ErrInvalidSubscribeScope) {
+		t.Fatalf("invalid scope error = %v, want ErrInvalidSubscribeScope", err)
+	}
+	if errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		t.Fatalf("invalid scope must remain distinct from ErrReconnectCursorNotFound")
 	}
 }
