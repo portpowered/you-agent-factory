@@ -92,6 +92,7 @@ func BuildPathLeaseFreeze() PathLeaseFreeze {
 				PathLeaseFreezeRelativePath,
 				"internal/ownershipinventory/",
 				"cmd/ownershipinventoryfreeze/",
+				"cmd/ownershipinventorycheck/",
 			},
 			State:         psslease.StateActive,
 			Prerequisites: []string{"FND-01", "FND-10"},

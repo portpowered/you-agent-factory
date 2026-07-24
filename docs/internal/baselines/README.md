@@ -35,7 +35,7 @@ restricted to construction or external effect. When
 `package-target-manifest.json` (FND-01) is present, validators reuse that seed
 for package rows instead of inventing a second destination catalog. Regenerate
 with `go run ./cmd/ownershipinventoryfreeze` and prove with
-`go test ./internal/ownershipinventory`.
+`go test ./internal/ownershipinventory` or `make ownership-inventory-check`.
 
 The initial path-lease freeze published from that inventory lives at
 `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`.
@@ -44,4 +44,9 @@ to assign exclusive changed-path leases for the ownership-inventory packet
 (`PSS-F01`) and the first PSS-F02 owner-boundary checker slice, rejects
 overlapping active leases, and refuses CLI-manifest / provider-conductor
 portfolio holds. Regenerate with the same freeze command; prove with
-`go test ./internal/ownershipinventory ./internal/psslease`.
+`go test ./internal/ownershipinventory ./internal/psslease` or
+`make ownership-inventory-check`. The combined verification gate
+(`ownershipinventory.VerifyFreeze`) proves completeness, stable sort order,
+required rationale fields, edge classifications, named-owner coverage, Process
+Edges exception presence, and non-overlapping active leases together. That
+check is part of `make lint`.

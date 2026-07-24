@@ -11,7 +11,8 @@
         "docs/internal/baselines/README.md",
         "docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
         "internal/ownershipinventory/",
-        "cmd/ownershipinventoryfreeze/"
+        "cmd/ownershipinventoryfreeze/",
+        "cmd/ownershipinventorycheck/"
       ],
       "state": "active",
       "prerequisites": [

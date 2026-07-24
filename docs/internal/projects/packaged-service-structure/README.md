@@ -25,17 +25,22 @@ scheduling evidence.
 
 - **PSS-F01** (`active`) — exclusive paths for the ownership-inventory artifact,
   freeze artifact, and their validators (`internal/ownershipinventory/`,
-  `cmd/ownershipinventoryfreeze/`)
+  `cmd/ownershipinventoryfreeze/`, `cmd/ownershipinventorycheck/`)
 - **PSS-F02** (`ready`) — exclusive path for the first owner-boundary checker
   slice (`owner-boundary-enforcement.md`), unblocked by the freeze
 
 The freeze records portfolio-hold exclusions for CLI-manifest generation and
 provider-conductor composition so those live external programs keep their
 paths. Focused validation rejects empty exclusive path sets, overlapping
-active leases, and claims that collide with those portfolio holds.
+active leases, and claims that collide with those portfolio holds. The combined
+verification gate (`make ownership-inventory-check`) proves inventory
+completeness, stable sort order, required rationale fields, edge
+classifications, named-owner coverage, Process Edges exception presence, and
+non-overlapping active leases.
 
 ```bash
 go test ./internal/ownershipinventory/ ./internal/psslease/ -count=1
+make ownership-inventory-check
 ```
 
 ## Packet record shape

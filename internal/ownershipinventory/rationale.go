@@ -107,6 +107,23 @@ func BuildResponsibilityClusters() []ResponsibilityCluster {
 }
 
 func committedOwnerRationales() []OwnerRationaleCard {
+	out := make([]OwnerRationaleCard, 0, 65)
+	out = append(out, committedAutomationsRationales()...)
+	out = append(out, committedFactoryDefinitionsRationales()...)
+	out = append(out, committedFactoryRuntimeRationales()...)
+	out = append(out, committedFactorySessionsRationales()...)
+	out = append(out, committedFactoryVisualizationRationales()...)
+	out = append(out, committedModelsRationales()...)
+	out = append(out, committedOperatorSettingsRationales()...)
+	out = append(out, committedProviderSessionsRationales()...)
+	out = append(out, committedProvidersRationales()...)
+	out = append(out, committedRecordingsRationales()...)
+	out = append(out, committedSystemInitializationRationales()...)
+	out = append(out, committedWorkRationales()...)
+	out = append(out, committedWorkersRationales()...)
+	return out
+}
+func committedAutomationsRationales() []OwnerRationaleCard {
 	return []OwnerRationaleCard{
 		topLevel(
 			"automations",
@@ -178,6 +195,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Cursor and poller status are Automations-local; emitted Work crosses owners by command.",
 			"Timeout and parse failures remain Automations poller recovery facts.",
 		),
+	}
+}
+func committedFactoryDefinitionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"factory_definitions",
 			"pkg/services/factory_definitions",
@@ -260,6 +281,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Validation does not mutate peer stores; persist remains Definition transaction.",
 			"Validation diagnostics are Definition rejection facts, not Runtime failures.",
 		),
+	}
+}
+func committedFactoryRuntimeRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"factory_runtime",
 			"pkg/services/factory_runtime",
@@ -318,6 +343,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Strategy execution shares Runtime instance transaction; authored Factory config remains Definitions.",
 			"Strategy validation and execution faults normalize through Runtime orchestration.",
 		),
+	}
+}
+func committedFactorySessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"factory_sessions",
 			"pkg/services/factory_sessions",
@@ -400,6 +429,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Does not own peer transactions; only plans Sessions-owned activation steps.",
 			"Binding/plan failures surface as Sessions opening faults without peer downcasts.",
 		),
+	}
+}
+func committedFactoryVisualizationRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"factory_visualization",
 			"pkg/services/factory_visualization",
@@ -446,6 +479,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Queue mutations are Visualization-local.",
 			"Drop/backpressure and final-write conflicts are presentation recovery facts.",
 		),
+	}
+}
+func committedModelsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"models",
 			"pkg/services/models",
@@ -528,6 +565,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Scope registry is Models-local and process-scoped.",
 			"Stale/foreign scope references are typed scope faults.",
 		),
+	}
+}
+func committedOperatorSettingsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"operator_settings",
 			"pkg/services/operator_settings",
@@ -562,6 +603,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Resolution does not mutate Document; callers persist via Document commands.",
 			"Conflict/unsupported override failures are Resolution facts.",
 		),
+	}
+}
+func committedProviderSessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"provider_sessions",
 			"pkg/services/provider_sessions",
@@ -596,6 +641,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Reader-local decode projection; no provider execution.",
 			"Store/decode failures normalize through Cursor Reader.",
 		),
+	}
+}
+func committedProvidersRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"providers",
 			"pkg/services/providers",
@@ -630,6 +679,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Attempt boundary is Providers-local; Workers owns multi-attempt policy.",
 			"Native adapter and failure-normalization faults are Execution facts.",
 		),
+	}
+}
+func committedRecordingsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"recordings",
 			"pkg/services/recordings",
@@ -700,6 +753,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Replay plans are Recordings-owned; peers do not import replay implementations.",
 			"Divergence and hydrate failures are Replay recovery facts.",
 		),
+	}
+}
+func committedSystemInitializationRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"system_initialization",
 			"pkg/services/system_initialization",
@@ -710,6 +767,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"Cross-owner ordering only; Settings and Definitions retain their own transactions/rollback.",
 			"Partial failure/rollback reporting is Bootstrap-owned without absorbing peer stores.",
 		),
+	}
+}
+func committedWorkRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"work",
 			"pkg/services/work",
@@ -768,6 +829,10 @@ func committedOwnerRationales() []OwnerRationaleCard {
 			"State Access does not write Sessions/Recordings stores.",
 			"Not-found and move conflicts are State Access facts.",
 		),
+	}
+}
+func committedWorkersRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
 		topLevel(
 			"workers",
 			"pkg/services/workers",
