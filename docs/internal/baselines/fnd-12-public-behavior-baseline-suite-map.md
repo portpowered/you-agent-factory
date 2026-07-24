@@ -1,0 +1,73 @@
+# FND-12 public behavior baseline suite map
+
+Maintainer map of **runnable** entry points that lock representative public
+success and typed-failure behavior for CLI, HTTP, MCP, replay, and Factory
+Visualization activation **before** Packaged Service Structure service-package
+moves.
+
+This packet captures and documents baselines only. It does **not** migrate
+service packages, change provider conductor behavior, or own live
+docs/models/mcp CLI-manifest generation.
+
+## How to use
+
+Run each surface entry point below before a PSS package move that depends on
+FND-12. Prefer the focused `go test` filters; Make targets are listed when they
+already wrap the same evidence.
+
+Foundation gate (after all surfaces are green): `make verify-fast` and
+`make lint`.
+
+## Ownership note (out of lease)
+
+Live **docs / models / mcp CLI-manifest** baselines and generation owned by
+[PR #1262](https://github.com/portpowered/you-agent-factory/pull/1262)
+(`make cli-manifest-generate`, `make cli-manifest-check`, authored manifest
+projections) are **referenced only**. This packet must not refresh, regenerate,
+or re-own those artifacts.
+
+## Proof rules
+
+Every listed baseline must assert an operator- or protocol-visible outcome
+(exit/status, stdout/stderr or structured CLI result, HTTP status + body/error
+code, MCP tool/protocol result, replay completion/divergence, visualization
+view or activation failure).
+
+Do **not** treat the following as sole proof for a surface:
+
+- Source-file inventory or package import-graph scans
+- Docs-link / docs-topology checks
+- Command-tree, route-registration, or MCP discovery-artifact inventory dumps
+  without a protocol-visible success or typed-failure assertion
+
+## Surface map
+
+| Surface | Runnable entry point | Success baseline | Typed-failure baseline | Pair status |
+| --- | --- | --- | --- | --- |
+| CLI | Focused: `go test ./pkg/transports/cli/baseline -run 'Test(RootHelpBaseline_MatchesFixture\|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)' -count=1` Also included under `make test-functional` (short CLI baseline package). | `TestRootHelpBaseline_MatchesFixture` — customer-visible `you --help` stdout matches the checked-in fixture via `root.BuildProcess`. | `TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure` — invalid factory topology fails before invocation with structured `ErrorResponse` on stderr (code/family/message). | Covered |
+| HTTP | Focused: `go test ./tests/functional/runtime_api -run 'TestGeneratedAPIIntegrationSmoke_(OpenAPIGeneratedServerAndLiveRuntimeStayAligned\|SubmitWorkItemsRejectEmptyStructuredSubmission)' -count=1` Broader Make wrap: `make api-smoke` (also regenerates/validates OpenAPI; heavier than the focused pair). | `TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned` — live generated server serves a successful protocol-visible Work read/submit path. | `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission` — empty structured submit returns HTTP 400. | Covered |
+| MCP | Focused: `go test ./pkg/transports/mcp/server -run 'Test(ServeStdioUsesSDKProtocolAndRegistersCatalog\|SDKProtocolErrors)' -count=1` Broader Make wrap: `make mcp-contract-smoke` (also runs contract/discovery checks; discovery drift alone is **not** the behavioral proof). | `TestServeStdioUsesSDKProtocolAndRegistersCatalog` — initialize/list/call succeed over stdio JSON-RPC with a catalog tool result. | `TestSDKProtocolErrors` — unknown tool / unsupported method return protocol-visible JSON-RPC errors. | Covered |
+| Replay | Focused: `go test ./pkg/services/recordings/replay -run 'TestSideEffects_(InferReturnsRecordedProviderResponse\|UnmatchedRequestFailsClearly)' -count=1` Optional broader (long tags): `go test -tags=<FUNCTIONAL_LONG_TAGS> ./tests/functional/replay_contracts -run 'TestReplayRegressionHarness_(LoadsArtifactAndAssertsSuccessfulReplay\|AssertsExpectedDivergence)' -count=1` | `TestSideEffects_InferReturnsRecordedProviderResponse` — matched recorded provider inference returns the recorded response. | `TestSideEffects_UnmatchedRequestFailsClearly` — unmatched replay key fails with a stable visible error (`replay provider request did not match`). | Covered |
+| Visualization activation | Focused: `go test ./pkg/services/factory_visualization -run 'Test(ServiceProjectsRetainedAndLiveFactoryEvents\|NewRejectsMissingDependencies)' -count=1` | `TestServiceProjectsRetainedAndLiveFactoryEvents` — `Start` against a valid event source projects retained-then-live events and emits observable `View`s. | `TestNewRejectsMissingDependencies` — activation construct fails with an explicit missing-dependency error (no false success). Related: `TestServiceReportsProjectionReadFailureWithoutStoppingSubscription` reports projection read failure without claiming success. | Covered |
+
+## Gaps and follow-ups
+
+As of this map, each surface already has a **reusable success + typed-failure
+pair** in existing focused evidence. Remaining FND-12 work is capture/gate
+hardening, not inventing sole-proof source scans:
+
+- Stories 002–006: keep the focused filters above as the captured suite
+  contracts; add the smallest hermetic fixture only if a listed case regresses
+  or proves too brittle for the gate.
+- Story 007: execute every entry point above plus `make verify-fast` and
+  `make lint` on the capturing branch; optionally introduce a single Make
+  aggregator that shells the five focused filters without package migration.
+- Do not expand this map to own PR #1262 CLI-manifest generate/check artifacts.
+
+## Non-goals (explicit)
+
+- Migrating any `pkg/services/*` tree
+- Changing provider conductor behavior
+- Refreshing or re-owning PR #1262 docs/models/mcp CLI-manifest baselines
+- Adding meta tests whose sole assertion is source, docs topology, or
+  registration inventory
