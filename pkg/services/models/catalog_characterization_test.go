@@ -53,6 +53,14 @@ func (catalogPeerService) InspectRuntime(context.Context, string) (models.Runtim
 	return models.Runtime{}, models.ErrUnsupported
 }
 
+func (catalogPeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, models.ErrHostRuntimeNotReady
+}
+
+func (catalogPeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return models.ErrHostLeaseNotFound
+}
+
 func (catalogPeerService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{Handled: false}, nil
 }

@@ -1,0 +1,41 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+)
+
+// AcquireLease acquires Models-owned local capacity through the singular root
+// Service host/lease surface.
+func (s *Service) AcquireLease(ctx context.Context, request models.AcquireLeaseRequest) (models.HostLease, error) {
+	if err := models.ValidateAcquireLeaseRequest(request); err != nil {
+		return models.HostLease{}, err
+	}
+	runtimeCfg := s.runtimeConfig()
+	if runtimeCfg == nil {
+		return models.HostLease{}, fmt.Errorf("factory service runtime is not available")
+	}
+	host := s.modelHost()
+	if host == nil {
+		return models.HostLease{}, models.ErrHostRuntimeNotReady
+	}
+	return host.AcquireLease(ctx, runtimeCfg, request.ModelName, modelhost.LeaseOptions{
+		Holder: request.Holder,
+	})
+}
+
+// ReleaseLease releases one Models-owned HostLease through the singular root
+// Service host/lease surface.
+func (s *Service) ReleaseLease(ctx context.Context, request models.ReleaseLeaseRequest) error {
+	if err := models.ValidateReleaseLeaseRequest(request); err != nil {
+		return err
+	}
+	host := s.modelHost()
+	if host == nil {
+		return models.ErrHostLeaseNotFound
+	}
+	return host.ReleaseLease(ctx, request.LeaseID)
+}

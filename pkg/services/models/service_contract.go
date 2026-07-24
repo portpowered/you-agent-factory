@@ -29,7 +29,21 @@ type Service interface {
 	// Asset pull stays on this singular root Service; peers do not import a
 	// nested asset-gateway interface.
 	PullModel(context.Context, string) (PullResult, error)
+	// InspectRuntime returns Models-owned host readiness for one model
+	// (ReadinessState / LifecycleState vocabulary). Missing assets and loading
+	// timeout fail with distinct typed host outcomes (ErrHostMissingAssets,
+	// ErrHostLoadingTimeout). Readiness inspect stays on this singular root
+	// Service; peers do not import nested host supervisor types.
 	InspectRuntime(context.Context, string) (Runtime, error)
+	// AcquireLease acquires Models-owned local capacity and returns a HostLease.
+	// Capacity exhausted and runtime-not-ready fail with distinct typed outcomes
+	// (ErrHostCapacityExhausted, ErrHostRuntimeNotReady). Lease acquire stays on
+	// this singular root Service; peers do not import nested lease-manager types.
+	AcquireLease(context.Context, AcquireLeaseRequest) (HostLease, error)
+	// ReleaseLease releases one Models-owned HostLease by id. Unknown leases fail
+	// with ErrHostLeaseNotFound. Lease release stays on this singular root
+	// Service; peers do not import nested host supervisor types.
+	ReleaseLease(context.Context, ReleaseLeaseRequest) error
 	InvokeLocal(context.Context, LocalInvocationRequest) (LocalInvocationResult, error)
 }
 

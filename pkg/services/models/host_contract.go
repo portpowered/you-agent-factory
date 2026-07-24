@@ -14,17 +14,27 @@ var (
 	ErrHostCancelled = errors.New("model host operation cancelled")
 	// ErrHostUnsupportedRuntime reports that the managed runtime identity is unsupported.
 	ErrHostUnsupportedRuntime = errors.New("model host unsupported runtime")
-	// ErrHostMissingAssets reports that required local model assets are not installed.
+	// ErrHostMissingAssets reports that required local model assets are not
+	// installed. Distinct from loading-timeout, capacity, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostMissingAssets = errors.New("model host missing assets")
-	// ErrHostLoadingTimeout reports that readiness did not complete before timeout.
+	// ErrHostLoadingTimeout reports that readiness did not complete before
+	// timeout. Distinct from missing-assets, capacity, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostLoadingTimeout = errors.New("model host loading timeout")
 	// ErrHostProcessCrash reports that the supervised runtime process exited unexpectedly.
 	ErrHostProcessCrash = errors.New("model host process crash")
 	// ErrHostCapacityExhausted reports that lease capacity is exhausted.
+	// Distinct from missing-assets, loading-timeout, lease-not-found, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostCapacityExhausted = errors.New("model host capacity exhausted")
 	// ErrHostLeaseNotFound reports that a lease identifier is unknown.
+	// Distinct from missing-assets, loading-timeout, capacity, and
+	// runtime-not-ready outcomes on the host/lease root slice.
 	ErrHostLeaseNotFound = errors.New("model host lease not found")
-	// ErrHostRuntimeNotReady reports that lease acquisition requires a ready runtime.
+	// ErrHostRuntimeNotReady reports that lease acquisition requires a ready
+	// runtime. Distinct from missing-assets, loading-timeout, capacity, and
+	// lease-not-found outcomes on the host/lease root slice.
 	ErrHostRuntimeNotReady = errors.New("model host runtime not ready")
 )
 

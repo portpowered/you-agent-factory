@@ -42,6 +42,14 @@ func (runtimeScopePeerService) InspectRuntime(context.Context, string) (models.R
 	return models.Runtime{}, models.ErrUnsupported
 }
 
+func (runtimeScopePeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, models.ErrHostRuntimeNotReady
+}
+
+func (runtimeScopePeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return models.ErrHostLeaseNotFound
+}
+
 func (runtimeScopePeerService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{Handled: false}, nil
 }

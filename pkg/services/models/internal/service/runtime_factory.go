@@ -170,6 +170,14 @@ func (o *Root) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, missingDependencyError("Models runtime binding")
 }
 
+func (o *Root) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, missingDependencyError("Models runtime binding")
+}
+
+func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return missingDependencyError("Models runtime binding")
+}
+
 func (o *Root) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{}, missingDependencyError("Models runtime binding")
 }
