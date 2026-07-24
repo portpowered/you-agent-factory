@@ -48,6 +48,7 @@ var apiSet = wire.NewSet(
 var servicesSet = wire.NewSet(
 	provideProviderRegistry,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
+	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,

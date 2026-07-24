@@ -84,6 +84,10 @@ type RunnerSelectionResolver func(
 	workerModelProvider string,
 ) (ResolvedRunnerSelection, error)
 
+// ProviderIdentityResolver validates a concrete provider identity or alias and
+// returns the authoritative canonical identity.
+type ProviderIdentityResolver func(identity string) (string, error)
+
 type ResolvedModelOperationBinding struct {
 	Slot    string                      `json:"slot"`
 	Source  ModelOperationBindingSource `json:"source"`

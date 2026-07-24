@@ -2,6 +2,10 @@ package factorysessions
 
 import "io"
 
+// ProviderIdentityResolver resolves one authored provider selection through
+// the immutable process registry without exposing a second service interface.
+type ProviderIdentityResolver func(string) (string, error)
+
 // ExecutionRuntimeOpeningRequest carries invocation-edge roots required to
 // open a runtime-backed durable execution service without ambient discovery.
 type ExecutionRuntimeOpeningRequest struct {

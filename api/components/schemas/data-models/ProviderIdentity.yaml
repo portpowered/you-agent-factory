@@ -1,0 +1,10 @@
+type: string
+minLength: 1
+maxLength: 128
+pattern: '^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$'
+description: >-
+  Open provider identity used by authored modelProvider fields. Extension
+  identities use lowercase letters and digits separated by dots or hyphens.
+  Built-in identities and documented legacy aliases remain accepted
+  compatibility spellings. For example, `customer.provider` is a valid
+  extension identity.

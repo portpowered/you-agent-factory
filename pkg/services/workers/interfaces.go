@@ -5,12 +5,50 @@ package workers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+const maxProviderIdentityLength = 128
+
+// ProviderIdentity is the provider-neutral identity accepted at authored and
+// runtime boundaries.
+type ProviderIdentity string
+
+// Validate checks that the identity uses its canonical authored form.
+func (identity ProviderIdentity) Validate() error {
+	if identity == "" {
+		return fmt.Errorf("must not be empty")
+	}
+	if len(identity) > maxProviderIdentityLength {
+		return fmt.Errorf("must not exceed %d bytes", maxProviderIdentityLength)
+	}
+	if !canonicalProviderIdentifier(string(identity)) {
+		return fmt.Errorf("must start with a lowercase letter and contain only lowercase letters, digits, dots, or hyphens")
+	}
+	return nil
+}
+
+func canonicalProviderIdentifier(value string) bool {
+	for index, character := range value {
+		if character >= 'a' && character <= 'z' {
+			continue
+		}
+		if index > 0 && (character >= '0' && character <= '9' || character == '.' || character == '-') {
+			if character != '.' && character != '-' || index+1 < len(value) {
+				continue
+			}
+		}
+		return false
+	}
+	return !strings.Contains(value, "..") && !strings.Contains(value, "--") &&
+		!strings.Contains(value, ".-") && !strings.Contains(value, "-.")
+}
 
 // HostedPollerClock, HostedPollerHTTPDoer, and HostedPollerSecretResolver are
 // the Workers-owned external-effect contracts used to construct hosted worker

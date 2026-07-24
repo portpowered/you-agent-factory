@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -31,22 +31,58 @@ func ApplyToLoadedConfig(loaded interfaces.MutableLoadedFactorySource, defaults 
 	})
 }
 
-// ValidateModelWorkerRuntimeProviders rejects unresolved DEFAULT and unsupported
-// model providers on MODEL_WORKER definitions before runtime dispatch.
-func ValidateModelWorkerRuntimeProviders(loaded interfaces.MutableLoadedFactorySource) error {
+// ResolveConcreteProviderSelections resolves every concrete provider selection
+// through the process registry after operator defaults have been applied.
+// Invocation expressions stay unresolved until invocation input is available.
+func ResolveConcreteProviderSelections(
+	loaded interfaces.MutableLoadedFactorySource,
+	providers factorysessions.ProviderIdentityResolver,
+) error {
 	if loaded == nil || loaded.FactoryConfig() == nil {
 		return nil
 	}
+	if providers == nil {
+		return fmt.Errorf("provider identity resolver is required")
+	}
 	factoryCfg := loaded.FactoryConfig()
-	for _, worker := range factoryCfg.Workers {
+	for index := range factoryCfg.Workers {
+		worker := &factoryCfg.Workers[index]
 		if !isModelWorkerType(worker.Type) {
 			continue
 		}
-		if err := validateModelWorkerProvider(factoryCfg.InvocationSignature, worker.Name, worker.ModelProvider); err != nil {
-			return err
+		canonical, err := resolveConcreteProvider(
+			factoryCfg.InvocationSignature,
+			worker.ModelProvider,
+			providers,
+		)
+		if err != nil {
+			return fmt.Errorf("workers[%d].modelProvider: %w", index, err)
 		}
+		worker.ModelProvider = canonical
 	}
-	return nil
+	for index := range factoryCfg.Guards {
+		guard := &factoryCfg.Guards[index]
+		canonical, err := resolveConcreteProvider(nil, guard.ModelProvider, providers)
+		if err != nil {
+			return fmt.Errorf("guards[%d].modelProvider: %w", index, err)
+		}
+		guard.ModelProvider = canonical
+	}
+	return loaded.MutateWorkers(func(worker *interfaces.FactoryWorkerConfig) error {
+		if worker == nil || !isModelWorkerType(worker.Type) {
+			return nil
+		}
+		canonical, err := resolveConcreteProvider(
+			factoryCfg.InvocationSignature,
+			worker.ModelProvider,
+			providers,
+		)
+		if err != nil {
+			return fmt.Errorf("model worker %q modelProvider: %w", worker.Name, err)
+		}
+		worker.ModelProvider = canonical
+		return nil
+	})
 }
 
 func applyOperatorDefaultsToWorker(worker *interfaces.FactoryWorkerConfig, defaultProvider, defaultModel string) error {
@@ -77,62 +113,41 @@ func operatorDefaultProviderInternal(canonicalPublic string) (string, error) {
 		return "", nil
 	}
 	internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(trimmed)
-	if !ok {
+	if ok {
+		return string(internal), nil
+	}
+	if interfaces.StrictPublicFactoryWorkerModelProvider(trimmed) == "" {
 		return "", fmt.Errorf(
 			"unsupported worker model provider %q: %s",
 			trimmed,
 			interfaces.AcceptedPublicWorkerModelProviderSummary(),
 		)
 	}
-	return string(internal), nil
+	return trimmed, nil
 }
 
-func validateModelWorkerProvider(signature *interfaces.InvocationSignatureConfig, workerName, modelProvider string) error {
+func resolveConcreteProvider(
+	signature *interfaces.InvocationSignatureConfig,
+	modelProvider string,
+	providers factorysessions.ProviderIdentityResolver,
+) (string, error) {
 	trimmed := strings.TrimSpace(modelProvider)
 	if trimmed == "" {
-		return nil
+		return "", nil
 	}
 	if invocationInterpolationParameterName(signature, trimmed) != "" {
-		return nil
+		return modelProvider, nil
 	}
 	if interfaces.IsSymbolicWorkerModelProviderDefault(trimmed) {
-		return fmt.Errorf(
-			"model worker %q has unresolved DEFAULT model provider; set modelProvider or configure an operator default worker model provider",
-			workerName,
+		return "", fmt.Errorf(
+			"unresolved DEFAULT model provider; set modelProvider or configure an operator default worker model provider",
 		)
 	}
-	if isSupportedRuntimeModelProvider(trimmed) {
-		return nil
+	canonical, err := providers(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("select provider %q: %w", trimmed, err)
 	}
-	return fmt.Errorf(
-		"model worker %q has unsupported model provider %q: %s",
-		workerName,
-		trimmed,
-		interfaces.AcceptedPublicWorkerModelProviderSummary(),
-	)
-}
-
-func isSupportedRuntimeModelProvider(value string) bool {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return true
-	}
-	for _, provider := range factorycontracts.SupportedModelProviders() {
-		if string(provider) == trimmed {
-			return true
-		}
-	}
-	if canonical := interfaces.StrictPublicFactoryWorkerModelProvider(trimmed); canonical != "" {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(canonical); ok {
-			return true
-		}
-	}
-	if canonical, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(trimmed); ok && !interfaces.IsSymbolicWorkerModelProviderDefault(canonical) {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(canonical); ok {
-			return true
-		}
-	}
-	return false
+	return canonical, nil
 }
 
 func invocationInterpolationParameterName(signature *interfaces.InvocationSignatureConfig, value string) string {

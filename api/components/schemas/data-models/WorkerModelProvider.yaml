@@ -1,11 +1,14 @@
 type: string
-description: Canonical model-provider identifiers supported by model workers in factory config.
+description: >-
+  Built-in model-provider constants retained as generated-client conveniences.
+  Authored modelProvider fields use the open ProviderIdentity contract, so this
+  list is not an exhaustive provider inventory.
 enum:
-    - CLAUDE
-    - CODEX
-    - CURSOR
-    - GEMINI
-    - KIRO
-    - OPENCODE
-    - PI
-    - AGY
+  - CLAUDE
+  - CODEX
+  - CURSOR
+  - GEMINI
+  - KIRO
+  - OPENCODE
+  - PI
+  - AGY

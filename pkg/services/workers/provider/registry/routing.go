@@ -47,7 +47,7 @@ func (r *Registry) ResolveRunnerSelection(
 			isUnresolvedProviderTemplate(candidate.identity) {
 			continue
 		}
-		runnerID, err := r.RunnerID(candidate.identity)
+		runnerID, err := r.selectionRunnerID(candidate.identity)
 		if err != nil {
 			return workers.ResolvedRunnerSelection{}, err
 		}
@@ -66,6 +66,18 @@ func (r *Registry) ResolveRunnerSelection(
 func isUnresolvedProviderTemplate(identity string) bool {
 	trimmed := strings.TrimSpace(identity)
 	return strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}")
+}
+
+func (r *Registry) selectionRunnerID(identity string) (string, error) {
+	entry, err := r.Lookup(identity)
+	if err != nil {
+		return "", err
+	}
+	canonical := string(entry.Identity())
+	if canonical == "cursor" {
+		return legacyCursorRunnerID, nil
+	}
+	return canonical, nil
 }
 
 // RunnerID resolves a provider canonical ID or alias to the stable native
