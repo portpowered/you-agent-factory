@@ -19,11 +19,11 @@ func TestIdentityPath_TypedNormalizeFailuresAreDistinct(t *testing.T) {
 	t.Parallel()
 
 	canonicalFolder := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	svc, err := identitywire.NewService(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		ownershipDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService: %v", err)
 	}
@@ -99,11 +99,11 @@ func TestIdentityPath_SelectAndResolveReturnTypedOrEmptyNotFound(t *testing.T) {
 	t.Parallel()
 
 	canonicalFolder := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	svc, err := identitywire.NewService(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		ownershipDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService: %v", err)
 	}

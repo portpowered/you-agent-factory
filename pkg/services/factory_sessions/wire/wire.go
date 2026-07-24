@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
@@ -81,7 +82,11 @@ func NewService(
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
-	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
+	identityService, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: resolveSymlinks,
+		ResolveHome:     resolveHome,
+		Directories:     directoryInspection,
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -25,6 +25,15 @@ type Service interface {
 	ResolveLogical(sessionregistry.Service, string, string) *livesession.LiveSession
 }
 
+// Dependencies are the exact host-effect ports required to construct identity.
+// They contain no peer-service implementations, filesystem/SQL/OS concrete
+// types, Runtime/Petri types, or Wire/root construction ownership.
+type Dependencies struct {
+	ResolveSymlinks factorysessions.LogicalTargetResolveSymlinks
+	ResolveHome     factorysessions.HomeDirectoryResolver
+	Directories     factorysessions.DirectoryInspection
+}
+
 // NormalizeRequest is the private alias for the CTR-SES root identity
 // normalize request. Peers continue to import only the Factory Sessions root.
 type NormalizeRequest = factorysessions.IdentityNormalizeRequest

@@ -41,11 +41,11 @@ func TestWireServiceOwnsNormalizeDiscoverAndResolve(t *testing.T) {
 	t.Parallel()
 
 	canonicalFolder := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	svc, err := identitywire.NewService(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		ownershipDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService: %v", err)
 	}
@@ -95,11 +95,11 @@ func TestWireServiceOwnsNormalizeDiscoverAndResolve(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(folder, "beta"), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	discoverSvc, err := identitywire.NewService(
-		func(path string) (string, error) { return filepath.Clean(path), nil },
-		func() (string, error) { return "home", nil },
-		ownershipRealDirectories{},
-	)
+	discoverSvc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(path string) (string, error) { return filepath.Clean(path), nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipRealDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService(discover): %v", err)
 	}

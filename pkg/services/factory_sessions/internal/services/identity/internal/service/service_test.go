@@ -129,11 +129,11 @@ func TestServiceResolvesRestartedSessionByLogicalIdentity(t *testing.T) {
 }
 
 func newTestService(canonicalFolder string) *Service {
-	return New(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		testDirectories{},
-	)
+	return New(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     testDirectories{},
+	})
 }
 
 type testDirectories struct{}

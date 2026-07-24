@@ -5,27 +5,21 @@ package wire
 import (
 	"fmt"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identityservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/internal/service"
 )
 
-func NewService(
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directories roles.DirectoryInspection,
-) (identity.Service, error) {
-	if resolveSymlinks == nil {
+func NewService(dependencies identity.Dependencies) (identity.Service, error) {
+	if dependencies.ResolveSymlinks == nil {
 		return nil, fmt.Errorf("construct Factory Session identity: symlink resolver is required")
 	}
-	if resolveHome == nil {
+	if dependencies.ResolveHome == nil {
 		return nil, fmt.Errorf("construct Factory Session identity: home resolver is required")
 	}
-	if directories == nil {
+	if dependencies.Directories == nil {
 		return nil, fmt.Errorf("construct Factory Session identity: directory inspection is required")
 	}
-	service := identityservice.New(resolveSymlinks, resolveHome, directories)
+	service := identityservice.New(dependencies)
 	if service == nil {
 		return nil, fmt.Errorf("construct Factory Session identity: implementation rejected its dependencies")
 	}

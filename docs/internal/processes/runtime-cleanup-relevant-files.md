@@ -493,8 +493,9 @@ detached result-owner values and must not import transport contracts.
 Normalized Factory Session logical-target identity, target discovery, selection,
 and restart remapping are owned by the injected subservice rooted at
 `pkg/services/factory_sessions/internal/services/identity`; its implementation receives
-home, directory-inspection, and symlink-resolution effects through service-local
-Wire. The outer Factory Sessions service delegates open, list/read projection,
+home, directory-inspection, and symlink-resolution effects only through
+`identity.Dependencies` at service-local Wire construction and never selects host
+filesystem/SQL/OS implementations itself. The outer Factory Sessions service delegates open, list/read projection,
 and reconnect behavior to that subservice without exposing it cross-service.
 Canonical reference and runtime projection value contracts remain at the
 Factory Sessions root. Convert those values to generated
@@ -504,7 +505,9 @@ return generated HTTP values. Root-equivalence proofs bind private identity
 behind a peer-facing surface typed only with those root request/result/error
 values (see `root_equivalence_test.go`); assert real private-impl outcomes
 (default+name → ambiguous, unsupported kind → invalid) rather than the CTR-SES
-vocabulary-demo fake's swapped labels.
+vocabulary-demo fake's swapped labels. Construction-port proofs in
+`surface_ports_test.go` reject missing effect ports and assert Normalize /
+ResolveFolder invoke the exact injected ports.
 
 Factory Session folder/discovery validation reasons remain plain value
 constants at the service root, while concrete error state, target construction,

@@ -16,11 +16,11 @@ func TestIdentityPath_EquivalentTargetsShareDeterministicLogicalSessionKey(t *te
 	t.Parallel()
 
 	canonicalFolder := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	svc, err := identitywire.NewService(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		ownershipDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService: %v", err)
 	}
@@ -79,11 +79,11 @@ func TestIdentityPath_DistinctBoundariesProduceDistinctLogicalSessionKeys(t *tes
 	ctx := context.Background()
 
 	resolveTo := func(canonical string) identity.Service {
-		svc, err := identitywire.NewService(
-			func(string) (string, error) { return canonical, nil },
-			func() (string, error) { return "home", nil },
-			ownershipDirectories{},
-		)
+		svc, err := identitywire.NewService(identity.Dependencies{
+			ResolveSymlinks: func(string) (string, error) { return canonical, nil },
+			ResolveHome:     func() (string, error) { return "home", nil },
+			Directories:     ownershipDirectories{},
+		})
 		if err != nil {
 			t.Fatalf("identitywire.NewService: %v", err)
 		}
@@ -163,11 +163,11 @@ func TestIdentityPath_LogicalSessionKeyDoesNotDependOnLiveSessionUUID(t *testing
 	t.Parallel()
 
 	canonicalFolder := filepath.Clean(filepath.Join(t.TempDir(), "canonical"))
-	svc, err := identitywire.NewService(
-		func(string) (string, error) { return canonicalFolder, nil },
-		func() (string, error) { return "home", nil },
-		ownershipDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: func(string) (string, error) { return canonicalFolder, nil },
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     ownershipDirectories{},
+	})
 	if err != nil {
 		t.Fatalf("identitywire.NewService: %v", err)
 	}

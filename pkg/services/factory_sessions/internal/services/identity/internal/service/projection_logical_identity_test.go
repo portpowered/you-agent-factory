@@ -21,11 +21,11 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 	if ctx.Session == nil {
 		return ctx
 	}
-	svc, err := identitywire.NewService(
-		filepath.EvalSymlinks,
-		func() (string, error) { return "home", nil },
-		projectionDirectories{},
-	)
+	svc, err := identitywire.NewService(identity.Dependencies{
+		ResolveSymlinks: filepath.EvalSymlinks,
+		ResolveHome:     func() (string, error) { return "home", nil },
+		Directories:     projectionDirectories{},
+	})
 	if err != nil {
 		return ctx
 	}

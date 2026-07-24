@@ -20,15 +20,15 @@ type Service struct {
 
 var _ identity.Service = (*Service)(nil)
 
-func New(
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directories roles.DirectoryInspection,
-) *Service {
-	if resolveSymlinks == nil || resolveHome == nil || directories == nil {
+func New(dependencies identity.Dependencies) *Service {
+	if dependencies.ResolveSymlinks == nil || dependencies.ResolveHome == nil || dependencies.Directories == nil {
 		return nil
 	}
-	return &Service{resolveSymlinks: resolveSymlinks, resolveHome: resolveHome, directories: directories}
+	return &Service{
+		resolveSymlinks: dependencies.ResolveSymlinks,
+		resolveHome:     dependencies.ResolveHome,
+		directories:     dependencies.Directories,
+	}
 }
 
 func (s *Service) Normalize(_ context.Context, request identity.NormalizeRequest) (identity.ResolvedIdentity, error) {
