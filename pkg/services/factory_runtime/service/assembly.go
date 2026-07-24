@@ -87,7 +87,7 @@ func (a *Assembly) Assemble(
 	runtimeInstanceID string,
 	replayArtifact *factorydefinitions.ReplayArtifact,
 	replayExecutionFactory recordings.ReplayExecutionFactory,
-	automationService automations.Service,
+	automationService automations.RuntimeScheduler,
 	serviceMode bool,
 ) (
 	factoryruntime.ReplacementBuilder,

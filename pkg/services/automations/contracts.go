@@ -3,6 +3,8 @@ package automations
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations/timework"
@@ -36,9 +38,10 @@ type HostedPollers interface {
 	) error
 }
 
-// Service supervises runtime-scoped cron, watcher, listener, and poller
-// automations.
-type Service interface {
+// RuntimeScheduler is the legacy Runtime-sidecar startup seam. Peers that need
+// published Automations contracts should depend on Service instead. Nested
+// IMP-AUTO cuts retain and eventually privatize this surface.
+type RuntimeScheduler interface {
 	StartSchedulerSidecarsForRuntime(
 		context.Context,
 		*sync.WaitGroup,
@@ -47,6 +50,82 @@ type Service interface {
 		factorydefinitions.RuntimeConfigLookup,
 		WorkRequestSubmitter,
 	) error
+}
+
+// Service is the singular Automations root contract. Additive reconcile, source
+// lifecycle, and cursor/status slices publish on this interface using plain
+// request, result, value, and typed-error contracts.
+type Service interface {
+	Ready(context.Context, ReadyRequest) (ReadyResult, error)
+}
+
+// Root is the Wire-injectable Automations surface during migration. It composes
+// the published Service root with the legacy RuntimeScheduler seam.
+type Root interface {
+	Service
+	RuntimeScheduler
+}
+
+// ReadyRequest is the plain probe input for Automations root readiness.
+type ReadyRequest struct{}
+
+// ReadyResult is the detached readiness observation returned by Service.Ready.
+type ReadyResult struct {
+	Ready bool
+}
+
+// ErrorCode classifies typed Automations root failures peers can branch on.
+type ErrorCode string
+
+const (
+	ErrorCodeNotReady ErrorCode = "not_ready"
+	ErrorCodeInvalid  ErrorCode = "invalid"
+	ErrorCodeNotFound ErrorCode = "not_found"
+	ErrorCodeConflict ErrorCode = "conflict"
+)
+
+var (
+	// ErrNotReady reports that the Automations root is not ready for published
+	// contract operations.
+	ErrNotReady = errors.New("automations: service not ready")
+	// ErrInvalidRequest reports that a published Automations request was rejected.
+	ErrInvalidRequest = errors.New("automations: invalid request")
+	// ErrNotFound reports that a referenced Automations entity was not found.
+	ErrNotFound = errors.New("automations: not found")
+	// ErrConflict reports that an Automations operation conflicted with observed state.
+	ErrConflict = errors.New("automations: conflict")
+)
+
+// Error is the typed Automations root failure peers distinguish without parsing
+// free-form implementation details.
+type Error struct {
+	Op   string
+	Code ErrorCode
+	Err  error
+}
+
+func (e *Error) Error() string {
+	if e == nil {
+		return "automations: error"
+	}
+	if e.Err == nil {
+		return fmt.Sprintf("automations: %s: %s", e.Op, e.Code)
+	}
+	return fmt.Sprintf("automations: %s: %s: %v", e.Op, e.Code, e.Err)
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (e *Error) Is(target error) bool {
+	if e == nil {
+		return false
+	}
+	return errors.Is(e.Err, target)
 }
 
 var (

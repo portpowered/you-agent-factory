@@ -381,7 +381,7 @@ func provideAutomationFactory() factorysessionwire.AutomationFactory {
 		workflowID string,
 		defaultFactoryDir string,
 		hostedPollers automations.HostedPollers,
-	) automations.Service {
+	) automations.Root {
 		return automationservice.NewService(
 			logger,
 			clock,

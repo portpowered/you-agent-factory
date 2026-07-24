@@ -12,7 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ automations.Service = (*Service)(nil)
+var (
+	_ automations.Service          = (*Service)(nil)
+	_ automations.RuntimeScheduler = (*Service)(nil)
+	_ automations.Root             = (*Service)(nil)
+)
 
 // Clock is the automation time source needed for scheduling and supervision.
 type Clock interface {
@@ -65,7 +69,7 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) automations.Service {
+) automations.Root {
 	return New(
 		logger,
 		clock,
@@ -76,6 +80,19 @@ func NewService(
 		resolveTemplates,
 		executionPolicy,
 	)
+}
+
+// Ready reports that the concrete Automations root is available for published
+// contract slices.
+func (s *Service) Ready(context.Context, automations.ReadyRequest) (automations.ReadyResult, error) {
+	if s == nil {
+		return automations.ReadyResult{}, &automations.Error{
+			Op:   "Ready",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.ReadyResult{Ready: true}, nil
 }
 
 func (s *Service) logger() *zap.Logger {
