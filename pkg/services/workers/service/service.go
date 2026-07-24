@@ -20,6 +20,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
@@ -59,6 +60,7 @@ type Service struct {
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
 	providerRegistry                  *providerregistry.Registry
+	invocationConductor               *providerconductor.Conductor
 }
 
 type CurrentRuntimeResolver interface {

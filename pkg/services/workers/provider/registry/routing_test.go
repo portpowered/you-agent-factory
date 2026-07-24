@@ -149,7 +149,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	}
 }
 
-func TestResolveRunnerSelectionRejectsExternalIntegrationOnNativeRunnerPath(t *testing.T) {
+func TestResolveRunnerSelectionRoutesExternalIntegrationOntoConductorIdentity(t *testing.T) {
 	t.Parallel()
 	registrations, err := BuiltInRegistrations()
 	if err != nil {
@@ -162,9 +162,18 @@ func TestResolveRunnerSelectionRejectsExternalIntegrationOnNativeRunnerPath(t *t
 		t.Fatalf("New() error = %v", err)
 	}
 
-	_, err = providers.ResolveRunnerSelection("customer", "", "")
-	if err == nil || !strings.Contains(err.Error(), "not available through the provider-native runner path") {
+	selection, err := providers.ResolveRunnerSelection("customer", "", "")
+	if err != nil {
 		t.Fatalf("ResolveRunnerSelection(external) error = %v", err)
+	}
+	if selection.RunnerID != "customer.provider" {
+		t.Fatalf("ResolveRunnerSelection(external) = %#v, want conductor identity", selection)
+	}
+	if providers.UsesNativeRunner(selection.RunnerID) {
+		t.Fatal("UsesNativeRunner(external) = true, want conductor route")
+	}
+	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
+		t.Fatal("UsesNativeRunner(codex) = false, want native runner route")
 	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)

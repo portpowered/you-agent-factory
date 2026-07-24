@@ -18,6 +18,7 @@ import (
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
@@ -140,6 +141,7 @@ func NewRuntimeWithSelection(
 	service.scriptCommandInjected = scriptCommandInjected
 	service.providerRegistry = providerRegistry
 	if providerRegistry != nil {
+		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.WithRunnerSelection(providerRegistry.ResolveRunnerSelection)
 		}

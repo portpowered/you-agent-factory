@@ -115,8 +115,17 @@ primary-result behavior.
   symbolic diagnostics (`invariant=canceled|timeout`) and provider-neutral
   retryability (timeout retryable, canceled not). Shared orchestration reads
   retry handoff only through `conductor.RetryHandoffFromFailure` rather than
-  concrete provider switches. Keep Factory Session and worker-executor routing
-  through the conductor for the next story.
+  concrete provider switches. Factory Sessions and worker executors enter
+  registry-selected integrations through the Workers-owned conductor composed
+  from the same authoritative registry: `NewRuntimeWithSelection` constructs
+  `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
+  retained provider-native runner with `conductorInvocationRunner` when
+  `ProviderOverride` is absent. Externally supplied selectable identities
+  resolve onto their canonical conductor identity; bundled built-ins continue
+  on the provider-native Infer/command path without migrating Gemini, Kiro,
+  Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
+  dispatch/failure branches and `ProviderOverride` remain intact and bypass
+  the registry/conductor decorators.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
@@ -143,12 +152,15 @@ primary-result behavior.
   embedding tests can verify composition without importing service packages
   into `pkg/initializer`. Keep `ProviderOverride` on its existing replacement
   path until provider-native execution migrates to the neutral conductor.
+  Externally supplied registrations become selectable conductor identities
+  through the same registry `ResolveRunnerSelection` precedence; they do not
+  use the provider-native executable LookPath path.
 - Wire supplies that same registry to the Workers runtime for routed provider
-  selection, manifest-maximum capability checks, and executable-prerequisite
-  preflight. Preserve the existing selection precedence and native runner IDs;
-  the registry resolves canonical IDs and published aliases first, with the
-  legacy `cursor-cli` runner ID mapped only at the native-execution
-  compatibility boundary. Preserve accepted public model-provider aliases
+  selection, conductor composition, manifest-maximum capability checks, and
+  executable-prerequisite preflight. Preserve the existing selection precedence
+  and native runner IDs for bundled providers; the registry resolves canonical
+  IDs and published aliases first, with the legacy `cursor-cli` runner ID
+  mapped only at the native-execution compatibility boundary. Preserve accepted public model-provider aliases
   (`openai` and `anthropic`) as collision-validated registry identity claims so
   static lookup and routed selection cannot disagree. Carry the registry's
   canonical legacy-provider selection through the workstation boundary into
