@@ -217,36 +217,15 @@ func TestExecuteJSONReportsPackageFloorsFromManifest(t *testing.T) {
 }
 
 func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandPassing
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
+	_, stderr := stubCoverageExecute(t, fakeGoCoverageCommandPassing)
 
 	configPackage := modulePath + "/pkg/config"
 	servicePackage := modulePath + "/pkg/service"
 	initializerPackage := modulePath + "/pkg/initializer"
+	wantException := unitUnmeasurableMeasurementException()
 	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
 		{importPath: configPackage, minimum: "100.00"},
-		{
-			importPath: initializerPackage,
-			exception: &coverageManifestException{
-				Kind:          "measurement",
-				Justification: "The active unit coverage profile contains no measurable statements for this package.",
-				Owner:         "backend-quality",
-				Deadline:      unmeasurablePackageDeadline,
-				RemovalGate:   "The unit coverage profile reports at least one measurable statement for this package.",
-			},
-		},
+		{importPath: initializerPackage, exception: wantException},
 		{importPath: servicePackage, minimum: "100.00"},
 	})
 	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
@@ -267,16 +246,9 @@ func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
 		t.Fatalf("execute() error = %v", err)
 	}
 
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatalf("read coverage summary json: %v", err)
-	}
-	var summary coverageSummaryJSON
-	if err := json.Unmarshal(data, &summary); err != nil {
-		t.Fatalf("decode coverage summary json: %v\n%s", err, data)
-	}
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
 	if len(summary.Packages) != 3 {
-		t.Fatalf("packages len = %d, want 3\n%s", len(summary.Packages), data)
+		t.Fatalf("packages len = %d, want 3", len(summary.Packages))
 	}
 	wantOrder := []string{configPackage, initializerPackage, servicePackage}
 	for index, wantPackage := range wantOrder {
@@ -285,33 +257,7 @@ func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
 		}
 	}
 
-	exceptionEntry := summary.Packages[1]
-	if exceptionEntry.CoveredStatements != 0 || exceptionEntry.MeasurableStatements != 0 {
-		t.Fatalf("unmeasurable package statements = %d/%d, want 0/0", exceptionEntry.CoveredStatements, exceptionEntry.MeasurableStatements)
-	}
-	if exceptionEntry.PackageFloor != nil {
-		t.Fatalf("unmeasurable packageFloor = %v, want null", *exceptionEntry.PackageFloor)
-	}
-	if exceptionEntry.MeasurementException == nil {
-		t.Fatalf("measurementException is nil, want structured exception\n%s", data)
-	}
-	gotException := exceptionEntry.MeasurementException
-	if gotException.Kind != "measurement" {
-		t.Fatalf("exception kind = %q, want measurement", gotException.Kind)
-	}
-	if gotException.Justification != "The active unit coverage profile contains no measurable statements for this package." {
-		t.Fatalf("exception justification = %q", gotException.Justification)
-	}
-	if gotException.Owner != "backend-quality" {
-		t.Fatalf("exception owner = %q, want backend-quality", gotException.Owner)
-	}
-	if gotException.Deadline != unmeasurablePackageDeadline {
-		t.Fatalf("exception deadline = %q, want %q", gotException.Deadline, unmeasurablePackageDeadline)
-	}
-	if gotException.RemovalGate != "The unit coverage profile reports at least one measurable statement for this package." {
-		t.Fatalf("exception removalGate = %q", gotException.RemovalGate)
-	}
-
+	assertUnmeasurablePackageJSON(t, summary.Packages[1], wantException)
 	if summary.Packages[0].MeasurementException != nil || summary.Packages[2].MeasurementException != nil {
 		t.Fatalf("measurable packages unexpectedly carried measurementException: %+v / %+v", summary.Packages[0].MeasurementException, summary.Packages[2].MeasurementException)
 	}
@@ -619,6 +565,64 @@ type manifestPackageSpec struct {
 	importPath string
 	minimum    string
 	exception  *coverageManifestException
+}
+
+func stubCoverageExecute(t *testing.T, runner commandRunnerFunc) (stdout *bytes.Buffer, stderr *bytes.Buffer) {
+	t.Helper()
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
+	stdout = &bytes.Buffer{}
+	stderr = &bytes.Buffer{}
+	commandRunner = runner
+	stdoutWriter = stdout
+	stderrWriter = stderr
+	return stdout, stderr
+}
+
+func readCoverageSummaryJSONFile(t *testing.T, path string) coverageSummaryJSON {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read coverage summary json: %v", err)
+	}
+	var summary coverageSummaryJSON
+	if err := json.Unmarshal(data, &summary); err != nil {
+		t.Fatalf("decode coverage summary json: %v\n%s", err, data)
+	}
+	return summary
+}
+
+func unitUnmeasurableMeasurementException() *coverageManifestException {
+	return &coverageManifestException{
+		Kind:          "measurement",
+		Justification: "The active unit coverage profile contains no measurable statements for this package.",
+		Owner:         "backend-quality",
+		Deadline:      unmeasurablePackageDeadline,
+		RemovalGate:   "The unit coverage profile reports at least one measurable statement for this package.",
+	}
+}
+
+func assertUnmeasurablePackageJSON(t *testing.T, entry packageCoverageJSON, want *coverageManifestException) {
+	t.Helper()
+	if entry.CoveredStatements != 0 || entry.MeasurableStatements != 0 {
+		t.Fatalf("unmeasurable package statements = %d/%d, want 0/0", entry.CoveredStatements, entry.MeasurableStatements)
+	}
+	if entry.PackageFloor != nil {
+		t.Fatalf("unmeasurable packageFloor = %v, want null", *entry.PackageFloor)
+	}
+	if entry.MeasurementException == nil {
+		t.Fatal("measurementException is nil, want structured exception")
+	}
+	got := entry.MeasurementException
+	if got.Kind != want.Kind || got.Justification != want.Justification || got.Owner != want.Owner || got.Deadline != want.Deadline || got.RemovalGate != want.RemovalGate {
+		t.Fatalf("measurementException = %+v, want %+v", got, want)
+	}
 }
 
 func writePackageMinimumManifestWithEntries(t *testing.T, lane string, entries []manifestPackageSpec) string {
