@@ -846,7 +846,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 8.16
+      "minimum": 75.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
