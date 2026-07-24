@@ -73,6 +73,7 @@ type config struct {
 	generateManifest string
 	updateManifest   string
 	packageManifest  string
+	jsonOutput       string
 	min              float64
 	packageBaseline  string
 	packageMin       float64
@@ -154,6 +155,9 @@ func execute(cfg config) error {
 			return err
 		}
 	}
+	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
+		return err
+	}
 
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "\n"))
@@ -170,6 +174,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
+	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
