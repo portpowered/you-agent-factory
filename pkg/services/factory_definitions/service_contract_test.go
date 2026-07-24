@@ -3,6 +3,7 @@ package factorydefinitions_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -199,6 +200,30 @@ func (p fakeDefinitionsPeer) ReplaceNamedFactory(
 	return factorydefinitions.ReplaceNamedFactoryResult{
 		Name:       request.Name,
 		FactoryDir: p.authoredFactoryDir,
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) CompileEffectiveFactorySource(
+	_ context.Context,
+	request factorydefinitions.CompileEffectiveFactorySourceRequest,
+) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
+	canonical := strings.TrimSpace(string(request.Canonical))
+	if canonical == "" || canonical == "{" {
+		return factorydefinitions.CompileEffectiveFactorySourceResult{}, factorydefinitions.ErrInvalidAuthoredFactorySource
+	}
+	if strings.Contains(canonical, `"$unresolved"`) {
+		return factorydefinitions.CompileEffectiveFactorySourceResult{}, factorydefinitions.ErrUnresolvedDefinitionReference
+	}
+	factoryDir := request.FactoryDir
+	if factoryDir == "" {
+		factoryDir = p.authoredFactoryDir
+	}
+	return factorydefinitions.CompileEffectiveFactorySourceResult{
+		Effective: factorydefinitions.EffectiveFactorySource{
+			FactoryDir:      factoryDir,
+			RuntimeBaseDir:  factoryDir,
+			ContentIdentity: canonical,
+		},
 	}, nil
 }
 
@@ -411,5 +436,85 @@ func TestRootService_AuthoringSlice_TypedMalformedAndAtomicWriteFailure(t *testi
 	}
 	if errors.Is(createErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
 		t.Fatal("atomic write failure must not also match ErrMalformedFactoryLayoutPayload")
+	}
+}
+
+func TestRootService_CompileSlice_EquivalentInputsSameEffectiveIdentity(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{
+		authoredFactoryDir: "/factories/alpha",
+	}
+
+	first, err := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical:  []byte(`  {"name":"alpha"}  `),
+			FactoryDir: "/factories/alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CompileEffectiveFactorySource first: %v", err)
+	}
+
+	second, err := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical:  []byte(`{"name":"alpha"}`),
+			FactoryDir: "/factories/alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CompileEffectiveFactorySource second: %v", err)
+	}
+
+	if first.Effective.ContentIdentity == "" {
+		t.Fatal("CompileEffectiveFactorySource ContentIdentity is empty")
+	}
+	if first.Effective.ContentIdentity != second.Effective.ContentIdentity {
+		t.Fatalf(
+			"equivalent inputs produced different ContentIdentity: %q vs %q",
+			first.Effective.ContentIdentity,
+			second.Effective.ContentIdentity,
+		)
+	}
+	if first.Effective.FactoryDir != "/factories/alpha" ||
+		first.Effective.RuntimeBaseDir != "/factories/alpha" {
+		t.Fatalf("CompileEffectiveFactorySource effective = %#v, want alpha identity facts", first.Effective)
+	}
+}
+
+func TestRootService_CompileSlice_TypedInvalidSourceAndUnresolvedReference(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{}
+
+	_, invalidErr := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{Canonical: []byte("{")},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource invalid-source error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidAuthoredFactorySource,
+		)
+	}
+
+	_, unresolvedErr := service.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical: []byte(`{"worker":"$unresolved"}`),
+		},
+	)
+	if !errors.Is(unresolvedErr, factorydefinitions.ErrUnresolvedDefinitionReference) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource unresolved error = %v, want %v",
+			unresolvedErr,
+			factorydefinitions.ErrUnresolvedDefinitionReference,
+		)
+	}
+	if errors.Is(unresolvedErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatal("unresolved definition reference must not also match ErrInvalidAuthoredFactorySource")
 	}
 }

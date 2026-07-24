@@ -275,6 +275,16 @@ func (s *Service) ReplaceNamedFactory(
 	}
 }
 
+// CompileEffectiveFactorySource satisfies the root compile slice. Nested
+// loading wiring remains an IMP-DEF concern; this method keeps the root
+// Service assignable.
+func (s *Service) CompileEffectiveFactorySource(
+	context.Context,
+	factoryroot.CompileEffectiveFactorySourceRequest,
+) (factoryroot.CompileEffectiveFactorySourceResult, error) {
+	return factoryroot.CompileEffectiveFactorySourceResult{}, factoryroot.ErrInvalidAuthoredFactorySource
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

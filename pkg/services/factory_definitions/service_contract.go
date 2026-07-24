@@ -33,6 +33,9 @@ type Service interface {
 	ExpandFactoryLayout(context.Context, ExpandFactoryLayoutRequest) (ExpandFactoryLayoutResult, error)
 	CreateNamedFactory(context.Context, CreateNamedFactoryRequest) (CreateNamedFactoryResult, error)
 	ReplaceNamedFactory(context.Context, ReplaceNamedFactoryRequest) (ReplaceNamedFactoryResult, error)
+
+	// Compile slice: authored/canonical source into one normalized effective source.
+	CompileEffectiveFactorySource(context.Context, CompileEffectiveFactorySourceRequest) (CompileEffectiveFactorySourceResult, error)
 }
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
@@ -208,6 +211,36 @@ type ReplaceNamedFactoryRequest struct {
 type ReplaceNamedFactoryResult struct {
 	Name       string
 	FactoryDir string
+}
+
+// ErrInvalidAuthoredFactorySource reports that authored/canonical bytes could
+// not be compiled into one normalized effective source.
+var ErrInvalidAuthoredFactorySource = errors.New("invalid authored factory source")
+
+// ErrUnresolvedDefinitionReference reports that compile could not resolve one
+// or more definition references in the authored source.
+var ErrUnresolvedDefinitionReference = errors.New("unresolved definition reference")
+
+// CompileEffectiveFactorySourceRequest carries authored/canonical Factory
+// source for compile/load-effective. Callers do not supply loading
+// implementation types or session/runtime lifecycle handles.
+type CompileEffectiveFactorySourceRequest struct {
+	Canonical  []byte
+	FactoryDir string
+}
+
+// CompileEffectiveFactorySourceResult carries one Definitions-owned normalized
+// effective-source value peers can consume without importing loading types.
+type CompileEffectiveFactorySourceResult struct {
+	Effective EffectiveFactorySource
+}
+
+// EffectiveFactorySource is the Definitions-owned effective-source value
+// equivalent to a detached LoadedFactorySource identity/facts projection.
+type EffectiveFactorySource struct {
+	FactoryDir      string
+	RuntimeBaseDir  string
+	ContentIdentity string
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped
