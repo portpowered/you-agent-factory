@@ -58,6 +58,10 @@ type RuntimeScheduler interface {
 type Service interface {
 	Ready(context.Context, ReadyRequest) (ReadyResult, error)
 	Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
+	StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
+	StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
+	WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
+	SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
 }
 
 // Root is the Wire-injectable Automations surface during migration. It composes
@@ -119,12 +123,67 @@ const (
 	ConvergenceActionRemoved   = "removed"
 )
 
-// Instance status vocabulary shared by reconcile and later status slices.
+// Instance status vocabulary shared by reconcile, source lifecycle, and status
+// slices.
 const (
 	InstanceStatusReady   = "ready"
 	InstanceStatusRunning = "running"
 	InstanceStatusStopped = "stopped"
 )
+
+// SourceHandle is an opaque lifecycle/source identity peers hold without knowing
+// cron, poller, watcher, or hosted-poller implementation types.
+type SourceHandle struct {
+	ID string
+}
+
+// StartSourceRequest asks Automations to start one trigger source by opaque id
+// and kind. Kind remains a plain string so peers never import cron/poller/watcher
+// concrete types.
+type StartSourceRequest struct {
+	SourceID string
+	Kind     string
+}
+
+// StartSourceResult returns the opaque handle and initial lifecycle status.
+type StartSourceResult struct {
+	Handle SourceHandle
+	Status string
+}
+
+// StopSourceRequest asks Automations to stop a previously started source.
+type StopSourceRequest struct {
+	Handle SourceHandle
+}
+
+// StopSourceResult reports the stopped lifecycle observation.
+type StopSourceResult struct {
+	Handle SourceHandle
+	Status string
+}
+
+// WaitSourceRequest waits/joins a source until it reaches a terminal lifecycle
+// outcome.
+type WaitSourceRequest struct {
+	Handle SourceHandle
+}
+
+// WaitSourceResult reports the terminal lifecycle observation.
+type WaitSourceResult struct {
+	Handle SourceHandle
+	Status string
+}
+
+// SourceStatusRequest observes the current lifecycle status of one source.
+type SourceStatusRequest struct {
+	Handle SourceHandle
+}
+
+// SourceStatusResult is the detached lifecycle status peers consume.
+type SourceStatusResult struct {
+	Handle SourceHandle
+	Status string
+}
 
 // ErrorCode classifies typed Automations root failures peers can branch on.
 type ErrorCode string

@@ -109,6 +109,62 @@ func (s *Service) Reconcile(context.Context, automations.ReconcileRequest) (auto
 	return automations.ReconcileResult{}, nil
 }
 
+// StartSource is the published Automations root source-start slice. Nested
+// source ownership remains an IMP-AUTO packet; this additive stub keeps the
+// concrete root aligned with the published Service contract.
+func (s *Service) StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error) {
+	if s == nil {
+		return automations.StartSourceResult{}, &automations.Error{
+			Op:   "StartSource",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.StartSourceResult{}, nil
+}
+
+// StopSource is the published Automations root source-stop slice. Nested source
+// ownership remains an IMP-AUTO packet; this additive stub keeps the concrete
+// root aligned with the published Service contract.
+func (s *Service) StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error) {
+	if s == nil {
+		return automations.StopSourceResult{}, &automations.Error{
+			Op:   "StopSource",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.StopSourceResult{}, nil
+}
+
+// WaitSource is the published Automations root source wait/join slice. Nested
+// source ownership remains an IMP-AUTO packet; this additive stub keeps the
+// concrete root aligned with the published Service contract.
+func (s *Service) WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error) {
+	if s == nil {
+		return automations.WaitSourceResult{}, &automations.Error{
+			Op:   "WaitSource",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.WaitSourceResult{}, nil
+}
+
+// SourceStatus is the published Automations root source-status observation
+// slice. Nested source ownership remains an IMP-AUTO packet; this additive stub
+// keeps the concrete root aligned with the published Service contract.
+func (s *Service) SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error) {
+	if s == nil {
+		return automations.SourceStatusResult{}, &automations.Error{
+			Op:   "SourceStatus",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.SourceStatusResult{}, nil
+}
+
 func (s *Service) logger() *zap.Logger {
 	if s == nil || s.loggerValue == nil {
 		return zap.NewNop()
