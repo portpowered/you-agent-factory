@@ -323,6 +323,229 @@ func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
 	}
 }
 
+func TestExecuteWritesJSONWhenOverallFloorFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+	err := execute(config{
+		min: 100.1,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages:        "./pkg/config",
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		jsonOutput:      jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	wantFailure := "go coverage 100.0% is below minimum 100.1%"
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
+	}
+
+	data, readErr := os.ReadFile(jsonPath)
+	if readErr != nil {
+		t.Fatalf("read coverage summary json after floor failure: %v", readErr)
+	}
+	var summary coverageSummaryJSON
+	if decodeErr := json.Unmarshal(data, &summary); decodeErr != nil {
+		t.Fatalf("decode coverage summary json: %v\n%s", decodeErr, data)
+	}
+	if summary.CoveredStatements != 8 || summary.MeasurableStatements != 8 {
+		t.Fatalf("overall statements = %d/%d, want 8/8", summary.CoveredStatements, summary.MeasurableStatements)
+	}
+	if summary.CoveragePercent != 100.0 {
+		t.Fatalf("coveragePercent = %v, want 100.0", summary.CoveragePercent)
+	}
+	if len(summary.Packages) != 2 {
+		t.Fatalf("packages len = %d, want 2", len(summary.Packages))
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary retained on floor failure", got)
+	}
+	if strings.Contains(got, "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteWritesJSONWhenPackageFloorFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommand
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{importPath: configPackage, minimum: "80.00"},
+	})
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+
+	err := execute(config{
+		suite:           "unit",
+		min:             0,
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+		jsonOutput:      jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "package coverage regression: package="+configPackage+" lane=unit expected-minimum=80.00%") {
+		t.Fatalf("execute() error = %q, want package floor failure", err.Error())
+	}
+
+	data, readErr := os.ReadFile(jsonPath)
+	if readErr != nil {
+		t.Fatalf("read coverage summary json after package floor failure: %v", readErr)
+	}
+	var summary coverageSummaryJSON
+	if decodeErr := json.Unmarshal(data, &summary); decodeErr != nil {
+		t.Fatalf("decode coverage summary json: %v\n%s", decodeErr, data)
+	}
+	if len(summary.Packages) != 1 {
+		t.Fatalf("packages len = %d, want 1\n%s", len(summary.Packages), data)
+	}
+	entry := summary.Packages[0]
+	if entry.Package != configPackage {
+		t.Fatalf("package = %q, want %q", entry.Package, configPackage)
+	}
+	if entry.PackageFloor == nil || *entry.PackageFloor != 80.0 {
+		t.Fatalf("packageFloor = %v, want 80", entry.PackageFloor)
+	}
+	if entry.CoveragePercent != 0.0 {
+		t.Fatalf("coveragePercent = %v, want 0.0", entry.CoveragePercent)
+	}
+	if strings.Contains(stdout.String(), "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteDoesNotWriteJSONWhenMeasurementIncomplete(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandTestFailsWithoutDetail
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+	err := execute(config{
+		min: 80,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages:   "./pkg/config",
+		profile:    filepath.Join(t.TempDir(), "coverage.out"),
+		jsonOutput: jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "run go test coverage shard") {
+		t.Fatalf("execute() error = %q, want incomplete measurement failure", err.Error())
+	}
+	if _, statErr := os.Stat(jsonPath); !os.IsNotExist(statErr) {
+		t.Fatalf("unexpected json file at %s after incomplete measurement (stat err=%v)", jsonPath, statErr)
+	}
+}
+
+func TestExecuteFloorFailureWithoutJSONOptionKeepsHumanDiagnostics(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+	err := execute(config{
+		min: 100.1,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages: "./pkg/config",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	wantFailure := "go coverage 100.0% is below minimum 100.1%"
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
+	}
+	if _, statErr := os.Stat(jsonPath); !os.IsNotExist(statErr) {
+		t.Fatalf("unexpected json file at %s when json option absent (stat err=%v)", jsonPath, statErr)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "total: (statements) 100.0%") {
+		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
+	}
+	if strings.Contains(got, "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
 func TestBuildCoverageSummaryJSONUsesMeasuredTotalsAndPackageGates(t *testing.T) {
 	t.Parallel()
 
