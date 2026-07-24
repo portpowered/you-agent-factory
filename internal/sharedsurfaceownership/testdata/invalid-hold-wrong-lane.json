@@ -1,0 +1,24 @@
+{
+  "formatVersion": "1.0.0",
+  "integrationMetadataOnly": true,
+  "authorizesPackageMoves": false,
+  "authorizesPublicContractChanges": false,
+  "authorizesTransportCutovers": false,
+  "concurrentWriteLeasesAllowed": false,
+  "queueSemantics": {
+    "ordering": "deterministic-stable",
+    "activationPolicy": "head-of-queue-only",
+    "ownerLocalOutsideExclusivePaths": "unblocked"
+  },
+  "surfaces": {},
+  "holds": {
+    "hold.schema-cli.pr-1262.cli-manifest-generation": {
+      "holdId": "hold.schema-cli.pr-1262.cli-manifest-generation",
+      "externalOwner": "Schema CLI docs/models/mcp (PR #1262) live CLI-manifest/generation ownership",
+      "blockedLaneOrSurfaceClass": "PSS-I02 OpenAPI cutovers (wrong lane attachment)",
+      "releaseCondition": "Accepted clear or merge of Schema CLI PR #1262 CLI-manifest/generation ownership",
+      "bypassable": false,
+      "ownerLocalNonOverlappingAllowed": true
+    }
+  }
+}

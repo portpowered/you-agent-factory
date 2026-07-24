@@ -34,6 +34,45 @@ var RequiredPSSI04SurfaceIDs = []string{
 	"mcp.registry.tool-discovery-catalog-composition",
 }
 
+// Required portfolio hold IDs for live Schema CLI and Standardized Providers
+// contention. These are non-bypassable and do not seize ownership.
+const (
+	HoldSchemaCLIPR1262CLIManifestGeneration = "hold.schema-cli.pr-1262.cli-manifest-generation"
+	HoldStandardizedProvidersConductor       = "hold.standardized-providers.conductor"
+)
+
+// RequiredPortfolioHoldIDs lists live portfolio holds that must appear when the
+// inventory includes the complete shared-surface family set.
+var RequiredPortfolioHoldIDs = []string{
+	HoldSchemaCLIPR1262CLIManifestGeneration,
+	HoldStandardizedProvidersConductor,
+}
+
+// RequiredPortfolioHoldSpec describes the actionable fields expected for a
+// required live portfolio hold.
+type RequiredPortfolioHoldSpec struct {
+	HoldID              string
+	ExternalOwnerSubstr string
+	BlockedLaneSubstr   string
+	ReleaseSubstr       string
+}
+
+// RequiredPortfolioHoldSpecs are the actionable hold contracts for FND-11.
+var RequiredPortfolioHoldSpecs = []RequiredPortfolioHoldSpec{
+	{
+		HoldID:              HoldSchemaCLIPR1262CLIManifestGeneration,
+		ExternalOwnerSubstr: "Schema CLI",
+		BlockedLaneSubstr:   "PSS-I03",
+		ReleaseSubstr:       "1262",
+	},
+	{
+		HoldID:              HoldStandardizedProvidersConductor,
+		ExternalOwnerSubstr: "Standardized Providers",
+		BlockedLaneSubstr:   "PSS-I02",
+		ReleaseSubstr:       "conductor",
+	},
+}
+
 // Diagnostic is one maintainer-readable validation finding.
 type Diagnostic struct {
 	Rule     string

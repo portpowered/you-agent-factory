@@ -135,6 +135,7 @@ func semanticDiagnostics(document string, root map[string]any) []Diagnostic {
 	}
 
 	surfaces, _ := root["surfaces"].(map[string]any)
+	holds, _ := root["holds"].(map[string]any)
 	keys := sortedKeys(surfaces)
 	for _, key := range keys {
 		surface, ok := surfaces[key].(map[string]any)
@@ -147,12 +148,16 @@ func semanticDiagnostics(document string, root map[string]any) []Diagnostic {
 			))
 			continue
 		}
-		diagnostics = append(diagnostics, surfaceDiagnostics(document, key, surface)...)
+		diagnostics = append(diagnostics, surfaceDiagnostics(document, key, surface, holds)...)
+	}
+	diagnostics = append(diagnostics, holdDiagnostics(document, holds)...)
+	if hasCompleteSharedSurfaceFamilies(surfaces) {
+		diagnostics = append(diagnostics, requiredPortfolioHoldDiagnostics(document, holds)...)
 	}
 	return diagnostics
 }
 
-func surfaceDiagnostics(document, key string, surface map[string]any) []Diagnostic {
+func surfaceDiagnostics(document, key string, surface map[string]any, holds map[string]any) []Diagnostic {
 	base := "/surfaces/" + escapeJSONPointerToken(key)
 	var diagnostics []Diagnostic
 
@@ -262,7 +267,120 @@ func surfaceDiagnostics(document, key string, surface map[string]any) []Diagnost
 		}
 	}
 
+	refs, _ := surface["holdConditionRefs"].([]any)
+	for index, item := range refs {
+		ref, _ := item.(string)
+		if strings.TrimSpace(ref) == "" {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.hold_ref_empty",
+				fmt.Sprintf("%s/holdConditionRefs/%d", base, index),
+				"holdConditionRefs entries must be non-empty hold IDs",
+				document,
+			))
+			continue
+		}
+		if _, ok := holds[ref]; !ok {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.hold_ref_missing",
+				fmt.Sprintf("%s/holdConditionRefs/%d", base, index),
+				fmt.Sprintf("holdConditionRefs entry %s does not resolve to a holds record", strconv.Quote(ref)),
+				document,
+			))
+		}
+	}
+
 	return diagnostics
+}
+
+func holdDiagnostics(document string, holds map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+	specsByID := make(map[string]RequiredPortfolioHoldSpec, len(RequiredPortfolioHoldSpecs))
+	for _, spec := range RequiredPortfolioHoldSpecs {
+		specsByID[spec.HoldID] = spec
+	}
+
+	for _, key := range sortedKeys(holds) {
+		base := "/holds/" + escapeJSONPointerToken(key)
+		hold, ok := holds[key].(map[string]any)
+		if !ok {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.hold_type",
+				base,
+				"hold record must be an object",
+				document,
+			))
+			continue
+		}
+
+		holdID, _ := hold["holdId"].(string)
+		if holdID != "" && holdID != key {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.hold_id_mismatch",
+				base+"/holdId",
+				fmt.Sprintf("holdId %s must match holds key %s", strconv.Quote(holdID), strconv.Quote(key)),
+				document,
+			))
+		}
+
+		if bypassable, exists := hold["bypassable"]; exists && bypassable != false {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.hold_bypassable",
+				base+"/bypassable",
+				fmt.Sprintf("required portfolio hold %s must not be bypassable; conflicting PSS cutovers wait for release", strconv.Quote(key)),
+				document,
+			))
+		}
+
+		if spec, ok := specsByID[key]; ok {
+			blocked, _ := hold["blockedLaneOrSurfaceClass"].(string)
+			if !strings.Contains(blocked, spec.BlockedLaneSubstr) {
+				diagnostics = append(diagnostics, newDiagnostic(
+					"inventory.hold_wrong_lane",
+					base+"/blockedLaneOrSurfaceClass",
+					fmt.Sprintf("required portfolio hold %s must attach to serial lane %s; blockedLaneOrSurfaceClass %s is the wrong serial lane", strconv.Quote(key), strconv.Quote(spec.BlockedLaneSubstr), strconv.Quote(blocked)),
+					document,
+				))
+			}
+			externalOwner, _ := hold["externalOwner"].(string)
+			if !strings.Contains(externalOwner, spec.ExternalOwnerSubstr) {
+				diagnostics = append(diagnostics, newDiagnostic(
+					"inventory.hold_external_owner",
+					base+"/externalOwner",
+					fmt.Sprintf("required portfolio hold %s externalOwner must name %s", strconv.Quote(key), strconv.Quote(spec.ExternalOwnerSubstr)),
+					document,
+				))
+			}
+		}
+	}
+	return diagnostics
+}
+
+func requiredPortfolioHoldDiagnostics(document string, holds map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+	for _, holdID := range RequiredPortfolioHoldIDs {
+		if _, ok := holds[holdID]; ok {
+			continue
+		}
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.missing_required_portfolio_hold",
+			"/holds/"+escapeJSONPointerToken(holdID),
+			fmt.Sprintf("complete shared-surface inventory is missing required portfolio hold %s", strconv.Quote(holdID)),
+			document,
+		))
+	}
+	return diagnostics
+}
+
+func hasCompleteSharedSurfaceFamilies(surfaces map[string]any) bool {
+	required := append([]string{}, RequiredPSSI02SurfaceIDs...)
+	required = append(required, RequiredPSSI03SurfaceIDs...)
+	required = append(required, RequiredPSSI04SurfaceIDs...)
+	for _, surfaceID := range required {
+		if _, ok := surfaces[surfaceID]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeObject(payload []byte) (map[string]any, error) {
@@ -384,6 +502,9 @@ func collectSchemaDiagnostics(document string, err *jsonschema.ValidationError, 
 			strings.Contains(lower, "integrator"):
 			rule = "inventory.dual_integrators"
 			message = "surface declares an additional integrator field; each surface requires exactly one serial integrator"
+		case strings.Contains(path, "bypassable"):
+			rule = "inventory.hold_bypassable"
+			message = "portfolio hold must not be bypassable; conflicting PSS cutovers wait for release"
 		}
 		*diagnostics = append(*diagnostics, newDiagnostic(rule, path, message, document))
 		return

@@ -104,6 +104,27 @@ composition paths above.
 Top-level MCP owns **server and registration only**. Tools continue to depend on
 **injected root contracts** rather than service implementations.
 
+## Live portfolio hold conditions
+
+Required **portfolio holds** record current live contention so PSS shared-lane
+work waits correctly instead of bypassing owners:
+
+| Hold ID | External owner | Blocks | Release condition |
+| --- | --- | --- | --- |
+| `hold.schema-cli.pr-1262.cli-manifest-generation` | Schema CLI `docs`/`models`/`mcp` (**PR #1262**) live CLI-manifest/generation ownership | Conflicting **PSS-I03** shared root/manifest/generation cutovers | Accepted clear or merge of Schema CLI PR #1262 ownership |
+| `hold.standardized-providers.conductor` | **Standardized Providers** conductor live provider composition/invocation ownership | Conflicting provider-config/composition cutovers, including **PSS-I02** OpenAPI cutovers that would race provider-config or CLI-manifest generation while the conductor is live | Accepted clear or merge of the Standardized Providers conductor ownership |
+
+Holds are **non-bypassable** (`bypassable: false`). Each hold is actionable: it
+names the blocked PSS lane or surface class, the external owner, and the release
+condition. Owner-local PSS packets whose exclusive paths do **not** overlap the
+held surfaces remain allowed to proceed
+(`ownerLocalNonOverlappingAllowed: true`).
+
+This inventory **does not seize** CLI-manifest or provider-conductor ownership
+and does not open competing provider catalog/execution abstractions. It only
+records hold conditions that block conflicting cutovers until those owners
+clear.
+
 ## Scope boundary
 
 This model is **integration metadata only**. Publishing or updating the

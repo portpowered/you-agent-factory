@@ -65,6 +65,21 @@ func TestValidateFixtures(t *testing.T) {
 			fixture:    "invalid-mcp-wrong-lane.json",
 			wantSubstr: "PSS-I04",
 		},
+		{
+			name:       "required portfolio hold marked bypassable",
+			fixture:    "invalid-hold-bypassable.json",
+			wantSubstr: "bypass",
+		},
+		{
+			name:       "required portfolio hold attached to wrong serial lane",
+			fixture:    "invalid-hold-wrong-lane.json",
+			wantSubstr: "PSS-I03",
+		},
+		{
+			name:       "complete surface family missing required portfolio hold",
+			fixture:    "invalid-missing-required-portfolio-holds.json",
+			wantSubstr: "required portfolio hold",
+		},
 	}
 
 	for _, test := range tests {
@@ -245,6 +260,63 @@ func TestCanonicalInventoryIncludesPSSI04MCPSurfaces(t *testing.T) {
 	}
 }
 
+func TestCanonicalInventoryIncludesRequiredPortfolioHolds(t *testing.T) {
+	t.Parallel()
+
+	path := testutil.MustRepoPath(t, sharedsurfaceownership.CanonicalInventoryRelPath)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read canonical inventory: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(payload, &root); err != nil {
+		t.Fatalf("decode canonical inventory: %v", err)
+	}
+	holds, _ := root["holds"].(map[string]any)
+	surfaces, _ := root["surfaces"].(map[string]any)
+
+	for _, spec := range sharedsurfaceownership.RequiredPortfolioHoldSpecs {
+		raw, ok := holds[spec.HoldID]
+		if !ok {
+			t.Fatalf("canonical inventory missing required portfolio hold %q", spec.HoldID)
+		}
+		hold, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("hold %q must be an object", spec.HoldID)
+		}
+		if got, _ := hold["holdId"].(string); got != spec.HoldID {
+			t.Fatalf("hold %q holdId = %q, want matching key", spec.HoldID, got)
+		}
+		externalOwner, _ := hold["externalOwner"].(string)
+		if !strings.Contains(externalOwner, spec.ExternalOwnerSubstr) {
+			t.Fatalf("hold %q externalOwner = %q, want substring %q", spec.HoldID, externalOwner, spec.ExternalOwnerSubstr)
+		}
+		blocked, _ := hold["blockedLaneOrSurfaceClass"].(string)
+		if !strings.Contains(blocked, spec.BlockedLaneSubstr) {
+			t.Fatalf("hold %q blockedLaneOrSurfaceClass = %q, want substring %q", spec.HoldID, blocked, spec.BlockedLaneSubstr)
+		}
+		release, _ := hold["releaseCondition"].(string)
+		if !strings.Contains(strings.ToLower(release), strings.ToLower(spec.ReleaseSubstr)) {
+			t.Fatalf("hold %q releaseCondition = %q, want substring %q", spec.HoldID, release, spec.ReleaseSubstr)
+		}
+		if hold["bypassable"] != false {
+			t.Fatalf("hold %q bypassable must be false; holds never authorize bypass", spec.HoldID)
+		}
+		if hold["ownerLocalNonOverlappingAllowed"] != true {
+			t.Fatalf("hold %q ownerLocalNonOverlappingAllowed must be true", spec.HoldID)
+		}
+	}
+
+	schemaHold := sharedsurfaceownership.HoldSchemaCLIPR1262CLIManifestGeneration
+	providerHold := sharedsurfaceownership.HoldStandardizedProvidersConductor
+	for _, surfaceID := range sharedsurfaceownership.RequiredPSSI03SurfaceIDs {
+		assertSurfaceHoldRef(t, surfaces, surfaceID, schemaHold)
+	}
+	for _, surfaceID := range sharedsurfaceownership.RequiredPSSI02SurfaceIDs {
+		assertSurfaceHoldRef(t, surfaces, surfaceID, providerHold)
+	}
+}
+
 func TestModelDocsDeclareMetadataOnlySchedulingContract(t *testing.T) {
 	t.Parallel()
 
@@ -282,12 +354,41 @@ func TestModelDocsDeclareMetadataOnlySchedulingContract(t *testing.T) {
 		"MCP-*",
 		"registry",
 		"discovery",
+		"portfolio hold",
+		"PR #1262",
+		"Standardized Providers",
+		"non-bypassable",
+		"does not seize",
+		"owner-local",
+		"release condition",
 	}
 	for _, needle := range required {
 		if !strings.Contains(strings.ToLower(text), strings.ToLower(needle)) {
 			t.Fatalf("model doc missing required phrase %q", needle)
 		}
 	}
+}
+
+func assertSurfaceHoldRef(t *testing.T, surfaces map[string]any, surfaceID, holdID string) {
+	t.Helper()
+	raw, ok := surfaces[surfaceID]
+	if !ok {
+		t.Fatalf("canonical inventory missing surface %q", surfaceID)
+	}
+	surface, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("surface %q must be an object", surfaceID)
+	}
+	refs, ok := surface["holdConditionRefs"].([]any)
+	if !ok {
+		t.Fatalf("surface %q must declare holdConditionRefs", surfaceID)
+	}
+	for _, ref := range refs {
+		if got, _ := ref.(string); got == holdID {
+			return
+		}
+	}
+	t.Fatalf("surface %q holdConditionRefs = %#v, want %q", surfaceID, refs, holdID)
 }
 
 func joinDiagnostics(diagnostics []sharedsurfaceownership.Diagnostic) string {

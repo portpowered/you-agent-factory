@@ -18,9 +18,7 @@
       "serialIntegratorLaneId": "PSS-I02",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.standardized-providers.conductor"
-      ]
+      "holdConditionRefs": []
     },
     "openapi.authored.entrypoint-and-fragments": {
       "surfaceId": "openapi.authored.entrypoint-and-fragments",
@@ -29,9 +27,7 @@
       "serialIntegratorLaneId": "PSS-I02",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.standardized-providers.conductor"
-      ]
+      "holdConditionRefs": []
     },
     "openapi.bundled.output": {
       "surfaceId": "openapi.bundled.output",
@@ -40,9 +36,7 @@
       "serialIntegratorLaneId": "PSS-I02",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.standardized-providers.conductor"
-      ]
+      "holdConditionRefs": []
     },
     "openapi.generated.go-server-and-client": {
       "surfaceId": "openapi.generated.go-server-and-client",
@@ -51,9 +45,7 @@
       "serialIntegratorLaneId": "PSS-I02",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.standardized-providers.conductor"
-      ]
+      "holdConditionRefs": []
     },
     "openapi.generated.typescript-client": {
       "surfaceId": "openapi.generated.typescript-client",
@@ -62,9 +54,7 @@
       "serialIntegratorLaneId": "PSS-I02",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.standardized-providers.conductor"
-      ]
+      "holdConditionRefs": []
     },
     "cli.root.assembly": {
       "surfaceId": "cli.root.assembly",
@@ -73,9 +63,7 @@
       "serialIntegratorLaneId": "PSS-I03",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.schema-cli.pr-1262.cli-manifest-generation"
-      ]
+      "holdConditionRefs": []
     },
     "cli.manifest.cobra-generation-authority": {
       "surfaceId": "cli.manifest.cobra-generation-authority",
@@ -84,9 +72,7 @@
       "serialIntegratorLaneId": "PSS-I03",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.schema-cli.pr-1262.cli-manifest-generation"
-      ]
+      "holdConditionRefs": []
     },
     "cli.global.help-and-completion-composition": {
       "surfaceId": "cli.global.help-and-completion-composition",
@@ -95,9 +81,7 @@
       "serialIntegratorLaneId": "PSS-I03",
       "activeHolder": null,
       "ownerRequestQueue": [],
-      "holdConditionRefs": [
-        "hold.schema-cli.pr-1262.cli-manifest-generation"
-      ]
+      "holdConditionRefs": []
     },
     "mcp.toplevel.server-composition": {
       "surfaceId": "mcp.toplevel.server-composition",
@@ -118,22 +102,5 @@
       "holdConditionRefs": []
     }
   },
-  "holds": {
-    "hold.schema-cli.pr-1262.cli-manifest-generation": {
-      "holdId": "hold.schema-cli.pr-1262.cli-manifest-generation",
-      "externalOwner": "Schema CLI docs/models/mcp (PR #1262) live canonical CLI-manifest/generation ownership",
-      "blockedLaneOrSurfaceClass": "PSS-I03 shared CLI root/manifest/generation cutovers",
-      "releaseCondition": "Accepted clear or merge of Schema CLI PR #1262 CLI-manifest/generation ownership",
-      "bypassable": false,
-      "ownerLocalNonOverlappingAllowed": true
-    },
-    "hold.standardized-providers.conductor": {
-      "holdId": "hold.standardized-providers.conductor",
-      "externalOwner": "Standardized Providers conductor live provider composition/invocation ownership",
-      "blockedLaneOrSurfaceClass": "PSS-I02 OpenAPI/provider-config composition cutovers that would race provider-config or CLI-manifest generation while the conductor is live",
-      "releaseCondition": "Accepted clear or merge of the Standardized Providers conductor ownership",
-      "bypassable": false,
-      "ownerLocalNonOverlappingAllowed": true
-    }
-  }
+  "holds": {}
 }
