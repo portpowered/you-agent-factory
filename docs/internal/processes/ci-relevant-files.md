@@ -79,10 +79,13 @@
   `//go:build` (preferring it over legacy `// +build`) expressions as
   `BuildTags`, and capture explicit golden fixture/manifest paths from a
   `//golden: <path>` doc directive or a test-owned `golden` /
-  `goldenManifest` / `goldenFixture` string declaration. Fail closed with a
-  file-scoped error on malformed source. Later FND cells consume that package
-  for customer-versus-harness classification and the undocumented baseline; do
-  not reintroduce regex or line-scraping inventories.
+  `goldenManifest` / `goldenFixture` string declaration. Classify
+  `internal/**` and `*helpers*_test.go` paths as harness verification
+  (`ClassificationHarness`); all other inventoried `Test*` records are
+  `ClassificationCustomer`. `CustomerScenarioCount` equals the customer
+  record count only. Fail closed with a file-scoped error on malformed
+  source. Later FND cells consume that package for the undocumented
+  baseline; do not reintroduce regex or line-scraping inventories.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions

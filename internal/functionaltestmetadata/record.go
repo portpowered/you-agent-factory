@@ -1,5 +1,19 @@
 package functionaltestmetadata
 
+// Classification labels whether an inventoried Test* is a customer scenario or
+// harness/internal verification. Customer scenario counts use only
+// ClassificationCustomer records.
+type Classification string
+
+const (
+	// ClassificationCustomer is a customer-facing functional scenario.
+	ClassificationCustomer Classification = "customer"
+	// ClassificationHarness is harness/internal or helper-only verification.
+	// These records remain in the inventory for later report rendering but do
+	// not increment customer scenario counts.
+	ClassificationHarness Classification = "harness"
+)
+
 // Record is one inventoried top-level Test* declaration.
 type Record struct {
 	// File is the repository-relative source path using forward slashes.
@@ -24,9 +38,29 @@ type Record struct {
 	// //golden: comment or a test-owned golden string declaration. Empty when
 	// no golden is declared; never fabricated.
 	Golden string `json:"golden,omitempty"`
+	// Classification is customer versus harness/helper verification.
+	Classification Classification `json:"classification"`
 }
 
 // Identity returns the stable catalog identity for this record.
 func (r Record) Identity() string {
 	return r.File + "::" + r.Name
+}
+
+// IsCustomerScenario reports whether this record counts toward customer
+// scenario totals.
+func (r Record) IsCustomerScenario() bool {
+	return r.Classification == ClassificationCustomer
+}
+
+// CustomerScenarioCount returns the number of inventoried top-level customer
+// Test* records after excluding harness/internal and helper-only entries.
+func CustomerScenarioCount(records []Record) int {
+	count := 0
+	for _, record := range records {
+		if record.IsCustomerScenario() {
+			count++
+		}
+	}
+	return count
 }

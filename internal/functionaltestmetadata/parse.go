@@ -86,6 +86,7 @@ func parseTestFile(absolutePath, relativePath string) ([]Record, error) {
 		return nil, err
 	}
 
+	classification := classifyPath(relativePath)
 	records := make([]Record, 0)
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
@@ -94,11 +95,12 @@ func parseTestFile(absolutePath, relativePath string) ([]Record, error) {
 		}
 
 		record := Record{
-			File:      relativePath,
-			Package:   file.Name.Name,
-			Name:      function.Name.Name,
-			Line:      fileSet.Position(function.Pos()).Line,
-			BuildTags: cloneStrings(buildTags),
+			File:           relativePath,
+			Package:        file.Name.Name,
+			Name:           function.Name.Name,
+			Line:           fileSet.Position(function.Pos()).Line,
+			BuildTags:      cloneStrings(buildTags),
+			Classification: classification,
 		}
 		description, undocumented := descriptionFromDoc(function.Doc)
 		record.Description = description
@@ -107,6 +109,30 @@ func parseTestFile(absolutePath, relativePath string) ([]Record, error) {
 		records = append(records, record)
 	}
 	return records, nil
+}
+
+// classifyPath labels a repository-relative *_test.go path as customer or
+// harness verification. Paths under internal/** and helper-only filenames
+// (basename contains "helpers") are harness; everything else is customer.
+func classifyPath(relativePath string) Classification {
+	normalized := normalizePath(relativePath)
+	if isInternalSupportPath(normalized) || isHelperOnlyFile(normalized) {
+		return ClassificationHarness
+	}
+	return ClassificationCustomer
+}
+
+func isInternalSupportPath(relativePath string) bool {
+	return relativePath == "internal" || strings.HasPrefix(relativePath, "internal/")
+}
+
+func isHelperOnlyFile(relativePath string) bool {
+	base := filepath.Base(relativePath)
+	name := strings.TrimSuffix(base, "_test.go")
+	if name == base {
+		return false
+	}
+	return strings.Contains(name, "helpers")
 }
 
 func fileBuildTags(file *ast.File, relativePath string) ([]string, error) {

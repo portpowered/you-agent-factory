@@ -45,6 +45,14 @@ func TestGamma(t *testing.T) {}
 	if records[0].Line <= 0 || records[1].Line <= records[0].Line {
 		t.Fatalf("source lines not increasing within file: %#v", records[:2])
 	}
+	for _, record := range records {
+		if record.Classification != functionaltestmetadata.ClassificationCustomer {
+			t.Fatalf("%s Classification = %q, want %q", record.Name, record.Classification, functionaltestmetadata.ClassificationCustomer)
+		}
+	}
+	if got := functionaltestmetadata.CustomerScenarioCount(records); got != 3 {
+		t.Fatalf("CustomerScenarioCount = %d, want 3", got)
+	}
 }
 
 func TestParseMarksMissingDocAsUndocumentedWithoutInventingText(t *testing.T) {
@@ -453,6 +461,173 @@ func TestParseNormalizesWindowsStyleGoldenPaths(t *testing.T) {
 	}
 }
 
+func TestParseClassifiesInternalSupportAsHarness(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"internal/support/paths_test.go": `package support_test
+
+import "testing"
+
+// TestDefaultSessionEventsURL verifies harness URL helpers.
+func TestDefaultSessionEventsURL(t *testing.T) {}
+`,
+		"smoke/customer_test.go": `package smoke
+
+import "testing"
+
+// TestCustomerColdStart is a customer-facing scenario.
+func TestCustomerColdStart(t *testing.T) {}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("Parse() returned %d records, want 2: %#v", len(records), records)
+	}
+
+	byName := map[string]functionaltestmetadata.Record{}
+	for _, record := range records {
+		byName[record.Name] = record
+	}
+
+	internal := byName["TestDefaultSessionEventsURL"]
+	if internal.Classification != functionaltestmetadata.ClassificationHarness {
+		t.Fatalf("internal Classification = %q, want %q", internal.Classification, functionaltestmetadata.ClassificationHarness)
+	}
+	if internal.IsCustomerScenario() {
+		t.Fatalf("internal record must not count as a customer scenario")
+	}
+
+	customer := byName["TestCustomerColdStart"]
+	if customer.Classification != functionaltestmetadata.ClassificationCustomer {
+		t.Fatalf("customer Classification = %q, want %q", customer.Classification, functionaltestmetadata.ClassificationCustomer)
+	}
+	if got := functionaltestmetadata.CustomerScenarioCount(records); got != 1 {
+		t.Fatalf("CustomerScenarioCount = %d, want 1 (internal excluded)", got)
+	}
+}
+
+func TestParseExcludesHelperOnlyFilesFromCustomerCounts(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"smoke/helpers_test.go": `package smoke
+
+func sharedHelper() {}
+`,
+		"smoke/short_helpers_contract_test.go": `package smoke
+
+import "testing"
+
+// TestHelperContract verifies shared helper behavior only.
+func TestHelperContract(t *testing.T) {}
+`,
+		"smoke/customer_test.go": `package smoke
+
+import "testing"
+
+// TestCustomerScenario is a customer-facing proof.
+func TestCustomerScenario(t *testing.T) {}
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("Parse() returned %d records, want 2 (helper-only file with no Test* emits nothing): %#v", len(records), records)
+	}
+
+	byName := map[string]functionaltestmetadata.Record{}
+	for _, record := range records {
+		byName[record.Name] = record
+	}
+
+	helper := byName["TestHelperContract"]
+	if helper.Classification != functionaltestmetadata.ClassificationHarness {
+		t.Fatalf("helpers Classification = %q, want %q", helper.Classification, functionaltestmetadata.ClassificationHarness)
+	}
+	if helper.IsCustomerScenario() {
+		t.Fatalf("helper-only Test* must not count as a customer scenario")
+	}
+
+	customer := byName["TestCustomerScenario"]
+	if customer.Classification != functionaltestmetadata.ClassificationCustomer {
+		t.Fatalf("customer Classification = %q, want %q", customer.Classification, functionaltestmetadata.ClassificationCustomer)
+	}
+	if got := functionaltestmetadata.CustomerScenarioCount(records); got != 1 {
+		t.Fatalf("CustomerScenarioCount = %d, want 1 after helper-only exclusion", got)
+	}
+}
+
+func TestParseClassifiesMixedCustomerScenarioFile(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"smoke/mixed_test.go": `package smoke
+
+import "testing"
+
+func localHelper(t *testing.T) {
+	t.Helper()
+}
+
+// TestAlpha is the first customer scenario in a mixed file.
+func TestAlpha(t *testing.T) {}
+
+// TestBeta is the second customer scenario in a mixed file.
+func TestBeta(t *testing.T) {}
+`,
+		"internal/support/harness_test.go": `package support
+
+import "testing"
+
+// TestHarnessOnly stays out of customer totals.
+func TestHarnessOnly(t *testing.T) {}
+`,
+		"smoke/helpers_test.go": `package smoke
+
+func unusedSharedHelper() string { return "ok" }
+`,
+	})
+
+	records, err := functionaltestmetadata.Parse(root)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("Parse() returned %d records, want 3: %#v", len(records), records)
+	}
+
+	customerNames := make([]string, 0, 2)
+	for _, record := range records {
+		switch record.Name {
+		case "TestAlpha", "TestBeta":
+			if record.Classification != functionaltestmetadata.ClassificationCustomer {
+				t.Fatalf("%s Classification = %q, want %q", record.Name, record.Classification, functionaltestmetadata.ClassificationCustomer)
+			}
+			customerNames = append(customerNames, record.Name)
+		case "TestHarnessOnly":
+			if record.Classification != functionaltestmetadata.ClassificationHarness {
+				t.Fatalf("TestHarnessOnly Classification = %q, want %q", record.Classification, functionaltestmetadata.ClassificationHarness)
+			}
+		default:
+			t.Fatalf("unexpected record %#v", record)
+		}
+	}
+	if len(customerNames) != 2 {
+		t.Fatalf("customer names = %#v, want TestAlpha and TestBeta", customerNames)
+	}
+	if got := functionaltestmetadata.CustomerScenarioCount(records); got != 2 {
+		t.Fatalf("CustomerScenarioCount = %d, want 2 (equals inventoried customer Test* after exclusions)", got)
+	}
+}
+
 func assertRecord(t *testing.T, got functionaltestmetadata.Record, file, pkg, name, description string, undocumented bool) {
 	t.Helper()
 	if got.File != file {
@@ -470,13 +645,16 @@ func assertRecord(t *testing.T, got functionaltestmetadata.Record, file, pkg, na
 	if got.Undocumented != undocumented {
 		t.Fatalf("Undocumented = %v, want %v", got.Undocumented, undocumented)
 	}
+	if got.Classification == "" {
+		t.Fatalf("Classification is empty on %#v", got)
+	}
 }
 
 func assertRecordsEqual(t *testing.T, got, want functionaltestmetadata.Record) {
 	t.Helper()
 	if got.File != want.File || got.Package != want.Package || got.Name != want.Name ||
 		got.Line != want.Line || got.Description != want.Description || got.Undocumented != want.Undocumented ||
-		got.Golden != want.Golden {
+		got.Golden != want.Golden || got.Classification != want.Classification {
 		t.Fatalf("records differ:\ngot  %#v\nwant %#v", got, want)
 	}
 	if len(got.BuildTags) != len(want.BuildTags) {
