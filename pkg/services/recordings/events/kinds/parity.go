@@ -24,7 +24,7 @@ type FactoryEventKindParityInput struct {
 
 // CompareFactoryEventKindParity returns drift between the runtime public inventory
 // and OpenAPI mapping keys. Contract-only kinds that are already classified with
-// evidence are not reported as unexplained contract-only drift.
+// non-empty evidence are not reported as unexplained contract-only drift.
 func CompareFactoryEventKindParity(input FactoryEventKindParityInput) FactoryEventKindParityDrift {
 	runtimeSet := make(map[factorycontracts.FactoryEventType]struct{}, len(input.RuntimeKinds))
 	for _, entry := range input.RuntimeKinds {
@@ -33,6 +33,9 @@ func CompareFactoryEventKindParity(input FactoryEventKindParityInput) FactoryEve
 
 	classifiedContractOnly := make(map[factorycontracts.FactoryEventType]struct{}, len(input.ContractOnlyKinds))
 	for _, entry := range input.ContractOnlyKinds {
+		if strings.TrimSpace(entry.Evidence) == "" {
+			continue
+		}
 		classifiedContractOnly[entry.Kind] = struct{}{}
 	}
 
@@ -98,10 +101,24 @@ func (d FactoryEventKindParityDrift) Error() string {
 	return strings.Join(parts, "; ")
 }
 
+// CurrentFactoryEventKindInventory returns the Recordings-owned compile-time
+// vocabulary used by ownership and parity consumers.
+func CurrentFactoryEventKindInventory() FactoryEventKindInventory {
+	return FactoryEventKindInventory{
+		PublicEmittable: PublicEmittableFactoryEventKinds(),
+		Excluded:        ExcludedNonPublicFactoryEventKinds(),
+		ContractOnly:    ContractOnlyFactoryEventKinds(),
+	}
+}
+
 // ValidateBundledFactoryEventKindParity proves public runtime-emittable FactoryEvent
-// kinds have closed parity against the bundled OpenAPI discriminator mapping:
-// zero runtime-only kinds and zero unexplained contract-only kinds.
+// kinds have closed parity against the bundled OpenAPI discriminator mapping
+// through the Recordings-owned inventory: the frozen vocabulary validates, then
+// parity reports zero runtime-only kinds and zero unexplained contract-only kinds.
 func ValidateBundledFactoryEventKindParity(openAPIYAML []byte) error {
+	if err := ValidateFactoryEventKindInventory(CurrentFactoryEventKindInventory()); err != nil {
+		return fmt.Errorf("recordings-owned factory event kind inventory: %w", err)
+	}
 	input, err := LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML)
 	if err != nil {
 		return err

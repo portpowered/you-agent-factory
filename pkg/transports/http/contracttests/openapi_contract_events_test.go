@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,6 +21,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedEventLegacySchemasAbsent(t, schemas)
 	assertUnifiedEventEnvelope(t, schemas)
 	assertFactoryEventTypePayloadDiscriminator(t, schemas)
+	assertPublicFactoryEventKindParityIsClosed(t)
 	assertUnifiedEventContext(t, schemas)
 	assertUnifiedRunRequestEvent(t, schemas)
 	assertUnifiedFactorySchema(t, schemas)
@@ -31,6 +33,21 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedScriptEvents(t, schemas)
 	assertUnifiedStateEvent(t, schemas)
 	assertSessionLifecycleEventStatusVocabulary(t, schemas)
+}
+
+// assertPublicFactoryEventKindParityIsClosed proves runtime↔OpenAPI FactoryEvent
+// kind parity through the Recordings-owned inventory (zero runtime-only and zero
+// unexplained contract-only kinds) without reshaping public event payloads.
+func assertPublicFactoryEventKindParityIsClosed(t *testing.T) {
+	t.Helper()
+
+	data, err := os.ReadFile("../../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read bundled openapi contract: %v", err)
+	}
+	if err := factoryeventkinds.ValidateBundledFactoryEventKindParity(data); err != nil {
+		t.Fatalf("public FactoryEvent kind parity is not closed through Recordings inventory: %v", err)
+	}
 }
 
 func TestOpenAPIContract_CanonicalFactoryEventVocabularyFixtureValidatesAndRetiresLegacyNames(t *testing.T) {

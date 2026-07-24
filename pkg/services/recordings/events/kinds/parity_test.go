@@ -123,6 +123,28 @@ func TestCompareFactoryEventKindParity_ClassifiedContractOnlyKindsAreNotUnexplai
 	}
 }
 
+func TestCompareFactoryEventKindParity_EmptyEvidenceContractOnlyKindsRemainUnexplainedDrift(t *testing.T) {
+	drift := CompareFactoryEventKindParity(FactoryEventKindParityInput{
+		RuntimeKinds: []PublicEmittableKind{
+			{Kind: factorycontracts.FactoryEventTypeRunRequest, EmissionEvidence: "test"},
+		},
+		ContractOnlyKinds: []ContractOnlyKind{
+			{
+				Kind:     factorycontracts.FactoryEventTypeFactoryChange,
+				Evidence: "   ",
+			},
+		},
+		OpenAPIMappingKinds: []factorycontracts.FactoryEventType{
+			factorycontracts.FactoryEventTypeRunRequest,
+			factorycontracts.FactoryEventTypeFactoryChange,
+		},
+	})
+
+	if len(drift.ContractOnlyKinds) != 1 || drift.ContractOnlyKinds[0] != factorycontracts.FactoryEventTypeFactoryChange {
+		t.Fatalf("empty-evidence contract-only drift = %#v, want [FACTORY_CHANGE]", drift.ContractOnlyKinds)
+	}
+}
+
 func TestContractOnlyFactoryEventKinds_HasEvidenceForEveryEntry(t *testing.T) {
 	contractOnly := ContractOnlyFactoryEventKinds()
 	seen := make(map[factorycontracts.FactoryEventType]struct{}, len(contractOnly))
