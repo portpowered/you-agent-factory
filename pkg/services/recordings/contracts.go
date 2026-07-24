@@ -25,6 +25,17 @@ var ErrInvalidSubscribeScope = errors.New("invalid subscribe reconnect scope")
 // empty or malformed inputs (for example a negative selected tick).
 var ErrInvalidProjectionInput = errors.New("invalid projection query input")
 
+// ErrMissingRecordingTarget reports that a recording-lifecycle request lacks a
+// bound recording target (empty record path or unknown recording id).
+var ErrMissingRecordingTarget = errors.New("missing recording target")
+
+// ErrRecordingFlushFailed reports that a recording flush could not complete.
+var ErrRecordingFlushFailed = errors.New("recording flush failed")
+
+// ErrRecordingWriteRejected reports that a write was rejected after the
+// recording finished.
+var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
+
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -111,6 +122,86 @@ type ValidateReconnectReplayRequest struct {
 	Scope  EventReconnectScope
 }
 
+// BindRecordingRequest is the plain recorder construction/binding request peers
+// send through the Recordings root recording-lifecycle slice.
+type BindRecordingRequest struct {
+	RecordingID   string
+	RecordPath    string
+	FlushInterval time.Duration
+}
+
+// BindRecordingResult is the plain recorder construction/binding success
+// outcome.
+type BindRecordingResult struct {
+	RecordingID string
+}
+
+// StartRecordingRequest is the plain start request for one bound recording.
+type StartRecordingRequest struct {
+	RecordingID string
+}
+
+// StartRecordingResult is the plain start success outcome.
+type StartRecordingResult struct{}
+
+// RecordRecordingEventRequest is the plain record-event request for one bound
+// recording.
+type RecordRecordingEventRequest struct {
+	RecordingID string
+	Event       interfaces.FactoryEvent
+}
+
+// RecordRecordingEventResult is the plain record-event success outcome.
+type RecordRecordingEventResult struct{}
+
+// RecordRecordingErrorRequest is the plain record-error request for one bound
+// recording.
+type RecordRecordingErrorRequest struct {
+	RecordingID string
+	Err         error
+}
+
+// RecordRecordingErrorResult is the plain record-error success outcome.
+type RecordRecordingErrorResult struct{}
+
+// FlushRecordingRequest is the plain flush request for one bound recording.
+type FlushRecordingRequest struct {
+	RecordingID string
+}
+
+// FlushRecordingResult is the plain flush success outcome.
+type FlushRecordingResult struct{}
+
+// FinishRecordingRequest is the plain finish request for one bound recording.
+type FinishRecordingRequest struct {
+	RecordingID string
+	FinishedAt  time.Time
+}
+
+// FinishRecordingResult is the plain finish success outcome.
+type FinishRecordingResult struct{}
+
+// StopRecordingRequest is the plain stop request for one bound recording.
+type StopRecordingRequest struct {
+	RecordingID string
+}
+
+// StopRecordingResult is the plain stop success outcome.
+type StopRecordingResult struct{}
+
+// RecordingStatusRequest is the plain status query for one bound recording.
+type RecordingStatusRequest struct {
+	RecordingID string
+}
+
+// RecordingStatusResult is the plain status outcome for one bound recording.
+type RecordingStatusResult struct {
+	Started  bool
+	Finished bool
+	Stopped  bool
+	Err      error
+}
+
 // Ledger is the append/subscribe capability surface embedded in the singular
 // Recordings root Service. Peers should depend on Service rather than treating
 // Ledger as a second peer-facing Recordings authority. Nested ledger storage
@@ -162,6 +253,25 @@ type Service interface {
 	// ValidateReconnectReplayFrom validates reconnect-replay inputs through
 	// the plain projection-query root-contract slice.
 	ValidateReconnectReplayFrom(ValidateReconnectReplayRequest) error
+
+	// BindRecording constructs or binds one session-scoped recording through
+	// the plain recording-lifecycle root-contract slice.
+	BindRecording(BindRecordingRequest) (BindRecordingResult, error)
+	// StartRecording starts periodic flush behavior for one bound recording.
+	StartRecording(context.Context, StartRecordingRequest) (StartRecordingResult, error)
+	// RecordRecordingEvent appends one Factory Event into a bound recording.
+	RecordRecordingEvent(RecordRecordingEventRequest) (RecordRecordingEventResult, error)
+	// RecordRecordingError retains a producer-boundary failure for flush/status.
+	RecordRecordingError(RecordRecordingErrorRequest) (RecordRecordingErrorResult, error)
+	// FlushRecording flushes one bound recording through the published slice.
+	FlushRecording(FlushRecordingRequest) (FlushRecordingResult, error)
+	// FinishRecording records terminal wall-clock metadata for one recording.
+	FinishRecording(FinishRecordingRequest) (FinishRecordingResult, error)
+	// StopRecording stops periodic flush behavior for one bound recording.
+	StopRecording(StopRecordingRequest) (StopRecordingResult, error)
+	// QueryRecordingStatus returns start/finish/stop/error status for one
+	// bound recording.
+	QueryRecordingStatus(RecordingStatusRequest) (RecordingStatusResult, error)
 }
 
 // ProjectionService is the projection-query capability surface embedded in the
@@ -273,7 +383,10 @@ type WorkerEventRecorder interface {
 }
 
 // RuntimeRecorder owns the lifecycle and durable flush behavior of one replay
-// recording without exposing the concrete replay artifact writer.
+// recording without exposing the concrete replay artifact writer. Existing
+// Runtime callers may still consume this capability surface; peers should prefer
+// the plain recording-lifecycle methods on Service as the cross-service source
+// of truth rather than treating RuntimeRecorder construction as the peer seam.
 type RuntimeRecorder interface {
 	Start(context.Context)
 	Stop()

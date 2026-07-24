@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -53,9 +55,23 @@ func (projectionService) ValidateReconnectReplay(
 	return err
 }
 
+type lifecycleRecordingSession struct {
+	recordPath  string
+	started     bool
+	finished    bool
+	stopped     bool
+	flushFail   bool
+	events      []factorydefinitions.FactoryEvent
+	retainedErr error
+}
+
 type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
+
+	lifecycleMu     sync.Mutex
+	lifecycleByID   map[string]*lifecycleRecordingSession
+	nextRecordingID int
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -114,6 +130,152 @@ func (service *combinedService) ValidateReconnectReplayFrom(
 	request recordings.ValidateReconnectReplayRequest,
 ) error {
 	return service.ValidateReconnectReplay(request.Events, request.Cursor, request.Scope)
+}
+
+func (service *combinedService) BindRecording(
+	request recordings.BindRecordingRequest,
+) (recordings.BindRecordingResult, error) {
+	if strings.TrimSpace(request.RecordPath) == "" {
+		return recordings.BindRecordingResult{}, recordings.ErrMissingRecordingTarget
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if service.lifecycleByID == nil {
+		service.lifecycleByID = make(map[string]*lifecycleRecordingSession)
+	}
+	id := strings.TrimSpace(request.RecordingID)
+	if id == "" {
+		service.nextRecordingID++
+		id = "recording-" + strconv.Itoa(service.nextRecordingID)
+	}
+	service.lifecycleByID[id] = &lifecycleRecordingSession{recordPath: request.RecordPath}
+	return recordings.BindRecordingResult{RecordingID: id}, nil
+}
+
+func (service *combinedService) lifecycleSession(id string) (*lifecycleRecordingSession, error) {
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if strings.TrimSpace(id) == "" || service.lifecycleByID == nil {
+		return nil, recordings.ErrMissingRecordingTarget
+	}
+	session, ok := service.lifecycleByID[id]
+	if !ok {
+		return nil, recordings.ErrMissingRecordingTarget
+	}
+	return session, nil
+}
+
+func (service *combinedService) StartRecording(
+	_ context.Context,
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.StartRecordingResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	session.started = true
+	session.stopped = false
+	return recordings.StartRecordingResult{}, nil
+}
+
+func (service *combinedService) RecordRecordingEvent(
+	request recordings.RecordRecordingEventRequest,
+) (recordings.RecordRecordingEventResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordRecordingEventResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if session.finished {
+		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
+	}
+	session.events = append(session.events, request.Event)
+	return recordings.RecordRecordingEventResult{}, nil
+}
+
+func (service *combinedService) RecordRecordingError(
+	request recordings.RecordRecordingErrorRequest,
+) (recordings.RecordRecordingErrorResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordRecordingErrorResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if session.finished {
+		return recordings.RecordRecordingErrorResult{}, recordings.ErrRecordingWriteRejected
+	}
+	if request.Err != nil {
+		session.retainedErr = request.Err
+		session.flushFail = true
+	}
+	return recordings.RecordRecordingErrorResult{}, nil
+}
+
+func (service *combinedService) FlushRecording(
+	request recordings.FlushRecordingRequest,
+) (recordings.FlushRecordingResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if session.flushFail {
+		if session.retainedErr == nil {
+			session.retainedErr = recordings.ErrRecordingFlushFailed
+		}
+		return recordings.FlushRecordingResult{}, recordings.ErrRecordingFlushFailed
+	}
+	return recordings.FlushRecordingResult{}, nil
+}
+
+func (service *combinedService) FinishRecording(
+	request recordings.FinishRecordingRequest,
+) (recordings.FinishRecordingResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.FinishRecordingResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	_ = request.FinishedAt
+	session.finished = true
+	return recordings.FinishRecordingResult{}, nil
+}
+
+func (service *combinedService) StopRecording(
+	request recordings.StopRecordingRequest,
+) (recordings.StopRecordingResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.StopRecordingResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	session.stopped = true
+	session.started = false
+	return recordings.StopRecordingResult{}, nil
+}
+
+func (service *combinedService) QueryRecordingStatus(
+	request recordings.RecordingStatusRequest,
+) (recordings.RecordingStatusResult, error) {
+	session, err := service.lifecycleSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordingStatusResult{}, err
+	}
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	return recordings.RecordingStatusResult{
+		Started:  session.started,
+		Finished: session.finished,
+		Stopped:  session.stopped,
+		Err:      session.retainedErr,
+	}, nil
 }
 
 func NewService(

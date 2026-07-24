@@ -3,12 +3,24 @@ package recordings_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
+
+type peerRecordingSession struct {
+	recordPath string
+	started    bool
+	finished   bool
+	stopped    bool
+	flushFail  bool
+	events     []interfaces.FactoryEvent
+	retainedErr error
+}
 
 // peerRootServiceFake is a peer-shaped Recordings root Service that uses only
 // the published Recordings root package (plus approved peer-root vocabulary
@@ -25,6 +37,8 @@ type peerRootServiceFake struct {
 	throttlePauses      []interfaces.FactoryWorldThrottlePause
 	workstationRequests recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
 	validateReplayErr   error
+	recordings          map[string]*peerRecordingSession
+	nextRecordingID     int
 }
 
 var _ recordings.Service = (*peerRootServiceFake)(nil)
@@ -185,6 +199,139 @@ func (fake *peerRootServiceFake) ValidateReconnectReplayFrom(
 		interfaces.FactoryEventReconnectCursor(request.Cursor),
 		interfaces.FactoryEventReconnectScope(request.Scope),
 	)
+}
+
+func (fake *peerRootServiceFake) ensureRecordings() {
+	if fake.recordings == nil {
+		fake.recordings = make(map[string]*peerRecordingSession)
+	}
+}
+
+func (fake *peerRootServiceFake) recordingSession(id string) (*peerRecordingSession, error) {
+	fake.ensureRecordings()
+	if strings.TrimSpace(id) == "" {
+		return nil, recordings.ErrMissingRecordingTarget
+	}
+	session, ok := fake.recordings[id]
+	if !ok {
+		return nil, recordings.ErrMissingRecordingTarget
+	}
+	return session, nil
+}
+
+func (fake *peerRootServiceFake) BindRecording(
+	request recordings.BindRecordingRequest,
+) (recordings.BindRecordingResult, error) {
+	if strings.TrimSpace(request.RecordPath) == "" {
+		return recordings.BindRecordingResult{}, recordings.ErrMissingRecordingTarget
+	}
+	fake.ensureRecordings()
+	id := strings.TrimSpace(request.RecordingID)
+	if id == "" {
+		fake.nextRecordingID++
+		id = "recording-" + strconv.Itoa(fake.nextRecordingID)
+	}
+	fake.recordings[id] = &peerRecordingSession{recordPath: request.RecordPath}
+	return recordings.BindRecordingResult{RecordingID: id}, nil
+}
+
+func (fake *peerRootServiceFake) StartRecording(
+	_ context.Context,
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.StartRecordingResult{}, err
+	}
+	session.started = true
+	session.stopped = false
+	return recordings.StartRecordingResult{}, nil
+}
+
+func (fake *peerRootServiceFake) RecordRecordingEvent(
+	request recordings.RecordRecordingEventRequest,
+) (recordings.RecordRecordingEventResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordRecordingEventResult{}, err
+	}
+	if session.finished {
+		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
+	}
+	session.events = append(session.events, request.Event)
+	return recordings.RecordRecordingEventResult{}, nil
+}
+
+func (fake *peerRootServiceFake) RecordRecordingError(
+	request recordings.RecordRecordingErrorRequest,
+) (recordings.RecordRecordingErrorResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordRecordingErrorResult{}, err
+	}
+	if session.finished {
+		return recordings.RecordRecordingErrorResult{}, recordings.ErrRecordingWriteRejected
+	}
+	if request.Err != nil {
+		session.retainedErr = request.Err
+		session.flushFail = true
+	}
+	return recordings.RecordRecordingErrorResult{}, nil
+}
+
+func (fake *peerRootServiceFake) FlushRecording(
+	request recordings.FlushRecordingRequest,
+) (recordings.FlushRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	if session.flushFail {
+		if session.retainedErr == nil {
+			session.retainedErr = recordings.ErrRecordingFlushFailed
+		}
+		return recordings.FlushRecordingResult{}, recordings.ErrRecordingFlushFailed
+	}
+	return recordings.FlushRecordingResult{}, nil
+}
+
+func (fake *peerRootServiceFake) FinishRecording(
+	request recordings.FinishRecordingRequest,
+) (recordings.FinishRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.FinishRecordingResult{}, err
+	}
+	_ = request.FinishedAt
+	session.finished = true
+	return recordings.FinishRecordingResult{}, nil
+}
+
+func (fake *peerRootServiceFake) StopRecording(
+	request recordings.StopRecordingRequest,
+) (recordings.StopRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.StopRecordingResult{}, err
+	}
+	session.stopped = true
+	session.started = false
+	return recordings.StopRecordingResult{}, nil
+}
+
+func (fake *peerRootServiceFake) QueryRecordingStatus(
+	request recordings.RecordingStatusRequest,
+) (recordings.RecordingStatusResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.RecordingStatusResult{}, err
+	}
+	return recordings.RecordingStatusResult{
+		Started:  session.started,
+		Finished: session.finished,
+		Stopped:  session.stopped,
+		Err:      session.retainedErr,
+	}, nil
 }
 
 func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
@@ -355,5 +502,115 @@ func TestProjectionQueryRootContract_SuccessAndTypedFailures(t *testing.T) {
 	}
 	if errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 		t.Fatalf("malformed projection input must remain distinct from ErrReconnectCursorNotFound")
+	}
+}
+
+func TestRecordingLifecycleRootContract_SuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	fake := &peerRootServiceFake{}
+	var service recordings.Service = fake
+	ctx := context.Background()
+
+	bound, err := service.BindRecording(recordings.BindRecordingRequest{
+		RecordPath:    "session.replay.json",
+		FlushInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording success path: %v", err)
+	}
+	if bound.RecordingID == "" {
+		t.Fatal("BindRecording RecordingID empty, want bound handle")
+	}
+
+	if _, err := service.StartRecording(ctx, recordings.StartRecordingRequest{
+		RecordingID: bound.RecordingID,
+	}); err != nil {
+		t.Fatalf("StartRecording: %v", err)
+	}
+
+	if _, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.RecordingID,
+		Event:       interfaces.FactoryEvent{Id: "event-1", Type: "WORK_REQUEST"},
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
+	}
+
+	if _, err := service.FlushRecording(recordings.FlushRecordingRequest{
+		RecordingID: bound.RecordingID,
+	}); err != nil {
+		t.Fatalf("FlushRecording success path: %v", err)
+	}
+
+	finishedAt := time.Unix(1_700_000_000, 0).UTC()
+	if _, err := service.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.RecordingID,
+		FinishedAt:  finishedAt,
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{
+		RecordingID: bound.RecordingID,
+	})
+	if err != nil {
+		t.Fatalf("QueryRecordingStatus: %v", err)
+	}
+	if !status.Finished {
+		t.Fatalf("QueryRecordingStatus = %#v, want Finished true after finish", status)
+	}
+
+	_, err = service.BindRecording(recordings.BindRecordingRequest{RecordPath: ""})
+	if !errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		t.Fatalf("missing recording target error = %v, want ErrMissingRecordingTarget", err)
+	}
+
+	_, err = service.FlushRecording(recordings.FlushRecordingRequest{RecordingID: "missing-id"})
+	if !errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		t.Fatalf("missing recording id error = %v, want ErrMissingRecordingTarget", err)
+	}
+
+	failing, err := service.BindRecording(recordings.BindRecordingRequest{
+		RecordPath: "failing.replay.json",
+	})
+	if err != nil {
+		t.Fatalf("BindRecording for flush failure: %v", err)
+	}
+	if _, err := service.StartRecording(ctx, recordings.StartRecordingRequest{
+		RecordingID: failing.RecordingID,
+	}); err != nil {
+		t.Fatalf("StartRecording for flush failure: %v", err)
+	}
+	if _, err := service.RecordRecordingError(recordings.RecordRecordingErrorRequest{
+		RecordingID: failing.RecordingID,
+		Err:         errors.New("producer boundary failure"),
+	}); err != nil {
+		t.Fatalf("RecordRecordingError: %v", err)
+	}
+	_, err = service.FlushRecording(recordings.FlushRecordingRequest{
+		RecordingID: failing.RecordingID,
+	})
+	if !errors.Is(err, recordings.ErrRecordingFlushFailed) {
+		t.Fatalf("flush failure error = %v, want ErrRecordingFlushFailed", err)
+	}
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		t.Fatalf("flush failure must remain distinct from ErrMissingRecordingTarget")
+	}
+
+	_, err = service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.RecordingID,
+		Event:       interfaces.FactoryEvent{Id: "event-after-finish", Type: "WORK_STATE_CHANGE"},
+	})
+	if !errors.Is(err, recordings.ErrRecordingWriteRejected) {
+		t.Fatalf("post-finish write error = %v, want ErrRecordingWriteRejected", err)
+	}
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) || errors.Is(err, recordings.ErrRecordingFlushFailed) {
+		t.Fatalf("post-finish write rejection must remain distinct from other lifecycle typed errors")
+	}
+
+	if _, err := service.StopRecording(recordings.StopRecordingRequest{
+		RecordingID: bound.RecordingID,
+	}); err != nil {
+		t.Fatalf("StopRecording: %v", err)
 	}
 }
