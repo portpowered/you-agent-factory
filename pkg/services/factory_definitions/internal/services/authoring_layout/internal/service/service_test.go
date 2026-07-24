@@ -3,6 +3,8 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -123,6 +125,169 @@ func TestNewServiceRejectsMissingPorts(t *testing.T) {
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Ports{})
 	if err == nil || svc != nil {
 		t.Fatalf("NewService(empty ports) = (%v, %v), want deterministic dependency error", svc, err)
+	}
+}
+
+func TestAuthoringLayoutPublicSurfaceRejectsForbiddenOwnershipLeaks(t *testing.T) {
+	t.Parallel()
+
+	// Service contract is authoring-only: no catalog, compilation, validation,
+	// snapshot/portability, or distribution ownership methods.
+	serviceType := reflect.TypeOf((*authoringlayout.Service)(nil)).Elem()
+	// reflect reports interface methods in lexicographic order.
+	wantMethods := []string{
+		"CreateNamedFactory",
+		"ExpandFactoryLayout",
+		"FlattenFactoryLayout",
+		"PrepareFactoryLayout",
+		"ReplaceNamedFactory",
+	}
+	gotMethods := make([]string, 0, serviceType.NumMethod())
+	for i := 0; i < serviceType.NumMethod(); i++ {
+		gotMethods = append(gotMethods, serviceType.Method(i).Name)
+	}
+	if !reflect.DeepEqual(gotMethods, wantMethods) {
+		t.Fatalf("Service methods = %v, want authoring-only %v", gotMethods, wantMethods)
+	}
+	for _, forbidden := range []string{
+		"ListNamedFactories",
+		"DeleteNamedFactory",
+		"SetCurrentNamedFactoryPointer",
+		"CompileEffectiveFactorySource",
+		"ValidateStructuralFactoryDefinition",
+		"ValidateEffectiveFactoryDefinition",
+		"CaptureFactorySnapshot",
+		"PrepareFactorySnapshotImport",
+		"MaterializeFactorySnapshot",
+		"InstallPackagedFactory",
+		"CreateFactoryScaffold",
+		"ActivateNamedFactory",
+		"Save",
+	} {
+		if _, ok := serviceType.MethodByName(forbidden); ok {
+			t.Fatalf("Service exposes out-of-lease method %q", forbidden)
+		}
+	}
+
+	// Ports accept only exact injected effect funcs with Definitions-owned
+	// vocabulary — not peer implementations, Runtime/Petri, or Wire/root types.
+	portsType := reflect.TypeOf(authoringlayout.Ports{})
+	wantPorts := []string{"Prepare", "Flatten", "Expand", "Create", "Replace"}
+	if portsType.NumField() != len(wantPorts) {
+		t.Fatalf("Ports fields = %d, want %d exact effect ports", portsType.NumField(), len(wantPorts))
+	}
+	for i, wantName := range wantPorts {
+		field := portsType.Field(i)
+		if field.Name != wantName {
+			t.Fatalf("Ports field[%d] = %q, want %q", i, field.Name, wantName)
+		}
+		if field.Type.Kind() != reflect.Func {
+			t.Fatalf("Ports.%s type = %v, want func effect port", field.Name, field.Type)
+		}
+		assertAuthoringLayoutSurfaceTypesAllowed(t, "Ports."+field.Name, field.Type)
+	}
+
+	// Construction API takes only Ports — callers cannot select peer services
+	// or Wire/root composition ownership through authoring_layout wire.
+	ctorType := reflect.TypeOf(authoringlayoutwire.NewService)
+	if ctorType.NumIn() != 1 || ctorType.In(0) != portsType {
+		t.Fatalf("NewService inputs = %v, want exactly Ports", ctorType)
+	}
+	if ctorType.NumOut() != 2 ||
+		ctorType.Out(0) != serviceType ||
+		ctorType.Out(1) != reflect.TypeOf((*error)(nil)).Elem() {
+		t.Fatalf("NewService outputs = %v, want (Service, error)", ctorType)
+	}
+
+	// Observable runtime proof: construct and exercise authoring through exact
+	// ports alone, with no peer/Wire/root collaborator injected.
+	payload := []byte(`{"name":"surface"}`)
+	prepared := factorydefinitions.PreparedFactoryLayoutPayload{Canonical: payload}
+	var prepareCalls int
+	svc, err := authoringlayoutwire.NewService(authoringlayout.Ports{
+		Prepare: func(_ context.Context, name string, got []byte) (factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			prepareCalls++
+			if name != "surface" || string(got) != string(payload) {
+				t.Fatalf("Prepare got name=%q payload=%q", name, got)
+			}
+			return prepared, nil
+		},
+		Flatten: func(string) ([]byte, error) { return payload, nil },
+		Expand: func(string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			return "/factories/surface", factorydefinitions.LayoutExpansionReport{}, nil
+		},
+		Create:  func(string, string, factorydefinitions.PreparedFactoryLayoutPayload) (string, error) { return "/factories/surface", nil },
+		Replace: func(string, string, factorydefinitions.PreparedFactoryLayoutPayload) (string, error) { return "/factories/surface", nil },
+	})
+	if err != nil {
+		t.Fatalf("NewService from exact ports: %v", err)
+	}
+	result, err := svc.PrepareFactoryLayout(context.Background(), factorydefinitions.PrepareFactoryLayoutRequest{
+		Name: "surface", Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout through exact ports: %v", err)
+	}
+	if string(result.Prepared.Canonical) != string(payload) || prepareCalls != 1 {
+		t.Fatalf("prepare via exact ports = %#v calls=%d", result, prepareCalls)
+	}
+}
+
+func assertAuthoringLayoutSurfaceTypesAllowed(t *testing.T, path string, typ reflect.Type) {
+	t.Helper()
+	switch typ.Kind() {
+	case reflect.Func:
+		for i := 0; i < typ.NumIn(); i++ {
+			assertAuthoringLayoutSurfaceTypesAllowed(t, path+".in", typ.In(i))
+		}
+		for i := 0; i < typ.NumOut(); i++ {
+			assertAuthoringLayoutSurfaceTypesAllowed(t, path+".out", typ.Out(i))
+		}
+		return
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan, reflect.Map:
+		if typ.Kind() == reflect.Map {
+			assertAuthoringLayoutSurfaceTypesAllowed(t, path+".key", typ.Key())
+		}
+		assertAuthoringLayoutSurfaceTypesAllowed(t, path+".elem", typ.Elem())
+		return
+	case reflect.Interface:
+		if typ == reflect.TypeOf((*error)(nil)).Elem() || typ == reflect.TypeOf((*context.Context)(nil)).Elem() {
+			return
+		}
+		t.Fatalf("%s exposes interface type %v outside Definitions-owned effect vocabulary", path, typ)
+		return
+	}
+
+	pkg := typ.PkgPath()
+	if authoringLayoutSurfacePackageAllowed(pkg) {
+		// Definitions-owned value types are opaque here; do not walk nested fields.
+		return
+	}
+	for _, forbiddenPrefix := range []string{
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions",
+		"github.com/portpowered/infinite-you/pkg/services/workers",
+		"github.com/portpowered/infinite-you/pkg/services/automations",
+		"github.com/portpowered/infinite-you/pkg/wire",
+		"github.com/portpowered/infinite-you/pkg/root",
+	} {
+		if pkg == forbiddenPrefix || strings.HasPrefix(pkg, forbiddenPrefix+"/") {
+			t.Fatalf("%s exposes type %v from forbidden ownership package %q", path, typ, pkg)
+		}
+	}
+	t.Fatalf("%s exposes type %v from non-Definitions package %q", path, typ, pkg)
+}
+
+func authoringLayoutSurfacePackageAllowed(pkg string) bool {
+	const definitionsRoot = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	const definitionsContracts = definitionsRoot + "/contracts"
+	switch {
+	case pkg == "", pkg == "context", pkg == definitionsRoot:
+		return true
+	case pkg == definitionsContracts, strings.HasPrefix(pkg, definitionsContracts+"/"):
+		return true
+	default:
+		return false
 	}
 }
 
