@@ -274,8 +274,13 @@ cross-owner peer rule: importing an inventoried peer root
 (`pkg/services/<peer>`) is allowed, and same-owner non-root imports do not fire
 the peer rule. Peer implementation and nested-subservice imports fail with a
 diagnostic that names the importer owner and peer owner and directs remediation
-to the peer root contract. Exact documented leaf-effect ports remain pairwise
-exceptions, not a private-root allowlist.
+to the peer root contract. Introducing a previously unlisted deeper path under
+an inventoried owner is rejected automatically; do not edit a private-root
+catalog to make that fail. Exact documented leaf-effect ports remain pairwise
+importer→import exceptions, not a private-root allowlist. Peer-import debt in
+`ownership-boundary-baseline.json` stays deletion-only/ratchet: clear the
+import (or delete the exact baseline entry), and do not relocate production
+service packages solely to satisfy the checker.
 
 The guard rejects new production imports from `pkg/factory/**`, `pkg/work/**`,
 `pkg/workers/**`, and `pkg/models/**` into `pkg/transports/**`. Generated OpenAPI
