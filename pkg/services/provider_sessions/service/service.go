@@ -138,6 +138,26 @@ func (s *inspectionService) Details(provider, kind, id string) (providersessions
 	}
 }
 
+// Inspect validates and inspects a detached typed SessionRef through the same
+// storage-backed lookup path as Details, returning a plain InspectResult.
+func (s *inspectionService) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	if strings.TrimSpace(req.Session.ID) == "" {
+		return providersessions.InspectResult{}, providersessions.ErrInvalidIdentifier
+	}
+	detail, err := s.Details(string(req.Session.Provider), req.Session.Kind, req.Session.ID)
+	if err != nil {
+		return providersessions.InspectResult{}, err
+	}
+	return providersessions.InspectResult{
+		Session: providersessions.SessionRef{
+			Provider: detail.ProviderSession.Provider,
+			Kind:     detail.ProviderSession.Kind,
+			ID:       detail.ProviderSession.ID,
+		},
+		Source: detail.Source,
+	}, nil
+}
+
 func normalizeProvider(provider string) (providersessions.Provider, error) {
 	switch strings.TrimSpace(provider) {
 	case string(providersessions.ProviderCodex):

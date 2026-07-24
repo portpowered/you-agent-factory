@@ -72,9 +72,43 @@ type Service interface {
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
 	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
 	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
-	// invoke this peer API. Later additive slices may accept typed SessionRef
-	// identity without replacing this singular root.
+	// invoke this peer API. Additive typed SessionRef slices (Inspect) share this
+	// singular root without replacing Details.
 	Details(provider, kind, id string) (Detail, error)
+
+	// Inspect validates and inspects a detached typed SessionRef identity in the
+	// providers.SessionRef vocabulary (provider + kind + id). Peers receive a
+	// detached InspectResult or a typed Provider Sessions failure such as
+	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. This slice
+	// does not import Providers catalog/execution, enumeration, availability,
+	// capability, or Workers selection-policy types.
+	Inspect(InspectRequest) (InspectResult, error)
+}
+
+// SessionRef is the detached typed provider-session identity in the
+// providers.SessionRef vocabulary (provider + kind + id). Until CTR-PROV
+// publishes the canonical Providers type, this Provider Sessions-owned value is
+// the peer identity accepted by additive root slices. It does not carry
+// Providers catalog/execution or Workers selection-policy fields.
+type SessionRef struct {
+	Provider Provider
+	Kind     string
+	ID       string
+}
+
+// InspectRequest asks the root Service to validate and inspect one detached
+// SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
+type InspectRequest struct {
+	Session SessionRef
+}
+
+// InspectResult is the detached success outcome for typed SessionRef
+// validation/inspection. Normalized transcript/detail projection remains an
+// additive companion slice on the same root Service.
+type InspectResult struct {
+	Session SessionRef
+	Source  SourceMetadata
 }
 
 type Provider string

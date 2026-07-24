@@ -16,6 +16,10 @@ type rootServiceFake struct {
 	detail    providersessions.Detail
 	detailErr error
 
+	inspect       providersessions.InspectResult
+	inspectErr    error
+	lastInspected providersessions.SessionRef
+
 	lastProvider string
 	lastKind     string
 	lastID       string
@@ -31,6 +35,14 @@ func (f *rootServiceFake) Details(provider, kind, id string) (providersessions.D
 		return providersessions.Detail{}, f.detailErr
 	}
 	return f.detail, nil
+}
+
+func (f *rootServiceFake) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	f.lastInspected = req.Session
+	if f.inspectErr != nil {
+		return providersessions.InspectResult{}, f.inspectErr
+	}
+	return f.inspect, nil
 }
 
 func TestRootService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
@@ -116,6 +128,90 @@ func TestRootService_Characterization_TypedFailures(t *testing.T) {
 			fake := &rootServiceFake{detailErr: test.err}
 			var svc providersessions.Service = fake
 			_, err := svc.Details("cursor", providersessions.SessionIDKind, "missing")
+			if !errors.Is(err, test.err) {
+				t.Fatalf("err = %v, want typed %v", err, test.err)
+			}
+			var lookupErr *providersessions.LookupError
+			if errors.As(test.err, &lookupErr) {
+				var got *providersessions.LookupError
+				if !errors.As(err, &got) {
+					t.Fatalf("err = %T, want LookupError", err)
+				}
+				if got.Provider != providersessions.ProviderCursor || got.Root != "/tmp/cursor-root" {
+					t.Fatalf("LookupError = %#v", got)
+				}
+				if !errors.Is(err, providersessions.ErrSessionNotFound) {
+					t.Fatalf("LookupError should unwrap to ErrSessionNotFound, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestRootService_Inspect_Characterization_TypedSessionRefSuccess(t *testing.T) {
+	modifiedAt := time.Date(2026, 7, 24, 3, 0, 0, 0, time.UTC)
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-inspect-1",
+	}
+	fake := &rootServiceFake{
+		inspect: providersessions.InspectResult{
+			Session: ref,
+			Source: providersessions.SourceMetadata{
+				ModifiedAt:   &modifiedAt,
+				RelativePath: "2026/07/24/rollout-session-inspect-1.jsonl",
+				SizeBytes:    17,
+			},
+		},
+	}
+
+	var svc providersessions.Service = fake
+	result, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if fake.lastInspected != ref {
+		t.Fatalf("fake recorded SessionRef = %#v, want %#v", fake.lastInspected, ref)
+	}
+	if result.Session != ref {
+		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
+	}
+	if result.Source.RelativePath == "" || result.Source.ModifiedAt == nil || result.Source.SizeBytes != 17 {
+		t.Fatalf("InspectResult.Source = %#v", result.Source)
+	}
+}
+
+func TestRootService_Inspect_Characterization_TypedFailures(t *testing.T) {
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCursor,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "missing-session",
+	}
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "unsupported provider", err: providersessions.ErrUnsupportedProvider},
+		{name: "unsupported kind", err: providersessions.ErrUnsupportedKind},
+		{name: "invalid identifier", err: providersessions.ErrInvalidIdentifier},
+		{name: "session not found", err: providersessions.ErrSessionNotFound},
+		{name: "ambiguous session", err: providersessions.ErrAmbiguousSessionFile},
+		{
+			name: "lookup wraps session not found",
+			err: &providersessions.LookupError{
+				Provider: providersessions.ProviderCursor,
+				Root:     "/tmp/cursor-root",
+				Err:      providersessions.ErrSessionNotFound,
+			},
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			fake := &rootServiceFake{inspectErr: test.err}
+			var svc providersessions.Service = fake
+			_, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
 			if !errors.Is(err, test.err) {
 				t.Fatalf("err = %v, want typed %v", err, test.err)
 			}

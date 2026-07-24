@@ -241,6 +241,12 @@ func (role *strictProviderSessionRole) Details(provider, kind, id string) (provi
 	return want.detail, want.err
 }
 
+func (role *strictProviderSessionRole) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	role.t.Helper()
+	role.t.Fatalf("unexpected Provider Sessions Inspect(%#v)", req.Session)
+	return providersessions.InspectResult{}, nil
+}
+
 func newTestServerWithProviderSessionCalls(t *testing.T, calls ...providerSessionCall) *Server {
 	t.Helper()
 	logger, _ := zap.NewDevelopment()
