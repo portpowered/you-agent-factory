@@ -22,6 +22,8 @@ the repository's customer-level functional tests.
   fully mapped into named `runtime_api-delete-*` deletion-only batches
   (FND-007-003). `smoke` and `workflow` rows are fully mapped into named
   `smoke-delete-*` and `workflow-delete-*` split batches (FND-007-004).
+  `guards_batch`, `bootstrap_portability`, and `replay_contracts` rows are fully
+  mapped into named `*-delete-*` split batches (FND-007-005).
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.
