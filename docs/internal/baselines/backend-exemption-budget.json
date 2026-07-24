@@ -543,6 +543,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_sessions/execution_owned_helpers.go#EvaluateLifecycleControl",
+      "owner": "backend-maintainers",
+      "removalReason": "split EvaluateLifecycleControl into per-operation classifiers and remove this exemption once root-owned lifecycle helpers stay under the cyclomatic limit."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/internal/applicationopening/service_test.go#TestOpenApplicationResolvesThenOpensAndBindsExactInputs",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
@@ -640,12 +646,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_sessions/internal/execution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/internal/execution/lifecycle.go#EvaluateLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },

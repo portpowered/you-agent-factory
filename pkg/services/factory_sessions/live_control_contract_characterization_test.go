@@ -153,12 +153,10 @@ func (fake *peerLiveControlFake) applyLiveControl(
 	}
 }
 
-func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
-	t.Parallel()
-
-	fake := newPeerLiveControlFake()
-	sessionID := "live-session-alpha"
-	folder := "/workspace/factories/demo"
+func seedRunningLiveControlSession(
+	fake *peerLiveControlFake,
+	sessionID, folder string,
+) factorysessions.LiveControlSnapshot {
 	fake.openResults[folder] = &factorysessions.LiveControlOpenResult{
 		SessionID:  sessionID,
 		FolderPath: folder,
@@ -186,6 +184,40 @@ func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
 		Runtime:          snapshot.Runtime,
 		RuntimeAvailable: true,
 	}}
+	return snapshot
+}
+
+func requireLiveOpenIdentity(
+	t *testing.T,
+	opened *factorysessions.LiveControlOpenResult,
+	sessionID string,
+) {
+	t.Helper()
+	if opened == nil || opened.SessionID != sessionID || opened.Session == nil || opened.Session.ID != sessionID {
+		t.Fatalf("OpenFactorySession result = %#v, want stable session identity %q", opened, sessionID)
+	}
+}
+
+func requireAcceptedPause(
+	t *testing.T,
+	paused factorysessions.LiveControlResult,
+	sessionID string,
+) {
+	t.Helper()
+	if paused.SessionID != sessionID ||
+		paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
+		paused.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("PauseLiveFactorySession = %#v, want accepted pause", paused)
+	}
+}
+
+func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
+	t.Parallel()
+
+	fake := newPeerLiveControlFake()
+	sessionID := "live-session-alpha"
+	folder := "/workspace/factories/demo"
+	seedRunningLiveControlSession(fake, sessionID, folder)
 
 	var service factorysessions.Service = fake
 	ctx := context.Background()
@@ -194,9 +226,7 @@ func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if opened == nil || opened.SessionID != sessionID || opened.Session == nil || opened.Session.ID != sessionID {
-		t.Fatalf("OpenFactorySession result = %#v, want stable session identity %q", opened, sessionID)
-	}
+	requireLiveOpenIdentity(t, opened, sessionID)
 
 	listed, err := service.ListFactorySessions(ctx)
 	if err != nil {
@@ -218,11 +248,7 @@ func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
 	}
-	if paused.SessionID != sessionID ||
-		paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
-		paused.Status != factorysessions.LifecycleStatusPaused {
-		t.Fatalf("PauseLiveFactorySession = %#v, want accepted pause", paused)
-	}
+	requireAcceptedPause(t, paused, sessionID)
 }
 
 func TestLiveControlRootContract_TypedMissingAndLifecycleFailures(t *testing.T) {

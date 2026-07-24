@@ -59,89 +59,97 @@ func (fake *peerIdentitySurfaceFake) NormalizeProvider(
 	return factorysessions.ResolvedIdentity{}, factorysessions.ErrLogicalTargetNotFound
 }
 
+func defaultIdentityRequest(folder string, target factorysessions.TargetRef) factorysessions.IdentityNormalizeRequest {
+	return factorysessions.IdentityNormalizeRequest{
+		BackendScopeID: "backend-a",
+		FolderPath:     folder,
+		Target:         target,
+	}
+}
+
+func seedDefaultResolvedIdentity(fake *peerIdentitySurfaceFake, folder, key string, requests ...factorysessions.IdentityNormalizeRequest) {
+	resolved := factorysessions.ResolvedIdentity{
+		Reference: factorysessions.CanonicalLogicalTargetReference{
+			BackendScopeID: "backend-a",
+			FolderPath:     folder,
+			Kind:           factorysessions.LogicalTargetKindDefault,
+		},
+		LogicalSessionKeyID: key,
+		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
+			FolderPath: folder,
+			Kind:       string(factorysessions.LogicalTargetKindDefault),
+		},
+	}
+	for _, request := range requests {
+		fake.bySignature[identityRequestSignature(request)] = resolved
+	}
+}
+
+func seedNamedResolvedIdentity(fake *peerIdentitySurfaceFake, request factorysessions.IdentityNormalizeRequest, key string) {
+	fake.bySignature[identityRequestSignature(request)] = factorysessions.ResolvedIdentity{
+		Reference: factorysessions.CanonicalLogicalTargetReference{
+			BackendScopeID: request.BackendScopeID,
+			FolderPath:     request.FolderPath,
+			Kind:           factorysessions.LogicalTargetKindNamed,
+			NamedTarget:    request.Target.Name,
+		},
+		LogicalSessionKeyID: key,
+		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
+			FolderPath:  request.FolderPath,
+			Kind:        string(factorysessions.LogicalTargetKindNamed),
+			NamedTarget: ptr(request.Target.Name),
+		},
+	}
+}
+
+func seedProviderResolvedIdentity(fake *peerIdentitySurfaceFake, request factorysessions.IdentityNormalizeProviderRequest, key string) {
+	boundary := request.Boundary
+	fake.bySignature[identityProviderSignature(request)] = factorysessions.ResolvedIdentity{
+		Reference: factorysessions.CanonicalLogicalTargetReference{
+			BackendScopeID: request.BackendScopeID,
+			FolderPath:     request.FolderPath,
+			Kind:           factorysessions.LogicalTargetKindProvider,
+			Provider: &factorysessions.LogicalTargetProviderBoundary{
+				Provider: boundary.Provider,
+				Kind:     boundary.Kind,
+				Boundary: boundary.Boundary,
+			},
+		},
+		LogicalSessionKeyID: key,
+		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
+			FolderPath: request.FolderPath,
+			Kind:       string(factorysessions.LogicalTargetKindProvider),
+			ProviderBoundary: &factorysessions.RuntimeLogicalProviderBoundary{
+				Provider: boundary.Provider,
+				Kind:     boundary.Kind,
+				Boundary: boundary.Boundary,
+			},
+		},
+	}
+}
+
 func TestIdentityRootContract_EquivalentTargetsShareLogicalSessionKey(t *testing.T) {
 	t.Parallel()
 
 	fake := newPeerIdentitySurfaceFake()
 	sharedKey := "lsk-equivalent-default"
-	canonicalFolder := "/workspace/factories/demo"
-	resolved := factorysessions.ResolvedIdentity{
-		Reference: factorysessions.CanonicalLogicalTargetReference{
-			BackendScopeID: "backend-a",
-			FolderPath:     canonicalFolder,
-			Kind:           factorysessions.LogicalTargetKindDefault,
-		},
-		LogicalSessionKeyID: sharedKey,
-		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
-			FolderPath: canonicalFolder,
-			Kind:       string(factorysessions.LogicalTargetKindDefault),
-		},
-	}
+	folder := "/workspace/factories/demo"
+	explicitDefault := defaultIdentityRequest(folder, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	equivalentEmptyKind := defaultIdentityRequest(folder, factorysessions.TargetRef{})
+	seedDefaultResolvedIdentity(fake, folder, sharedKey, explicitDefault, equivalentEmptyKind)
 
-	explicitDefault := factorysessions.IdentityNormalizeRequest{
-		BackendScopeID: "backend-a",
-		FolderPath:     canonicalFolder,
-		Target:         factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-	}
-	equivalentEmptyKind := factorysessions.IdentityNormalizeRequest{
-		BackendScopeID: "backend-a",
-		FolderPath:     canonicalFolder,
-		Target:         factorysessions.TargetRef{},
-	}
-	fake.bySignature[identityRequestSignature(explicitDefault)] = resolved
-	fake.bySignature[identityRequestSignature(equivalentEmptyKind)] = resolved
-
-	named := factorysessions.IdentityNormalizeRequest{
-		BackendScopeID: "backend-a",
-		FolderPath:     canonicalFolder,
-		Target:         factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
-	}
-	fake.bySignature[identityRequestSignature(named)] = factorysessions.ResolvedIdentity{
-		Reference: factorysessions.CanonicalLogicalTargetReference{
-			BackendScopeID: "backend-a",
-			FolderPath:     canonicalFolder,
-			Kind:           factorysessions.LogicalTargetKindNamed,
-			NamedTarget:    "beta",
-		},
-		LogicalSessionKeyID: "lsk-named-beta",
-		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
-			FolderPath:  canonicalFolder,
-			Kind:        string(factorysessions.LogicalTargetKindNamed),
-			NamedTarget: ptr("beta"),
-		},
-	}
-
+	named := defaultIdentityRequest(folder, factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"})
+	seedNamedResolvedIdentity(fake, named, "lsk-named-beta")
 	provider := factorysessions.IdentityNormalizeProviderRequest{
 		BackendScopeID: "backend-a",
-		FolderPath:     canonicalFolder,
+		FolderPath:     folder,
 		Boundary: factorysessions.LogicalTargetProviderBoundary{
 			Provider: "cursor",
 			Kind:     "workspace",
 			Boundary: "team-alpha",
 		},
 	}
-	fake.bySignature[identityProviderSignature(provider)] = factorysessions.ResolvedIdentity{
-		Reference: factorysessions.CanonicalLogicalTargetReference{
-			BackendScopeID: "backend-a",
-			FolderPath:     canonicalFolder,
-			Kind:           factorysessions.LogicalTargetKindProvider,
-			Provider: &factorysessions.LogicalTargetProviderBoundary{
-				Provider: "cursor",
-				Kind:     "workspace",
-				Boundary: "team-alpha",
-			},
-		},
-		LogicalSessionKeyID: "lsk-provider-team-alpha",
-		RuntimeTarget: factorysessions.RuntimeLogicalTarget{
-			FolderPath: canonicalFolder,
-			Kind:       string(factorysessions.LogicalTargetKindProvider),
-			ProviderBoundary: &factorysessions.RuntimeLogicalProviderBoundary{
-				Provider: "cursor",
-				Kind:     "workspace",
-				Boundary: "team-alpha",
-			},
-		},
-	}
+	seedProviderResolvedIdentity(fake, provider, "lsk-provider-team-alpha")
 
 	first, err := fake.Normalize(explicitDefault)
 	if err != nil {

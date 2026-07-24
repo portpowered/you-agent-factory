@@ -151,25 +151,20 @@ func TestResponseStreamRootContract_SubscriberReceivesOnlyNewerEvents(t *testing
 	}
 }
 
-func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *testing.T) {
-	t.Parallel()
-
-	fake := newPeerResponseStreamFake()
-	staleSession := "sess-stale"
-	gapSession := "sess-gap"
-	cancelSession := "sess-cancel"
-
-	fake.eventsBySession[staleSession] = []factorysessions.ResponseStreamEvent{{
-		FactorySessionID: staleSession,
-		EventID:          "evt-stale",
-		Sequence:         5,
+func progressStreamEvent(sessionID, eventID string, sequence int64) factorysessions.ResponseStreamEvent {
+	return factorysessions.ResponseStreamEvent{
+		FactorySessionID: sessionID,
+		EventID:          eventID,
+		Sequence:         sequence,
 		Kind:             factorysessions.ResponseEventKindProgress,
 		Phase:            factorysessions.ResponseEventPhaseUpdated,
 		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
 		Payload:          json.RawMessage(`{}`),
-	}}
-	fake.staleCursors[staleSession] = true
+	}
+}
 
+func seedGapStreamEvent(t *testing.T, fake *peerResponseStreamFake, sessionID string) {
+	t.Helper()
 	gapPayload, err := json.Marshal(factorysessions.ResponseStreamGap{
 		FromSequence:           1,
 		ToSequence:             3,
@@ -179,8 +174,8 @@ func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *test
 	if err != nil {
 		t.Fatalf("marshal gap: %v", err)
 	}
-	fake.eventsBySession[gapSession] = []factorysessions.ResponseStreamEvent{{
-		FactorySessionID: gapSession,
+	fake.eventsBySession[sessionID] = []factorysessions.ResponseStreamEvent{{
+		FactorySessionID: sessionID,
 		EventID:          "evt-gap",
 		Sequence:         4,
 		Kind:             factorysessions.ResponseStreamKindGap,
@@ -188,22 +183,25 @@ func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *test
 		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
 		Payload:          gapPayload,
 	}}
+}
 
-	fake.eventsBySession[cancelSession] = []factorysessions.ResponseStreamEvent{{
-		FactorySessionID: cancelSession,
-		EventID:          "evt-cancel",
-		Sequence:         1,
-		Kind:             factorysessions.ResponseEventKindProgress,
-		Phase:            factorysessions.ResponseEventPhaseUpdated,
-		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
-		Payload:          json.RawMessage(`{}`),
-	}}
+func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *testing.T) {
+	t.Parallel()
+
+	fake := newPeerResponseStreamFake()
+	staleSession, gapSession, cancelSession := "sess-stale", "sess-gap", "sess-cancel"
+	fake.eventsBySession[staleSession] = []factorysessions.ResponseStreamEvent{
+		progressStreamEvent(staleSession, "evt-stale", 5),
+	}
+	fake.staleCursors[staleSession] = true
+	seedGapStreamEvent(t, fake, gapSession)
+	fake.eventsBySession[cancelSession] = []factorysessions.ResponseStreamEvent{
+		progressStreamEvent(cancelSession, "evt-cancel", 1),
+	}
 
 	var service factorysessions.Service = fake
-
-	_, err = service.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseStreamSubscriptionRequest{
-		SessionID:     staleSession,
-		AfterSequence: 1,
+	_, err := service.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseStreamSubscriptionRequest{
+		SessionID: staleSession, AfterSequence: 1,
 	})
 	if !errors.Is(err, factorysessions.ErrResponseStreamStaleCursor) {
 		t.Fatalf("stale cursor = %v, want ErrResponseStreamStaleCursor", err)
@@ -213,8 +211,7 @@ func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *test
 	}
 
 	cursor, err := service.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseStreamSubscriptionRequest{
-		SessionID:     gapSession,
-		AfterSequence: 0,
+		SessionID: gapSession, AfterSequence: 0,
 	})
 	if err != nil {
 		t.Fatalf("gap SubscribeFactoryResponseEvents: %v", err)
@@ -235,8 +232,7 @@ func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *test
 	}
 
 	cancelCursor, err := service.SubscribeFactoryResponseEvents(context.Background(), factorysessions.ResponseStreamSubscriptionRequest{
-		SessionID:     cancelSession,
-		AfterSequence: 0,
+		SessionID: cancelSession, AfterSequence: 0,
 	})
 	if err != nil {
 		t.Fatalf("cancel SubscribeFactoryResponseEvents: %v", err)
@@ -249,7 +245,6 @@ func TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures(t *test
 	if !errors.Is(err, factorysessions.ErrResponseEventSubscriptionClosed) {
 		t.Fatalf("ErrResponseStreamSubscriptionClosed must alias ErrResponseEventSubscriptionClosed, got %v", err)
 	}
-
 	if errors.Is(err, factorysessions.ErrResponseStreamStaleCursor) {
 		t.Fatal("cancelled subscription must stay distinct from stale cursor")
 	}
