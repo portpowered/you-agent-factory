@@ -27,6 +27,10 @@ type fakeWorkersPeer struct {
 	lastWorkstationDispatchRequest workers.WorkstationDispatchRequest
 	workstationDispatchResult      workers.WorkstationDispatchResult
 	workstationDispatchErr         error
+
+	lastRunnerExecuteRequest workers.RunnerExecuteRequest
+	runnerExecuteResult      workers.RunnerExecuteResult
+	runnerExecuteErr         error
 }
 
 func (f *fakeWorkersPeer) InvokeModel(
@@ -53,6 +57,14 @@ func (f *fakeWorkersPeer) DispatchWorkstation(
 ) (workers.WorkstationDispatchResult, error) {
 	f.lastWorkstationDispatchRequest = request
 	return f.workstationDispatchResult, f.workstationDispatchErr
+}
+
+func (f *fakeWorkersPeer) ExecuteRunner(
+	_ context.Context,
+	request workers.RunnerExecuteRequest,
+) (workers.RunnerExecuteResult, error) {
+	f.lastRunnerExecuteRequest = request
+	return f.runnerExecuteResult, f.runnerExecuteErr
 }
 
 var _ workers.Service = (*fakeWorkersPeer)(nil)
@@ -249,6 +261,80 @@ func TestServiceRootContract_WorkstationDispatchTypedFailuresThroughSingularSeam
 			_, err := service.DispatchWorkstation(context.Background(), workers.WorkstationDispatchRequest{})
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("DispatchWorkstation error = %v, want %v", err, tc.err)
+			}
+		})
+	}
+}
+
+func TestServiceRootContract_RunnerExecuteSuccessThroughSingularSeam(t *testing.T) {
+	wantCapabilities := workers.NewCapabilities(
+		workers.RunnerOptionalCapabilitySupport{
+			Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+			Status:     workers.RunnerOptionalCapabilityStatusSupported,
+		},
+	)
+	want := workers.RunnerExecuteResult{
+		RunnerID:     workers.RunnerIDCodex,
+		Kind:         workers.RunnerKindBuiltIn,
+		Capabilities: wantCapabilities,
+		Outcome:      workers.OutcomeAccepted,
+		Output:       "runner-ok",
+	}
+	fake := &fakeWorkersPeer{runnerExecuteResult: want}
+	var service workers.Service = fake
+
+	request := workers.RunnerExecuteRequest{
+		RunnerID: workers.RunnerIDCodex,
+		Kind:     workers.RunnerKindBuiltIn,
+		Validation: workers.RunnerValidationRequest{
+			RunnerID: workers.RunnerIDCodex,
+			Kind:     workers.RunnerKindBuiltIn,
+			RequiredCapabilities: []workers.RunnerOptionalCapability{
+				workers.RunnerOptionalCapabilityWorkingDirectory,
+			},
+		},
+		Input:            "summarize the change",
+		WorkingDirectory: "/tmp/work",
+	}
+	result, err := service.ExecuteRunner(context.Background(), request)
+	if err != nil {
+		t.Fatalf("ExecuteRunner: %v", err)
+	}
+	if result.RunnerID != workers.RunnerIDCodex || result.Kind != workers.RunnerKindBuiltIn {
+		t.Fatalf("identity = %#v, want codex built_in", result)
+	}
+	if result.Outcome != workers.OutcomeAccepted || result.Output != "runner-ok" {
+		t.Fatalf("result = %#v, want ACCEPTED runner-ok", result)
+	}
+	if len(result.Capabilities.Optional) != 1 ||
+		result.Capabilities.Optional[0].Capability != workers.RunnerOptionalCapabilityWorkingDirectory {
+		t.Fatalf("capabilities = %#v, want working_directory support", result.Capabilities)
+	}
+	if fake.lastRunnerExecuteRequest.RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("routed request = %#v, want codex", fake.lastRunnerExecuteRequest)
+	}
+	if fake.lastRunnerExecuteRequest.Validation.Kind != workers.RunnerKindBuiltIn {
+		t.Fatalf("validation = %#v, want built_in kind", fake.lastRunnerExecuteRequest.Validation)
+	}
+}
+
+func TestServiceRootContract_RunnerExecuteTypedFailuresThroughSingularSeam(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid", err: workers.ErrInvalidRunnerRequest},
+		{name: "unsupported_capability", err: workers.ErrUnsupportedRunnerCapability},
+		{name: "execution_failed", err: workers.ErrRunnerExecutionFailed},
+		{name: "incomplete", err: workers.ErrIncompleteRunnerExecution},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeWorkersPeer{runnerExecuteErr: tc.err}
+			var service workers.Service = fake
+			_, err := service.ExecuteRunner(context.Background(), workers.RunnerExecuteRequest{})
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("ExecuteRunner error = %v, want %v", err, tc.err)
 			}
 		})
 	}

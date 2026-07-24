@@ -48,6 +48,17 @@ type Service interface {
 	// The request stays free of provider-native command/decode/session types
 	// and concrete provider identity switches.
 	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
+
+	// ExecuteRunner is the published Runner-neutral execution slice. Peers
+	// supply a plain RunnerExecuteRequest covering stable runner identity/
+	// kind, capability validation facts, and one neutral input shape, and
+	// receive a detached RunnerExecuteResult, or a typed Workers failure such
+	// as ErrInvalidRunnerRequest, ErrUnsupportedRunnerCapability,
+	// ErrRunnerExecutionFailed, or ErrIncompleteRunnerExecution. The request
+	// stays free of provider-native command/decode/session types and concrete
+	// provider identity switches; every runner strategy shares this one
+	// execution command shape.
+	ExecuteRunner(context.Context, RunnerExecuteRequest) (RunnerExecuteResult, error)
 }
 
 // ModelInvoker is the narrow Workers role that exposes only direct model
@@ -174,3 +185,75 @@ var ErrWorkstationDispatchSaturated = errors.New("Workers workstation-dispatch s
 // ErrIncompleteWorkstationDispatch reports that Workers could not complete
 // workstation dispatch from the supplied request.
 var ErrIncompleteWorkstationDispatch = errors.New("Workers workstation dispatch incomplete")
+
+// RunnerKind identifies the stable runner strategy family peers select without
+// concrete provider identity switches.
+type RunnerKind string
+
+const (
+	// RunnerKindBuiltIn names a Workers-owned built-in runner strategy.
+	RunnerKindBuiltIn RunnerKind = "built_in"
+	// RunnerKindCustom names a peer-supplied custom runner strategy that still
+	// uses the Runner-neutral request/result vocabulary.
+	RunnerKindCustom RunnerKind = "custom"
+)
+
+// RunnerValidationRequest carries Runner-neutral validation facts peers use to
+// express required capabilities against a stable runner identity/kind before
+// or alongside execution. It stays free of provider-native command/decode/
+// session types.
+type RunnerValidationRequest struct {
+	RunnerID             string
+	Kind                 RunnerKind
+	RequiredCapabilities []RunnerOptionalCapability
+}
+
+// RunnerValidationResult carries detached Runner-neutral validation outcomes
+// peers can consume from Workers root capability vocabulary only.
+type RunnerValidationResult struct {
+	RunnerID     string
+	Kind         RunnerKind
+	Capabilities RunnerCapabilities
+	Valid        bool
+}
+
+// RunnerExecuteRequest is the plain Workers-owned Runner-neutral execution
+// input covering stable runner identity/kind, capability validation facts, and
+// one shared input shape every runner strategy uses. It stays free of
+// provider-native command/decode/session types and concrete provider identity
+// switches.
+type RunnerExecuteRequest struct {
+	RunnerID         string
+	Kind             RunnerKind
+	Validation       RunnerValidationRequest
+	Input            string
+	WorkingDirectory string
+}
+
+// RunnerExecuteResult carries detached Runner-neutral execution success facts
+// peers can consume from Workers root types only.
+type RunnerExecuteResult struct {
+	RunnerID     string
+	Kind         RunnerKind
+	Capabilities RunnerCapabilities
+	Outcome      WorkOutcome
+	Output       string
+	Error        string
+}
+
+// ErrInvalidRunnerRequest reports a malformed or empty Runner-neutral request
+// peers can distinguish without importing provider/* or Petri/JavaScript
+// packages.
+var ErrInvalidRunnerRequest = errors.New("invalid Workers runner request")
+
+// ErrUnsupportedRunnerCapability reports that a Runner-neutral request required
+// a capability the selected runner does not support.
+var ErrUnsupportedRunnerCapability = errors.New("Workers runner capability unsupported")
+
+// ErrRunnerExecutionFailed reports a normalized Runner-neutral execution failure
+// peers can branch on without parsing provider-native decode details.
+var ErrRunnerExecutionFailed = errors.New("Workers runner execution failed")
+
+// ErrIncompleteRunnerExecution reports that Workers could not complete
+// Runner-neutral execution from the supplied request.
+var ErrIncompleteRunnerExecution = errors.New("Workers runner execution incomplete")

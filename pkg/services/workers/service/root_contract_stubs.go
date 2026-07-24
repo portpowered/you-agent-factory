@@ -46,3 +46,24 @@ func (s *Service) DispatchWorkstation(
 		workers.ErrIncompleteWorkstationDispatch,
 	)
 }
+
+// ExecuteRunner satisfies the published Workers root Runner-neutral execution
+// slice. Nested IMP-WRK runner/subservice wiring that routes concrete runner
+// strategies from this request remains out of scope for the CTR-WRK
+// root-contract packet; peers and characterization fakes consume the root
+// contracts directly.
+func (s *Service) ExecuteRunner(
+	_ context.Context,
+	_ workers.RunnerExecuteRequest,
+) (workers.RunnerExecuteResult, error) {
+	if s == nil {
+		return workers.RunnerExecuteResult{}, fmt.Errorf(
+			"%w: Worker execution service is required",
+			workers.ErrIncompleteRunnerExecution,
+		)
+	}
+	return workers.RunnerExecuteResult{}, fmt.Errorf(
+		"%w: concrete Workers Runner-neutral execution is not wired on the root yet",
+		workers.ErrIncompleteRunnerExecution,
+	)
+}
