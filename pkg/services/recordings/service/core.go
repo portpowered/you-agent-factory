@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -318,6 +320,85 @@ func (service *combinedService) BindReplayExecution(
 	return recordings.BindReplayExecutionResult{
 		Hooks: []recordings.ReplayHook{},
 	}, nil
+}
+
+func mapPortableArtifactError(err error, decodePath bool) error {
+	if err == nil {
+		return nil
+	}
+	var diagnostic *recordings.PortableRecordingDiagnostic
+	if errors.As(err, &diagnostic) && diagnostic != nil {
+		switch diagnostic.Code {
+		case recordings.PortableRecordingCodeInvalidDigest:
+			return recordings.ErrInvalidRecordingDigest
+		case recordings.PortableRecordingCodeInvalidSummary:
+			return recordings.ErrInvalidRecordingSummary
+		case "MALFORMED_RECORDING_CONTRACT":
+			if decodePath {
+				return recordings.ErrInvalidRecordingDecode
+			}
+			return recordings.ErrInvalidRecordingSummary
+		default:
+			// Identity/version and other validate failures surface as summary
+			// typed outcomes on the published artifact-export slice.
+			return recordings.ErrInvalidRecordingSummary
+		}
+	}
+	if decodePath {
+		return recordings.ErrInvalidRecordingDecode
+	}
+	return err
+}
+
+func (service *combinedService) BuildPortableArtifact(
+	request recordings.BuildPortableArtifactRequest,
+) (recordings.BuildPortableArtifactResult, error) {
+	recording, err := recordings.BuildPortableRecording(request.Facts)
+	if err != nil {
+		return recordings.BuildPortableArtifactResult{}, mapPortableArtifactError(err, false)
+	}
+	return recordings.BuildPortableArtifactResult{Recording: recording}, nil
+}
+
+func (service *combinedService) ValidatePortableArtifact(
+	request recordings.ValidatePortableArtifactRequest,
+) (recordings.ValidatePortableArtifactResult, error) {
+	if err := recordings.ValidatePortableRecording(request.Recording); err != nil {
+		return recordings.ValidatePortableArtifactResult{}, mapPortableArtifactError(err, false)
+	}
+	return recordings.ValidatePortableArtifactResult{}, nil
+}
+
+func (service *combinedService) DecodePortableArtifact(
+	request recordings.DecodePortableArtifactRequest,
+) (recordings.DecodePortableArtifactResult, error) {
+	if len(request.Payload) == 0 {
+		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidRecordingDecode
+	}
+	recording, err := recordings.DecodePortableRecording(bytes.NewReader(request.Payload))
+	if err != nil {
+		return recordings.DecodePortableArtifactResult{}, mapPortableArtifactError(err, true)
+	}
+	return recordings.DecodePortableArtifactResult{Recording: recording}, nil
+}
+
+func (service *combinedService) SummarizePortableArtifact(
+	request recordings.SummarizePortableArtifactRequest,
+) (recordings.SummarizePortableArtifactResult, error) {
+	recording := request.Recording
+	if strings.TrimSpace(recording.Session.ID) == "" {
+		return recordings.SummarizePortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	}
+	result := recordings.SummarizePortableArtifactResult{
+		SessionID: recording.Session.ID,
+		Status:    recording.Session.Status,
+		Artifacts: append([]recordings.PortableRecordingArtifactSummary{}, recording.Artifacts...),
+	}
+	if recording.Result != nil {
+		result.Availability = recording.Result.Availability
+		result.Failure = recording.Result.Failure
+	}
+	return result, nil
 }
 
 func NewService(

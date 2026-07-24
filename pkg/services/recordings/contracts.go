@@ -48,6 +48,19 @@ var ErrInvalidReplayArtifact = errors.New("invalid or corrupt replay artifact")
 // unsupported inputs (for example a missing artifact or empty schema version).
 var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 
+// ErrInvalidRecordingDigest reports that portable-recording digest fields fail
+// validation through the artifact-export root-contract slice.
+var ErrInvalidRecordingDigest = errors.New("invalid recording digest")
+
+// ErrInvalidRecordingSummary reports that portable-recording summary fields fail
+// validation through the artifact-export root-contract slice.
+var ErrInvalidRecordingSummary = errors.New("invalid recording summary")
+
+// ErrInvalidRecordingDecode reports that portable-recording decode input could
+// not be read as one valid recording document through the artifact-export
+// root-contract slice.
+var ErrInvalidRecordingDecode = errors.New("invalid recording decode")
+
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -248,6 +261,57 @@ type BindReplayExecutionResult struct {
 	CompletionDelivery CompletionDeliveryPlanner
 }
 
+// BuildPortableArtifactRequest is the plain portable-recording build request
+// peers send through the Recordings root artifact-export slice.
+type BuildPortableArtifactRequest struct {
+	Facts PortableRecordingCanonicalFacts
+}
+
+// BuildPortableArtifactResult is the plain detached portable-recording success
+// outcome for the artifact-export slice.
+type BuildPortableArtifactResult struct {
+	Recording PortableRecording
+}
+
+// ValidatePortableArtifactRequest is the plain portable-recording validate
+// request peers send through the Recordings root artifact-export slice.
+type ValidatePortableArtifactRequest struct {
+	Recording PortableRecording
+}
+
+// ValidatePortableArtifactResult is the plain validate success outcome.
+type ValidatePortableArtifactResult struct{}
+
+// DecodePortableArtifactRequest is the plain portable-recording decode request
+// peers send through the Recordings root artifact-export slice. Callers supply
+// encoded payload bytes only; nested implementation types are not part of this
+// request shape.
+type DecodePortableArtifactRequest struct {
+	Payload []byte
+}
+
+// DecodePortableArtifactResult is the plain detached decode success outcome.
+type DecodePortableArtifactResult struct {
+	Recording PortableRecording
+}
+
+// SummarizePortableArtifactRequest is the plain portable-recording
+// summary/availability request peers send through the Recordings root
+// artifact-export slice.
+type SummarizePortableArtifactRequest struct {
+	Recording PortableRecording
+}
+
+// SummarizePortableArtifactResult is the plain detached summary/availability
+// success outcome for one portable recording.
+type SummarizePortableArtifactResult struct {
+	SessionID    string
+	Status       string
+	Artifacts    []PortableRecordingArtifactSummary
+	Availability *PortableRecordingAvailability
+	Failure      *PortableRecordingFailureSummary
+}
+
 // Ledger is the append/subscribe capability surface embedded in the singular
 // Recordings root Service. Peers should depend on Service rather than treating
 // Ledger as a second peer-facing Recordings authority. Nested ledger storage
@@ -325,6 +389,19 @@ type Service interface {
 	// BindReplayExecution obtains the replay execution binding peers consume
 	// through the plain replay root-contract slice.
 	BindReplayExecution(BindReplayExecutionRequest) (BindReplayExecutionResult, error)
+
+	// BuildPortableArtifact builds one portable recording through the plain
+	// artifact-export root-contract slice.
+	BuildPortableArtifact(BuildPortableArtifactRequest) (BuildPortableArtifactResult, error)
+	// ValidatePortableArtifact validates one portable recording through the
+	// plain artifact-export root-contract slice.
+	ValidatePortableArtifact(ValidatePortableArtifactRequest) (ValidatePortableArtifactResult, error)
+	// DecodePortableArtifact decodes and validates one portable recording
+	// payload through the plain artifact-export root-contract slice.
+	DecodePortableArtifact(DecodePortableArtifactRequest) (DecodePortableArtifactResult, error)
+	// SummarizePortableArtifact returns detached summary/availability outcomes
+	// for one portable recording through the plain artifact-export slice.
+	SummarizePortableArtifact(SummarizePortableArtifactRequest) (SummarizePortableArtifactResult, error)
 }
 
 // ProjectionService is the projection-query capability surface embedded in the
@@ -564,9 +641,13 @@ type SimpleDashboardSessionData struct {
 	ProviderSessions     []interfaces.FactoryWorldProviderSessionRecord
 }
 
-// Portable recording contracts are published at the Recordings service
-// boundary so Factory Sessions do not depend on artifact implementation
-// packages.
+// Portable recording value aliases remain published at the Recordings root so
+// existing Factory Sessions callers compile without importing artifact
+// implementation packages. Peers should prefer the plain artifact-export
+// methods on Service (BuildPortableArtifact, ValidatePortableArtifact,
+// DecodePortableArtifact, SummarizePortableArtifact) as the cross-service
+// source of truth rather than treating these type aliases or the package-level
+// Build/Validate/Decode helpers as the peer seam.
 type PortableRecording = recordingartifacts.Recording
 type PortableRecordingArtifactSummary = recordingartifacts.ArtifactSummary
 type PortableRecordingAvailability = recordingartifacts.AvailabilityDetail
@@ -578,6 +659,7 @@ type PortableRecordingCheckpointSummary = recordingartifacts.CheckpointSummary
 type PortableRecordingDiagnostic = recordingartifacts.Diagnostic
 type PortableRecordingEventSummary = recordingartifacts.EventSummary
 type PortableRecordingFailureSummary = recordingartifacts.FailureSummary
+type PortableRecordingResult = recordingartifacts.ResultProjection
 type PortableRecordingWriter = recordingartifacts.Writer
 type RecordingTemporaryFile = recordingartifacts.TemporaryFile
 type RecordingMakeDirectories = recordingartifacts.MakeDirectories
@@ -592,6 +674,9 @@ const (
 	PortableRecordingCodeInvalidSummary = recordingartifacts.CodeInvalidSummary
 )
 
+// Legacy package-level helpers remain for existing callers. Peers should prefer
+// the plain artifact-export methods on Service as the cross-service source of
+// truth for build/validate/decode outcomes.
 var (
 	BuildPortableRecording    = recordingartifacts.Build
 	DecodePortableRecording   = recordingartifacts.DecodeAndValidate

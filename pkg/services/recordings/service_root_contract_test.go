@@ -2,6 +2,7 @@ package recordings_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -380,6 +381,138 @@ func (fake *peerRootServiceFake) BindReplayExecution(
 	}, nil
 }
 
+func peerArtifactDigestOK(value string) bool {
+	const prefix = "sha256:"
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	hexPart := value[len(prefix):]
+	if len(hexPart) != 64 {
+		return false
+	}
+	for _, r := range hexPart {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func (fake *peerRootServiceFake) BuildPortableArtifact(
+	request recordings.BuildPortableArtifactRequest,
+) (recordings.BuildPortableArtifactResult, error) {
+	facts := request.Facts
+	if strings.TrimSpace(facts.SessionID) == "" {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	}
+	if !peerArtifactDigestOK(facts.SourceHash) || !peerArtifactDigestOK(facts.PolicyHash) {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	}
+	artifacts := make([]recordings.PortableRecordingArtifactSummary, 0, len(facts.Artifacts))
+	for _, artifact := range facts.Artifacts {
+		if !peerArtifactDigestOK(artifact.ContentHash) {
+			return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+		}
+		artifacts = append(artifacts, recordings.PortableRecordingArtifactSummary{
+			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
+			Label: artifact.Label, ContentHash: artifact.ContentHash,
+			SizeBytes: artifact.SizeBytes, CreatedAt: artifact.CreatedAt.UTC(),
+		})
+	}
+	argumentsDigest := strings.TrimSpace(facts.ArgumentsDigest)
+	if argumentsDigest == "" {
+		argumentsDigest = facts.SourceHash
+	} else if !peerArtifactDigestOK(argumentsDigest) {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	}
+	recording := recordings.PortableRecording{
+		RecordingKind:              recordings.KindJavaScriptFactorySession,
+		SchemaVersion:              "2",
+		ReplayCompatibilityVersion: "1",
+		ArgumentsDigest:            argumentsDigest,
+		PolicyHash:                 facts.PolicyHash,
+		Artifacts:                  artifacts,
+	}
+	recording.Session.ID = facts.SessionID
+	recording.Session.Status = facts.Status
+	recording.Session.OrchestratorKind = facts.OrchestratorKind
+	recording.Source.Ref = facts.SourceRef
+	recording.Source.Hash = facts.SourceHash
+	if facts.Result != nil {
+		recording.Result = &recordings.PortableRecordingResult{
+			Status:        facts.Result.Status,
+			Mode:          facts.Result.Mode,
+			PrimaryResult: append(json.RawMessage{}, facts.Result.PrimaryResult...),
+			ArtifactIDs:   append([]string{}, facts.Result.ArtifactIDs...),
+			Failure:       facts.Result.Failure,
+			Availability:  facts.Result.Availability,
+		}
+	}
+	return recordings.BuildPortableArtifactResult{Recording: recording}, nil
+}
+
+func (fake *peerRootServiceFake) ValidatePortableArtifact(
+	request recordings.ValidatePortableArtifactRequest,
+) (recordings.ValidatePortableArtifactResult, error) {
+	recording := request.Recording
+	if recording.ArgumentsDigest != "" && !peerArtifactDigestOK(recording.ArgumentsDigest) {
+		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	}
+	if recording.Source.Hash != "" && !peerArtifactDigestOK(recording.Source.Hash) {
+		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	}
+	if recording.PolicyHash != "" && !peerArtifactDigestOK(recording.PolicyHash) {
+		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	}
+	for _, artifact := range recording.Artifacts {
+		if artifact.ContentHash != "" && !peerArtifactDigestOK(artifact.ContentHash) {
+			return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+		}
+	}
+	if strings.TrimSpace(recording.Session.ID) == "" {
+		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	}
+	return recordings.ValidatePortableArtifactResult{}, nil
+}
+
+func (fake *peerRootServiceFake) DecodePortableArtifact(
+	request recordings.DecodePortableArtifactRequest,
+) (recordings.DecodePortableArtifactResult, error) {
+	if len(request.Payload) == 0 {
+		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidRecordingDecode
+	}
+	var recording recordings.PortableRecording
+	if err := json.Unmarshal(request.Payload, &recording); err != nil {
+		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidRecordingDecode
+	}
+	if _, err := fake.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+		Recording: recording,
+	}); err != nil {
+		return recordings.DecodePortableArtifactResult{}, err
+	}
+	return recordings.DecodePortableArtifactResult{Recording: recording}, nil
+}
+
+func (fake *peerRootServiceFake) SummarizePortableArtifact(
+	request recordings.SummarizePortableArtifactRequest,
+) (recordings.SummarizePortableArtifactResult, error) {
+	recording := request.Recording
+	if strings.TrimSpace(recording.Session.ID) == "" {
+		return recordings.SummarizePortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	}
+	artifacts := append([]recordings.PortableRecordingArtifactSummary{}, recording.Artifacts...)
+	result := recordings.SummarizePortableArtifactResult{
+		SessionID: recording.Session.ID,
+		Status:    recording.Session.Status,
+		Artifacts: artifacts,
+	}
+	if recording.Result != nil {
+		result.Availability = recording.Result.Availability
+		result.Failure = recording.Result.Failure
+	}
+	return result, nil
+}
+
 func TestServiceRootContract_FakeImplementsAndExercisesSeam(t *testing.T) {
 	t.Parallel()
 
@@ -749,5 +882,118 @@ func TestReplayRootContract_SuccessAndTypedFailures(t *testing.T) {
 	})
 	if !errors.Is(err, recordings.ErrUnsupportedReplayBinding) {
 		t.Fatalf("empty-schema binding error = %v, want ErrUnsupportedReplayBinding", err)
+	}
+}
+
+func TestArtifactExportRootContract_SuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	fake := &peerRootServiceFake{}
+	var service recordings.Service = fake
+	createdAt := time.Unix(1_700_000_000, 0).UTC()
+	digest := func(character byte) string {
+		return "sha256:" + strings.Repeat(string(character), 64)
+	}
+
+	built, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		Facts: recordings.PortableRecordingCanonicalFacts{
+			SessionID:        "session-export-1",
+			Status:           "COMPLETED",
+			OrchestratorKind: "JAVASCRIPT",
+			SourceRef:        "workflow/export.js",
+			SourceHash:       digest('1'),
+			PolicyHash:       digest('2'),
+			Artifacts: []recordings.PortableRecordingCanonicalArtifact{{
+				ID: "artifact-result", Kind: "RESULT", Visibility: "PUBLIC",
+				Label: "Result", ContentHash: digest('3'), SizeBytes: 21, CreatedAt: createdAt,
+			}},
+			Result: &recordings.PortableRecordingCanonicalResult{
+				Status: "FINAL", Mode: "final",
+				PrimaryResult: json.RawMessage(`{"answer":"ok"}`),
+				ArtifactIDs:   []string{"artifact-result"},
+				Availability: &recordings.PortableRecordingAvailability{
+					Reason: "READY", Message: "available", Retryable: false,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildPortableArtifact success path: %v", err)
+	}
+	if built.Recording.Session.ID != "session-export-1" {
+		t.Fatalf("BuildPortableArtifact session = %#v, want session-export-1", built.Recording.Session)
+	}
+	if len(built.Recording.Artifacts) != 1 || built.Recording.Artifacts[0].ID != "artifact-result" {
+		t.Fatalf("BuildPortableArtifact artifacts = %#v, want detached canonical artifact result", built.Recording.Artifacts)
+	}
+
+	if _, err := service.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+		Recording: built.Recording,
+	}); err != nil {
+		t.Fatalf("ValidatePortableArtifact success path: %v", err)
+	}
+
+	summary, err := service.SummarizePortableArtifact(recordings.SummarizePortableArtifactRequest{
+		Recording: built.Recording,
+	})
+	if err != nil {
+		t.Fatalf("SummarizePortableArtifact success path: %v", err)
+	}
+	if summary.SessionID != "session-export-1" || summary.Status != "COMPLETED" {
+		t.Fatalf("SummarizePortableArtifact = %#v, want session/status summary", summary)
+	}
+	if summary.Availability == nil || summary.Availability.Reason != "READY" {
+		t.Fatalf("SummarizePortableArtifact availability = %#v, want READY", summary.Availability)
+	}
+	if len(summary.Artifacts) != 1 || summary.Artifacts[0].ID != "artifact-result" {
+		t.Fatalf("SummarizePortableArtifact artifacts = %#v, want detached artifact summaries", summary.Artifacts)
+	}
+
+	encoded, err := json.Marshal(built.Recording)
+	if err != nil {
+		t.Fatalf("marshal portable recording: %v", err)
+	}
+	decoded, err := service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
+		Payload: encoded,
+	})
+	if err != nil {
+		t.Fatalf("DecodePortableArtifact success path: %v", err)
+	}
+	if decoded.Recording.Session.ID != built.Recording.Session.ID {
+		t.Fatalf("DecodePortableArtifact = %#v, want detached recording", decoded.Recording.Session)
+	}
+
+	_, err = service.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+		Recording: recordings.PortableRecording{
+			Session:         built.Recording.Session,
+			Source:          built.Recording.Source,
+			ArgumentsDigest: "not-a-digest",
+			PolicyHash:      built.Recording.PolicyHash,
+		},
+	})
+	if !errors.Is(err, recordings.ErrInvalidRecordingDigest) {
+		t.Fatalf("invalid digest error = %v, want ErrInvalidRecordingDigest", err)
+	}
+
+	invalidSummary := built.Recording
+	invalidSummary.Session.ID = ""
+	_, err = service.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+		Recording: invalidSummary,
+	})
+	if !errors.Is(err, recordings.ErrInvalidRecordingSummary) {
+		t.Fatalf("invalid summary error = %v, want ErrInvalidRecordingSummary", err)
+	}
+	if errors.Is(err, recordings.ErrInvalidRecordingDigest) {
+		t.Fatalf("invalid summary must remain distinct from ErrInvalidRecordingDigest")
+	}
+
+	_, err = service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
+		Payload: []byte(`{`),
+	})
+	if !errors.Is(err, recordings.ErrInvalidRecordingDecode) {
+		t.Fatalf("decode failure error = %v, want ErrInvalidRecordingDecode", err)
+	}
+	if errors.Is(err, recordings.ErrInvalidRecordingDigest) || errors.Is(err, recordings.ErrInvalidRecordingSummary) {
+		t.Fatalf("decode failure must remain distinct from digest/summary typed errors")
 	}
 }
