@@ -459,6 +459,10 @@ func commandParentPath(path string) string {
 }
 
 func projectCommand(record climanifest.Command, arguments []climanifest.Argument) *cobra.Command {
+	args := positionalArgsFromManifest(record)
+	if len(arguments) == 0 {
+		args = cobra.NoArgs
+	}
 	return &cobra.Command{
 		Use:     projectedCommandUsage(record, arguments),
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
@@ -466,6 +470,7 @@ func projectCommand(record climanifest.Command, arguments []climanifest.Argument
 		Example: commandExamples(record),
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
+		Args:    args,
 	}
 }
 
@@ -822,6 +827,10 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 	registered := flagSet.Lookup(record.Long)
 	registered.Hidden = record.Visibility == "hidden"
 	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}
+	registered.Annotations["infinite-you/normalization"] = []string{record.Normalization}
+	registered.Annotations["infinite-you/completion"] = []string{record.Completion}
+	registered.Annotations["infinite-you/enum"] = append([]string(nil), record.Enum...)
+	registered.Annotations["cobra_annotation_flag_aliases"] = append([]string(nil), record.Aliases...)
 	if record.Required {
 		registered.Annotations["infinite-you/required"] = []string{"true"}
 	}

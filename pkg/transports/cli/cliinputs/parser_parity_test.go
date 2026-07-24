@@ -95,10 +95,11 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			argumentPosition: 0,
 		},
 		{
-			name:        "mcp retains local runtime parsing",
-			commandPath: "you mcp serve",
-			argv:        []string{"mcp", "serve", "--runtime"},
-			flagLong:    "runtime",
+			name:             "mcp retains local runtime parsing",
+			commandPath:      "you mcp serve",
+			argv:             []string{"mcp", "serve", "--runtime"},
+			flagLong:         "runtime",
+			argumentPosition: -1,
 		},
 		{
 			name:        "factory retains local directory parsing",

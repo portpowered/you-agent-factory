@@ -1386,3 +1386,9 @@ response-stream output.
   replace workflow-result coverage.
 - A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
 - Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.
+- Canonical CLI-family cutovers must extend the production `clicontract` check
+  beyond command identity: compare the constructed positional arguments,
+  effective local/inherited flags, completion choices, normalization, and input
+  relationships against the authored manifest. Generated commands with no
+  declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
+  grouped commands appear variadic to the observable input inventory.

@@ -8858,6 +8858,50 @@
       "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp", "since": "1.0.0", "state": "active"},
       "name": "mcp",
       "path": "you mcp",
+      "flags": {
+        "you.mcp.flag.debug": {
+          "id": "you.mcp.flag.debug", "long": "debug", "shorthand": "d", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.debug", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.default-worker-model": {
+          "id": "you.mcp.flag.default-worker-model", "long": "default-worker-model", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model", "valueType": "string",
+          "required": false, "default": "", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.default-worker-model", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.default-worker-model-provider": {
+          "id": "you.mcp.flag.default-worker-model-provider", "long": "default-worker-model-provider", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model-provider", "valueType": "string",
+          "required": false, "default": "", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.default-worker-model-provider", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.json": {
+          "id": "you.mcp.flag.json", "long": "json", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.json", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.json", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.server": {
+          "id": "you.mcp.flag.server", "long": "server", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.server", "valueType": "string",
+          "required": false, "default": "http://localhost:7437", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.server", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.verbose": {
+          "id": "you.mcp.flag.verbose", "long": "verbose", "shorthand": "v", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.verbose", "state": "active", "since": "1.0.0"}
+        }
+      },
       "precedence": {
         "order": [
           "cli",
