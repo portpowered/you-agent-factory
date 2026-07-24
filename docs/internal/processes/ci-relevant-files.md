@@ -80,6 +80,12 @@
   rejects all service implementation and composition subpackage imports from
   dedicated provider packages, while retaining service-root contracts and the
   exact public external-effect ports used by typed `edges.Edges` replacements.
+  Wave 0 functional-tests-expansion planning authority lives under
+  `docs/temp/functional-tests-expansion/` and is durable via a narrow
+  `.gitignore` exception for that directory. Existing-scenario source→destination
+  mapping is owned by `migration-ledger.md` (planning-only; later move batches
+  consume its rows and deletion-only batch ids). Destination topology remains
+  `test-file-checklist.md`; ownership rules remain `plan.md`.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
