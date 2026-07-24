@@ -180,13 +180,19 @@ Repository package-boundary policy:
   or lifecycle behavior. `pkg/root` is the only startup consumer of the Wire
   injector; all other packages consume the typed roles Wire supplies and never
   reconstruct providers.
-- `pkg/services/edges` is the process-edge aggregator, not an owner of external
-  effect contracts. Each typed process, HTTP, filesystem, or time port **MUST**
-  be declared by the leaf package that directly performs that effect.
-  `pkg/services/edges` may import the exact model effect owners
-  the `pkg/services/models` root solely to aggregate its published external-effect contracts unchanged.
-  It **MUST NOT** import a composed Models service or runtime, redefine or alias
-  those contracts, or receive a general peer-service subpackage exemption.
+- `pkg/services/edges` is the documented process-edge aggregator architecture
+  exception for `root.BuildProcess` / `pkg/wire` construction and functional
+  overrides. It aggregates replaceable external-effect ports and owns `Merge`
+  for process overrides; it is **not** a service locator, Initializer
+  dependency bag, or owner of external effect contracts. Constructed services
+  **MUST** receive exact projected ports at the composition boundary and
+  **MUST NOT** import or hold `edges.Edges`. Each typed process, HTTP,
+  filesystem, or time port **MUST** be declared by the leaf package that
+  directly performs that effect. `pkg/services/edges` may import the exact
+  model effect owners the `pkg/services/models` root solely to aggregate its
+  published external-effect contracts unchanged. It **MUST NOT** import a
+  composed Models service or runtime, redefine or alias those contracts, or
+  receive a general peer-service subpackage exemption.
 - External provider inference follows the same leaf-effect rule:
   `pkg/services/workers/provider/inferencecontract` owns the single provider
   inference port consumed by Worker adapters, composition, replay, and
