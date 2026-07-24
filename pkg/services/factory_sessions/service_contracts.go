@@ -59,6 +59,13 @@ type RuntimeBinding struct {
 // ErrSessionNotFound, and *ControlError on these Service methods; peers must
 // not import private live-runtime registry or host types and must not depend
 // on a second peer-facing live-session interface.
+// The published durable-execution slice uses DurableStartRequest,
+// DurableAsyncStartResult, DurableResumeRequest, DurableControlRequest,
+// DurableControlResult, DurableInspectResult, *DurableValidationError,
+// ErrDurableSessionNotFound, *DurableResumeError, and *DurableControlError on
+// ExecutionService methods embedded in Service; peers must not import nested
+// durable-execution or internal/execution implementation packages as the
+// peer-facing source of truth.
 // The process-scoped root uses ForRuntime to create an isolated runtime view; a
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.

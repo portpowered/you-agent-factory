@@ -62,6 +62,7 @@ type (
 	ResultStatus                  = execution.ResultStatus
 	ResultSummary                 = execution.ResultSummary
 	ResumeError                   = execution.ResumeError
+	ResumeOutcome                 = execution.ResumeOutcome
 	ResumeSessionRequest          = execution.ResumeSessionRequest
 	RetryDispatchRequest          = execution.RetryDispatchRequest
 	RuntimeOptions                = execution.RuntimeOptions
@@ -86,6 +87,10 @@ const (
 
 	LifecycleControlPause  = execution.LifecycleControlPause
 	LifecycleControlResume = execution.LifecycleControlResume
+
+	ResumeOutcomeMissingCheckpoint    = execution.ResumeOutcomeMissingCheckpoint
+	ResumeOutcomeInvalidState         = execution.ResumeOutcomeInvalidState
+	ResumeOutcomeCorruptedPersistence = execution.ResumeOutcomeCorruptedPersistence
 
 	LifecycleStatusCanceling = execution.LifecycleStatusCanceling
 	LifecycleStatusFailed    = execution.LifecycleStatusFailed
