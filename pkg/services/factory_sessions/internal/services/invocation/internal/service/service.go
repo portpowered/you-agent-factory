@@ -84,9 +84,9 @@ func (s *Service) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
-) (factorydefinitions.FactoryInvocationResult, error) {
+) (factorysessions.InvocationResult, error) {
 	if s == nil || s.owner == nil {
-		return factorydefinitions.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is unavailable")
+		return factorysessions.InvocationResult{}, fmt.Errorf("Factory Session invocation service is unavailable")
 	}
 	result, err := s.owner.InvokeFactorySession(ctx, sessionID, request)
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *Service) InvokeFactorySession(
 // observe when the engine outcome omitted it. Callers distinguish completed
 // success from typed non-completed outcomes (timeout, cancel, partial-capture
 // failure) through Status/ErrorCode/Work context rather than SessionID alone.
-func withSessionScope(sessionID string, result factorydefinitions.FactoryInvocationResult) factorydefinitions.FactoryInvocationResult {
+func withSessionScope(sessionID string, result factorysessions.InvocationResult) factorysessions.InvocationResult {
 	if result.SessionID == "" && sessionID != "" {
 		result.SessionID = sessionID
 	}

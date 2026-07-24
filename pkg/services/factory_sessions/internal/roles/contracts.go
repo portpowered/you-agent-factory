@@ -214,7 +214,10 @@ type LifecyclePlanRequest struct {
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)
 
 type SessionInvoker interface {
-	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
+	// InvokeFactorySession returns the published CTR-SES root InvocationResult
+	// vocabulary (aliased to FactoryInvocationResult) so peers consume Sessions
+	// root outcomes without importing the private invocation subservice.
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
 }
 
 type InvocationInputResolver interface {

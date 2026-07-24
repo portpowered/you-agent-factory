@@ -92,7 +92,7 @@ type RuntimeHTTPServices struct {
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    Service
 	SessionInvocation  interface {
-		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
+		InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	}
 	SessionExecution ExecutionService
 	Work             work.Service

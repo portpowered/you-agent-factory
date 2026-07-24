@@ -2,9 +2,9 @@ package factorysessions
 
 import (
 	"fmt"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // RuntimeSidecars owns runtime-scoped background services without exposing
@@ -34,29 +34,21 @@ type DefinitionHost = factorydefinitions.SessionHost
 // does not publish a separate peer-facing invoker interface.
 
 // InvocationResult is the plain root session-scoped outcome of one Factory
-// Session invocation after input resolution and result selection.
-type InvocationResult struct {
-	RequestID     string
-	TraceID       string
-	Status        InvocationTerminalStatus
-	PrimaryResult []work.WorkContentPart
-	ErrorCode     string
-	Message       string
-	SessionID     string
-	WorkID        string
-	WorkName      string
-	WorkState     string
-}
+// Session invocation after input resolution and result selection. It stays
+// interchangeable with factorydefinitions.FactoryInvocationResult so the
+// private invocation subservice can publish CTR-SES outcomes without a second
+// peer-facing result shape.
+type InvocationResult = factorydefinitions.FactoryInvocationResult
 
 // InvocationTerminalStatus is the Factory Session-owned terminal outcome for
 // one invocation on the published root slice.
-type InvocationTerminalStatus string
+type InvocationTerminalStatus = factorydefinitions.InvocationTerminalStatus
 
 const (
-	InvocationTerminalStatusCanceled  InvocationTerminalStatus = "CANCELED"
-	InvocationTerminalStatusCompleted InvocationTerminalStatus = "COMPLETED"
-	InvocationTerminalStatusFailed    InvocationTerminalStatus = "FAILED"
-	InvocationTerminalStatusTimedOut  InvocationTerminalStatus = "TIMED_OUT"
+	InvocationTerminalStatusCanceled  = factorydefinitions.InvocationTerminalStatusCanceled
+	InvocationTerminalStatusCompleted = factorydefinitions.InvocationTerminalStatusCompleted
+	InvocationTerminalStatusFailed    = factorydefinitions.InvocationTerminalStatusFailed
+	InvocationTerminalStatusTimedOut  = factorydefinitions.InvocationTerminalStatusTimedOut
 )
 
 // InvocationErrorCode is the stable Factory Session-owned failure code emitted
@@ -64,9 +56,9 @@ const (
 type InvocationErrorCode string
 
 const (
-	InvocationErrorCodeCanceled       InvocationErrorCode = "INVOCATION_CANCELED"
-	InvocationErrorCodeRuntimeFailure InvocationErrorCode = "INVOCATION_RUNTIME_FAILURE"
-	InvocationErrorCodeTimedOut       InvocationErrorCode = "INVOCATION_TIMED_OUT"
+	InvocationErrorCodeCanceled       InvocationErrorCode = InvocationErrorCode(factorydefinitions.InvocationErrorCodeCanceled)
+	InvocationErrorCodeRuntimeFailure InvocationErrorCode = InvocationErrorCode(factorydefinitions.InvocationErrorCodeRuntimeFailure)
+	InvocationErrorCodeTimedOut       InvocationErrorCode = InvocationErrorCode(factorydefinitions.InvocationErrorCodeTimedOut)
 )
 
 // InvocationTimeout is the published root name for the Factory Sessions-owned

@@ -26,7 +26,12 @@ primary-result behavior.
   cancellation return distinct typed terminals (`TIMED_OUT` /
   `INVOCATION_TIMED_OUT`, `CANCELED` / `INVOCATION_CANCELED`); invalid input is
   projected to CTR-SES `*InvocationValidationError` and must not collapse into
-  those timeout/cancel codes.
+  those timeout/cancel codes. Published root `InvocationResult` /
+  `InvocationTerminalStatus` stay type-aliases of the engine
+  `FactoryInvocationResult` vocabulary so private prepare/command/observe
+  outcomes remain interchangeable with CTR-SES characterization; peers continue
+  to consume only the Sessions root and must not import
+  `internal/services/invocation`.
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and

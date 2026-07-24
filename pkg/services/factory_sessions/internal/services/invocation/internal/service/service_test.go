@@ -346,6 +346,129 @@ func TestServiceCoordinatesSubmissionAndTerminalResult(t *testing.T) {
 	assertCommandedPreparedWork(t, peer.lastRequest, "hello")
 }
 
+func TestService_PreservesCTRSESRootEquivalenceThroughPrivatePath(t *testing.T) {
+	t.Parallel()
+
+	// Mirrors CTR-SES characterization request shapes from
+	// TestInvocationRootContract_* while exercising prepare→command→observe
+	// through the private Service and a fake Work peer (no Work implementation
+	// imports). Outcomes are asserted as published root InvocationResult
+	// vocabulary so peers can keep using only the Sessions root.
+	const sessionID = "sess-invoke-alpha"
+	requestID := "req-invoke-1"
+	sourceKind := factorysessions.InvocationInputSourceKindText
+
+	peer := &fakeWorkPeer{
+		submitResult: work.WorkRequestSubmitResult{
+			RequestID: requestID, TraceID: "trace-invoke-1", Accepted: true,
+			Works: []work.WorkRequestSubmittedWork{{Name: "task", WorkTypeName: "task", WorkID: "work-1"}},
+		},
+	}
+	deps := validDependencies(nil)
+	deps.Work = peer
+	deps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		return completedObservation(requestID, "trace-invoke-1", "ok"), nil
+	}
+	service, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	var rootInvoker invocationservice.Service = service
+	successRequest := factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		RequestID:       &requestID,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	}
+	engineResult, err := rootInvoker.InvokeFactorySession(context.Background(), sessionID, successRequest)
+	if err != nil {
+		t.Fatalf("success InvokeFactorySession(): %v", err)
+	}
+	var rootResult factorysessions.InvocationResult = engineResult
+	if rootResult.Status != factorysessions.InvocationTerminalStatusCompleted ||
+		rootResult.SessionID != sessionID ||
+		rootResult.RequestID != requestID {
+		t.Fatalf("success root result = %#v, want completed session-scoped CTR-SES outcome", rootResult)
+	}
+	if peer.submitCalls != 1 {
+		t.Fatalf("Work peer admission calls = %d, want 1 through private prepare→command", peer.submitCalls)
+	}
+	assertCommandedPreparedWork(t, peer.lastRequest, "hello")
+
+	_, validationErr := service.InvokeFactorySession(context.Background(), "sess-invoke-beta", factorysessions.InvocationRequest{
+		ContentProvided: false,
+		RequestID:       strPtr("req-invalid"),
+	})
+	var invalidInput *factorysessions.InvocationValidationError
+	if !errors.As(validationErr, &invalidInput) || invalidInput.Field != "content" {
+		t.Fatalf("invalid input = %v, want *InvocationValidationError field=content", validationErr)
+	}
+
+	timeoutDeps := validDependencies(nil)
+	timeoutDeps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		return legacyinvocation.SessionInvocationObservation{}, nil
+	}
+	timeoutDeps.WaitNext = func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	timeoutService, err := New(timeoutDeps)
+	if err != nil {
+		t.Fatalf("New(timeout): %v", err)
+	}
+	timeoutMillis := int64(1)
+	timeoutResult, err := timeoutService.InvokeFactorySession(context.Background(), "sess-invoke-beta", factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		RequestID:       strPtr("req-timeout"),
+		TimeoutMillis:   &timeoutMillis,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("timeout InvokeFactorySession(): %v", err)
+	}
+	timeoutRoot := factorysessions.InvocationResult(timeoutResult)
+	if timeoutRoot.Status != factorysessions.InvocationTerminalStatusTimedOut ||
+		timeoutRoot.ErrorCode != string(factorysessions.InvocationErrorCodeTimedOut) {
+		t.Fatalf("timeout root result = %#v, want TIMED_OUT typed outcome", timeoutRoot)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelDeps := validDependencies(nil)
+	cancelDeps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		cancel()
+		return legacyinvocation.SessionInvocationObservation{}, nil
+	}
+	cancelDeps.WaitNext = func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	cancelService, err := New(cancelDeps)
+	if err != nil {
+		t.Fatalf("New(cancel): %v", err)
+	}
+	cancelResult, err := cancelService.InvokeFactorySession(ctx, "sess-invoke-beta", factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		RequestID:       strPtr("req-cancel"),
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("cancel InvokeFactorySession(): %v", err)
+	}
+	cancelRoot := factorysessions.InvocationResult(cancelResult)
+	if cancelRoot.Status != factorysessions.InvocationTerminalStatusCanceled ||
+		cancelRoot.ErrorCode != string(factorysessions.InvocationErrorCodeCanceled) {
+		t.Fatalf("cancel root result = %#v, want CANCELED typed outcome", cancelRoot)
+	}
+	if timeoutRoot.Status == cancelRoot.Status ||
+		timeoutRoot.ErrorCode == cancelRoot.ErrorCode ||
+		timeoutRoot.Status == factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatal("timeout and cancellation typed outcomes must stay distinguishable from each other and success")
+	}
+}
+
 func TestService_TypedTimeoutCancelAndValidationOutcomesAreDistinct(t *testing.T) {
 	t.Parallel()
 
