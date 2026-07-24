@@ -126,6 +126,133 @@ func TestNewServiceRejectsMissingPorts(t *testing.T) {
 	}
 }
 
+func TestAuthoringLayoutPreservesRoundTripAuthoredSemantics(t *testing.T) {
+	t.Parallel()
+
+	// In-memory authored layout store proves prepare → create/replace → flatten/expand
+	// preserves identity and content through the private authoring_layout path.
+	store := map[string][]byte{}
+	factoryPath := func(rootDir, name string) string {
+		return rootDir + "/" + name
+	}
+
+	authoredPayload := []byte(`{"name":"alpha","workStations":[{"id":"intake"}]}`)
+	preparedCanonical := []byte(`{"name":"alpha","workStations":[{"id":"intake"}]}`)
+
+	svc, err := authoringlayoutwire.NewService(authoringlayout.Ports{
+		Prepare: func(_ context.Context, name string, got []byte) (factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			if name != "alpha" || string(got) != string(authoredPayload) {
+				t.Fatalf("Prepare got name=%q payload=%q", name, got)
+			}
+			return factorydefinitions.PreparedFactoryLayoutPayload{
+				Canonical: append([]byte(nil), preparedCanonical...),
+			}, nil
+		},
+		Create: func(rootDir, name string, prepared factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			path := factoryPath(rootDir, name)
+			store[path] = append([]byte(nil), prepared.Canonical...)
+			return path, nil
+		},
+		Replace: func(rootDir, name string, prepared factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			path := factoryPath(rootDir, name)
+			if _, ok := store[path]; !ok {
+				t.Fatalf("Replace missing prior content at %q", path)
+			}
+			store[path] = append([]byte(nil), prepared.Canonical...)
+			return path, nil
+		},
+		Flatten: func(path string) ([]byte, error) {
+			canonical, ok := store[path]
+			if !ok {
+				return nil, errors.New("missing authored layout")
+			}
+			return append([]byte(nil), canonical...), nil
+		},
+		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			if _, ok := store[path]; !ok {
+				return "", factorydefinitions.LayoutExpansionReport{}, errors.New("missing authored layout")
+			}
+			return path, factorydefinitions.LayoutExpansionReport{FactoryConfigPaths: 1}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	prepared, err := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{
+		Name: "alpha", Payload: authoredPayload,
+	})
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout: %v", err)
+	}
+	if string(prepared.Prepared.Canonical) != string(preparedCanonical) {
+		t.Fatalf(
+			"prepared canonical = %q, want CTR-DEF prepared outcome %q",
+			prepared.Prepared.Canonical,
+			preparedCanonical,
+		)
+	}
+
+	created, err := svc.CreateNamedFactory(ctx, factorydefinitions.CreateNamedFactoryRequest{
+		RootDir: "/factories", Name: "alpha", Prepared: prepared.Prepared,
+	})
+	if err != nil {
+		t.Fatalf("CreateNamedFactory: %v", err)
+	}
+	if created.Name != "alpha" || created.FactoryDir != "/factories/alpha" {
+		t.Fatalf("CreateNamedFactory result = %#v, want Definitions-owned identity facts", created)
+	}
+
+	flattenedAfterCreate, err := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{
+		Path: created.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout after create: %v", err)
+	}
+	if string(flattenedAfterCreate.Canonical) != string(prepared.Prepared.Canonical) {
+		t.Fatalf(
+			"flatten after create = %q, want prepared canonical %q",
+			flattenedAfterCreate.Canonical,
+			prepared.Prepared.Canonical,
+		)
+	}
+
+	expanded, err := svc.ExpandFactoryLayout(ctx, factorydefinitions.ExpandFactoryLayoutRequest{
+		Path: created.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("ExpandFactoryLayout: %v", err)
+	}
+	if expanded.FactoryDir != created.FactoryDir || expanded.Report.FactoryConfigPaths != 1 {
+		t.Fatalf("ExpandFactoryLayout result = %#v, want factory directory identity", expanded)
+	}
+
+	replaced, err := svc.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{
+		RootDir: "/factories", Name: "alpha", Prepared: prepared.Prepared,
+	})
+	if err != nil {
+		t.Fatalf("ReplaceNamedFactory: %v", err)
+	}
+	if replaced.Name != "alpha" || replaced.FactoryDir != "/factories/alpha" {
+		t.Fatalf("ReplaceNamedFactory result = %#v, want Definitions-owned identity facts", replaced)
+	}
+
+	flattenedAfterReplace, err := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{
+		Path: replaced.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout after replace: %v", err)
+	}
+	if string(flattenedAfterReplace.Canonical) != string(prepared.Prepared.Canonical) {
+		t.Fatalf(
+			"flatten after replace = %q, want prepared canonical %q",
+			flattenedAfterReplace.Canonical,
+			prepared.Prepared.Canonical,
+		)
+	}
+}
+
 func TestRootAuthoringSurfaceSucceedsThroughPrivateOwnership(t *testing.T) {
 	t.Parallel()
 
