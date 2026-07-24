@@ -62,6 +62,8 @@ type Service interface {
 	StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
 	WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
 	SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
+	GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
+	GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
 }
 
 // Root is the Wire-injectable Automations surface during migration. It composes
@@ -183,6 +185,38 @@ type SourceStatusRequest struct {
 type SourceStatusResult struct {
 	Handle SourceHandle
 	Status string
+}
+
+// GetStatusRequest queries the detached status of one automation instance by
+// opaque instance identity. It stays free of Runtime sidecar, WaitGroup, and
+// cron/poller/watcher implementation types.
+type GetStatusRequest struct {
+	InstanceID string
+}
+
+// GetStatusResult is the detached instance status peers consume for progress
+// inspection without importing source implementation packages.
+type GetStatusResult struct {
+	AutomationID string
+	InstanceID   string
+	Status       string
+}
+
+// GetCursorRequest reads cursor/checkpoint recovery facts for one instance.
+// ExpectedCursor, when non-empty, is an optimistic concurrency token peers can
+// supply to detect stale cursors.
+type GetCursorRequest struct {
+	InstanceID     string
+	ExpectedCursor string
+}
+
+// GetCursorResult is the detached cursor and checkpoint observation peers use
+// for recovery without importing cron/poller/watcher types.
+type GetCursorResult struct {
+	AutomationID string
+	InstanceID   string
+	Cursor       string
+	Checkpoint   string
 }
 
 // ErrorCode classifies typed Automations root failures peers can branch on.

@@ -15,11 +15,25 @@ type fakeRootService struct {
 	ready               bool
 	conflictOnReconcile bool
 	sources             map[string]string
+	instances           map[string]fakeInstance
+}
+
+type fakeInstance struct {
+	automationID string
+	status       string
+	cursor       string
+	checkpoint   string
 }
 
 func (f *fakeRootService) ensureSources() {
 	if f.sources == nil {
 		f.sources = make(map[string]string)
+	}
+}
+
+func (f *fakeRootService) ensureInstances() {
+	if f.instances == nil {
+		f.instances = make(map[string]fakeInstance)
 	}
 }
 
@@ -224,6 +238,76 @@ func (f *fakeRootService) SourceStatus(_ context.Context, req automations.Source
 	return automations.SourceStatusResult{
 		Handle: req.Handle,
 		Status: status,
+	}, nil
+}
+
+func (f *fakeRootService) GetStatus(_ context.Context, req automations.GetStatusRequest) (automations.GetStatusResult, error) {
+	if f == nil || !f.ready {
+		return automations.GetStatusResult{}, &automations.Error{
+			Op:   "GetStatus",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	if req.InstanceID == "" {
+		return automations.GetStatusResult{}, &automations.Error{
+			Op:   "GetStatus",
+			Code: automations.ErrorCodeInvalid,
+			Err:  automations.ErrInvalidRequest,
+		}
+	}
+	f.ensureInstances()
+	instance, ok := f.instances[req.InstanceID]
+	if !ok {
+		return automations.GetStatusResult{}, &automations.Error{
+			Op:   "GetStatus",
+			Code: automations.ErrorCodeNotFound,
+			Err:  automations.ErrNotFound,
+		}
+	}
+	return automations.GetStatusResult{
+		AutomationID: instance.automationID,
+		InstanceID:   req.InstanceID,
+		Status:       instance.status,
+	}, nil
+}
+
+func (f *fakeRootService) GetCursor(_ context.Context, req automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	if f == nil || !f.ready {
+		return automations.GetCursorResult{}, &automations.Error{
+			Op:   "GetCursor",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	if req.InstanceID == "" {
+		return automations.GetCursorResult{}, &automations.Error{
+			Op:   "GetCursor",
+			Code: automations.ErrorCodeInvalid,
+			Err:  automations.ErrInvalidRequest,
+		}
+	}
+	f.ensureInstances()
+	instance, ok := f.instances[req.InstanceID]
+	if !ok {
+		return automations.GetCursorResult{}, &automations.Error{
+			Op:   "GetCursor",
+			Code: automations.ErrorCodeNotFound,
+			Err:  automations.ErrNotFound,
+		}
+	}
+	if req.ExpectedCursor != "" && req.ExpectedCursor != instance.cursor {
+		return automations.GetCursorResult{}, &automations.Error{
+			Op:   "GetCursor",
+			Code: automations.ErrorCodeConflict,
+			Err:  automations.ErrConflict,
+		}
+	}
+	return automations.GetCursorResult{
+		AutomationID: instance.automationID,
+		InstanceID:   req.InstanceID,
+		Cursor:       instance.cursor,
+		Checkpoint:   instance.checkpoint,
 	}, nil
 }
 
@@ -471,5 +555,130 @@ func TestServiceSourceLifecycle_FakeTypedAlreadyStopped(t *testing.T) {
 	}
 	if !errors.Is(err, automations.ErrConflict) {
 		t.Fatalf("StopSource() error = %v, want errors.Is ErrConflict", err)
+	}
+}
+
+func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
+	t.Parallel()
+
+	var svc automations.Service = &fakeRootService{
+		ready: true,
+		instances: map[string]fakeInstance{
+			"inst-a": {
+				automationID: "auto-a",
+				status:       automations.InstanceStatusRunning,
+				cursor:       "cursor-42",
+				checkpoint:   "checkpoint-7",
+			},
+		},
+	}
+
+	status, err := svc.GetStatus(context.Background(), automations.GetStatusRequest{
+		InstanceID: "inst-a",
+	})
+	if err != nil {
+		t.Fatalf("GetStatus() unexpected error: %v", err)
+	}
+	if status.AutomationID != "auto-a" {
+		t.Fatalf("GetStatus() AutomationID = %q, want %q", status.AutomationID, "auto-a")
+	}
+	if status.InstanceID != "inst-a" {
+		t.Fatalf("GetStatus() InstanceID = %q, want %q", status.InstanceID, "inst-a")
+	}
+	if status.Status != automations.InstanceStatusRunning {
+		t.Fatalf("GetStatus() Status = %q, want %q", status.Status, automations.InstanceStatusRunning)
+	}
+
+	cursor, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID: "inst-a",
+	})
+	if err != nil {
+		t.Fatalf("GetCursor() unexpected error: %v", err)
+	}
+	if cursor.AutomationID != "auto-a" {
+		t.Fatalf("GetCursor() AutomationID = %q, want %q", cursor.AutomationID, "auto-a")
+	}
+	if cursor.InstanceID != "inst-a" {
+		t.Fatalf("GetCursor() InstanceID = %q, want %q", cursor.InstanceID, "inst-a")
+	}
+	if cursor.Cursor != "cursor-42" {
+		t.Fatalf("GetCursor() Cursor = %q, want %q", cursor.Cursor, "cursor-42")
+	}
+	if cursor.Checkpoint != "checkpoint-7" {
+		t.Fatalf("GetCursor() Checkpoint = %q, want %q", cursor.Checkpoint, "checkpoint-7")
+	}
+}
+
+func TestServiceCursorStatus_FakeTypedMissingInstance(t *testing.T) {
+	t.Parallel()
+
+	var svc automations.Service = &fakeRootService{ready: true}
+	_, err := svc.GetStatus(context.Background(), automations.GetStatusRequest{
+		InstanceID: "missing-instance",
+	})
+	if err == nil {
+		t.Fatal("GetStatus() error = nil, want typed not-found error")
+	}
+	var typed *automations.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("GetStatus() error type = %T, want *automations.Error", err)
+	}
+	if typed.Code != automations.ErrorCodeNotFound {
+		t.Fatalf("GetStatus() error code = %q, want %q", typed.Code, automations.ErrorCodeNotFound)
+	}
+	if !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("GetStatus() error = %v, want errors.Is ErrNotFound", err)
+	}
+}
+
+func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
+	t.Parallel()
+
+	var svc automations.Service = &fakeRootService{
+		ready: true,
+		instances: map[string]fakeInstance{
+			"inst-b": {
+				automationID: "auto-b",
+				status:       automations.InstanceStatusReady,
+				cursor:       "cursor-current",
+				checkpoint:   "checkpoint-1",
+			},
+		},
+	}
+
+	_, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID:     "",
+		ExpectedCursor: "cursor-current",
+	})
+	if err == nil {
+		t.Fatal("GetCursor() error = nil, want typed invalid-request error")
+	}
+	var invalid *automations.Error
+	if !errors.As(err, &invalid) {
+		t.Fatalf("GetCursor() error type = %T, want *automations.Error", err)
+	}
+	if invalid.Code != automations.ErrorCodeInvalid {
+		t.Fatalf("GetCursor() error code = %q, want %q", invalid.Code, automations.ErrorCodeInvalid)
+	}
+	if !errors.Is(err, automations.ErrInvalidRequest) {
+		t.Fatalf("GetCursor() error = %v, want errors.Is ErrInvalidRequest", err)
+	}
+
+	_, err = svc.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID:     "inst-b",
+		ExpectedCursor: "cursor-stale",
+	})
+	if err == nil {
+		t.Fatal("GetCursor() error = nil, want typed stale-cursor conflict")
+	}
+	var stale *automations.Error
+	if !errors.As(err, &stale) {
+		t.Fatalf("GetCursor() error type = %T, want *automations.Error", err)
+	}
+	if stale.Code != automations.ErrorCodeConflict {
+		t.Fatalf("GetCursor() error code = %q, want %q", stale.Code, automations.ErrorCodeConflict)
+	}
+	if !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("GetCursor() error = %v, want errors.Is ErrConflict", err)
 	}
 }

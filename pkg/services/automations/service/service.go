@@ -165,6 +165,34 @@ func (s *Service) SourceStatus(context.Context, automations.SourceStatusRequest)
 	return automations.SourceStatusResult{}, nil
 }
 
+// GetStatus is the published Automations root instance-status query slice.
+// Nested cursor/status ownership remains an IMP-AUTO packet; this additive stub
+// keeps the concrete root aligned with the published Service contract.
+func (s *Service) GetStatus(context.Context, automations.GetStatusRequest) (automations.GetStatusResult, error) {
+	if s == nil {
+		return automations.GetStatusResult{}, &automations.Error{
+			Op:   "GetStatus",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.GetStatusResult{}, nil
+}
+
+// GetCursor is the published Automations root cursor/checkpoint query slice.
+// Nested cursor ownership remains an IMP-AUTO packet; this additive stub keeps
+// the concrete root aligned with the published Service contract.
+func (s *Service) GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	if s == nil {
+		return automations.GetCursorResult{}, &automations.Error{
+			Op:   "GetCursor",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.GetCursorResult{}, nil
+}
+
 func (s *Service) logger() *zap.Logger {
 	if s == nil || s.loggerValue == nil {
 		return zap.NewNop()
