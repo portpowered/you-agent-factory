@@ -25,23 +25,16 @@ type Service interface {
 	ResolveLogical(sessionregistry.Service, string, string) *livesession.LiveSession
 }
 
-type NormalizeRequest struct {
-	BackendScopeID string
-	FolderPath     string
-	Target         factorysessions.TargetRef
-}
+// NormalizeRequest is the private alias for the CTR-SES root identity
+// normalize request. Peers continue to import only the Factory Sessions root.
+type NormalizeRequest = factorysessions.IdentityNormalizeRequest
 
-type NormalizeProviderRequest struct {
-	BackendScopeID string
-	FolderPath     string
-	Boundary       factorysessions.LogicalTargetProviderBoundary
-}
+// NormalizeProviderRequest is the private alias for the CTR-SES root provider
+// identity normalize request.
+type NormalizeProviderRequest = factorysessions.IdentityNormalizeProviderRequest
 
-type ResolvedIdentity struct {
-	Reference           factorysessions.CanonicalLogicalTargetReference
-	LogicalSessionKeyID string
-	RuntimeTarget       factorysessions.RuntimeLogicalTarget
-}
+// ResolvedIdentity is the private alias for the CTR-SES root identity result.
+type ResolvedIdentity = factorysessions.ResolvedIdentity
 
 type DiscoverRequest struct {
 	FolderPath        string

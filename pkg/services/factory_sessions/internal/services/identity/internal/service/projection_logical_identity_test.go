@@ -1,7 +1,8 @@
 package service_test
 
 import (
-	"os"
+	"context"
+	"io/fs"
 	"path/filepath"
 	"testing"
 	"time"
@@ -9,7 +10,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -19,21 +21,41 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 	if ctx.Session == nil {
 		return ctx
 	}
-	ref, err := logicaltarget.NormalizeTargetRefWithEffects(
+	svc, err := identitywire.NewService(
 		filepath.EvalSymlinks,
-		os.UserHomeDir,
-		backendScopeID,
-		ctx.Session.FolderPath,
-		ctx.Session.Target,
+		func() (string, error) { return "home", nil },
+		projectionDirectories{},
 	)
 	if err != nil {
 		return ctx
 	}
-	ctx.LogicalSessionKeyID = logicaltarget.DeriveLogicalSessionKeyID(ref)
-	target := logicaltarget.RuntimeLogicalTarget(ref)
+	resolved, err := svc.Normalize(context.Background(), identity.NormalizeRequest{
+		BackendScopeID: backendScopeID,
+		FolderPath:     ctx.Session.FolderPath,
+		Target:         ctx.Session.Target,
+	})
+	if err != nil {
+		return ctx
+	}
+	ctx.LogicalSessionKeyID = resolved.LogicalSessionKeyID
+	target := resolved.RuntimeTarget
 	ctx.NormalizedTarget = &target
 	return ctx
 }
+
+type projectionDirectories struct{}
+
+func (projectionDirectories) Stat(string) (fs.FileInfo, error)      { return projectionFileInfo{}, nil }
+func (projectionDirectories) ReadDir(string) ([]fs.DirEntry, error) { return nil, nil }
+
+type projectionFileInfo struct{}
+
+func (projectionFileInfo) Name() string       { return "folder" }
+func (projectionFileInfo) Size() int64        { return 0 }
+func (projectionFileInfo) Mode() fs.FileMode  { return fs.ModeDir }
+func (projectionFileInfo) ModTime() time.Time { return time.Time{} }
+func (projectionFileInfo) IsDir() bool        { return true }
+func (projectionFileInfo) Sys() any           { return nil }
 
 func projectRuntimeToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySessionRuntime {
 	return factorysessionmapping.RuntimeProjectionToAPI(
