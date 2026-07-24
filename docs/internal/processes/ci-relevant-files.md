@@ -209,3 +209,11 @@
   media type follows the declared filename (`*.jsonl`/`*.ndjson`, `*.json`, or
   text). Expected response events decode as NDJSON records. Load failures use
   `ProviderSessionLoadError` naming case id, role, and path/field.
+- Provider-session golden comparison (`CompareProviderSessionGoldens`) normalizes
+  only field names listed in `manifest.normalizedFields` (any depth) to
+  `<normalized>`, then structurally compares Provider Session JSON, response-
+  event NDJSON records, and invocation-result JSON. Whitespace-only differences
+  do not fail. Callers supply observed public metadata; comparison must never
+  synthesize expected output by calling the mapper/adapter under test.
+  Mismatches use `ProviderSessionCompareError` naming case id, artifact role,
+  and JSON path.
