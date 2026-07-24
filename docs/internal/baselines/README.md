@@ -17,8 +17,11 @@ that were not lowered or removed when the corresponding package shrank.
 
 `ownership-inventory.json` is the PSS-F01 frozen package-destination inventory.
 It maps every production `pkg` package to one committed owner, approved family,
-Process Edges exception, or deletion/move successor. When
+Process Edges exception, or deletion/move successor. It also freezes owner and
+nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
+transaction boundary, failure/recovery) plus large responsibility clusters from
+the Packaged Service Structure committed target tree. When
 `package-target-manifest.json` (FND-01) is present, validators reuse that seed
-instead of inventing a second destination catalog. Regenerate with
-`go run ./cmd/ownershipinventoryfreeze` and prove with
+for package rows instead of inventing a second destination catalog. Regenerate
+with `go run ./cmd/ownershipinventoryfreeze` and prove with
 `go test ./internal/ownershipinventory`.

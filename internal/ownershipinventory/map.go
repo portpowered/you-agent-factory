@@ -128,6 +128,8 @@ func BuildInventory(packages []string) (Inventory, error) {
 		ProcessEdgesException:  defaultProcessEdgesException(),
 		SeedServices:           append([]SeedService(nil), StructuresSeedServices...),
 		AdditionalCurrentRoots: append([]string(nil), AdditionalCurrentRoots...),
+		OwnerRationales:        BuildOwnerRationales(),
+		ResponsibilityClusters: BuildResponsibilityClusters(),
 		Packages:               rows,
 	}, nil
 }

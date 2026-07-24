@@ -3,6 +3,7 @@ package ownershipinventory
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -92,7 +93,109 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	}
 	slices.Sort(report.MissingAdditionalRoots)
 
+	validateRationales(inventory, &report)
+	validateResponsibilityClusters(inventory, &report)
+
 	return report
+}
+
+func validateRationales(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.OwnerRationales, func(a, b OwnerRationaleCard) int {
+		return strings.Compare(a.ServiceID, b.ServiceID)
+	}) {
+		report.UnstableRationaleSort = true
+	}
+
+	byID := map[string]OwnerRationaleCard{}
+	for _, card := range inventory.OwnerRationales {
+		byID[card.ServiceID] = card
+		if msg := validateRationaleCard(card); msg != "" {
+			report.InvalidRationaleFields = append(report.InvalidRationaleFields, msg)
+		}
+	}
+
+	for _, owner := range ProductOwners {
+		card, ok := byID[owner]
+		if !ok || card.Kind != RationaleKindTopLevel || card.Owner != owner {
+			report.MissingOwnerRationales = append(report.MissingOwnerRationales, owner)
+		}
+	}
+	slices.Sort(report.MissingOwnerRationales)
+
+	for _, serviceID := range CommittedNestedServiceIDs {
+		card, ok := byID[serviceID]
+		if !ok || card.Kind != RationaleKindNested {
+			report.MissingNestedRationales = append(report.MissingNestedRationales, serviceID)
+		}
+	}
+	slices.Sort(report.MissingNestedRationales)
+	slices.Sort(report.InvalidRationaleFields)
+}
+
+func validateResponsibilityClusters(inventory Inventory, report *Report) {
+	if !slices.IsSortedFunc(inventory.ResponsibilityClusters, func(a, b ResponsibilityCluster) int {
+		if cmp := strings.Compare(a.Owner, b.Owner); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.ClusterID, b.ClusterID)
+	}) {
+		report.UnstableResponsibilitySort = true
+	}
+
+	seen := map[string]ResponsibilityCluster{}
+	for _, cluster := range inventory.ResponsibilityClusters {
+		key := cluster.Owner + "/" + cluster.ClusterID
+		seen[key] = cluster
+		if strings.TrimSpace(cluster.Owner) == "" ||
+			strings.TrimSpace(cluster.ClusterID) == "" ||
+			strings.TrimSpace(cluster.Name) == "" ||
+			strings.TrimSpace(cluster.Note) == "" {
+			report.MissingResponsibilityClusters = append(report.MissingResponsibilityClusters, key)
+		}
+	}
+	for _, key := range CommittedResponsibilityClusterIDs {
+		if _, ok := seen[key]; !ok {
+			report.MissingResponsibilityClusters = append(report.MissingResponsibilityClusters, key)
+		}
+	}
+	slices.Sort(report.MissingResponsibilityClusters)
+	report.MissingResponsibilityClusters = slices.Compact(report.MissingResponsibilityClusters)
+}
+
+func validateRationaleCard(card OwnerRationaleCard) string {
+	if strings.TrimSpace(card.ServiceID) == "" {
+		return "rationale card missing serviceId"
+	}
+	switch card.Kind {
+	case RationaleKindTopLevel, RationaleKindNested:
+	default:
+		return card.ServiceID + ": unknown rationale kind " + strconv.Quote(card.Kind)
+	}
+	if strings.TrimSpace(card.Owner) == "" {
+		return card.ServiceID + ": missing owner"
+	}
+	if strings.TrimSpace(card.TargetPath) == "" {
+		return card.ServiceID + ": missing targetPath"
+	}
+	if card.Kind == RationaleKindNested && strings.TrimSpace(card.ParentServiceID) == "" {
+		return card.ServiceID + ": nested rationale missing parentServiceId"
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"authority", card.Authority},
+		{"stateStore", card.StateStore},
+		{"lifecycle", card.Lifecycle},
+		{"consumers", card.Consumers},
+		{"transactionBoundary", card.TransactionBoundary},
+		{"failureRecovery", card.FailureRecovery},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return card.ServiceID + ": missing " + field.name
+		}
+	}
+	return ""
 }
 
 func packagePaths(rows []PackageRow) []string {

@@ -21,19 +21,53 @@ const (
 	DestinationEdges         = "edges"
 
 	ProcessEdgesPackagePath = "pkg/services/edges"
+
+	RationaleKindTopLevel = "top_level"
+	RationaleKindNested   = "nested"
+
+	OwnerRationaleSortKeyDescription         = "serviceID ascending byte order"
+	ResponsibilityClusterSortKeyDescription  = "owner then clusterID ascending byte order"
 )
 
 // Inventory is the frozen PSS-F01 ownership inventory artifact.
 type Inventory struct {
-	Version                int                   `json:"version"`
-	Stage                  string                `json:"stage"`
-	SortKey                string                `json:"sortKey"`
-	FND01SeedPath          string                `json:"fnd01SeedPath"`
-	Destinations           DestinationVocabulary `json:"destinations"`
-	ProcessEdgesException  ProcessEdgesException `json:"processEdgesException"`
-	SeedServices           []SeedService         `json:"seedServices"`
-	AdditionalCurrentRoots []string              `json:"additionalCurrentRoots"`
-	Packages               []PackageRow          `json:"packages"`
+	Version                  int                     `json:"version"`
+	Stage                    string                  `json:"stage"`
+	SortKey                  string                  `json:"sortKey"`
+	FND01SeedPath            string                  `json:"fnd01SeedPath"`
+	Destinations             DestinationVocabulary   `json:"destinations"`
+	ProcessEdgesException    ProcessEdgesException   `json:"processEdgesException"`
+	SeedServices             []SeedService           `json:"seedServices"`
+	AdditionalCurrentRoots   []string                `json:"additionalCurrentRoots"`
+	OwnerRationales          []OwnerRationaleCard    `json:"ownerRationales"`
+	ResponsibilityClusters   []ResponsibilityCluster `json:"responsibilityClusters"`
+	Packages                 []PackageRow            `json:"packages"`
+}
+
+// OwnerRationaleCard records authority, state, lifecycle, consumers,
+// transaction, and failure rationale for one committed top-level or nested
+// service from the Packaged Service Structure plan target tree.
+type OwnerRationaleCard struct {
+	ServiceID            string `json:"serviceId"`
+	Owner                string `json:"owner"`
+	Kind                 string `json:"kind"`
+	ParentServiceID      string `json:"parentServiceId,omitempty"`
+	TargetPath           string `json:"targetPath"`
+	Authority            string `json:"authority"`
+	StateStore           string `json:"stateStore"`
+	Lifecycle            string `json:"lifecycle"`
+	Consumers            string `json:"consumers"`
+	TransactionBoundary  string `json:"transactionBoundary"`
+	FailureRecovery      string `json:"failureRecovery"`
+}
+
+// ResponsibilityCluster records a large non-subservice responsibility cluster
+// that remains under a committed owner without becoming its own nested service.
+type ResponsibilityCluster struct {
+	Owner     string `json:"owner"`
+	ClusterID string `json:"clusterId"`
+	Name      string `json:"name"`
+	Note      string `json:"note"`
 }
 
 // PackageTargetManifest is the FND-01 package-to-target/deletion seed shape.
@@ -83,15 +117,21 @@ type PackageRow struct {
 
 // Report is the focused ownership-inventory validation result.
 type Report struct {
-	MissingPackages              []string
-	UnexpectedPackages           []string
-	DuplicatePackages            []string
-	InvalidMappings              []string
-	MissingSeedServices          []string
-	MissingAdditionalRoots       []string
-	MissingProcessEdgesException bool
-	UnstableSort                 bool
-	ReusedFND01Seed              bool
+	MissingPackages                []string
+	UnexpectedPackages             []string
+	DuplicatePackages              []string
+	InvalidMappings                []string
+	MissingSeedServices            []string
+	MissingAdditionalRoots         []string
+	MissingOwnerRationales         []string
+	MissingNestedRationales        []string
+	InvalidRationaleFields         []string
+	MissingResponsibilityClusters  []string
+	MissingProcessEdgesException   bool
+	UnstableSort                   bool
+	UnstableRationaleSort          bool
+	UnstableResponsibilitySort     bool
+	ReusedFND01Seed                bool
 }
 
 // OK reports whether validation found no defects.
@@ -102,6 +142,12 @@ func (r Report) OK() bool {
 		len(r.InvalidMappings) == 0 &&
 		len(r.MissingSeedServices) == 0 &&
 		len(r.MissingAdditionalRoots) == 0 &&
+		len(r.MissingOwnerRationales) == 0 &&
+		len(r.MissingNestedRationales) == 0 &&
+		len(r.InvalidRationaleFields) == 0 &&
+		len(r.MissingResponsibilityClusters) == 0 &&
 		!r.MissingProcessEdgesException &&
-		!r.UnstableSort
+		!r.UnstableSort &&
+		!r.UnstableRationaleSort &&
+		!r.UnstableResponsibilitySort
 }
