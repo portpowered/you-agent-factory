@@ -104,10 +104,16 @@
   one short functional coverage lane with
   `GO_FUNCTIONAL_COVERAGE_PROFILE` / `GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT`
   under `.artifacts/functional-test-viz/`, then `cmd/functionaltestviz`.
-  Prove rendering with focused package/cmd golden fixtures under
-  `internal/functionaltestviz/testdata/` rather than executing the full
-  functional suite. Later FND-005 cells still own required-CI boundary
-  enforcement, artifact uploads, and Makefile contract proofs.
+  The target is fail-closed: boundary, suite, coverage-floor, metadata, or
+  rendering failures exit non-zero. It never deletes the artifact root on
+  failure, so already-written diagnostics remain (for example profile/JSON
+  after a floor fail, or those files before a render fail). Prove fail-closed
+  preservation with stubbed Make wrapper smoke under
+  `tests/functional/smoke/functional_test_viz_fail_closed_smoke_test.go`
+  rather than the full functional suite. Prove rendering with focused
+  package/cmd golden fixtures under `internal/functionaltestviz/testdata/`.
+  Later FND-005 cells still own required-CI boundary enforcement, artifact
+  uploads, and Makefile wiring contract proofs.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions

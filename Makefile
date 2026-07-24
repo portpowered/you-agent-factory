@@ -313,6 +313,14 @@ functional-boundary-check:
 # coverage lane exactly once (profile + gocoveragecheck -json-output), then the
 # FND-004 Markdown catalog generator. Artifacts land under
 # .artifacts/functional-test-viz/.
+#
+# Fail-closed composition: each recipe line must succeed before the next runs.
+# Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
+# failures exit non-zero. The target never deletes the artifact root on failure,
+# so already-written diagnostics (for example coverage.out / coverage-summary.json
+# after a floor fail, or those files before a render fail) remain inspectable.
+# gocoveragecheck writes -json-output after a completed measurement even when a
+# floor fails; Make then stops before Markdown so the failure stays non-zero.
 functional-test-viz:
 	$(MAKE) functional-boundary-check
 	@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)

@@ -346,7 +346,7 @@ Use the lane-specific targets below when you need to rerun one required CI lane 
 - `make ui-integration-test` for the browser-backed dashboard integration lane.
 - `make test-unit-coverage` for backend package-test coverage.
 - `make test-functional-coverage` for independent maintained short functional-test coverage.
-- `make functional-test-viz` for the maintainer inventory-plus-coverage catalog: runs `functional-boundary-check`, executes the short functional coverage lane once with profile and `gocoveragecheck -json-output` under `.artifacts/functional-test-viz/`, then renders `functional-tests.md` via `cmd/functionaltestviz`.
+- `make functional-test-viz` for the maintainer inventory-plus-coverage catalog: runs `functional-boundary-check`, executes the short functional coverage lane once with profile and `gocoveragecheck -json-output` under `.artifacts/functional-test-viz/`, then renders `functional-tests.md` via `cmd/functionaltestviz`. Boundary, suite, coverage-floor, metadata, or rendering failures exit non-zero; already-written diagnostics under `.artifacts/functional-test-viz/` are left in place for inspection.
 - `make verify-pr-inference` for the required PR inference approval lane (requires OMNIVOICE runtime prerequisites above).
 
 `make verify-pr` is the canonical full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
