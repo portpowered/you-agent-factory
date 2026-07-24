@@ -1,33 +1,25 @@
 # Invert Factory Sessions execution type ownership without import cycles
 
-## Problem
+## Status
+
+Resolved by `pss-ctr-ses-root-contract-008` (2026-07-24): durable execution and
+effect-port type bodies now live on the `factory_sessions` root;
+`internal/execution` and `internal/contracts` alias from the root.
+
+## Problem (historical)
 
 Closing `type X = internal/execution.X` and `type Y = internal/contracts.Y`
-re-exports from the Factory Sessions root is required so peers treat plain root
-contracts as the source of truth. A naive invert fails:
+re-exports from the Factory Sessions root failed when contracts aliased from the
+root while the root still imported execution:
 
 `factory_sessions` → `internal/execution` → `internal/contracts` → `factory_sessions`
 
-when contracts are changed to alias from the root while the root still imports
-execution for type aliases.
-
-## Why it matters
-
-CTR-SES story work repeatedly hits this wall: opening/binding can publish plain
-root vocabulary, but full re-export closure cannot land without either keeping
-aliases or completing a coordinated ownership invert.
-
-## Proposed direction
+## Resolution
 
 1. Move durable execution request/result/error type bodies onto the
-   `factory_sessions` root (or a root-owned types file with no import of
-   `internal/execution`).
-2. Change `internal/execution` to consume root types (aliases or direct imports).
-3. Only then invert `internal/contracts` to alias from the root.
-4. Keep function helpers that must stay in execution callable without making
-   nested packages the peer-facing contract source.
-
-## Non-goals
-
-- Broad IMP-SES nested capability rewrites.
-- Transport/OpenAPI redesign beyond compile fixes forced by type ownership.
+   `factory_sessions` root (`execution_owned_contract.go`).
+2. Change `internal/execution` to alias root types (`root_contract_aliases.go`)
+   and keep thin wrappers for helpers that remain useful inside execution.
+3. Invert `internal/contracts` to alias effect-port types from the root.
+4. Keep listing helpers that need execution-local filters (`ApplySessionListScope`)
+   inside execution; publish pure lifecycle/listing helpers used by peers on the root.

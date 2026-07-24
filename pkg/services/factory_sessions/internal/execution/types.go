@@ -6,6 +6,7 @@ import (
 	"fmt"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"strings"
 	"time"
@@ -278,236 +279,20 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 	return cloned
 }
 
-// SyncOutcome reports how a sync start wait ended.
-type SyncOutcome string
-
 const (
 	SyncOutcomeCompleted    SyncOutcome = "COMPLETED"
 	SyncOutcomeTimedOut     SyncOutcome = "TIMED_OUT"
 	SyncOutcomeStillRunning SyncOutcome = "STILL_RUNNING"
 )
 
-// InlineWorkflowSource carries inline workflow source from a durable execution request.
-type InlineWorkflowSource struct {
-	Dialect      string
-	InlineSource string
-	Entrypoint   string
-	Metadata     map[string]string
-	// Factory declaration fields retain constraints when a caller has already
-	// resolved a JavaScript factory asset and supplies its source directly.
-	Agents        map[string]interfaces.FactoryOrchestratorJavaScriptAgent
-	ArgsSchema    json.RawMessage
-	DefaultPolicy json.RawMessage
-}
-
-// Source is the normalized durable execution source selector.
-type Source struct {
-	Kind           workflowsource.WorkflowSourceKind
-	FactoryID      string
-	FactoryInline  json.RawMessage
-	WorkflowFile   string
-	WorkflowName   string
-	InlineWorkflow *InlineWorkflowSource
-}
-
-// OrchestratorOverride is an optional orchestrator override on a start request.
-type OrchestratorOverride struct {
-	Kind string
-	Raw  json.RawMessage
-}
-
-// WaitOptions bounds sync execution waits.
-type WaitOptions struct {
-	TimeoutMillis   *int64
-	CancelOnTimeout bool
-}
-
-const (
-	// ChildExecutorModeFake selects deterministic in-process child execution.
-	ChildExecutorModeFake = workflowsource.JavaScriptChildExecutionModeFake
-	// ChildExecutorModeLive selects provider-backed child execution.
-	ChildExecutorModeLive = workflowsource.JavaScriptChildExecutionModeLive
-)
-
-// RuntimeOptions selects durable JavaScript runtime execution behavior without
-// changing workflow source syntax.
-type RuntimeOptions struct {
-	ChildExecutorMode string
-}
-
-// FactoryEventConsumer observes ordered canonical events for one synchronous
-// execution. It is invocation-local and is never serialized or persisted.
-type FactoryEventConsumer func([]interfaces.FactoryEvent)
-
-// ResumeSessionRequest resumes one interrupted durable session from persisted
-// checkpoint summaries and shared session state.
-type ResumeSessionRequest struct {
-	RequestID string
-}
-
-// StartRequest is the normalized durable session execution request shared by async
-// and sync start across API, CLI, MCP, and UI.
-type StartRequest struct {
-	RequestID       string
-	Source          Source
-	Args            map[string]any
-	Orchestrator    *OrchestratorOverride
-	RequestedPolicy map[string]any
-	Runtime         *RuntimeOptions
-	Wait            *WaitOptions
-	EventConsumer   FactoryEventConsumer `json:"-"`
-}
-
-// ResolvedSource is the customer-visible resolved source identity for one session.
-type ResolvedSource struct {
-	Kind            workflowsource.WorkflowSourceKind
-	SourceRef       string
-	SourceHash      string
-	Dialect         string
-	ResolutionOrder []string
-	Metadata        map[string]string
-	Agents          map[string]interfaces.FactoryOrchestratorJavaScriptAgent
-	ArgsSchema      json.RawMessage `json:"argsSchema,omitempty"`
-	DefaultPolicy   json.RawMessage `json:"defaultPolicy,omitempty"`
-}
-
-// InspectionLinks are API-relative links for polling and inspecting one session.
-type InspectionLinks struct {
-	Session    string
-	Status     string
-	Events     string
-	Results    string
-	Dispatches string
-	Artifacts  string
-}
-
-// PolicyProjection carries requested and effective policy hashes for start responses.
-type PolicyProjection struct {
-	Requested     map[string]any
-	Effective     map[string]any
-	EffectiveHash string
-}
-
-// AsyncStartResult is the shared async durable execution start outcome.
-type AsyncStartResult struct {
-	SessionID        string
-	Status           string
-	OrchestratorKind string
-	Dialect          string
-	ResolvedSource   ResolvedSource
-	SourceHash       string
-	Policy           PolicyProjection
-	Links            InspectionLinks
-}
-
-// SyncStartResult is the shared sync durable execution start outcome.
-type SyncStartResult struct {
-	AsyncStartResult
-	SyncOutcome              SyncOutcome
-	Result                   json.RawMessage
-	TimedOut                 bool
-	SessionCanceledByTimeout bool
-}
-
-// ErrExecutionRequestIDConflict reports that requestId was reused with a different
-// normalized execution tuple or a different start operation (async vs sync).
-var ErrExecutionRequestIDConflict = errors.New("execution request id conflict")
-
 // ErrControlRequestIDConflict reports that requestId was reused with a different
 // normalized lifecycle-control tuple.
 var ErrControlRequestIDConflict = errors.New("control request id conflict")
-
-// ErrSessionNotFound reports that no durable session matched the requested id.
-var ErrSessionNotFound = errors.New("factory session not found")
-
-// ErrDispatchNotFound reports that no dispatch matched the requested id within
-// the targeted durable session.
-var ErrDispatchNotFound = errors.New("dispatch not found")
-
-// ErrArtifactNotFound reports that no artifact matched the requested id within
-// the targeted durable session.
-var ErrArtifactNotFound = errors.New("artifact not found")
-
-// ErrReconnectCursorNotFound reports that the reconnect cursor did not match any
-// recorded durable session event.
-var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
 
 // ErrUnsupportedControl reports that the requested control is not supported by
 // the active durable session runtime.
 var ErrUnsupportedControl = errors.New("unsupported lifecycle control")
 
-// ControlError carries a typed lifecycle-control outcome for invalid transitions
-// and other actionable control failures surfaced by service implementations.
-type ControlError struct {
-	Operation LifecycleControlKind
-	Outcome   LifecycleControlOutcome
-	Status    LifecycleStatus
-	Message   string
-	Links     LifecycleControlLinks
-}
-
-func (e *ControlError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.Message != "" {
-		return e.Message
-	}
-	return string(e.Outcome)
-}
-
-// ValidationError reports a stable client-side normalization failure.
-type ValidationError struct {
-	Message string
-	Field   string
-}
-
-func (e *ValidationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
-
-// NewValidationError constructs one field-scoped validation error.
 func NewValidationError(field, message string) *ValidationError {
-	return &ValidationError{
-		Field:   field,
-		Message: message,
-	}
-}
-
-// ResumeOutcome identifies one typed restart-resume failure class.
-type ResumeOutcome string
-
-const (
-	// ResumeOutcomeMissingCheckpoint reports that no persisted checkpoint summary
-	// exists for the interrupted session.
-	ResumeOutcomeMissingCheckpoint ResumeOutcome = "MISSING_CHECKPOINT"
-	// ResumeOutcomeInvalidState reports corrupted resume metadata or a session that
-	// is not eligible for restart-resume reconstruction.
-	ResumeOutcomeInvalidState ResumeOutcome = "INVALID_RESUME_STATE"
-	// ResumeOutcomeCorruptedPersistence reports unreadable or invalid persisted
-	// session snapshots required for restart-resume.
-	ResumeOutcomeCorruptedPersistence ResumeOutcome = "CORRUPTED_PERSISTENCE"
-)
-
-// ResumeError carries a typed restart-resume failure surfaced by durable session
-// execution when checkpoint summaries or persisted resume state are missing or invalid.
-type ResumeError struct {
-	Outcome   ResumeOutcome
-	Status    LifecycleStatus
-	Field     string
-	Message   string
-	SessionID string
-}
-
-func (e *ResumeError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.Message != "" {
-		return e.Message
-	}
-	return string(e.Outcome)
+	return factorysessions.NewValidationError(field, message)
 }
