@@ -15,6 +15,9 @@ ui/dist_stamp.go
 
 ## do not include temporary working files
 docs/temp/**
+## Wave 0 functional-tests-expansion planning authority (durable)
+!docs/temp/functional-tests-expansion/
+!docs/temp/functional-tests-expansion/**
 ## Do not include temporary files in general for worktree progress
 prd.json
 prd.md
