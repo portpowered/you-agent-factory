@@ -1,0 +1,12 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "FND-10",
+      "leaseClass": "program-metadata",
+      "exclusivePaths": [],
+      "state": "ready",
+      "prerequisites": []
+    }
+  ]
+}

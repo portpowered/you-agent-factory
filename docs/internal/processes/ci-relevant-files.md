@@ -160,6 +160,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   without writing, reports sorted package-relative stale, missing, and
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
+  PSS-F01 ownership freeze gating lives in `internal/ownershipinventory`:
+  `make ownership-inventory-check` runs `VerifyFreeze` against
+  `docs/internal/baselines/ownership-inventory.json` and
+  `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,
+  proving completeness, stable sort, rationale fields, edge classifications,
+  named-owner coverage, Process Edges exception presence, and non-overlapping
+  active leases. Keep that check in the default lint aggregation so PSS-F02
+  starts from a proven freeze rather than prose-only claims.
   Packaged Factory npm candidates use the shared release identity and staging
   core in `scripts/package-release-candidate.mjs` through
   `scripts/packaged-factories-package-candidate.mjs`; keep its run ID, full
