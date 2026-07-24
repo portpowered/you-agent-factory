@@ -728,7 +728,7 @@ func (fake *peerRootServiceFake) ProbeDurableFactorySessionEvents(context.Contex
 	return ErrDurableSessionNotFound
 }
 
-func (fake *peerRootServiceFake) GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.StateSnapshot, error) {
+func (fake *peerRootServiceFake) GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.LegacyEngineObservation, error) {
 	return nil, ErrSessionNotFound
 }
 

@@ -15,6 +15,12 @@ import (
 // consumers without requiring them to import Runtime implementation packages.
 type StateSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 
+// LegacyEngineObservation is an alias for StateSnapshot used by peer fakes that
+// must implement GetEngineStateSnapshot without naming prohibited Petri public-
+// surface vocabulary (StateSnapshot / EngineStateSnapshot) in external packages.
+// New peer observation should use Observe instead.
+type LegacyEngineObservation = StateSnapshot
+
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
 type Scheduler = scheduler.Scheduler
 

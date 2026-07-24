@@ -8,7 +8,7 @@
     { "packagePath": "pkg/services/factory_definitions/loading/runtimetests", "fileCount": 19, "owner": "factory-definition-maintainers", "removalReason": "Consolidate runtime loading fixtures and move focused scenarios beside their owners." },
     { "packagePath": "pkg/services/factory_definitions/validation", "fileCount": 22, "owner": "factory-definition-maintainers", "removalReason": "Partition validation rules by definition concern." },
     { "packagePath": "pkg/services/factory_runtime", "fileCount": 64, "owner": "factory-runtime-maintainers", "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages." },
-    { "packagePath": "pkg/services/factory_runtime/runtime", "fileCount": 21, "owner": "factory-runtime-maintainers", "removalReason": "Split runtime coordination from lifecycle and projection behavior." },
+    { "packagePath": "pkg/services/factory_runtime/runtime", "fileCount": 20, "owner": "factory-runtime-maintainers", "removalReason": "Split runtime coordination from lifecycle and projection behavior." },
     { "packagePath": "pkg/services/factory_runtime/subsystems", "fileCount": 19, "owner": "factory-runtime-maintainers", "removalReason": "Separate subsystem adapters by stable runtime boundary." },
     { "packagePath": "pkg/services/factory_sessions", "fileCount": 24, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
     { "packagePath": "pkg/services/factory_sessions/internal/execution", "fileCount": 18, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },

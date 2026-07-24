@@ -1,4 +1,4 @@
-package runtime
+package rootobservation
 
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -7,10 +7,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 )
 
-// projectRootObservation maps a legacy engine snapshot into the published plain
-// observation vocabulary. Marking, topology, tokens, and enabled transitions are
-// intentionally omitted from the peer-facing result.
-func projectRootObservation(
+// Project maps a legacy engine snapshot into the published plain observation
+// vocabulary. Marking, topology, tokens, and enabled transitions are
+// intentionally omitted from the peer-facing result. This helper lives under
+// factory_runtime/internal so raw engine-snapshot types stay off the public
+// Runtime package surface enforced by pkg-boundary.
+func Project(
 	snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	scope factory.ObservationScope,
 ) factory.Observation {

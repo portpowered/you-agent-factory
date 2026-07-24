@@ -826,6 +826,12 @@ Plain observation request/result/value vocabulary lives in
 `ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
 legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
 JavaScript runtime-record types as the peer source of truth for this slice.
+Concrete sanitized projection from legacy engine snapshots lives under
+`factory_runtime/internal/rootobservation` so raw `EngineStateSnapshot` types
+stay off the public Runtime package surface enforced by `make pkg-boundary`.
+External peer fakes that must still stub `GetEngineStateSnapshot` should return
+`LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
+prohibited Petri public-surface symbols in non-internal packages.
 
 Plain dispatch-plan request/result vocabulary lives in
 `root_dispatch_plan_contract.go` (`PlanDispatchRequest`/`PlanDispatchResult`,

@@ -42,7 +42,7 @@ func (s *peerRootService) SubscribeFactoryEvents(
 ) (*factorydefinitions.FactoryEventStream, error) {
 	return nil, nil
 }
-func (s *peerRootService) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+func (s *peerRootService) GetEngineStateSnapshot(context.Context) (*factoryruntime.LegacyEngineObservation, error) {
 	return nil, nil
 }
 func (s *peerRootService) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {

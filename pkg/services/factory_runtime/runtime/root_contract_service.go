@@ -5,6 +5,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 )
 
 // Terminate publishes the root terminate/stop control entrypoint. Durable stop
@@ -43,7 +44,7 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	if err != nil {
 		return factory.ObserveResult{}, err
 	}
-	return factory.ObserveResult{Observation: projectRootObservation(snap, req.Scope)}, nil
+	return factory.ObserveResult{Observation: rootobservation.Project(snap, req.Scope)}, nil
 }
 
 // PlanDispatch publishes a stable dispatch intent through the root dispatch-plan
