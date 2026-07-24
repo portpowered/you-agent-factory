@@ -1417,6 +1417,15 @@ response-stream output.
   stable-ID local/inherited inputs, missing injected dependencies, and
   initializer/home failures that must not invoke the operation. Do not weaken
   `go-unit-coverage-package-minimums.json` for migration-owned packages.
+- Functional coverage does not inherit unit-test hits. After the same cutover,
+  restore `go-functional-coverage-package-minimums.json` floors with short
+  `tests/functional/...` evidence that exercises the migrated packages under the
+  functional profile: docs topic inventory accessors
+  (`TopicIndexEntries` / `SupportedTopicCommands`) plus alias `you docs` paths,
+  MCP `ResolvedServeHandler` fixture/runtime/error paths (and production
+  `you mcp serve --runtime` missing-home), and process-level
+  `you models list` / `inspect` against an injected `--server`. Do not weaken
+  the functional package floors for migration-owned packages.
 - `pkg/workers/mockworker/runner.go` preserves the original provider command, args,
   and worker identity in `YOU_MOCK_WORKER_*` script environment variables before a
   script mock replaces the command. Functional CLI tests can capture those values
