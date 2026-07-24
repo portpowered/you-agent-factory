@@ -63,7 +63,28 @@ packet is treated as active/dispatched.
 
 FND-10 owns program metadata only. It does not migrate services, invent a
 second architecture tree, or take shared Wire/HTTP/CLI/MCP fan-in cutovers
-(`PSS-I01`..`PSS-I05`).
+(`PSS-I01`..`PSS-I05`). Shared Wire/HTTP/CLI/MCP composition remains owned by
+those integration packets; do not edit generated OpenAPI bundles, CLI
+manifests/generators, or provider registry/conductor surfaces to record lease
+or packet-state evidence.
+
+## Planner state updates
+
+Update scheduling evidence by editing only this program-metadata ledger (and,
+when needed, co-located `internal/psslease` fixtures). Representative lifecycle:
+
+1. `blocked` or `ready` — undispatched; path overlap does not hold a lease
+2. `active` — dispatched / lease-holding (run `ValidateDispatchCandidate` first)
+3. `review` or `integration` — still lease-holding while exclusive paths are claimed
+4. `done` — lease released; packet no longer blocks overlapping dispatch
+
+In code, `psslease.SetPacketState` applies the same gate then writes the new
+state. Planners may equivalently edit `state` in
+`path-lease-packet-manifest.json` by hand and re-run validation.
+
+Cross-links: plan/checklist lease matrix under
+`docs/temp/projects/packaged-service-structure/` (local planner mirror) and the
+committed ledger in this directory.
 
 ## Validation
 

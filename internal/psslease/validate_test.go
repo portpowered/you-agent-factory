@@ -284,6 +284,91 @@ func TestCommittedProgramMetadataManifestPassesLeaseHolderValidation(t *testing.
 	}
 }
 
+func TestPlannerStateUpdateWalksReadyActiveReviewIntegrationDoneOnProgramMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadCommittedCatalog(t)
+	packetID := "FND-10"
+	packet := packetByID(t, manifest, packetID)
+	if packet.State != psslease.StateReady {
+		t.Fatalf("FND-10 starting state = %q, want %q for representative planner walk", packet.State, psslease.StateReady)
+	}
+	for _, path := range packet.ExclusivePaths {
+		if strings.Contains(path, "api/openapi") ||
+			strings.Contains(path, "pkg/transports/http/") ||
+			strings.Contains(path, "cmd/factory/") ||
+			strings.Contains(path, "pkg/transports/mcp/") ||
+			strings.Contains(path, "pkg/wire/") {
+			t.Fatalf("FND-10 exclusive path %q crosses shared OpenAPI/CLI/provider/Wire surfaces; planner updates must stay in program metadata", path)
+		}
+	}
+
+	transitions := []string{
+		psslease.StateActive,
+		psslease.StateReview,
+		psslease.StateIntegration,
+		psslease.StateDone,
+	}
+	for _, target := range transitions {
+		if err := psslease.SetPacketState(manifest, packetID, target); err != nil {
+			t.Fatalf("SetPacketState(%q, %q) error = %v, want nil for planner-only lifecycle update", packetID, target, err)
+		}
+		updated := packetByID(t, manifest, packetID)
+		if updated.State != target {
+			t.Fatalf("after SetPacketState packet state = %q, want %q", updated.State, target)
+		}
+		if err := psslease.ValidateCatalog(manifest); err != nil {
+			t.Fatalf("ValidateCatalog() after %q error = %v, want nil", target, err)
+		}
+	}
+}
+
+func TestSetPacketStateRejectsOverlappingLeaseHoldingPromotion(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-blocked-ready-path-overlap.json")
+	if err := psslease.SetPacketState(manifest, "PKT-A", psslease.StateActive); err != nil {
+		t.Fatalf("SetPacketState(PKT-A, active) error = %v, want nil", err)
+	}
+	err := psslease.SetPacketState(manifest, "PKT-B", psslease.StateActive)
+	if err == nil {
+		t.Fatal("SetPacketState(PKT-B, active) error = nil, want overlapping lease rejection")
+	}
+	for _, want := range []string{"PKT-A", "PKT-B"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("SetPacketState() error = %v, want substring %q", err, want)
+		}
+	}
+	if got := packetByID(t, manifest, "PKT-B").State; got != psslease.StateBlocked {
+		t.Fatalf("PKT-B state = %q after rejected promotion, want unchanged %q", got, psslease.StateBlocked)
+	}
+}
+
+func loadCommittedCatalog(t *testing.T) *psslease.Manifest {
+	t.Helper()
+	path := filepath.Join("..", "..", "docs", "internal", "projects", "packaged-service-structure", "path-lease-packet-manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read committed manifest: %v", err)
+	}
+	manifest, err := psslease.DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest() error = %v", err)
+	}
+	return manifest
+}
+
+func packetByID(t *testing.T, manifest *psslease.Manifest, packetID string) psslease.Packet {
+	t.Helper()
+	for _, packet := range manifest.Packets {
+		if packet.PacketID == packetID {
+			return packet
+		}
+	}
+	t.Fatalf("packet %q not found", packetID)
+	return psslease.Packet{}
+}
+
 func loadFixture(t *testing.T, name string) *psslease.Manifest {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))

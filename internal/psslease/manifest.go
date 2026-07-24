@@ -194,6 +194,39 @@ func ValidateLeaseHolders(manifest *Manifest) error {
 	return nil
 }
 
+// SetPacketState applies a planner state update to packetID after the
+// pre-dispatch overlap gate. Callers edit program-metadata manifests (and
+// co-located fixtures) only; this helper does not touch OpenAPI, CLI, or
+// provider surfaces.
+//
+// Documented planner lifecycle: blocked|ready → active → review|integration → done.
+func SetPacketState(manifest *Manifest, packetID, targetState string) error {
+	if manifest == nil {
+		return fmt.Errorf("set pss packet state: manifest is nil")
+	}
+	packetID = strings.TrimSpace(packetID)
+	if packetID == "" {
+		return fmt.Errorf("set pss packet state: missing packetId")
+	}
+	if err := ValidateDispatchCandidate(manifest, packetID, targetState); err != nil {
+		return err
+	}
+
+	for index := range manifest.Packets {
+		if strings.TrimSpace(manifest.Packets[index].PacketID) != packetID {
+			continue
+		}
+		prior := manifest.Packets[index].State
+		manifest.Packets[index].State = targetState
+		if err := ValidateLeaseHolders(manifest); err != nil {
+			manifest.Packets[index].State = prior
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("set pss packet state: unknown packetId %q", packetID)
+}
+
 // ValidateDispatchCandidate rejects promoting packetID into targetState when
 // that transition would create a lease-holding overlap with an existing holder.
 // Non-holding target states always pass the overlap gate.
