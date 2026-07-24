@@ -47,6 +47,10 @@ func (f *gatewayLifecycleFactory) Pause(context.Context) error { return nil }
 
 func (f *gatewayLifecycleFactory) Resume(context.Context) error { return nil }
 
+func (f *gatewayLifecycleFactory) Terminate(context.Context, factory.TerminateRequest) (factory.TerminateResult, error) {
+	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+}
+
 func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }

@@ -64,6 +64,12 @@ type Service interface {
 	// Returns ErrNotRunning when the instance is not running.
 	Resume(ctx context.Context) error
 
+	// Terminate requests cooperative stop of the Factory Runtime instance using
+	// the published plain terminate/stop control contract. Returns
+	// ErrAlreadyStopped, ErrNotRunning, or ErrInvalidLifecycleTransition for
+	// typed lifecycle failures. Nested IMP-RUN packets own durable stop wiring.
+	Terminate(ctx context.Context, req TerminateRequest) (TerminateResult, error)
+
 	// GetFactoryEvents returns the current-process canonical event history.
 	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
 

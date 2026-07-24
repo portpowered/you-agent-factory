@@ -455,6 +455,20 @@ func (m *MockFactory) Resume(_ context.Context) error {
 	return nil
 }
 
+func (m *MockFactory) Terminate(_ context.Context, _ petri.TerminateRequest) (petri.TerminateResult, error) {
+	if m == nil {
+		return petri.TerminateResult{Outcome: petri.ControlOutcomeAccepted}, nil
+	}
+	switch m.State {
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return petri.TerminateResult{}, petri.ErrAlreadyStopped
+	case "":
+		return petri.TerminateResult{}, petri.ErrNotRunning
+	default:
+		return petri.TerminateResult{Outcome: petri.ControlOutcomeAccepted}, nil
+	}
+}
+
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
 		return work.OperatorMoveResult{}, m.MoveWorkErr

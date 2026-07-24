@@ -16,6 +16,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -64,6 +65,9 @@ func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.Fa
 }
 func (m *mockFactory) Pause(_ context.Context) error  { return nil }
 func (m *mockFactory) Resume(_ context.Context) error { return nil }
+func (m *mockFactory) Terminate(_ context.Context, _ factory.TerminateRequest) (factory.TerminateResult, error) {
+	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+}
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

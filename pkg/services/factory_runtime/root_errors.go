@@ -13,4 +13,12 @@ var (
 	// ErrNotFound indicates the targeted Factory Runtime instance or work scope
 	// does not exist for the requested operation.
 	ErrNotFound = errors.New("factory runtime target not found")
+
+	// ErrAlreadyStopped indicates terminate/stop was requested against an
+	// instance that has already stopped.
+	ErrAlreadyStopped = errors.New("factory runtime is already stopped")
+
+	// ErrInvalidLifecycleTransition indicates the requested control operation is
+	// not valid from the instance's current lifecycle state.
+	ErrInvalidLifecycleTransition = errors.New("factory runtime invalid lifecycle transition")
 )

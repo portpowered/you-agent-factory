@@ -631,6 +631,23 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	return nil
 }
 
+// Terminate publishes the root terminate/stop control entrypoint. Durable stop
+// wiring remains an IMP-RUN concern; this maps lifecycle states onto the plain
+// root typed errors and accepted outcome without mutating run-loop internals.
+func (f *factoryImpl) Terminate(_ context.Context, _ factory.TerminateRequest) (factory.TerminateResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return factory.TerminateResult{}, factory.ErrAlreadyStopped
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+	default:
+		return factory.TerminateResult{}, factory.ErrNotRunning
+	}
+}
+
 func (f *factoryImpl) automaticTicksPaused() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()

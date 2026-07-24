@@ -719,3 +719,13 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 slices. Prove each published slice with a colocated `factory_test`
 characterization that implements a fake `Service` using only the root package
 and approved peer contracts, without importing `factory_runtime/internal`.
+
+Plain control request/result vocabulary lives in `root_control_contract.go`
+(`PauseRequest`/`PauseResult`, `ResumeRequest`/`ResumeResult`,
+`TerminateRequest`/`TerminateResult`, `WaitToCompleteRequest`/`WaitToCompleteResult`,
+`MoveWorkRequest`/`MoveWorkResult`, plus `Apply*` helpers). Peers call those
+helpers or `Service` methods (`Pause`, `Resume`, `Terminate`, `WaitToComplete`,
+`MoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
+`ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
+errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`). Do not route
+control through hosting `Lifecycle.Stop` as the peer authority for this slice.

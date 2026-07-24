@@ -21,6 +21,9 @@ var _ factoryruntime.Service = (*peerRootService)(nil)
 
 func (s *peerRootService) Pause(context.Context) error  { return s.pauseErr }
 func (s *peerRootService) Resume(context.Context) error { return nil }
+func (s *peerRootService) Terminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
+}
 func (s *peerRootService) GetFactoryEvents(context.Context) ([]factorydefinitions.FactoryEvent, error) {
 	return nil, nil
 }

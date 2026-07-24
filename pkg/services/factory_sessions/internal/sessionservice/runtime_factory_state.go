@@ -97,6 +97,20 @@ func (fs *SessionRuntime) Resume(ctx context.Context) error {
 	return nil
 }
 
+// Terminate requests cooperative stop of the current runtime instance through
+// the published Factory Runtime root control contract.
+func (fs *SessionRuntime) Terminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.TerminateResult{}, fmt.Errorf("factory runtime is not available")
+	}
+	result, err := runtime.Terminate(ctx, req)
+	if err != nil {
+		return factory.TerminateResult{}, fmt.Errorf("terminate factory: %w", err)
+	}
+	return result, nil
+}
+
 // GetFactoryEvents returns the canonical factory event history.
 func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
 	runtime := fs.currentRuntimeService()
