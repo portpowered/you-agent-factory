@@ -2331,1080 +2331,1080 @@
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/batch_inputs_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_cleanup_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/product/dashboard/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestConfigDriven_RESTAPISubmitAndQuery",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
     },
     {
       "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
     },
     {
       "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
       "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "cron-time-work-smoke",
+      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
     },
     {
       "source_path": "tests/functional/runtime_api/api_event_replay_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: unit \u2014 calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests.",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
     },
     {
       "source_path": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
       "source_path": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestRuntimeAPI_CompilesWithFunctionalLongTag",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty.",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/generated_client_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/generated_client_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/generated_client_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_schema_deserialization_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetiredFieldsAtSameBoundaryStage",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/content_negotiation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_schema_deserialization_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedSchemaDeserializationSmoke_FileHTTPAndReplayTransportsStayAligned",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/content_negotiation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/generated_client_test.go",
       "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "api-smoke,artifact-contract-closeout",
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/response_events/stream_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/response_events/stream_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/http_test.go",
       "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "artifact-contract-closeout",
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_manual_work_recovery_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/recovery/manual_move_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/models/lifecycle/http_test.go",
       "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "specialty_targets": "pr-inference-approval,long-tests-functional-runtime",
+      "deletion_only_batch": "runtime_api-delete-08-models"
     },
     {
       "source_path": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/models/lifecycle/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-08-models"
     },
     {
       "source_path": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestOOTBExperience_APIPreseededSimplePipelineCompletes",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestOOTBExperience_APIPreseededTwoStagePipelineCompletes",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/status/status_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/observability/metrics/lifecycle_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
       "source_path": "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/work/submission/batch_inputs_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_runtime_config_alignment_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/api_runtime_log_policy_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/observability/logging/redaction_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_runtime_log_policy_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/observability/logging/redaction_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_service_config_override_alignment_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/mock/replacement_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
       "source_path": "tests/functional/runtime_api/api_service_config_override_alignment_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
       "source_path": "tests/functional/runtime_api/api_service_mode_observability_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/observability/metrics/lifecycle_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/api_service_mode_observability_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-01-transport-http"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_ReturnsPrimaryResult",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
       "source_path": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/workers/inference/failure_normalization_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
       "source_path": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/events/replay/record_replay_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/runtime_api/dashboard_engine_state_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestDashboard_EngineStateSnapshot_EndToEnd",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/product/dashboard/http_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_RejectsInvalidDocTargets",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_validation_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_session_import_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFactory",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_RequiresAdvancedSaveVersion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_import_replace_current_split_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_layout_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion",
       "lane": "short",
-      "destination": "TBD",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/topology_projection_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch",
       "lane": "functionallong",
-      "destination": "TBD",
+      "destination": "tests/functional/events/replay/record_replay_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
-      "deletion_only_batch": "TBD"
+      "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
       "source_path": "tests/functional/sessionparity/compare_test.go",
@@ -5253,5 +5253,24 @@
     "lane_functionallong": 122,
     "lane_short": 381
   },
-  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. destination and deletion_only_batch remain TBD until mapping stories fill them. specialty_targets is none until specialty-binding stories record Make selectors."
+  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. destination and deletion_only_batch remain TBD until mapping stories fill them. specialty_targets is none until specialty-binding stories record Make selectors.",
+  "runtime_api_mapping": {
+    "mapped_at": "2026-07-24T02:25:00Z",
+    "story": "fnd-007-migration-ledger-003",
+    "scenario_count": 108,
+    "batch_ids": [
+      "runtime_api-delete-01-transport-http",
+      "runtime_api-delete-02-work-submission",
+      "runtime_api-delete-03-workstations-cron",
+      "runtime_api-delete-04-sessions",
+      "runtime_api-delete-05-factory-packaged",
+      "runtime_api-delete-06-factory-current",
+      "runtime_api-delete-07-events-replay",
+      "runtime_api-delete-08-models",
+      "runtime_api-delete-09-workers-resilience",
+      "runtime_api-delete-10-observability-product",
+      "runtime_api-delete-11-wrong-layer"
+    ],
+    "wrong_layer_count": 2
+  }
 }

@@ -18,7 +18,9 @@ the repository's customer-level functional tests.
 - [`migration-ledger-inventory.json`](migration-ledger-inventory.json) is the
   machine-readable companion to the ledger Inventory section (same required
   row fields). Use it for later batch tooling; keep it in sync with the
-  Markdown inventory when mapping stories update rows.
+  Markdown inventory when mapping stories update rows. `runtime_api` rows are
+  fully mapped into named `runtime_api-delete-*` deletion-only batches
+  (FND-007-003).
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.
