@@ -72,8 +72,8 @@ type Service interface {
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
 	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
 	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
-	// invoke this peer API. Additive typed SessionRef slices (Inspect) share this
-	// singular root without replacing Details.
+	// invoke this peer API. Additive typed SessionRef slices (Inspect, Project)
+	// share this singular root without replacing Details.
 	Details(provider, kind, id string) (Detail, error)
 
 	// Inspect validates and inspects a detached typed SessionRef identity in the
@@ -84,6 +84,16 @@ type Service interface {
 	// does not import Providers catalog/execution, enumeration, availability,
 	// capability, or Workers selection-policy types.
 	Inspect(InspectRequest) (InspectResult, error)
+
+	// Project returns a provider-independent normalized transcript/detail
+	// projection for a detached typed SessionRef. Peers receive a ProjectResult
+	// whose Detail covers transcript entries, reasoning summaries,
+	// tool/function-call facts, parse summary, and token usage, or a typed
+	// Provider Sessions failure such as ErrUnsupportedProvider,
+	// ErrUnsupportedKind, ErrSessionNotFound, and/or LookupError. Method
+	// signatures and published values do not name private Codex/Cursor reader
+	// types, filesystem/SQL/OS effect ports, or Providers execution types.
+	Project(ProjectRequest) (ProjectResult, error)
 }
 
 // SessionRef is the detached typed provider-session identity in the
@@ -104,11 +114,26 @@ type InspectRequest struct {
 }
 
 // InspectResult is the detached success outcome for typed SessionRef
-// validation/inspection. Normalized transcript/detail projection remains an
-// additive companion slice on the same root Service.
+// validation/inspection. Normalized transcript/detail projection is published
+// as the additive Project companion slice on the same root Service.
 type InspectResult struct {
 	Session SessionRef
 	Source  SourceMetadata
+}
+
+// ProjectRequest asks the root Service for a normalized transcript/detail
+// projection for one detached SessionRef without requiring filesystem/SQL/OS
+// effect ports from the caller.
+type ProjectRequest struct {
+	Session SessionRef
+}
+
+// ProjectResult is the detached Detail-shaped projection peers consume for
+// transcript, reasoning, tool/function-call, parse, and usage facts through
+// Provider Sessions root contracts only.
+type ProjectResult struct {
+	Session SessionRef
+	Detail  Detail
 }
 
 type Provider string

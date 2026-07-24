@@ -158,6 +158,26 @@ func (s *inspectionService) Inspect(req providersessions.InspectRequest) (provid
 	}, nil
 }
 
+// Project projects provider-independent transcript/detail facts for a detached
+// typed SessionRef through the same storage-backed lookup path as Details.
+func (s *inspectionService) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	if strings.TrimSpace(req.Session.ID) == "" {
+		return providersessions.ProjectResult{}, providersessions.ErrInvalidIdentifier
+	}
+	detail, err := s.Details(string(req.Session.Provider), req.Session.Kind, req.Session.ID)
+	if err != nil {
+		return providersessions.ProjectResult{}, err
+	}
+	return providersessions.ProjectResult{
+		Session: providersessions.SessionRef{
+			Provider: detail.ProviderSession.Provider,
+			Kind:     detail.ProviderSession.Kind,
+			ID:       detail.ProviderSession.ID,
+		},
+		Detail: detail,
+	}, nil
+}
+
 func normalizeProvider(provider string) (providersessions.Provider, error) {
 	switch strings.TrimSpace(provider) {
 	case string(providersessions.ProviderCodex):

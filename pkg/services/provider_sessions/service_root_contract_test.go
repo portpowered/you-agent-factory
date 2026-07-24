@@ -20,6 +20,10 @@ type rootServiceFake struct {
 	inspectErr    error
 	lastInspected providersessions.SessionRef
 
+	project       providersessions.ProjectResult
+	projectErr    error
+	lastProjected providersessions.SessionRef
+
 	lastProvider string
 	lastKind     string
 	lastID       string
@@ -43,6 +47,14 @@ func (f *rootServiceFake) Inspect(req providersessions.InspectRequest) (provider
 		return providersessions.InspectResult{}, f.inspectErr
 	}
 	return f.inspect, nil
+}
+
+func (f *rootServiceFake) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	f.lastProjected = req.Session
+	if f.projectErr != nil {
+		return providersessions.ProjectResult{}, f.projectErr
+	}
+	return f.project, nil
 }
 
 func TestRootService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
@@ -212,6 +224,187 @@ func TestRootService_Inspect_Characterization_TypedFailures(t *testing.T) {
 			fake := &rootServiceFake{inspectErr: test.err}
 			var svc providersessions.Service = fake
 			_, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
+			if !errors.Is(err, test.err) {
+				t.Fatalf("err = %v, want typed %v", err, test.err)
+			}
+			var lookupErr *providersessions.LookupError
+			if errors.As(test.err, &lookupErr) {
+				var got *providersessions.LookupError
+				if !errors.As(err, &got) {
+					t.Fatalf("err = %T, want LookupError", err)
+				}
+				if got.Provider != providersessions.ProviderCursor || got.Root != "/tmp/cursor-root" {
+					t.Fatalf("LookupError = %#v", got)
+				}
+				if !errors.Is(err, providersessions.ErrSessionNotFound) {
+					t.Fatalf("LookupError should unwrap to ErrSessionNotFound, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing.T) {
+	modifiedAt := time.Date(2026, 7, 24, 4, 0, 0, 0, time.UTC)
+	assistantText := "projected assistant reply"
+	reasoningText := "projected reasoning"
+	toolName := "exec_command"
+	toolArgs := `{"cmd":"go test"}`
+	toolCallID := "call-project-1"
+	toolStatus := "completed"
+	inputTokens := 11
+	outputTokens := 7
+	totalTokens := 18
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-project-1",
+	}
+	fake := &rootServiceFake{
+		project: providersessions.ProjectResult{
+			Session: ref,
+			Detail: providersessions.Detail{
+				ProviderSession: providersessions.Ref{
+					Provider: ref.Provider,
+					Kind:     ref.Kind,
+					ID:       ref.ID,
+				},
+				Source: providersessions.SourceMetadata{
+					ModifiedAt:   &modifiedAt,
+					RelativePath: "2026/07/24/rollout-session-project-1.jsonl",
+					SizeBytes:    99,
+				},
+				Parse: providersessions.ParseSummary{
+					EventCount: 3,
+					LineCount:  3,
+					FunctionCalls: []providersessions.FunctionCallSummary{{
+						Arguments: &toolArgs,
+						CallID:    &toolCallID,
+						Name:      &toolName,
+						Order:     1,
+						Status:    &toolStatus,
+						Type:      "function_call",
+					}},
+					Reasoning: []providersessions.ReasoningSummary{{
+						Order:      1,
+						SourceType: "agent_reasoning",
+						Text:       &reasoningText,
+					}},
+					TokenUsage: &providersessions.TokenUsage{
+						InputTokens:  &inputTokens,
+						OutputTokens: &outputTokens,
+						TotalTokens:  &totalTokens,
+					},
+					Turns: []providersessions.TurnSummary{{
+						Index:             0,
+						EventCount:        3,
+						FunctionCallCount: 1,
+						ReasoningCount:    1,
+					}},
+				},
+				Transcript: []providersessions.TranscriptEntry{
+					{
+						Order: 0,
+						Text:  &reasoningText,
+						Type:  providersessions.TranscriptReasoning,
+					},
+					{
+						Arguments: &toolArgs,
+						CallID:    &toolCallID,
+						Name:      &toolName,
+						Order:     1,
+						Status:    &toolStatus,
+						Type:      providersessions.TranscriptToolCall,
+					},
+					{
+						Order: 2,
+						Text:  &assistantText,
+						Type:  providersessions.TranscriptAssistantMessage,
+					},
+				},
+			},
+		},
+	}
+
+	var svc providersessions.Service = fake
+	result, err := svc.Project(providersessions.ProjectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+	if fake.lastProjected != ref {
+		t.Fatalf("fake recorded SessionRef = %#v, want %#v", fake.lastProjected, ref)
+	}
+	if result.Session != ref {
+		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, ref)
+	}
+	detail := result.Detail
+	if detail.ProviderSession.Provider != ref.Provider ||
+		detail.ProviderSession.Kind != ref.Kind ||
+		detail.ProviderSession.ID != ref.ID {
+		t.Fatalf("Detail.ProviderSession = %#v", detail.ProviderSession)
+	}
+	if len(detail.Transcript) != 3 {
+		t.Fatalf("Transcript len = %d, want 3", len(detail.Transcript))
+	}
+	if detail.Transcript[0].Type != providersessions.TranscriptReasoning ||
+		detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != reasoningText {
+		t.Fatalf("Transcript[0] = %#v", detail.Transcript[0])
+	}
+	if detail.Transcript[1].Type != providersessions.TranscriptToolCall ||
+		detail.Transcript[1].Name == nil || *detail.Transcript[1].Name != toolName {
+		t.Fatalf("Transcript[1] = %#v", detail.Transcript[1])
+	}
+	if detail.Transcript[2].Type != providersessions.TranscriptAssistantMessage ||
+		detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != assistantText {
+		t.Fatalf("Transcript[2] = %#v", detail.Transcript[2])
+	}
+	if len(detail.Parse.Reasoning) != 1 || detail.Parse.Reasoning[0].Text == nil ||
+		*detail.Parse.Reasoning[0].Text != reasoningText {
+		t.Fatalf("Parse.Reasoning = %#v", detail.Parse.Reasoning)
+	}
+	if len(detail.Parse.FunctionCalls) != 1 || detail.Parse.FunctionCalls[0].Name == nil ||
+		*detail.Parse.FunctionCalls[0].Name != toolName {
+		t.Fatalf("Parse.FunctionCalls = %#v", detail.Parse.FunctionCalls)
+	}
+	if detail.Parse.TokenUsage == nil ||
+		detail.Parse.TokenUsage.InputTokens == nil || *detail.Parse.TokenUsage.InputTokens != inputTokens ||
+		detail.Parse.TokenUsage.OutputTokens == nil || *detail.Parse.TokenUsage.OutputTokens != outputTokens ||
+		detail.Parse.TokenUsage.TotalTokens == nil || *detail.Parse.TokenUsage.TotalTokens != totalTokens {
+		t.Fatalf("Parse.TokenUsage = %#v", detail.Parse.TokenUsage)
+	}
+	if detail.Source.RelativePath == "" || detail.Source.ModifiedAt == nil || detail.Source.SizeBytes != 99 {
+		t.Fatalf("Source = %#v", detail.Source)
+	}
+}
+
+func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCursor,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "missing-project-session",
+	}
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "unsupported provider", err: providersessions.ErrUnsupportedProvider},
+		{name: "unsupported kind", err: providersessions.ErrUnsupportedKind},
+		{name: "session not found", err: providersessions.ErrSessionNotFound},
+		{
+			name: "lookup wraps session not found",
+			err: &providersessions.LookupError{
+				Provider: providersessions.ProviderCursor,
+				Root:     "/tmp/cursor-root",
+				Err:      providersessions.ErrSessionNotFound,
+			},
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			fake := &rootServiceFake{projectErr: test.err}
+			var svc providersessions.Service = fake
+			_, err := svc.Project(providersessions.ProjectRequest{Session: ref})
 			if !errors.Is(err, test.err) {
 				t.Fatalf("err = %v, want typed %v", err, test.err)
 			}

@@ -247,6 +247,12 @@ func (role *strictProviderSessionRole) Inspect(req providersessions.InspectReque
 	return providersessions.InspectResult{}, nil
 }
 
+func (role *strictProviderSessionRole) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	role.t.Helper()
+	role.t.Fatalf("unexpected Provider Sessions Project(%#v)", req.Session)
+	return providersessions.ProjectResult{}, nil
+}
+
 func newTestServerWithProviderSessionCalls(t *testing.T, calls ...providerSessionCall) *Server {
 	t.Helper()
 	logger, _ := zap.NewDevelopment()
