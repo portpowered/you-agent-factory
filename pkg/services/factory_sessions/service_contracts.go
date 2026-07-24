@@ -47,9 +47,13 @@ type RuntimeBinding struct {
 	Clock factoryruntime.Clock
 }
 
-// Service is the complete Factory Sessions application boundary. The
+// Service is the singular Factory Sessions root contract and the only
+// cross-service session authority. Identity, live control, durable execution,
+// invocation, response stream, and opening operations already owned by
+// Sessions remain reachable through this one named interface. The
 // process-scoped root uses ForRuntime to create an isolated runtime view; a
-// bound view serves the remaining application operations.
+// bound view serves the remaining application operations. Peers must depend on
+// Service rather than introducing a second peer-facing session authority.
 type Service interface {
 	ExecutionService
 	ForRuntime(RuntimeBinding) (Service, error)
