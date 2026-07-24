@@ -633,6 +633,14 @@ atomic removal of the root's consolidated interface-count baseline; removing
 root interfaces one at a time replaces the exact deletion-only finding instead
 of reducing it.
 
+When promoting a Factory Definitions `Service` alias into a root-declared
+interface, move `SessionHost` with it when `AttachFactoryDefinitions` closes
+over `Service`, point the local `service.New` constructor at the root types
+(not `contracts.*`), and replace the exact `service-root-interface-count`
+baseline target for that package. Characterization proof for the seam belongs
+in a root-package external test that implements `Service` using only
+`pkg/services/factory_definitions` imports.
+
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
 contract when that does not create a cycle; implementation capabilities needed
