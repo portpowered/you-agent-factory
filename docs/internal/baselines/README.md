@@ -36,3 +36,12 @@ restricted to construction or external effect. When
 for package rows instead of inventing a second destination catalog. Regenerate
 with `go run ./cmd/ownershipinventoryfreeze` and prove with
 `go test ./internal/ownershipinventory`.
+
+The initial path-lease freeze published from that inventory lives at
+`docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`.
+It reuses FND-10 `pss-path-lease-packet-manifest/v1` mechanics (`internal/psslease`)
+to assign exclusive changed-path leases for the ownership-inventory packet
+(`PSS-F01`) and the first PSS-F02 owner-boundary checker slice, rejects
+overlapping active leases, and refuses CLI-manifest / provider-conductor
+portfolio holds. Regenerate with the same freeze command; prove with
+`go test ./internal/ownershipinventory ./internal/psslease`.

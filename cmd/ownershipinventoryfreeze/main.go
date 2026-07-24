@@ -28,5 +28,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ownership-inventory-freeze: write inventory: %v\n", err)
 		os.Exit(1)
 	}
+	freeze := ownershipinventory.BuildPathLeaseFreeze()
+	if err := ownershipinventory.WritePathLeaseFreeze(root, freeze); err != nil {
+		fmt.Fprintf(os.Stderr, "ownership-inventory-freeze: write path-lease freeze: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("wrote %s (%d packages)\n", ownershipinventory.InventoryRelativePath, len(inventory.Packages))
+	fmt.Printf("wrote %s (%d packets)\n", ownershipinventory.PathLeaseFreezeRelativePath, len(freeze.Packets))
 }

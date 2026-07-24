@@ -1,0 +1,55 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "freezeId": "pss-f01-initial-path-lease-freeze",
+  "sourceInventory": "docs/internal/baselines/ownership-inventory.json",
+  "sortKey": "packetId ascending byte order",
+  "packets": [
+    {
+      "packetId": "PSS-F01",
+      "exclusivePaths": [
+        "docs/internal/baselines/ownership-inventory.json",
+        "docs/internal/baselines/README.md",
+        "docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
+        "internal/ownershipinventory/",
+        "cmd/ownershipinventoryfreeze/"
+      ],
+      "state": "active",
+      "prerequisites": [
+        "FND-01",
+        "FND-10"
+      ],
+      "leaseClass": "ownership-inventory"
+    },
+    {
+      "packetId": "PSS-F02",
+      "exclusivePaths": [
+        "docs/internal/projects/packaged-service-structure/owner-boundary-enforcement.md"
+      ],
+      "state": "ready",
+      "prerequisites": [
+        "PSS-F01"
+      ],
+      "leaseClass": "architecture-rule"
+    }
+  ],
+  "portfolioHoldExclusions": [
+    {
+      "id": "cli-manifest",
+      "paths": [
+        "cmd/climanifestgen/",
+        "contracts/cli/",
+        "cmd/factory/"
+      ],
+      "note": "Schema CLI / Clean CLI portfolio hold owns canonical CLI manifest/generation (PR #1262); PSS-I03 stays held."
+    },
+    {
+      "id": "provider-conductor",
+      "paths": [
+        "pkg/services/workers/provider/",
+        "pkg/services/workers/cliprovider/",
+        "pkg/services/workers/agypty/"
+      ],
+      "note": "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze."
+    }
+  ]
+}
