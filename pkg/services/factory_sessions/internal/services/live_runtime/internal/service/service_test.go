@@ -163,6 +163,33 @@ func (f *testFactoryRuntime) AcceptDispatchResult(_ context.Context, req factory
 		CorrelationID: req.CorrelationID,
 	}, nil
 }
+func (f *testFactoryRuntime) CaptureCheckpoint(_ context.Context, req factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factoryruntime.CaptureCheckpointResult{
+		Outcome: factoryruntime.CheckpointOutcomeCaptured,
+		Checkpoint: factoryruntime.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+func (f *testFactoryRuntime) LoadCheckpoint(_ context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+	}
+	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+}
+func (f *testFactoryRuntime) RestoreCheckpoint(_ context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
+	return factoryruntime.RestoreCheckpointResult{
+		Outcome:      factoryruntime.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 func (f *testFactoryRuntime) GetFactoryEvents(context.Context) ([]factorydefinitions.FactoryEvent, error) {
 	return nil, nil
 }

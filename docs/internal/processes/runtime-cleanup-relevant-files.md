@@ -750,3 +750,16 @@ Plain dispatch-plan request/result vocabulary lives in
 `ErrInvalidDispatchResultBoundary`, plus `ErrNotRunning`/`ErrNotFound`). Do not
 expose Petri transition objects or Workers construction/implementation types,
 and do not require a separate public Dispatch Service for this slice.
+
+Plain checkpoint request/result/value vocabulary lives in
+`root_checkpoint_contract.go` (`CaptureCheckpointRequest`/`CaptureCheckpointResult`,
+`LoadCheckpointRequest`/`LoadCheckpointResult`,
+`RestoreCheckpointRequest`/`RestoreCheckpointResult`, `Checkpoint` with opaque
+`Payload` bytes, `CheckpointOutcome`, plus `ApplyCaptureCheckpoint` /
+`ApplyLoadCheckpoint` / `ApplyRestoreCheckpoint`). Peers call those helpers or
+`Service` methods (`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`)
+and branch on root typed errors (`ErrCheckpointNotFound`, `ErrCorruptCheckpoint`,
+`ErrIncompatibleCheckpoint`, plus `ErrNotRunning`/`ErrNotFound`). Do not expose
+Petri marking snapshots or JavaScript checkpoint strategy types as peer-facing
+vocabulary, and do not claim Recordings immutable history ownership from this
+slice.

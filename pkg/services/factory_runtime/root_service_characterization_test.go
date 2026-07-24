@@ -54,6 +54,15 @@ func (s *peerRootService) PlanDispatch(context.Context, factoryruntime.PlanDispa
 func (s *peerRootService) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
 	return factoryruntime.AcceptDispatchResultResult{Outcome: factoryruntime.DispatchPlanOutcomeRetired}, nil
 }
+func (s *peerRootService) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
+	return factoryruntime.CaptureCheckpointResult{Outcome: factoryruntime.CheckpointOutcomeCaptured}, nil
+}
+func (s *peerRootService) LoadCheckpoint(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
+	return factoryruntime.LoadCheckpointResult{Outcome: factoryruntime.CheckpointOutcomeLoaded}, nil
+}
+func (s *peerRootService) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
+	return factoryruntime.RestoreCheckpointResult{Outcome: factoryruntime.CheckpointOutcomeRestored}, nil
+}
 func (s *peerRootService) MoveWork(
 	context.Context,
 	string,

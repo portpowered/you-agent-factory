@@ -85,6 +85,33 @@ func (m *mockFactory) AcceptDispatchResult(_ context.Context, req factory.Accept
 		CorrelationID: req.CorrelationID,
 	}, nil
 }
+func (m *mockFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome: factory.CheckpointOutcomeCaptured,
+		Checkpoint: factory.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+func (m *mockFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+}
+func (m *mockFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

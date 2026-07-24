@@ -145,6 +145,36 @@ func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.
 	return runtime.AcceptDispatchResult(ctx, req)
 }
 
+// CaptureCheckpoint captures a versioned Runtime execution checkpoint through
+// the published Factory Runtime root checkpoint contract.
+func (fs *SessionRuntime) CaptureCheckpoint(ctx context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.CaptureCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.CaptureCheckpoint(ctx, req)
+}
+
+// LoadCheckpoint loads or inspects checkpoint compatibility through the
+// published Factory Runtime root checkpoint contract.
+func (fs *SessionRuntime) LoadCheckpoint(ctx context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.LoadCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.LoadCheckpoint(ctx, req)
+}
+
+// RestoreCheckpoint restores a compatible opaque checkpoint through the
+// published Factory Runtime root checkpoint contract.
+func (fs *SessionRuntime) RestoreCheckpoint(ctx context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.RestoreCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.RestoreCheckpoint(ctx, req)
+}
+
 // GetFactoryEvents returns the canonical factory event history.
 func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
 	runtime := fs.currentRuntimeService()

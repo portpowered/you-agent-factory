@@ -507,6 +507,54 @@ func (m *MockFactory) AcceptDispatchResult(_ context.Context, req petri.AcceptDi
 	}, nil
 }
 
+func (m *MockFactory) CaptureCheckpoint(_ context.Context, req petri.CaptureCheckpointRequest) (petri.CaptureCheckpointResult, error) {
+	if m == nil {
+		return petri.CaptureCheckpointResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.CaptureCheckpointResult{}, petri.ErrNotRunning
+	}
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return petri.CaptureCheckpointResult{
+		Outcome: petri.CheckpointOutcomeCaptured,
+		Checkpoint: petri.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+
+func (m *MockFactory) LoadCheckpoint(_ context.Context, req petri.LoadCheckpointRequest) (petri.LoadCheckpointResult, error) {
+	if m == nil {
+		return petri.LoadCheckpointResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.LoadCheckpointResult{}, petri.ErrNotRunning
+	}
+	if req.CheckpointID == "" {
+		return petri.LoadCheckpointResult{}, petri.ErrCheckpointNotFound
+	}
+	return petri.LoadCheckpointResult{}, petri.ErrCheckpointNotFound
+}
+
+func (m *MockFactory) RestoreCheckpoint(_ context.Context, req petri.RestoreCheckpointRequest) (petri.RestoreCheckpointResult, error) {
+	if m == nil {
+		return petri.RestoreCheckpointResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.RestoreCheckpointResult{}, petri.ErrNotRunning
+	}
+	return petri.RestoreCheckpointResult{
+		Outcome:      petri.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
+
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
 		return work.OperatorMoveResult{}, m.MoveWorkErr

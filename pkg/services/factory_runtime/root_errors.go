@@ -37,4 +37,16 @@ var (
 	// ErrInvalidDispatchResultBoundary indicates the correlated worker result fell
 	// outside the published result-boundary vocabulary peers may submit.
 	ErrInvalidDispatchResultBoundary = errors.New("factory runtime invalid dispatch result boundary")
+
+	// ErrCheckpointNotFound indicates capture/load/restore targeted a checkpoint
+	// identity that is not present in Runtime mutable checkpoint state.
+	ErrCheckpointNotFound = errors.New("factory runtime checkpoint not found")
+
+	// ErrCorruptCheckpoint indicates the checkpoint payload or envelope failed
+	// integrity or shape checks without exposing strategy codec internals.
+	ErrCorruptCheckpoint = errors.New("factory runtime checkpoint is corrupt")
+
+	// ErrIncompatibleCheckpoint indicates the checkpoint schema or opaque payload
+	// is incompatible with the Runtime restore surface.
+	ErrIncompatibleCheckpoint = errors.New("factory runtime checkpoint is incompatible")
 )

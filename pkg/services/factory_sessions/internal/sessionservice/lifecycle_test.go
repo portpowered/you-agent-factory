@@ -71,6 +71,36 @@ func (f *gatewayLifecycleFactory) AcceptDispatchResult(_ context.Context, req fa
 	}, nil
 }
 
+func (f *gatewayLifecycleFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome: factory.CheckpointOutcomeCaptured,
+		Checkpoint: factory.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+
+func (f *gatewayLifecycleFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+}
+
+func (f *gatewayLifecycleFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
+
 func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }

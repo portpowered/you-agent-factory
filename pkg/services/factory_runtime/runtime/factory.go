@@ -717,6 +717,70 @@ func (f *factoryImpl) AcceptDispatchResult(_ context.Context, req factory.Accept
 	}
 }
 
+// CaptureCheckpoint captures a versioned Runtime execution checkpoint through
+// the root checkpoint contract. Nested IMP-RUN packets own durable codec wiring;
+// this method maps lifecycle availability onto typed root errors for compile
+// continuity and returns opaque strategy bytes without Petri/JS vocabulary.
+func (f *factoryImpl) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		id := req.CheckpointID
+		if id == "" {
+			id = "checkpoint-stub"
+		}
+		return factory.CaptureCheckpointResult{
+			Outcome: factory.CheckpointOutcomeCaptured,
+			Checkpoint: factory.Checkpoint{
+				CheckpointID:  id,
+				SchemaVersion: 1,
+				StrategyKind:  "runtime",
+				Payload:       []byte(`{}`),
+			},
+		}, nil
+	default:
+		return factory.CaptureCheckpointResult{}, factory.ErrNotRunning
+	}
+}
+
+// LoadCheckpoint loads or inspects checkpoint compatibility through the root
+// checkpoint contract. Durable store wiring remains IMP-RUN; missing identity
+// maps to ErrCheckpointNotFound until nested packets land.
+func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
+		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		if req.CheckpointID == "" {
+			return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+		}
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	default:
+		return factory.LoadCheckpointResult{}, factory.ErrNotRunning
+	}
+}
+
+// RestoreCheckpoint restores a compatible opaque checkpoint through the root
+// checkpoint contract. Nested IMP-RUN packets own durable restore wiring.
+func (f *factoryImpl) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		return factory.RestoreCheckpointResult{
+			Outcome:      factory.CheckpointOutcomeRestored,
+			CheckpointID: req.Checkpoint.CheckpointID,
+		}, nil
+	default:
+		return factory.RestoreCheckpointResult{}, factory.ErrNotRunning
+	}
+}
+
 // GetEngineStateSnapshot returns the aggregate observability snapshot for
 // service-facing callers.
 func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

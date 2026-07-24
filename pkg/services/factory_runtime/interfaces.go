@@ -99,6 +99,24 @@ type Service interface {
 	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
 	// dispatch-plan failures.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
+
+	// CaptureCheckpoint captures a versioned Runtime execution checkpoint with
+	// opaque strategy payload bytes. Returns ErrNotRunning or ErrNotFound for
+	// typed availability failures. Does not claim Recordings immutable history
+	// ownership. Nested IMP-RUN packets own durable codec wiring.
+	CaptureCheckpoint(ctx context.Context, req CaptureCheckpointRequest) (CaptureCheckpointResult, error)
+
+	// LoadCheckpoint loads or inspects compatibility of a previously captured
+	// checkpoint without restoring it. Returns ErrCheckpointNotFound,
+	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
+	// ErrNotFound for typed failures.
+	LoadCheckpoint(ctx context.Context, req LoadCheckpointRequest) (LoadCheckpointResult, error)
+
+	// RestoreCheckpoint restores a compatible opaque checkpoint into mutable
+	// Runtime execution state. Returns ErrCheckpointNotFound,
+	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
+	// ErrNotFound for typed failures.
+	RestoreCheckpoint(ctx context.Context, req RestoreCheckpointRequest) (RestoreCheckpointResult, error)
 }
 
 // Factory extends Service with a blocking run loop for hosting-owned engine
