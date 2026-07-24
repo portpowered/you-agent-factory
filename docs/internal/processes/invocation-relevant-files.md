@@ -93,6 +93,19 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- The provider-neutral invocation conductor lives in
+  `pkg/services/workers/provider/conductor/`. Factory Sessions and worker
+  executors should enter registry-selected integrations through that conductor
+  rather than calling Discover, request-sensitive Capabilities, or Invoke
+  directly. Before any of those provider I/O paths, the conductor validates
+  requested capabilities against the selected integration's registry/manifest
+  maximum and rejects escalation, unknown capabilities, and contradictory
+  capability dependencies with deterministic symbolic
+  `conductor.Rejection` diagnostics (`invariant` + offending `capability`,
+  plus `requires` for dependency failures). Accepted subsets then delegate to
+  the authoritative registry and leaf `ExecuteInvocation` contract. Keep
+  response-writer correlation/ordering, terminal exclusivity, cancel/timeout,
+  and Factory Session routing follow-on work in later conductor stories.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
