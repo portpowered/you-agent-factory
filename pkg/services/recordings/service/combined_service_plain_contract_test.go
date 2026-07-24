@@ -152,6 +152,12 @@ func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 
 func assertRecordingLifecycle(t *testing.T, svc recordings.Service) {
 	t.Helper()
+	assertRecordingLifecycleHappyPath(t, svc)
+	assertRecordingLifecycleFlushFailure(t, svc)
+}
+
+func assertRecordingLifecycleHappyPath(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	if _, err := svc.BindRecording(recordings.BindRecordingRequest{}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("BindRecording empty path = %v, want ErrMissingRecordingTarget", err)
 	}
@@ -185,7 +191,10 @@ func assertRecordingLifecycle(t *testing.T, svc recordings.Service) {
 	}); !errors.Is(err, recordings.ErrRecordingWriteRejected) {
 		t.Fatalf("post-finish write = %v, want ErrRecordingWriteRejected", err)
 	}
+}
 
+func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordings.Service) {
+	t.Helper()
 	boundFail, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "flush-fail",
 		RecordPath:  "fail.json",
