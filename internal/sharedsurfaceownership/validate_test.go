@@ -1,6 +1,7 @@
 package sharedsurfaceownership_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,77 +12,43 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
+type fixtureCase struct {
+	name       string
+	fixture    string
+	complete   bool
+	wantOK     bool
+	wantSubstr string
+	wantRule   string
+}
+
 func TestValidateFixtures(t *testing.T) {
 	t.Parallel()
+	runFixtureCases(t, []fixtureCase{
+		{name: "valid empty surfaces model", fixture: "valid-model-empty-surfaces.json", wantOK: true},
+		{name: "valid surface with ordered owner-request queue", fixture: "valid-model-with-queued-request.json", wantOK: true},
+		{name: "empty integrator lane", fixture: "invalid-empty-integrator-lane.json", wantSubstr: "serial integrator", wantRule: "inventory.empty_serial_integrator"},
+		{name: "dual integrators mapped to more than one PSS lane", fixture: "invalid-dual-integrators.json", wantSubstr: "more than one of PSS-I02/I03/I04", wantRule: "inventory.dual_integrators"},
+		{name: "unordered owner-request queue", fixture: "invalid-unordered-owner-requests.json", wantSubstr: "owner-request queue"},
+		{name: "duplicate queued owner requests", fixture: "invalid-duplicate-owner-requests.json", wantSubstr: "duplicate"},
+		{name: "openapi-http surface mapped away from PSS-I02", fixture: "invalid-openapi-http-wrong-lane.json", wantSubstr: "PSS-I02"},
+		{name: "cli surface mapped away from PSS-I03", fixture: "invalid-cli-wrong-lane.json", wantSubstr: "PSS-I03"},
+		{name: "mcp surface mapped away from PSS-I04", fixture: "invalid-mcp-wrong-lane.json", wantSubstr: "PSS-I04"},
+	})
+}
 
-	tests := []struct {
-		name       string
-		fixture    string
-		wantOK     bool
-		wantSubstr string
-	}{
-		{
-			name:    "valid empty surfaces model",
-			fixture: "valid-model-empty-surfaces.json",
-			wantOK:  true,
-		},
-		{
-			name:    "valid surface with ordered owner-request queue",
-			fixture: "valid-model-with-queued-request.json",
-			wantOK:  true,
-		},
-		{
-			name:       "empty integrator lane",
-			fixture:    "invalid-empty-integrator-lane.json",
-			wantSubstr: "serial integrator",
-		},
-		{
-			name:       "dual integrators",
-			fixture:    "invalid-dual-integrators.json",
-			wantSubstr: "exactly one serial integrator",
-		},
-		{
-			name:       "unordered owner-request queue",
-			fixture:    "invalid-unordered-owner-requests.json",
-			wantSubstr: "owner-request queue",
-		},
-		{
-			name:       "duplicate queued owner requests",
-			fixture:    "invalid-duplicate-owner-requests.json",
-			wantSubstr: "duplicate",
-		},
-		{
-			name:       "openapi-http surface mapped away from PSS-I02",
-			fixture:    "invalid-openapi-http-wrong-lane.json",
-			wantSubstr: "PSS-I02",
-		},
-		{
-			name:       "cli surface mapped away from PSS-I03",
-			fixture:    "invalid-cli-wrong-lane.json",
-			wantSubstr: "PSS-I03",
-		},
-		{
-			name:       "mcp surface mapped away from PSS-I04",
-			fixture:    "invalid-mcp-wrong-lane.json",
-			wantSubstr: "PSS-I04",
-		},
-		{
-			name:       "required portfolio hold marked bypassable",
-			fixture:    "invalid-hold-bypassable.json",
-			wantSubstr: "bypass",
-		},
-		{
-			name:       "required portfolio hold attached to wrong serial lane",
-			fixture:    "invalid-hold-wrong-lane.json",
-			wantSubstr: "PSS-I03",
-		},
-		{
-			name:       "complete surface family missing required portfolio hold",
-			fixture:    "invalid-missing-required-portfolio-holds.json",
-			wantSubstr: "required portfolio hold",
-		},
-	}
+func TestValidateCompleteInventoryFailClosedFixtures(t *testing.T) {
+	t.Parallel()
+	runFixtureCases(t, []fixtureCase{
+		{name: "required portfolio hold marked bypassable", fixture: "invalid-hold-bypassable.json", wantSubstr: "bypass"},
+		{name: "required portfolio hold attached to wrong serial lane", fixture: "invalid-hold-wrong-lane.json", wantSubstr: "PSS-I03"},
+		{name: "complete surface family missing required portfolio hold", fixture: "invalid-missing-required-portfolio-holds.json", wantSubstr: "required portfolio hold", wantRule: "inventory.missing_required_portfolio_hold"},
+		{name: "complete inventory missing required surface family", fixture: "invalid-missing-surface-family.json", complete: true, wantSubstr: "required PSS-I04 surface family", wantRule: "inventory.missing_required_surface_family"},
+		{name: "surface missing owner-request queue model", fixture: "invalid-missing-owner-request-queue.json", wantSubstr: "owner-request queue", wantRule: "inventory.missing_owner_request_queue"},
+	})
+}
 
+func runFixtureCases(t *testing.T, tests []fixtureCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -90,22 +57,45 @@ func TestValidateFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read fixture: %v", err)
 			}
-			diagnostics := sharedsurfaceownership.ValidateDocument(path, payload)
-			if test.wantOK {
-				if len(diagnostics) != 0 {
-					t.Fatalf("diagnostics = %#v, want none", diagnostics)
-				}
-				return
+			var diagnostics []sharedsurfaceownership.Diagnostic
+			if test.complete {
+				diagnostics = sharedsurfaceownership.ValidateCompleteDocument(path, payload)
+			} else {
+				diagnostics = sharedsurfaceownership.ValidateDocument(path, payload)
 			}
-			if len(diagnostics) == 0 {
-				t.Fatal("expected validation to fail")
-			}
-			joined := joinDiagnostics(diagnostics)
-			if !strings.Contains(strings.ToLower(joined), strings.ToLower(test.wantSubstr)) {
-				t.Fatalf("diagnostics = %q, want substring %q", joined, test.wantSubstr)
-			}
+			assertFixtureDiagnostics(t, diagnostics, test)
 		})
 	}
+}
+
+func assertFixtureDiagnostics(t *testing.T, diagnostics []sharedsurfaceownership.Diagnostic, test fixtureCase) {
+	t.Helper()
+	if test.wantOK {
+		if len(diagnostics) != 0 {
+			t.Fatalf("diagnostics = %#v, want none", diagnostics)
+		}
+		return
+	}
+	if len(diagnostics) == 0 {
+		t.Fatal("expected validation to fail")
+	}
+	joined := joinDiagnostics(diagnostics)
+	if !strings.Contains(strings.ToLower(joined), strings.ToLower(test.wantSubstr)) {
+		t.Fatalf("diagnostics = %q, want substring %q", joined, test.wantSubstr)
+	}
+	if test.wantRule == "" {
+		return
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Rule != test.wantRule {
+			continue
+		}
+		if diagnostic.Path == "" {
+			t.Fatalf("diagnostic rule %q missing path identifying affected surface or hold", test.wantRule)
+		}
+		return
+	}
+	t.Fatalf("diagnostics = %q, want rule %q", joined, test.wantRule)
 }
 
 func TestCanonicalInventoryMatchesModelContract(t *testing.T) {
@@ -116,12 +106,36 @@ func TestCanonicalInventoryMatchesModelContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read canonical inventory: %v", err)
 	}
-	diagnostics := sharedsurfaceownership.ValidateDocument(
+	diagnostics := sharedsurfaceownership.ValidateCompleteDocument(
 		sharedsurfaceownership.CanonicalInventoryRelPath,
 		payload,
 	)
 	if len(diagnostics) != 0 {
 		t.Fatalf("canonical inventory diagnostics = %#v", diagnostics)
+	}
+}
+
+func TestValidateCompleteInventoryDoesNotMutateProtectedArtifacts(t *testing.T) {
+	t.Parallel()
+
+	before := digestProtectedArtifacts(t)
+	path := testutil.MustRepoPath(t, sharedsurfaceownership.CanonicalInventoryRelPath)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read canonical inventory: %v", err)
+	}
+	diagnostics := sharedsurfaceownership.ValidateCompleteDocument(
+		sharedsurfaceownership.CanonicalInventoryRelPath,
+		payload,
+	)
+	if len(diagnostics) != 0 {
+		t.Fatalf("canonical inventory diagnostics = %#v", diagnostics)
+	}
+	after := digestProtectedArtifacts(t)
+	for _, rel := range sharedsurfaceownership.ProtectedCompositionArtifactRelPaths {
+		if before[rel] != after[rel] {
+			t.Fatalf("validation mutated protected composition artifact %s", rel)
+		}
 	}
 }
 
@@ -361,6 +375,9 @@ func TestModelDocsDeclareMetadataOnlySchedulingContract(t *testing.T) {
 		"does not seize",
 		"owner-local",
 		"release condition",
+		"ValidateCompleteDocument",
+		"read-only",
+		"does not mutate",
 	}
 	for _, needle := range required {
 		if !strings.Contains(strings.ToLower(text), strings.ToLower(needle)) {
@@ -397,4 +414,18 @@ func joinDiagnostics(diagnostics []sharedsurfaceownership.Diagnostic) string {
 		parts = append(parts, diagnostic.Rule+" "+diagnostic.Path+" "+diagnostic.Message)
 	}
 	return strings.Join(parts, " | ")
+}
+
+func digestProtectedArtifacts(t *testing.T) map[string][sha256.Size]byte {
+	t.Helper()
+	digests := make(map[string][sha256.Size]byte, len(sharedsurfaceownership.ProtectedCompositionArtifactRelPaths))
+	for _, rel := range sharedsurfaceownership.ProtectedCompositionArtifactRelPaths {
+		path := testutil.MustRepoPath(t, rel)
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read protected artifact %s: %v", rel, err)
+		}
+		digests[rel] = sha256.Sum256(payload)
+	}
+	return digests
 }

@@ -131,3 +131,16 @@ This model is **integration metadata only**. Publishing or updating the
 inventory does not authorize package moves, public contract changes, or
 transport cutovers. Later PSS fan-in packets must still land through the named
 serial lanes after any live portfolio holds clear.
+
+## Complete-inventory validation
+
+Use `ValidateCompleteDocument` in `internal/sharedsurfaceownership` for the
+canonical inventory. It fail-closes when a required OpenAPI/HTTP, CLI, or MCP
+surface family member is missing, when a surface lacks a serial integrator,
+when a surface is mapped to more than one of PSS-I02/I03/I04, when the
+owner-request queue model is missing, or when a required portfolio hold is
+absent. Diagnostics name the affected surface or hold ID and the violated rule.
+
+Validation is **read-only**: it does not mutate authored OpenAPI, CLI
+manifests, MCP registries, or generated artifacts, and it does not require a
+regeneration step.

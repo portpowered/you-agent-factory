@@ -73,6 +73,19 @@ var RequiredPortfolioHoldSpecs = []RequiredPortfolioHoldSpec{
 	},
 }
 
+// ProtectedCompositionArtifactRelPaths are shared OpenAPI/CLI/MCP composition
+// artifacts that inventory validation must never mutate. Validation is read-only
+// integration-metadata checking; it does not regenerate contracts.
+var ProtectedCompositionArtifactRelPaths = []string{
+	"api/openapi-main.yaml",
+	"api/openapi.yaml",
+	"pkg/transports/http/generated/server.gen.go",
+	"pkg/transports/http/client/client.gen.go",
+	"ui/src/api/generated/openapi.ts",
+	"contracts/cli/commands.json",
+	"contracts/mcp/tools.json",
+}
+
 // Diagnostic is one maintainer-readable validation finding.
 type Diagnostic struct {
 	Rule     string

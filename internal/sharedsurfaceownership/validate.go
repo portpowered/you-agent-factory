@@ -30,6 +30,8 @@ var protocolFamilyToLane = map[string]string{
 }
 
 // ValidateDocument schema-validates and semantically checks one inventory document.
+// Partial fixtures remain valid under this entrypoint; use ValidateCompleteDocument
+// for the canonical full shared-surface inventory.
 func ValidateDocument(document string, payload []byte) []Diagnostic {
 	root, err := decodeObject(payload)
 	if err != nil {
@@ -46,6 +48,21 @@ func ValidateDocument(document string, payload []byte) []Diagnostic {
 		return append(schemaDiagnostics, semanticDiagnostics(document, root)...)
 	}
 	return semanticDiagnostics(document, root)
+}
+
+// ValidateCompleteDocument validates a complete shared-surface inventory: every
+// required OpenAPI/HTTP, CLI, and MCP surface family member, plus portfolio holds
+// when the surface set is complete. Validation is read-only and never mutates
+// authored OpenAPI, CLI manifests, MCP registries, or generated artifacts.
+func ValidateCompleteDocument(document string, payload []byte) []Diagnostic {
+	diagnostics := ValidateDocument(document, payload)
+	root, err := decodeObject(payload)
+	if err != nil {
+		return diagnostics
+	}
+	surfaces, _ := root["surfaces"].(map[string]any)
+	diagnostics = append(diagnostics, requiredSurfaceFamilyDiagnostics(document, surfaces)...)
+	return diagnostics
 }
 
 func validateAgainstSchema(document string, payload []byte) []Diagnostic {
@@ -160,16 +177,28 @@ func semanticDiagnostics(document string, root map[string]any) []Diagnostic {
 func surfaceDiagnostics(document, key string, surface map[string]any, holds map[string]any) []Diagnostic {
 	base := "/surfaces/" + escapeJSONPointerToken(key)
 	var diagnostics []Diagnostic
+	diagnostics = append(diagnostics, surfaceIdentityDiagnostics(document, key, base, surface)...)
+	diagnostics = append(diagnostics, surfaceIntegratorDiagnostics(document, key, base, surface)...)
+	diagnostics = append(diagnostics, surfaceOwnerRequestQueueDiagnostics(document, key, base, surface)...)
+	diagnostics = append(diagnostics, surfaceHoldRefDiagnostics(document, base, surface, holds)...)
+	return diagnostics
+}
 
+func surfaceIdentityDiagnostics(document, key, base string, surface map[string]any) []Diagnostic {
 	surfaceID, _ := surface["surfaceId"].(string)
-	if surfaceID != "" && surfaceID != key {
-		diagnostics = append(diagnostics, newDiagnostic(
-			"inventory.surface_id_mismatch",
-			base+"/surfaceId",
-			fmt.Sprintf("surfaceId %s must match surfaces key %s", strconv.Quote(surfaceID), strconv.Quote(key)),
-			document,
-		))
+	if surfaceID == "" || surfaceID == key {
+		return nil
 	}
+	return []Diagnostic{newDiagnostic(
+		"inventory.surface_id_mismatch",
+		base+"/surfaceId",
+		fmt.Sprintf("surfaceId %s must match surfaces key %s", strconv.Quote(surfaceID), strconv.Quote(key)),
+		document,
+	)}
+}
+
+func surfaceIntegratorDiagnostics(document, key, base string, surface map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
 
 	lane, _ := surface["serialIntegratorLaneId"].(string)
 	if strings.TrimSpace(lane) == "" {
@@ -210,7 +239,20 @@ func surfaceDiagnostics(document, key string, surface map[string]any, holds map[
 		diagnostics = append(diagnostics, newDiagnostic(
 			"inventory.dual_integrators",
 			base+"/"+integratorKeys[0],
-			fmt.Sprintf("surface declares additional integrator field %s; each surface requires exactly one serial integrator", strconv.Quote(integratorKeys[0])),
+			fmt.Sprintf("surface %s is mapped to more than one of PSS-I02/I03/I04 via additional integrator field %s; each surface requires exactly one serial integrator", strconv.Quote(key), strconv.Quote(integratorKeys[0])),
+			document,
+		))
+	}
+	return diagnostics
+}
+
+func surfaceOwnerRequestQueueDiagnostics(document, key, base string, surface map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+	if _, ok := surface["ownerRequestQueue"]; !ok {
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.missing_owner_request_queue",
+			base+"/ownerRequestQueue",
+			fmt.Sprintf("surface %s is missing owner-request queue model (ownerRequestQueue)", strconv.Quote(key)),
 			document,
 		))
 	}
@@ -228,45 +270,54 @@ func surfaceDiagnostics(document, key string, surface map[string]any, holds map[
 			))
 			continue
 		}
-		requestID, _ := entry["requestId"].(string)
-		if requestID == "" {
-			diagnostics = append(diagnostics, newDiagnostic(
-				"inventory.owner_request_id",
-				fmt.Sprintf("%s/ownerRequestQueue/%d/requestId", base, index),
-				"owner-request queue entry requires a non-empty requestId",
-				document,
-			))
-		} else if previous, exists := seenRequestIDs[requestID]; exists {
-			diagnostics = append(diagnostics, newDiagnostic(
-				"inventory.duplicate_owner_request",
-				fmt.Sprintf("%s/ownerRequestQueue/%d/requestId", base, index),
-				fmt.Sprintf("duplicate owner-request requestId %s also appears at queue index %d", strconv.Quote(requestID), previous),
-				document,
-			))
-		} else {
-			seenRequestIDs[requestID] = index
-		}
+		diagnostics = append(diagnostics, ownerRequestEntryDiagnostics(document, base, index, entry, seenRequestIDs)...)
+	}
+	return diagnostics
+}
 
-		position, ok := intValue(entry["queuePosition"])
-		if !ok {
-			diagnostics = append(diagnostics, newDiagnostic(
-				"inventory.owner_request_position",
-				fmt.Sprintf("%s/ownerRequestQueue/%d/queuePosition", base, index),
-				"owner-request queue entry requires an integer queuePosition",
-				document,
-			))
-			continue
-		}
-		if position != index {
-			diagnostics = append(diagnostics, newDiagnostic(
-				"inventory.unordered_owner_request_queue",
-				fmt.Sprintf("%s/ownerRequestQueue/%d/queuePosition", base, index),
-				fmt.Sprintf("owner-request queue must be deterministic and contiguous; queuePosition %d at index %d is unordered", position, index),
-				document,
-			))
-		}
+func ownerRequestEntryDiagnostics(document, base string, index int, entry map[string]any, seenRequestIDs map[string]int) []Diagnostic {
+	var diagnostics []Diagnostic
+	requestID, _ := entry["requestId"].(string)
+	if requestID == "" {
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.owner_request_id",
+			fmt.Sprintf("%s/ownerRequestQueue/%d/requestId", base, index),
+			"owner-request queue entry requires a non-empty requestId",
+			document,
+		))
+	} else if previous, exists := seenRequestIDs[requestID]; exists {
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.duplicate_owner_request",
+			fmt.Sprintf("%s/ownerRequestQueue/%d/requestId", base, index),
+			fmt.Sprintf("duplicate owner-request requestId %s also appears at queue index %d", strconv.Quote(requestID), previous),
+			document,
+		))
+	} else {
+		seenRequestIDs[requestID] = index
 	}
 
+	position, ok := intValue(entry["queuePosition"])
+	if !ok {
+		return append(diagnostics, newDiagnostic(
+			"inventory.owner_request_position",
+			fmt.Sprintf("%s/ownerRequestQueue/%d/queuePosition", base, index),
+			"owner-request queue entry requires an integer queuePosition",
+			document,
+		))
+	}
+	if position != index {
+		diagnostics = append(diagnostics, newDiagnostic(
+			"inventory.unordered_owner_request_queue",
+			fmt.Sprintf("%s/ownerRequestQueue/%d/queuePosition", base, index),
+			fmt.Sprintf("owner-request queue must be deterministic and contiguous; queuePosition %d at index %d is unordered", position, index),
+			document,
+		))
+	}
+	return diagnostics
+}
+
+func surfaceHoldRefDiagnostics(document, base string, surface map[string]any, holds map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
 	refs, _ := surface["holdConditionRefs"].([]any)
 	for index, item := range refs {
 		ref, _ := item.(string)
@@ -288,7 +339,6 @@ func surfaceDiagnostics(document, key string, surface map[string]any, holds map[
 			))
 		}
 	}
-
 	return diagnostics
 }
 
@@ -367,6 +417,32 @@ func requiredPortfolioHoldDiagnostics(document string, holds map[string]any) []D
 			fmt.Sprintf("complete shared-surface inventory is missing required portfolio hold %s", strconv.Quote(holdID)),
 			document,
 		))
+	}
+	return diagnostics
+}
+
+func requiredSurfaceFamilyDiagnostics(document string, surfaces map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+	families := []struct {
+		lane       string
+		surfaceIDs []string
+	}{
+		{lane: "PSS-I02", surfaceIDs: RequiredPSSI02SurfaceIDs},
+		{lane: "PSS-I03", surfaceIDs: RequiredPSSI03SurfaceIDs},
+		{lane: "PSS-I04", surfaceIDs: RequiredPSSI04SurfaceIDs},
+	}
+	for _, family := range families {
+		for _, surfaceID := range family.surfaceIDs {
+			if _, ok := surfaces[surfaceID]; ok {
+				continue
+			}
+			diagnostics = append(diagnostics, newDiagnostic(
+				"inventory.missing_required_surface_family",
+				"/surfaces/"+escapeJSONPointerToken(surfaceID),
+				fmt.Sprintf("complete shared-surface inventory is missing required %s surface family member %s", family.lane, strconv.Quote(surfaceID)),
+				document,
+			))
+		}
 	}
 	return diagnostics
 }
@@ -501,7 +577,12 @@ func collectSchemaDiagnostics(document string, err *jsonschema.ValidationError, 
 		case (strings.Contains(lower, "additionalproperties") || strings.Contains(lower, "additional properties")) &&
 			strings.Contains(lower, "integrator"):
 			rule = "inventory.dual_integrators"
-			message = "surface declares an additional integrator field; each surface requires exactly one serial integrator"
+			message = "surface is mapped to more than one of PSS-I02/I03/I04; each surface requires exactly one serial integrator"
+		case strings.Contains(path, "ownerRequestQueue") ||
+			(strings.Contains(lower, "ownerrequestqueue") && strings.Contains(lower, "required")) ||
+			(strings.Contains(path, "queueSemantics") && strings.Contains(lower, "required")):
+			rule = "inventory.missing_owner_request_queue"
+			message = "owner-request queue model is required (queueSemantics and per-surface ownerRequestQueue)"
 		case strings.Contains(path, "bypassable"):
 			rule = "inventory.hold_bypassable"
 			message = "portfolio hold must not be bypassable; conflicting PSS cutovers wait for release"
