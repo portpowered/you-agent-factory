@@ -21,7 +21,7 @@
     { "packagePath": "pkg/services/recordings/events", "fileCount": 18, "owner": "recording-maintainers", "removalReason": "Partition recording event contracts by stable concern." },
     { "packagePath": "pkg/services/recordings/projections/projectiontests", "fileCount": 16, "owner": "recording-maintainers", "removalReason": "Consolidate projection fixtures and focused scenarios." },
     { "packagePath": "pkg/services/recordings/replay", "fileCount": 19, "owner": "recording-maintainers", "removalReason": "Split replay ingestion, validation, and execution responsibilities." },
-    { "packagePath": "pkg/services/work", "fileCount": 37, "owner": "work-maintainers", "removalReason": "Continue extracting Work capabilities into focused child packages." },
+    { "packagePath": "pkg/services/work", "fileCount": 42, "owner": "work-maintainers", "removalReason": "Continue extracting Work capabilities into focused child packages." },
     { "packagePath": "pkg/services/workers", "fileCount": 30, "owner": "worker-maintainers", "removalReason": "Continue extracting worker policy and execution capabilities." },
     { "packagePath": "pkg/transports/cli", "fileCount": 20, "owner": "cli-maintainers", "removalReason": "Move command behavior into focused command packages." },
     { "packagePath": "pkg/transports/cli/baseline", "fileCount": 20, "owner": "cli-maintainers", "removalReason": "Consolidate baseline command fixtures and split durable behaviors." },
