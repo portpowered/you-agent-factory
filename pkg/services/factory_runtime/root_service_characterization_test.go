@@ -45,6 +45,9 @@ func (s *peerRootService) SubscribeFactoryEvents(
 func (s *peerRootService) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
 	return nil, nil
 }
+func (s *peerRootService) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, nil
+}
 func (s *peerRootService) MoveWork(
 	context.Context,
 	string,

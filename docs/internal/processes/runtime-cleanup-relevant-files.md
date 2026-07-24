@@ -729,3 +729,12 @@ helpers or `Service` methods (`Pause`, `Resume`, `Terminate`, `WaitToComplete`,
 `ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
 errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`). Do not route
 control through hosting `Lifecycle.Stop` as the peer authority for this slice.
+
+Plain observation request/result/value vocabulary lives in
+`root_observation_contract.go` (`ObserveRequest`/`ObserveResult`,
+`Observation`, `ObservationProgress`, `ObservationDispatchSummary`,
+`ObservationResultView`, `ObservationResourceView`, `ObservationHealth`, plus
+`ApplyObserve`). Peers call `ApplyObserve` or `Service.Observe` and branch on
+`ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
+legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
+JavaScript runtime-record types as the peer source of truth for this slice.

@@ -654,6 +654,28 @@ func (f *factoryImpl) automaticTicksPaused() bool {
 	return f.state == interfaces.FactoryStatePaused
 }
 
+// Observe returns a detached orchestration-neutral observation projected from
+// live runtime state. Petri markings, nets, tokens, and enabled transitions are
+// not included in the published observation vocabulary.
+func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
+		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		// Observable lifecycle states may return a sanitized observation.
+	default:
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+
+	snap, err := f.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factory.ObserveResult{}, err
+	}
+	return factory.ObserveResult{Observation: projectRootObservation(snap, req.Scope)}, nil
+}
+
 // GetEngineStateSnapshot returns the aggregate observability snapshot for
 // service-facing callers.
 func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

@@ -111,6 +111,20 @@ func (fs *SessionRuntime) Terminate(ctx context.Context, req factory.TerminateRe
 	return result, nil
 }
 
+// Observe returns a detached orchestration-neutral observation through the
+// published Factory Runtime root observation contract.
+func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.ObserveResult{}, factory.ErrNotFound
+	}
+	result, err := runtime.Observe(ctx, req)
+	if err != nil {
+		return factory.ObserveResult{}, err
+	}
+	return result, nil
+}
+
 // GetFactoryEvents returns the canonical factory event history.
 func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
 	runtime := fs.currentRuntimeService()

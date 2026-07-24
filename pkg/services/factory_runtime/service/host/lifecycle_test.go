@@ -112,6 +112,9 @@ func (f *lifecycleObserverFactory) Resume(context.Context) error { return nil }
 func (f *lifecycleObserverFactory) Terminate(context.Context, factory.TerminateRequest) (factory.TerminateResult, error) {
 	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
 }
+func (f *lifecycleObserverFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
 func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, nil
 }

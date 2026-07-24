@@ -51,6 +51,10 @@ func (f *gatewayLifecycleFactory) Terminate(context.Context, factory.TerminateRe
 	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
 }
 
+func (f *gatewayLifecycleFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
+
 func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }

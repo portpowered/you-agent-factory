@@ -469,6 +469,16 @@ func (m *MockFactory) Terminate(_ context.Context, _ petri.TerminateRequest) (pe
 	}
 }
 
+func (m *MockFactory) Observe(_ context.Context, _ petri.ObserveRequest) (petri.ObserveResult, error) {
+	if m == nil {
+		return petri.ObserveResult{}, petri.ErrNotFound
+	}
+	if m.State == "" {
+		return petri.ObserveResult{}, petri.ErrNotRunning
+	}
+	return petri.ObserveResult{}, nil
+}
+
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
 		return work.OperatorMoveResult{}, m.MoveWorkErr

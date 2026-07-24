@@ -68,6 +68,9 @@ func (m *mockFactory) Resume(_ context.Context) error { return nil }
 func (m *mockFactory) Terminate(_ context.Context, _ factory.TerminateRequest) (factory.TerminateResult, error) {
 	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
 }
+func (m *mockFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

@@ -40,7 +40,8 @@ type APIFactory interface {
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 
 	// GetEngineStateSnapshot returns the aggregate observability snapshot for
-	// service-facing consumers.
+	// service-facing consumers. Legacy Petri-shaped aliases remain available for
+	// migration; peers consuming published root observation slices use Observe.
 	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
 }
 
@@ -78,6 +79,13 @@ type Service interface {
 	// block on this channel to know when the factory has finished all work
 	// without having to manually drive ticks.
 	WaitToComplete() <-chan struct{}
+
+	// Observe returns a detached orchestration-neutral observation for live
+	// status, progress, dispatch, result, resource, and retained health views.
+	// Returns ErrNotRunning, ErrNotFound, or ErrInvalidObservationScope for typed
+	// observation failures. Peers must not treat GetEngineStateSnapshot as the
+	// source of truth for this published slice.
+	Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error)
 }
 
 // Factory extends Service with a blocking run loop for hosting-owned engine

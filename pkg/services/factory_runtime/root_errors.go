@@ -21,4 +21,8 @@ var (
 	// ErrInvalidLifecycleTransition indicates the requested control operation is
 	// not valid from the instance's current lifecycle state.
 	ErrInvalidLifecycleTransition = errors.New("factory runtime invalid lifecycle transition")
+
+	// ErrInvalidObservationScope indicates the observation request asked for a
+	// scope outside the published orchestration-neutral observation vocabulary.
+	ErrInvalidObservationScope = errors.New("factory runtime invalid observation scope")
 )
