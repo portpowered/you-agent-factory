@@ -6,8 +6,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// ErrUnsupportedResponseMode reports that an invocation result cannot satisfy
-// the requested response mode.
+// ErrUnsupportedResponseMode reports that an infer/local-invocation result
+// cannot satisfy the requested response mode. It is distinct from readiness
+// blocked outcomes (ErrMissing, ErrLoading, ErrFailed, ErrUnsupported) so peers
+// can branch on typed infer failures through the root contract.
 var ErrUnsupportedResponseMode = errors.New("model invocation response mode is not supported")
 
 // ResponseMode selects the representation returned by direct invocation.

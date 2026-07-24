@@ -44,6 +44,13 @@ type Service interface {
 	// with ErrHostLeaseNotFound. Lease release stays on this singular root
 	// Service; peers do not import nested host supervisor types.
 	ReleaseLease(context.Context, ReleaseLeaseRequest) error
+	// InvokeLocal accepts or declines local/direct invocation and returns a
+	// Models-owned LocalInvocationResult (Handled/not-handled). Missing,
+	// loading, failed, and unsupported readiness fail with distinct typed
+	// outcomes (ErrMissing, ErrLoading, ErrFailed, ErrUnsupported /
+	// InvocationError). Unsupported response modes fail with
+	// ErrUnsupportedResponseMode. Infer stays on this singular root Service;
+	// peers do not import a nested invoker or local-execution gateway.
 	InvokeLocal(context.Context, LocalInvocationRequest) (LocalInvocationResult, error)
 }
 

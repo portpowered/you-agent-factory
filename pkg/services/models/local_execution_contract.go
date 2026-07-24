@@ -2,7 +2,11 @@ package models
 
 import "github.com/portpowered/infinite-you/pkg/services/work"
 
-// LocalInvocationRequest describes one possible local-model invocation.
+// LocalInvocationRequest is the plain infer request on the Models root.
+// Peers supply Worker/dispatch/bindings vocabulary without importing nested
+// inference or local-execution implementation types. Validate with
+// ValidateLocalInvocationRequest before InvokeLocal when failing closed on
+// managed-runtime inputs.
 type LocalInvocationRequest struct {
 	Holder           string
 	Worker           LocalWorker
@@ -39,8 +43,12 @@ type LocalResource struct {
 	Provider   string
 }
 
-// LocalInvocationResult reports whether Models owned the invocation.
-// When Handled is false, Workers should continue with its normal runner.
+// LocalInvocationResult is the plain infer result on the Models root. Handled
+// true means Models owned the invocation and Content carries the Models-owned
+// outcome; Handled false means Models declined and Workers continue with its
+// normal runner. Readiness-blocked and unsupported-response-mode failures are
+// distinct typed errors (ErrMissing, ErrLoading, ErrFailed, ErrUnsupported,
+// ErrUnsupportedResponseMode), not Handled=false.
 type LocalInvocationResult struct {
 	Handled bool
 	Content string
