@@ -44,7 +44,7 @@ Do **not** treat the following as sole proof for a surface:
 
 | Surface | Runnable entry point | Success baseline | Typed-failure baseline | Pair status |
 | --- | --- | --- | --- | --- |
-| CLI | Focused: `go test ./pkg/transports/cli/baseline -run 'Test(RootHelpBaseline_MatchesFixture\|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)' -count=1` Also included under `make test-functional` (short CLI baseline package). | `TestRootHelpBaseline_MatchesFixture` — customer-visible `you --help` stdout matches the checked-in fixture via `root.BuildProcess`. | `TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure` — invalid factory topology fails before invocation with structured `ErrorResponse` on stderr (code/family/message). | Covered |
+| CLI | Captured Make: `make fnd-12-cli-behavior-baselines` (focused filter below). Equivalent: `go test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture\|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1`. Also included under `make test-functional` (short CLI baseline package). | `TestRootHelpBaseline_MatchesFixture` — customer-visible `you --help` stdout matches the checked-in fixture via `root.BuildProcess`. | `TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure` — invalid factory topology fails before invocation with structured `ErrorResponse` on stderr (code/family/message). | Covered (captured) |
 | HTTP | Focused: `go test ./tests/functional/runtime_api -run 'TestGeneratedAPIIntegrationSmoke_(OpenAPIGeneratedServerAndLiveRuntimeStayAligned\|SubmitWorkItemsRejectEmptyStructuredSubmission)' -count=1` Broader Make wrap: `make api-smoke` (also regenerates/validates OpenAPI; heavier than the focused pair). | `TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned` — live generated server serves a successful protocol-visible Work read/submit path. | `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission` — empty structured submit returns HTTP 400. | Covered |
 | MCP | Focused: `go test ./pkg/transports/mcp/server -run 'Test(ServeStdioUsesSDKProtocolAndRegistersCatalog\|SDKProtocolErrors)' -count=1` Broader Make wrap: `make mcp-contract-smoke` (also runs contract/discovery checks; discovery drift alone is **not** the behavioral proof). | `TestServeStdioUsesSDKProtocolAndRegistersCatalog` — initialize/list/call succeed over stdio JSON-RPC with a catalog tool result. | `TestSDKProtocolErrors` — unknown tool / unsupported method return protocol-visible JSON-RPC errors. | Covered |
 | Replay | Focused: `go test ./pkg/services/recordings/replay -run 'TestSideEffects_(InferReturnsRecordedProviderResponse\|UnmatchedRequestFailsClearly)' -count=1` Optional broader (long tags): `go test -tags=<FUNCTIONAL_LONG_TAGS> ./tests/functional/replay_contracts -run 'TestReplayRegressionHarness_(LoadsArtifactAndAssertsSuccessfulReplay\|AssertsExpectedDivergence)' -count=1` | `TestSideEffects_InferReturnsRecordedProviderResponse` — matched recorded provider inference returns the recorded response. | `TestSideEffects_UnmatchedRequestFailsClearly` — unmatched replay key fails with a stable visible error (`replay provider request did not match`). | Covered |
@@ -56,12 +56,14 @@ As of this map, each surface already has a **reusable success + typed-failure
 pair** in existing focused evidence. Remaining FND-12 work is capture/gate
 hardening, not inventing sole-proof source scans:
 
-- Stories 002–006: keep the focused filters above as the captured suite
-  contracts; add the smallest hermetic fixture only if a listed case regresses
-  or proves too brittle for the gate.
+- Story 002 (CLI): captured via `make fnd-12-cli-behavior-baselines`.
+- Stories 003–006: keep the focused filters above as the captured suite
+  contracts; add a matching `make fnd-12-*-behavior-baselines` target and the
+  smallest hermetic fixture only if a listed case regresses or proves too
+  brittle for the gate.
 - Story 007: execute every entry point above plus `make verify-fast` and
   `make lint` on the capturing branch; optionally introduce a single Make
-  aggregator that shells the five focused filters without package migration.
+  aggregator that shells the five surface targets without package migration.
 - Do not expand this map to own PR #1262 CLI-manifest generate/check artifacts.
 
 ## Non-goals (explicit)

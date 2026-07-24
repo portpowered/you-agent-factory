@@ -119,6 +119,7 @@ endef
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
+.PHONY: fnd-12-cli-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
@@ -254,6 +255,12 @@ cli-manifest-check:
 cli-contract-smoke:
 	$(GO) run ./cmd/clicontractsmoke -root .
 	$(GO) test ./cmd/clicontractsmoke ./pkg/transports/cli/clicontract -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured public CLI success + typed-failure pair (see
+# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# Does not refresh or re-own PR #1262 CLI-manifest baselines.
+fnd-12-cli-behavior-baselines:
+	$(GO) test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
