@@ -348,6 +348,18 @@ is allowed only when the text explicitly describes internal implementation
 details or `pkg/orchestrators/petri` ownership. It should not be the primary wording for
 customer-facing Factory Session, Work, or event-stream behavior.
 
+The architecture checker encodes a Petri-public-surface prohibition in
+`cmd/pkgboundarycheck/petri_public_surface.go`: raw nets, markings, tokens,
+transitions/enabled-transition engine shapes, and engine snapshots are rejected
+outside `pkg/services/factory_runtime/internal/`. Authored Factory Definition
+`orchestrator.kind = PETRI` remains allowed as configuration. Focused fixtures
+in `petri_public_surface_test.go` cover vocabulary shapes and the required
+public-surface categories (public API, transport, integration contract, and
+functional test). The prohibition runs on the `make lint` package-boundary path;
+pre-existing live-tree debt is inventory-only in
+`petri-public-surface-baseline.json` with an exact deletion gate pointing at
+Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
+
 ## Focused Verification
 
 For runtime-cleanup documentation changes, run a changed-docs vocabulary check
