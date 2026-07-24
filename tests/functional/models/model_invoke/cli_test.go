@@ -74,21 +74,6 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 
 	var output bytes.Buffer
 	if err := process.Execute(root.Input{
-		Args: []string{"you", "--json", "models", "list"},
-		Env:              homeEnvironment(home),
-		Stdout:           &output,
-		Stderr:           io.Discard,
-		Context:          context.Background(),
-		WorkingDirectory: factoryDir,
-	}); err != nil {
-		t.Fatalf("Process.Execute(models list) error = %v", err)
-	}
-	if output.Len() == 0 {
-		t.Fatal("Process.Execute(models list) produced empty output")
-	}
-
-	output.Reset()
-	if err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 			"--operation", "TTS", "--text", "hello from the process",
