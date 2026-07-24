@@ -22,6 +22,12 @@ type Service interface {
 	// GetModel returns one detached Models-owned catalog Detail. Missing models
 	// fail with ErrNotFound; unavailable catalog scope fails with ErrUnavailable.
 	GetModel(context.Context, string) (Detail, error)
+	// PullModel pulls managed model assets and returns a Models-owned PullResult
+	// (downloaded-file and pull-outcome vocabulary). Not-available, pull-
+	// unsupported, and source-fetch-failed cases return distinct typed outcomes
+	// (ErrNotAvailable, ErrPullUnsupported, ErrSourceFetchFailed / PullError).
+	// Asset pull stays on this singular root Service; peers do not import a
+	// nested asset-gateway interface.
 	PullModel(context.Context, string) (PullResult, error)
 	InspectRuntime(context.Context, string) (Runtime, error)
 	InvokeLocal(context.Context, LocalInvocationRequest) (LocalInvocationResult, error)
