@@ -1,5 +1,5 @@
 // Command pkgstructurecheck enforces the recursive service package shape and
-// feature-oriented functional-test layout.
+// domain-mirrored functional-test layout.
 package main
 
 import (
@@ -27,19 +27,21 @@ const (
 	ruleServiceExportedFunction = "service-root-exported-function"
 	ruleServiceUnexpectedDir    = "service-root-unexpected-directory"
 	ruleServiceContainerGoFile  = "service-container-go-file"
-	ruleFunctionalShallowFile   = "functional-test-missing-subsection"
-	ruleRuntimeAPIFile          = "deprecated-runtime-api-file"
-	ruleRuntimeAPITest          = "deprecated-runtime-api-test"
+	ruleFunctionalShallowFile         = "functional-test-missing-subsection"
+	ruleFunctionalUnclassifiedDomain  = "functional-test-unclassified-domain"
+	ruleRuntimeAPIFile                = "deprecated-runtime-api-file"
+	ruleRuntimeAPITest                = "deprecated-runtime-api-test"
 )
 
 var deletionGates = map[string]string{
-	ruleServiceInterfaceCount:   "reduce the service root to exactly one named interface and delete this exact entry",
-	ruleServiceExportedFunction: "move the exported function behind the service interface or into internal implementation and delete this exact entry",
-	ruleServiceUnexpectedDir:    "move the package under wire, internal, transports/<protocol>, or services/<subservice> and delete this exact entry",
-	ruleServiceContainerGoFile:  "move the Go file into a named subservice below services and delete this exact entry",
-	ruleFunctionalShallowFile:   "move the functional source into tests/functional/<feature>/<subsection> and delete this exact entry",
-	ruleRuntimeAPIFile:          "move the runtime_api source to its durable feature/subsection owner and delete this exact entry",
-	ruleRuntimeAPITest:          "move the runtime_api scenario to its durable feature/subsection owner and delete this exact entry",
+	ruleServiceInterfaceCount:        "reduce the service root to exactly one named interface and delete this exact entry",
+	ruleServiceExportedFunction:      "move the exported function behind the service interface or into internal implementation and delete this exact entry",
+	ruleServiceUnexpectedDir:         "move the package under wire, internal, transports/<protocol>, or services/<subservice> and delete this exact entry",
+	ruleServiceContainerGoFile:       "move the Go file into a named subservice below services and delete this exact entry",
+	ruleFunctionalShallowFile:        "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
+	ruleFunctionalUnclassifiedDomain: "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
+	ruleRuntimeAPIFile:               "move the runtime_api source to its durable domain/subsection owner and delete this exact entry",
+	ruleRuntimeAPITest:               "move the runtime_api scenario to its durable domain/subsection owner and delete this exact entry",
 }
 
 var allowedServiceRootDirectories = map[string]struct{}{
@@ -47,6 +49,26 @@ var allowedServiceRootDirectories = map[string]struct{}{
 	"services":   {},
 	"transports": {},
 	"wire":       {},
+}
+
+// allowedFunctionalDomains are the durable product-domain nouns for
+// tests/functional/<domain>/<subsection>/... scenario sources.
+var allowedFunctionalDomains = map[string]struct{}{
+	"transport":         {},
+	"workers":           {},
+	"orchestration":     {},
+	"workstations":      {},
+	"work":              {},
+	"sessions":          {},
+	"factory":           {},
+	"provider_sessions": {},
+	"events":            {},
+	"models":            {},
+	"guards":            {},
+	"resources":         {},
+	"observability":     {},
+	"product":           {},
+	"resilience":        {},
 }
 
 type config struct {
@@ -310,11 +332,21 @@ func scanFunctionalTests(repoRoot string) ([]finding, error) {
 		if len(parts) == 0 {
 			return nil
 		}
-		feature := parts[0]
-		if feature == "internal" {
+		domain := parts[0]
+		// Only tests/functional/internal/support/... is the shared harness exception.
+		// Other internal/* roots (for example restclient) are structure debt.
+		if domain == "internal" {
+			if len(parts) >= 3 && parts[1] == "support" {
+				return nil
+			}
+			if len(parts) < 3 {
+				findings = append(findings, finding{Rule: ruleFunctionalShallowFile, FilePath: relative, Target: domain})
+				return nil
+			}
+			findings = append(findings, finding{Rule: ruleFunctionalUnclassifiedDomain, FilePath: relative, Target: domain})
 			return nil
 		}
-		if feature == "runtime_api" {
+		if domain == "runtime_api" {
 			findings = append(findings, finding{Rule: ruleRuntimeAPIFile, FilePath: relative, Target: "tests/functional/runtime_api"})
 			tests, scanErr := functionalTestNames(path)
 			if scanErr != nil {
@@ -325,9 +357,18 @@ func scanFunctionalTests(repoRoot string) ([]finding, error) {
 			}
 			return nil
 		}
+		// Conforming scenario sources require tests/functional/<domain>/<subsection>/...
+		// Approved domain nouns with that depth are accepted and are not structure debt.
 		if len(parts) < 3 {
-			findings = append(findings, finding{Rule: ruleFunctionalShallowFile, FilePath: relative, Target: feature})
+			findings = append(findings, finding{Rule: ruleFunctionalShallowFile, FilePath: relative, Target: domain})
+			return nil
 		}
+		if isAllowedFunctionalDomain(domain) {
+			return nil
+		}
+		// Deep paths under catch-all or unclassified roots are deletion-only debt.
+		// New files under those roots fail immediately rather than becoming durable owners.
+		findings = append(findings, finding{Rule: ruleFunctionalUnclassifiedDomain, FilePath: relative, Target: domain})
 		return nil
 	})
 	if err != nil {
@@ -339,6 +380,11 @@ func scanFunctionalTests(repoRoot string) ([]finding, error) {
 type namedLine struct {
 	name string
 	line int
+}
+
+func isAllowedFunctionalDomain(domain string) bool {
+	_, ok := allowedFunctionalDomains[domain]
+	return ok
 }
 
 func functionalTestNames(path string) ([]namedLine, error) {
