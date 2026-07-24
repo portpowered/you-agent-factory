@@ -1,0 +1,233 @@
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+)
+
+const (
+	// providersLeafEffectContractPackage is the durable Providers Execution
+	// leaf that owns the provider inference/process effect contract. Later
+	// Providers migration packets move the live Workers path here; this packet
+	// only encodes ownership for the checker and fixtures.
+	providersLeafEffectContractPackage = "pkg/services/providers/execution/inferencecontract"
+	providersServiceRootPrefix         = "pkg/services/providers/"
+	providersLeafEffectContractImport  = repositoryImportPrefix + providersLeafEffectContractPackage
+
+	// workersProviderEffectMigrationDebtPackage remains the live declaration
+	// site until Providers packets land. It is not the durable normative owner.
+	workersProviderEffectMigrationDebtPackage = "pkg/services/workers/provider/inferencecontract"
+
+	edgesPackagePath = "pkg/services/edges"
+
+	providerEffectPortTypeName = "Provider"
+)
+
+type providerEffectOwnershipFinding struct {
+	kind        string
+	packagePath string
+	filePath    string
+	typeName    string
+}
+
+func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFinding, error) {
+	var findings []providerEffectOwnershipFinding
+	scanRoot := filepath.Join(repoRoot, "pkg")
+	if _, err := os.Stat(scanRoot); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat provider-effect scan root: %w", err)
+	}
+
+	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if entry.Name() == "testdata" || entry.Name() == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		relative, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		packagePath := filepath.ToSlash(filepath.Dir(relative))
+
+		fileSet := token.NewFileSet()
+		file, err := parser.ParseFile(fileSet, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("parse provider-effect ownership file %s: %w", relative, err)
+		}
+
+		for _, declaration := range file.Decls {
+			generic, ok := declaration.(*ast.GenDecl)
+			if !ok || generic.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range generic.Specs {
+				typed, ok := specification.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				if packagePath == edgesPackagePath {
+					if finding, hit := edgesProviderEffectRedefinition(packagePath, relative, typed); hit {
+						findings = append(findings, finding)
+					}
+					continue
+				}
+				if !isProviderEffectPortDeclaration(typed) {
+					continue
+				}
+				if isDurableProvidersLeafOwner(packagePath) {
+					continue
+				}
+				if packagePath == workersProviderEffectMigrationDebtPackage {
+					// Live Workers declaration is migration debt only.
+					continue
+				}
+				findings = append(findings, providerEffectOwnershipFinding{
+					kind:        "durable-owner",
+					packagePath: packagePath,
+					filePath:    relative,
+					typeName:    typed.Name.Name,
+				})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan provider-effect ownership: %w", err)
+	}
+
+	slices.SortFunc(findings, func(left, right providerEffectOwnershipFinding) int {
+		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
+			return comparison
+		}
+		if comparison := strings.Compare(left.kind, right.kind); comparison != 0 {
+			return comparison
+		}
+		return strings.Compare(left.typeName, right.typeName)
+	})
+	return findings, nil
+}
+
+func isDurableProvidersLeafOwner(packagePath string) bool {
+	return packagePath == strings.TrimSuffix(providersServiceRootPrefix, "/") ||
+		strings.HasPrefix(packagePath, providersServiceRootPrefix)
+}
+
+func isProviderEffectPortDeclaration(typed *ast.TypeSpec) bool {
+	if typed.Name == nil || typed.Name.Name != providerEffectPortTypeName {
+		return false
+	}
+	switch typed.Type.(type) {
+	case *ast.InterfaceType:
+		return true
+	default:
+		return typed.Assign.IsValid()
+	}
+}
+
+func edgesProviderEffectRedefinition(
+	packagePath string,
+	filePath string,
+	typed *ast.TypeSpec,
+) (providerEffectOwnershipFinding, bool) {
+	if typed.Name == nil {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if typed.Name.Name == "Edges" {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if isProviderEffectPortDeclaration(typed) || aliasesProvidersLeafEffectContract(typed) {
+		return providerEffectOwnershipFinding{
+			kind:        "edges-redefinition",
+			packagePath: packagePath,
+			filePath:    filePath,
+			typeName:    typed.Name.Name,
+		}, true
+	}
+	return providerEffectOwnershipFinding{}, false
+}
+
+func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec) bool {
+	if typed.Name == nil || !typed.Assign.IsValid() {
+		return false
+	}
+	selector, ok := typed.Type.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	return selector.Sel != nil && selector.Sel.Name == providerEffectPortTypeName
+}
+
+func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerEffectOwnershipFinding) {
+	for _, finding := range findings {
+		switch finding.kind {
+		case "durable-owner":
+			fmt.Fprintf(
+				writer,
+				"[agent-factory:pkg-boundary] prohibited durable provider-effect ownership: %s (%s)\n",
+				finding.packagePath,
+				finding.filePath,
+			)
+			fmt.Fprintf(
+				writer,
+				"  reason: %s declares %s as a durable provider inference/process effect port outside the Providers Execution leaf.\n",
+				finding.packagePath,
+				finding.typeName,
+			)
+			fmt.Fprintf(
+				writer,
+				"  canonical owner: %s\n",
+				providersLeafEffectContractPackage,
+			)
+			fmt.Fprintln(
+				writer,
+				"  remediation: declare the leaf effect contract in the Providers Execution leaf and keep Workers consuming the Providers root; do not redeclare or alias the port as a peer-owned contract.",
+			)
+		case "edges-redefinition":
+			fmt.Fprintf(
+				writer,
+				"[agent-factory:pkg-boundary] prohibited provider-effect contract redefinition: %s (%s)\n",
+				finding.packagePath,
+				finding.filePath,
+			)
+			fmt.Fprintf(
+				writer,
+				"  reason: pkg/services/edges declares %s instead of aggregating the exact Providers leaf effect contract unchanged.\n",
+				finding.typeName,
+			)
+			fmt.Fprintf(
+				writer,
+				"  canonical owner: %s\n",
+				providersLeafEffectContractPackage,
+			)
+			fmt.Fprintln(
+				writer,
+				"  remediation: aggregate the exact Providers leaf effect contract unchanged as the root/test override bag; do not own, redefine, or alias it in edges.",
+			)
+		default:
+			fmt.Fprintf(
+				writer,
+				"[agent-factory:pkg-boundary] prohibited provider-effect ownership finding: %s (%s)\n",
+				finding.packagePath,
+				finding.filePath,
+			)
+		}
+	}
+}

@@ -59,8 +59,12 @@ var deletionGates = map[string]string{
 // These packages declare exact external-effect contracts at the leaf that
 // performs the effect. Platform may implement those ports but may not depend on
 // a composed service, service root, or implementation package.
+//
+// Providers Execution leaf ownership is durable; Workers inferencecontract
+// remains migration debt until later Providers packets land.
 var approvedPlatformLeafPorts = map[string]struct{}{
-	modulePath + "/pkg/services/workers/provider/inferencecontract": {},
+	modulePath + "/pkg/services/providers/execution/inferencecontract": {},
+	modulePath + "/pkg/services/workers/provider/inferencecontract":    {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a

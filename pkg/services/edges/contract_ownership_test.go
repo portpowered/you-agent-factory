@@ -82,7 +82,7 @@ func TestProviderInferencePortHasSingleLeafOwner(t *testing.T) {
 	t.Parallel()
 
 	workersRoot := filepath.Join("..", "workers")
-	const canonical = "provider/inferencecontract/contract.go"
+	const workersMigrationDebt = "provider/inferencecontract/contract.go"
 	err := filepath.WalkDir(workersRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -109,11 +109,14 @@ func TestProviderInferencePortHasSingleLeafOwner(t *testing.T) {
 				if !ok || typed.Name.Name != "Provider" {
 					continue
 				}
-				if relative != canonical {
+				if _, isInterface := typed.Type.(*ast.InterfaceType); !isInterface && !typed.Assign.IsValid() {
+					continue
+				}
+				if relative != workersMigrationDebt {
 					t.Errorf(
-						"%s redeclares Provider; the external inference port is owned only by %s",
+						"%s redeclares Provider; durable ownership belongs to the Providers Execution leaf, and Workers migration debt may remain only at %s",
 						relative,
-						canonical,
+						workersMigrationDebt,
 					)
 				}
 			}

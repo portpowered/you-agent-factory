@@ -77,8 +77,14 @@ primary-result behavior.
   non-overwrite policy in Factory Definitions and lifecycle activation in
   Initializer; the embedded publication package and catalog must not acquire
   either responsibility.
-- The customer-implementable provider inference contract lives in
-  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+- The customer-implementable provider inference contract currently lives in
+  `pkg/services/workers/provider/inferencecontract/` as migration debt. Durable
+  ownership belongs to the Providers Execution leaf
+  (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
+  encodes that ownership with deliberate fixtures, while Workers continues to
+  host the live declaration until later Providers packets land. `pkg/services/edges`
+  may aggregate the exact leaf effect contract unchanged and must not redefine
+  or alias it. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
   result agreement, and exactly-once close before they reach orchestration.

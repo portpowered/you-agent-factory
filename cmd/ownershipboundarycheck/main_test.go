@@ -57,8 +57,11 @@ func TestScanRejectsPlatformDomainImportsAndAllowsExactLeafPorts(t *testing.T) {
 import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 type Config struct { Runtime runtime.Service }`,
 		"pkg/platform/http/provider.go": `package http
-import inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+import inference "github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract"
 type Adapter struct { Invoke inference.Invoker }`,
+		"pkg/platform/http/migration_debt.go": `package http
+import debt "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+type DebtAdapter struct { Invoke debt.Invoker }`,
 	})
 
 	findings := scanFixture(t, root)
