@@ -986,7 +986,9 @@ jobs:
             command: make test-unit-coverage
           - suite: functional
             label: Functional
-            command: make test-functional-coverage
+            # functional-test-viz composes boundary → one coverage run (profile +
+            # JSON) → Markdown catalog. Required CI uploads those plus command.log.
+            command: make functional-test-viz
     steps:
       - name: Report lane routing
         run: |
@@ -1051,12 +1053,19 @@ jobs:
           if [[ "${{ matrix.suite }}" == "unit" ]]; then
             GO_UNIT_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-unit-coverage 2>&1 | tee "$artifact_root/command.log"
           else
-            # make test-functional-coverage unavoidably runs functional-boundary-check
-            # before the functional coverage suite; do not replace this with a bare
-            # gocoveragecheck invocation that would skip the boundary gate.
-            GO_FUNCTIONAL_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-functional-coverage 2>&1 | tee "$artifact_root/command.log"
+            # Required Backend Functional Coverage runs make functional-test-viz so
+            # one suite execution yields coverage.out, coverage-summary.json, and
+            # functional-tests.md. Override FUNCTIONAL_TEST_VIZ_DIR to keep the
+            # established CI upload root (.artifacts/backend-functional-coverage/).
+            # Do not replace this with a bare gocoveragecheck invocation that would
+            # skip the boundary gate or omit the viz artifact set.
+            FUNCTIONAL_TEST_VIZ_DIR="$artifact_root" make functional-test-viz 2>&1 | tee "$artifact_root/command.log"
           fi
-          go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
+          # Profile may be absent when an early gate fails (for example boundary);
+          # keep already-written diagnostics and still upload command.log.
+          if [[ -f "$artifact_root/coverage.out" ]]; then
+            go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
+          fi
 
       - name: Report lane execution
         if: always() && needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
@@ -1072,6 +1081,9 @@ jobs:
               echo "- Verified: Independent backend ${{ matrix.suite }} coverage through \`${{ matrix.command }}\`."
               echo "- Coverage: \`${total:-unavailable}\`"
               echo "- Report artifact: \`$artifact_name\`"
+              if [[ "${{ matrix.suite }}" == "functional" ]]; then
+                echo "- Functional viz artifacts (when present): \`functional-tests.md\`, \`coverage-summary.json\`, \`coverage.out\`, \`command.log\`"
+              fi
               echo "- Result: \`passed\`"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -1084,8 +1096,16 @@ jobs:
               -artifact-name "$artifact_name" \
               -primary-log "$artifact_root/command.log"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ matrix.suite }}" == "functional" ]]; then
+            {
+              echo
+              echo "- Functional viz artifacts uploaded when present under \`$artifact_root/\`: \`functional-tests.md\`, \`coverage-summary.json\`, \`coverage.out\`, \`command.log\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload backend ${{ matrix.suite }} coverage report
+        # Upload on success and failure so functional Markdown/JSON/profile/log
+        # (and unit profile/log) remain inspectable when the lane fails.
         if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_coverage.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
