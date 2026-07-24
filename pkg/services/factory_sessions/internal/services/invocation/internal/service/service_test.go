@@ -151,6 +151,120 @@ func TestService_InvokeFactorySessionOwnsPrepareCommandObserve(t *testing.T) {
 	}
 }
 
+func TestService_ObserveCompletedYieldsSessionScopedResult(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sessionID = "session-observe-complete"
+		requestID = "request-observe-complete"
+		traceID   = "trace-observe-complete"
+	)
+	peer := &fakeWorkPeer{
+		submitResult: work.WorkRequestSubmitResult{RequestID: requestID, TraceID: traceID, Accepted: true},
+	}
+	deps := validDependencies(nil)
+	deps.Work = peer
+	var observedSession string
+	deps.Observe = func(_ context.Context, gotSessionID string, input legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		observedSession = gotSessionID
+		if input.RequestID != requestID || input.TraceID != traceID {
+			t.Fatalf("observe wait input = %#v, want request/trace identity", input)
+		}
+		return completedObservation(requestID, traceID, "observe-complete"), nil
+	}
+
+	service, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	result, err := service.InvokeFactorySession(context.Background(), sessionID, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "observe-me"}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession(): %v", err)
+	}
+	if result.Status != factorydefinitions.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want COMPLETED", result.Status)
+	}
+	if result.RequestID != requestID || result.TraceID != traceID {
+		t.Fatalf("result identity = %#v, want request/trace %s/%s", result, requestID, traceID)
+	}
+	if result.SessionID != sessionID {
+		t.Fatalf("SessionID = %q, want session-scoped %q", result.SessionID, sessionID)
+	}
+	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "observe-complete" {
+		t.Fatalf("PrimaryResult = %#v, want observe-complete", result.PrimaryResult)
+	}
+	if observedSession != sessionID {
+		t.Fatalf("observe session ID = %q, want %q", observedSession, sessionID)
+	}
+	if peer.submitCalls != 1 {
+		t.Fatalf("Work peer admission calls = %d, want 1", peer.submitCalls)
+	}
+}
+
+func TestService_ObservePartialResultAvailabilityAsTypedFailedOutcome(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sessionID   = "session-observe-partial"
+		requestID   = "request-observe-partial"
+		traceID     = "trace-observe-partial"
+		partialText = "partial answer before non-completed stop"
+	)
+	peer := &fakeWorkPeer{
+		submitResult: work.WorkRequestSubmitResult{RequestID: requestID, TraceID: traceID, Accepted: true},
+	}
+	deps := validDependencies(nil)
+	deps.Work = peer
+	deps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+		return partialCaptureFailedObservation(requestID, traceID, partialText), nil
+	}
+
+	service, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	result, err := service.InvokeFactorySession(context.Background(), sessionID, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial-me"}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession(): %v", err)
+	}
+	if result.Status != factorydefinitions.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED typed non-completed outcome", result.Status)
+	}
+	if result.ErrorCode != string(factorydefinitions.InvocationErrorCodeRuntimeFailure) {
+		t.Fatalf("ErrorCode = %q, want %q", result.ErrorCode, factorydefinitions.InvocationErrorCodeRuntimeFailure)
+	}
+	if result.RequestID != requestID || result.TraceID != traceID {
+		t.Fatalf("result identity = %#v, want request/trace %s/%s", result, requestID, traceID)
+	}
+	if result.SessionID != sessionID {
+		t.Fatalf("SessionID = %q, want session-scoped %q", result.SessionID, sessionID)
+	}
+	if result.WorkID != "work-partial-1" || result.WorkState == "" {
+		t.Fatalf("work context = workID=%q workState=%q, want typed Work identity on partial-capture failure", result.WorkID, result.WorkState)
+	}
+	if result.Status == factorydefinitions.InvocationTerminalStatusCompleted {
+		t.Fatal("partial-capture failure must not promote to COMPLETED")
+	}
+	for _, part := range result.PrimaryResult {
+		if part.Text == partialText {
+			t.Fatalf("PrimaryResult = %#v, want partial capture excluded from completed primary-result selection", result.PrimaryResult)
+		}
+	}
+	if result.ErrorCode == "" || result.Message == "" {
+		t.Fatalf("result = %#v, want typed ErrorCode/Message rather than an untyped side channel", result)
+	}
+}
+
 func TestService_PrepareCommandsWorkThroughCTRWorkPeerRoot(t *testing.T) {
 	t.Parallel()
 
@@ -410,4 +524,34 @@ func completedObservation(requestID, traceID, text string) legacyinvocation.Sess
 		}},
 		TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{item.ID: {WorkItem: item, Status: "done"}},
 	}}
+}
+
+// partialCaptureFailedObservation models non-completed Work that still carries
+// captured content. ResolvePrimaryResult must not treat that content as a
+// completed primary result; ClassifyFailedInvocation surfaces the typed failure.
+func partialCaptureFailedObservation(requestID, traceID, partialText string) legacyinvocation.SessionInvocationObservation {
+	initial := work.FactoryWorkItem{
+		ID: "work-partial-1", WorkTypeID: "task", State: "draft", TraceID: traceID,
+		DisplayName: "Goal", PlaceID: "task:init",
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "submitted"}},
+	}
+	failed := work.FactoryWorkItem{
+		ID: "work-partial-1", WorkTypeID: "task", State: "failed", TraceID: traceID,
+		DisplayName: "Goal", PlaceID: "task:failed",
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: partialText}},
+	}
+	state := factorydefinitions.FactoryWorldState{
+		PayloadLineage:      work.WorkPayloadLineageProjection{},
+		WorkItemsByID:       map[string]work.FactoryWorkItem{failed.ID: failed},
+		WorkRequestsByID:    map[string]factorydefinitions.WorkRequestPayload{},
+		TerminalWorkByID:    map[string]factorydefinitions.FactoryTerminalWork{},
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{failed.ID: failed},
+	}
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
+		RequestID: requestID, TraceID: traceID, Type: work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: []work.FactoryWorkItem{initial},
+	}
+	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, initial)
+	state.TerminalWorkByID[failed.ID] = factorydefinitions.FactoryTerminalWork{WorkItem: failed, Status: "FAILED"}
+	return legacyinvocation.SessionInvocationObservation{WorldState: state, ActiveWork: false}
 }

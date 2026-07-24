@@ -74,7 +74,8 @@ func commandWorkThroughPeerRoot(
 }
 
 // InvokeFactorySession delegates the complete invocation lifecycle to the
-// capability-owned engine.
+// capability-owned engine and stamps the bound session identity onto observe
+// outcomes so completed and non-completed results stay session-scoped.
 func (s *Service) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -83,7 +84,22 @@ func (s *Service) InvokeFactorySession(
 	if s == nil || s.owner == nil {
 		return factorydefinitions.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is unavailable")
 	}
-	return s.owner.InvokeFactorySession(ctx, sessionID, request)
+	result, err := s.owner.InvokeFactorySession(ctx, sessionID, request)
+	if err != nil {
+		return result, err
+	}
+	return withSessionScope(sessionID, result), nil
+}
+
+// withSessionScope records the Factory Session ID used for prepare/command/
+// observe when the engine outcome omitted it. Callers distinguish completed
+// success from typed non-completed outcomes (including partial-capture
+// failures) through Status/ErrorCode/Work context rather than SessionID alone.
+func withSessionScope(sessionID string, result factorydefinitions.FactoryInvocationResult) factorydefinitions.FactoryInvocationResult {
+	if result.SessionID == "" && sessionID != "" {
+		result.SessionID = sessionID
+	}
+	return result
 }
 
 // ResolveInvocationInput applies the same normalization policy used by live

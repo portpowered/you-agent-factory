@@ -16,9 +16,13 @@ primary-result behavior.
   projects prepared input into that vocabulary and does not implement Work
   admission, staging, or materialization. Compatibility-content prepare currently
   resolves to `work.ArgumentSourceKindCompatibilityContent`
-  (`COMPATIBILITY_CONTENT`); completed success outcomes keep request/trace
-  identity on the result while session scoping is proven by the session ID
-  passed through prepare/command/observe ports.
+  (`COMPATIBILITY_CONTENT`). Observe-completion stamps the bound Factory
+  Session ID onto `FactoryInvocationResult.SessionID` when the engine omits
+  it, so completed success and typed non-completed outcomes (including
+  partial-capture failures) stay session-scoped with stable request/trace
+  identity. Partial-capture failed Work must surface as `FAILED` /
+  `INVOCATION_RUNTIME_FAILURE` with Work identity fields rather than promoting
+  captured content into a `COMPLETED` primary result.
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
