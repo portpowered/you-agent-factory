@@ -11,6 +11,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -30,6 +31,7 @@ type Service struct {
 	factoryroot.UnimplementedService
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	catalog           catalog.Service
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
@@ -39,6 +41,84 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 		versionFileSystem = versionFileSystems[0]
 	}
 	return &Service{host: host, versionFileSystem: versionFileSystem}
+}
+
+// NewWithCatalog constructs the Definitions root collaborator with private
+// catalog ownership for the CTR-DEF catalog slice.
+func NewWithCatalog(
+	host Host,
+	catalogService catalog.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := New(host, versionFileSystems...)
+	service.catalog = catalogService
+	return service
+}
+
+// ListNamedFactories delegates to the private catalog subservice when wired.
+func (s *Service) ListNamedFactories(
+	ctx context.Context,
+	request factoryroot.ListNamedFactoriesRequest,
+) (factoryroot.ListNamedFactoriesResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.ListNamedFactories(ctx, request)
+	}
+	return s.catalog.ListNamedFactories(ctx, request)
+}
+
+// GetNamedFactory delegates to the private catalog subservice when wired.
+func (s *Service) GetNamedFactory(
+	ctx context.Context,
+	request factoryroot.GetNamedFactoryRequest,
+) (factoryroot.GetNamedFactoryResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.GetNamedFactory(ctx, request)
+	}
+	return s.catalog.GetNamedFactory(ctx, request)
+}
+
+// ResolveNamedFactory delegates to the private catalog subservice when wired.
+func (s *Service) ResolveNamedFactory(
+	ctx context.Context,
+	request factoryroot.ResolveNamedFactoryRequest,
+) (factoryroot.ResolveNamedFactoryResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.ResolveNamedFactory(ctx, request)
+	}
+	return s.catalog.ResolveNamedFactory(ctx, request)
+}
+
+// DeleteNamedFactory delegates to the private catalog subservice when wired.
+func (s *Service) DeleteNamedFactory(
+	ctx context.Context,
+	request factoryroot.DeleteNamedFactoryRequest,
+) (factoryroot.DeleteNamedFactoryResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.DeleteNamedFactory(ctx, request)
+	}
+	return s.catalog.DeleteNamedFactory(ctx, request)
+}
+
+// GetCurrentFactoryPointer delegates to the private catalog subservice when wired.
+func (s *Service) GetCurrentFactoryPointer(
+	ctx context.Context,
+	request factoryroot.GetCurrentFactoryPointerRequest,
+) (factoryroot.GetCurrentFactoryPointerResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.GetCurrentFactoryPointer(ctx, request)
+	}
+	return s.catalog.GetCurrentFactoryPointer(ctx, request)
+}
+
+// SetCurrentFactoryPointer delegates to the private catalog subservice when wired.
+func (s *Service) SetCurrentFactoryPointer(
+	ctx context.Context,
+	request factoryroot.SetCurrentFactoryPointerRequest,
+) (factoryroot.SetCurrentFactoryPointerResult, error) {
+	if s == nil || s.catalog == nil {
+		return factoryroot.UnimplementedService{}.SetCurrentFactoryPointer(ctx, request)
+	}
+	return s.catalog.SetCurrentFactoryPointer(ctx, request)
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the
