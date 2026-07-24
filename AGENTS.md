@@ -86,10 +86,12 @@ the standards.
   lifecycle gateways, response streams, execution contracts, and live
   invocation orchestration.
 - `pkg/factory/contracts/` contains canonical Factory definition, runtime,
-  event, and projection value contracts shared across domain boundaries;
-  Factory Event vocabulary inventory lives under `pkg/factory/events/kinds/`,
-  and Factory Session response-event contracts live under
-  `pkg/factory/sessions/responseevents/`.
+  event, and projection value contracts shared across domain boundaries.
+  Recordings owns the public Factory Event kind inventory under
+  `pkg/services/recordings/events/kinds/` (event-contract lease). Factory
+  Session response-stream / `FactoryResponseEvent` contracts live under
+  `pkg/services/factory_sessions/internal/responseevents/` and are
+  intentionally separate from canonical Factory Event replay history.
 - `pkg/work/` contains canonical Work content, materialization, query, graph,
   time-work, and pure invocation input/return-policy behavior.
 - `pkg/models/local/` contains managed model runtime catalog, readiness,
