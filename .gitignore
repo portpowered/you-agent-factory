@@ -15,6 +15,10 @@ ui/dist_stamp.go
 
 ## do not include temporary working files
 docs/temp/**
+# Provider-session golden fixtures must remain versioned for functional CI.
+!docs/temp/functional/
+!docs/temp/functional/provider-sessions/
+!docs/temp/functional/provider-sessions/**
 ## Wave 0 functional-tests-expansion planning authority (durable)
 !docs/temp/functional-tests-expansion/
 !docs/temp/functional-tests-expansion/**

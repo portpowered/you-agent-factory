@@ -186,3 +186,52 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
+
+- Provider-session golden fixtures live under
+  `docs/temp/functional/provider-sessions/**`. Keep that path narrowly
+  un-ignored after the general `docs/temp/**` rule by re-including each parent
+  directory (`!docs/temp/functional/`, `!docs/temp/functional/provider-sessions/`,
+  then `!docs/temp/functional/provider-sessions/**`). Prove the exception with
+  `git check-ignore -q` (exit 1 = not ignored, exit 0 = ignored) plus a sibling
+  `docs/temp/...` path that remains ignored. Shared helpers and fixture-root
+  constants belong in `tests/functional/internal/support`.
+- Provider-session golden `manifest.json` validation lives in
+  `tests/functional/internal/support` (`LoadProviderSessionCaseManifest` /
+  `ValidateProviderSessionGoldenManifest`). Require schema version 1, identity
+  (`id`, `provider`, `providerVersion`, `case`), `fidelityClass` in
+  `{full-stream, partial-stream, snapshot-only, final-only}`, sanitizer/source,
+  `normalizedFields`, and relative file pointers for request/process/stdout/
+  stderr plus the three expected outputs. Diagnostics must name the case id and
+  failing field or rule; pointer resolution must stay inside the case directory.
+- Provider-session golden sanitization (`ValidateProviderSessionCaseSanitization`
+  / `ValidateProviderSessionFixtureContent`) rejects unsanitized fixture material
+  with named categories: `credential`, `host-path`, `private-repo-url`,
+  `env-dump`, `unbounded-content`, and `account-identifier`. Diagnostics must
+  name the category plus fixture path or JSON field. Retain sanitized structural
+  values (fake session/tool/item IDs, usage counts, finish reasons, error codes,
+  `@example.com` emails). Run the gate after manifest validation and before
+  golden comparison.
+- Provider-session golden loading (`LoadProviderSessionCase`) runs
+  manifest → sanitization → request/process/stdout/stderr → expected goldens.
+  `process.json` must expose argv (no secrets), provider/model, exitCode and/or
+  signal, stdout/stderr stream flags, `workingDirectoryRole`,
+  `timeoutCancelClass`, and `terminalErrorClass` without an env dump. Stdout
+  media type follows the declared filename (`*.jsonl`/`*.ndjson`, `*.json`, or
+  text). Expected response events decode as NDJSON records. Load failures use
+  `ProviderSessionLoadError` naming case id, role, and path/field.
+- Provider-session golden comparison (`CompareProviderSessionGoldens`) normalizes
+  only field names listed in `manifest.normalizedFields` (any depth) to
+  `<normalized>`, then structurally compares Provider Session JSON, response-
+  event NDJSON records, and invocation-result JSON. Whitespace-only differences
+  do not fail. Callers supply observed public metadata; comparison must never
+  synthesize expected output by calling the mapper/adapter under test.
+  Mismatches use `ProviderSessionCompareError` naming case id, artifact role,
+  and JSON path.
+- Provider-session golden update gating (`CompareOrUpdateProviderSessionGoldens`)
+  fails on drift without rewriting unless `UPDATE_FUNCTIONAL_GOLDENS=1`. With that
+  env set, the helper may rewrite the three expected golden files from observed
+  values and returns `ProviderSessionGoldensUpdatedError` so CI still fails until
+  a non-update re-run passes. Missing required fixtures fail with
+  `ProviderSessionLoadError` naming case id, role (`request`, `process`, `stdout`,
+  `stderr`, `expected-provider-session`, `expected-response-events`,
+  `expected-invocation-result`), and path—never silent skip.
