@@ -17,6 +17,7 @@ type fakeDefinitionsPeer struct {
 	entries            []factorydefinitions.NamedFactoryListEntry
 	authoredCanonical  []byte
 	authoredFactoryDir string
+	builtIns           []factorydefinitions.BuiltInPackagedFactoryEntry
 }
 
 func (fakeDefinitionsPeer) ActivateNamedFactory(context.Context, string) error {

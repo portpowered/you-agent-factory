@@ -668,10 +668,20 @@ slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
 snapshotcapture or bundled-asset implementation types); publish distinct
 `ErrInvalidFactorySnapshotPayload` vs `ErrUnsafeFactorySnapshotMaterialize`.
-Avoid adding a new root Go file when the package is already over the
-file-count baseline; grow `service_contract.go` and
-`service_contract_test.go` instead, and ratchet
-`backend-package-file-count.json` only for unavoidable prior growth.
+Distribute slices stay on the singular `Service` via
+`ListBuiltInPackagedFactories`, `InstallPackagedFactory`, and
+`CreateFactoryScaffold` returning shared
+`DistributedFactoryDefinitionFacts` for install and scaffold (not
+packagedinstallation/scaffold implementation types or peer-facing
+`PackagedFactoryInstaller` / `ScaffoldInitializer` authorities); publish
+distinct `ErrUnknownPackagedFactoryIdentity` vs
+`ErrFactoryDistributeFailed`. Request shapes omit filesystem effects,
+output streams, and `PackagedDefinition` payload bytes.
+Prefer growing `service_contract.go` / `service_contract_test.go` while
+under the 1000-line maint limit. When characterization coverage forces a
+split (as with distribute + six-slice seal proof), add a focused sibling
+such as `service_contract_distribute_test.go` and ratchet
+`backend-package-file-count.json` for that unavoidable growth.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root

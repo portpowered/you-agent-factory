@@ -46,6 +46,13 @@ type Service interface {
 	CaptureFactorySnapshot(context.Context, CaptureFactorySnapshotRequest) (CaptureFactorySnapshotResult, error)
 	PrepareFactorySnapshotImport(context.Context, PrepareFactorySnapshotImportRequest) (PrepareFactorySnapshotImportResult, error)
 	MaterializeFactorySnapshot(context.Context, MaterializeFactorySnapshotRequest) (MaterializeFactorySnapshotResult, error)
+
+	// Distribute slice: built-in package catalog listing, packaged installation,
+	// and scaffold creation. Install and scaffold return the same Definition
+	// aggregate identity/facts shape.
+	ListBuiltInPackagedFactories(context.Context, ListBuiltInPackagedFactoriesRequest) (ListBuiltInPackagedFactoriesResult, error)
+	InstallPackagedFactory(context.Context, InstallPackagedFactoryRequest) (InstallPackagedFactoryResult, error)
+	CreateFactoryScaffold(context.Context, CreateFactoryScaffoldRequest) (CreateFactoryScaffoldResult, error)
 }
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
@@ -393,6 +400,68 @@ type PortableFactorySnapshotFacts struct {
 // bundled asset relative to the Factory root.
 type PortableSnapshotAssetFact struct {
 	TargetPath string
+}
+
+// ErrUnknownPackagedFactoryIdentity reports that a packaged Factory name is
+// not present in the built-in package catalog.
+var ErrUnknownPackagedFactoryIdentity = errors.New("unknown packaged factory identity")
+
+// ErrFactoryDistributeFailed reports that packaged installation or scaffold
+// creation did not produce a Factory Definition aggregate.
+var ErrFactoryDistributeFailed = errors.New("factory distribute failed")
+
+// DistributedFactoryDefinitionFacts are the shared Definition aggregate
+// identity/facts returned by install and scaffold distribute paths.
+type DistributedFactoryDefinitionFacts struct {
+	Name       string
+	FactoryDir string
+}
+
+// ListBuiltInPackagedFactoriesRequest lists built-in packaged Factory identities
+// published with the executable. Callers do not supply catalog storage types.
+type ListBuiltInPackagedFactoriesRequest struct{}
+
+// ListBuiltInPackagedFactoriesResult carries detached built-in package catalog
+// entries peers can consume without importing packagedinstallation types.
+type ListBuiltInPackagedFactoriesResult struct {
+	Entries []BuiltInPackagedFactoryEntry
+}
+
+// BuiltInPackagedFactoryEntry identifies one built-in packaged Factory.
+type BuiltInPackagedFactoryEntry struct {
+	Name    string
+	Project string
+}
+
+// InstallPackagedFactoryRequest installs one built-in packaged Factory by
+// identity under a named-Factory root. Callers do not supply PackagedDefinition
+// payload bytes or installer collaborators as request fields.
+type InstallPackagedFactoryRequest struct {
+	RootDir string
+	Name    string
+}
+
+// InstallPackagedFactoryResult carries Definitions-owned distribute success
+// facts for one installed packaged Factory.
+type InstallPackagedFactoryResult struct {
+	Definition DistributedFactoryDefinitionFacts
+	Outcome    PackagedFactoryInstallOutcome
+}
+
+// CreateFactoryScaffoldRequest creates one Factory scaffold under a target
+// directory. Callers do not supply filesystem effects or output streams as
+// part of the cross-service request shape.
+type CreateFactoryScaffoldRequest struct {
+	TargetDir string
+	Type      string
+	Executor  string
+}
+
+// CreateFactoryScaffoldResult carries Definitions-owned distribute success
+// facts for one scaffolded Factory aggregate.
+type CreateFactoryScaffoldResult struct {
+	Definition   DistributedFactoryDefinitionFacts
+	ScaffoldType string
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped

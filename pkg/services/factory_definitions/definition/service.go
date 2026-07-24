@@ -329,6 +329,32 @@ func (s *Service) MaterializeFactorySnapshot(
 	return factoryroot.MaterializeFactorySnapshotResult{}, factoryroot.ErrUnsafeFactorySnapshotMaterialize
 }
 
+// ListBuiltInPackagedFactories satisfies the root distribute slice. Nested
+// packaged-catalog wiring remains an IMP-DEF concern; this method keeps the
+// root Service assignable.
+func (s *Service) ListBuiltInPackagedFactories(
+	context.Context,
+	factoryroot.ListBuiltInPackagedFactoriesRequest,
+) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+	return factoryroot.ListBuiltInPackagedFactoriesResult{}, fmt.Errorf("packaged factory catalog collaborator is required")
+}
+
+// InstallPackagedFactory satisfies the root distribute slice.
+func (s *Service) InstallPackagedFactory(
+	context.Context,
+	factoryroot.InstallPackagedFactoryRequest,
+) (factoryroot.InstallPackagedFactoryResult, error) {
+	return factoryroot.InstallPackagedFactoryResult{}, factoryroot.ErrUnknownPackagedFactoryIdentity
+}
+
+// CreateFactoryScaffold satisfies the root distribute slice.
+func (s *Service) CreateFactoryScaffold(
+	context.Context,
+	factoryroot.CreateFactoryScaffoldRequest,
+) (factoryroot.CreateFactoryScaffoldResult, error) {
+	return factoryroot.CreateFactoryScaffoldResult{}, factoryroot.ErrFactoryDistributeFailed
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

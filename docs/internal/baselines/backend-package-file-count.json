@@ -2,7 +2,7 @@
   "version": 1,
   "entries": [
     { "packagePath": "pkg/platform/process", "fileCount": 17, "owner": "backend-maintainers", "removalReason": "Split process execution responsibilities into durable child packages." },
-    { "packagePath": "pkg/services/factory_definitions", "fileCount": 36, "owner": "factory-definition-maintainers", "removalReason": "Continue moving definition capabilities behind focused child-package contracts." },
+    { "packagePath": "pkg/services/factory_definitions", "fileCount": 37, "owner": "factory-definition-maintainers", "removalReason": "Continue moving definition capabilities behind focused child-package contracts." },
     { "packagePath": "pkg/services/factory_definitions/contracts", "fileCount": 26, "owner": "factory-definition-maintainers", "removalReason": "Partition definition contracts by stable consumer boundary." },
     { "packagePath": "pkg/services/factory_definitions/definition", "fileCount": 34, "owner": "factory-definition-maintainers", "removalReason": "Split definition representation behavior by durable responsibility." },
     { "packagePath": "pkg/services/factory_definitions/loading/runtimetests", "fileCount": 19, "owner": "factory-definition-maintainers", "removalReason": "Consolidate runtime loading fixtures and move focused scenarios beside their owners." },
