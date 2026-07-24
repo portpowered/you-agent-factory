@@ -27,7 +27,7 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ factorysessions.Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Service, error) {
+func (fake *peerRootServiceFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
 	return fake, nil
 }
 

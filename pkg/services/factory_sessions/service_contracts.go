@@ -79,12 +79,17 @@ type RuntimeBinding struct {
 // ErrResponseStreamSubscriptionClosed on SubscribeFactoryResponseEvents; peers
 // must not import private response-stream store or manager types and must not
 // depend on a nested stream interface for peer import.
+// The published opening/binding slice uses OpeningBindingRequest,
+// OpeningBindingResult, *OpeningBindingError, and ErrOpeningBindingInvalid on
+// ForRuntime; peers supply already-constructed peer root capabilities through
+// plain binding inputs without downcasting or bundling nested opening
+// interfaces. Binding stays inert during construction characterization.
 // The process-scoped root uses ForRuntime to create an isolated runtime view; a
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.
 type Service interface {
 	ExecutionService
-	ForRuntime(RuntimeBinding) (Service, error)
+	ForRuntime(OpeningBindingRequest) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
