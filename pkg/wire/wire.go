@@ -295,7 +295,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	factorysessionwire.NewInvocationOperation,
+	provideInvocationOperation,
 	initializerapplication.NewStdioRunnerBuilder,
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,

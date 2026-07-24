@@ -326,7 +326,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v52, err := wire.NewInvocationOperation(v45, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v14)
+	v52, err := provideInvocationOperation(v45, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v14)
 	if err != nil {
 		return nil, err
 	}
@@ -730,7 +730,8 @@ var BundleSet = wire2.NewSet(
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
 	provideRuntimeInputResolver, wire.NewApplicationService, application.NewRuntimeRunnerBuilder, provideRunRuntimeRunnerBuilder,
-	provideRunSelectionFactory, wire.NewInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
+	provideRunSelectionFactory,
+	provideInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory, wire2.Bind(new(wire.StdioExecutionOpening), new(*wire.ExecutionOpeningFactory)), wire.NewStdioOpeningService, wire2.Bind(new(wire.StdioOpeningOperation), new(*wire.StdioOpeningService)), provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
