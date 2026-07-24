@@ -178,6 +178,15 @@
   package-specific minimum to the matching
   `docs/internal/baselines/go-*-coverage-package-minimums.json` manifest in
   the same change; the coverage gate rejects unowned measured packages.
+  Optional machine-readable coverage summaries for CI/visualizer consumers come
+  from `gocoveragecheck -json-output <path>` after a completed measurement run.
+  The JSON includes overall totals plus per-package covered/measurable counts,
+  percentage, package floor, and measurement exception from the same gate
+  policy the checker already enforces; do not invent a second coverage-profile
+  parser for those summaries. When floors fail after measurement completes, the
+  JSON file is still written before the process returns the floor failure so
+  uploaded artifacts keep diagnostics; incomplete runs that never produce
+  measured results do not invent coverage JSON.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
