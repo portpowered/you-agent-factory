@@ -500,7 +500,11 @@ Canonical reference and runtime projection value contracts remain at the
 Factory Sessions root. Convert those values to generated
 logical-target kinds and provider-boundary fields only in
 `pkg/transports/mapping/factorysession`; domain target normalization must not
-return generated HTTP values.
+return generated HTTP values. Root-equivalence proofs bind private identity
+behind a peer-facing surface typed only with those root request/result/error
+values (see `root_equivalence_test.go`); assert real private-impl outcomes
+(default+name → ambiguous, unsupported kind → invalid) rather than the CTR-SES
+vocabulary-demo fake's swapped labels.
 
 Factory Session folder/discovery validation reasons remain plain value
 constants at the service root, while concrete error state, target construction,
