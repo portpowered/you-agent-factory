@@ -120,12 +120,17 @@ primary-result behavior.
   from the same authoritative registry: `NewRuntimeWithSelection` constructs
   `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
   retained provider-native runner with `conductorInvocationRunner` when
-  `ProviderOverride` is absent. Externally supplied selectable identities
+  `ProviderOverride` is absent.   Externally supplied selectable identities
   resolve onto their canonical conductor identity; bundled built-ins continue
   on the provider-native Infer/command path without migrating Gemini, Kiro,
   Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
   dispatch/failure branches and `ProviderOverride` remain intact and bypass
-  the registry/conductor decorators.
+  the registry/conductor decorators. Concurrent cancel, overlapping dispatch,
+  and destination write-failure/backpressure evidence lives in
+  `conductor/concurrency_test.go`: cancelled closes still reject late writes,
+  shared-conductor dispatch keeps per-invocation correlation/order/terminals
+  isolated, and sink backpressure remains the sole terminal for the affected
+  invocation without leaking unsafe provider detail into sibling successes.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached

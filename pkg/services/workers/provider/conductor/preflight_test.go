@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
@@ -76,8 +77,8 @@ func TestConductorAcceptedCapabilitySubsetProceedsToProviderIO(t *testing.T) {
 	if discovery.Readiness() != inference.ReadinessReady {
 		t.Fatalf("Discover() readiness = %q, want ready", discovery.Readiness())
 	}
-	if recording.discoveryCalls != 1 {
-		t.Fatalf("discoveryCalls = %d, want 1", recording.discoveryCalls)
+	if got := recording.discoveryCalls.Load(); got != 1 {
+		t.Fatalf("discoveryCalls = %d, want 1", got)
 	}
 
 	capabilities, err := subject.Capabilities(context.Background(), "conductor.fixture", request)
@@ -87,16 +88,16 @@ func TestConductorAcceptedCapabilitySubsetProceedsToProviderIO(t *testing.T) {
 	if !capabilities.Has(inference.CapabilityPromptSubmission) {
 		t.Fatalf("Capabilities() = %v, want prompt_submission", capabilities.Values())
 	}
-	if recording.capabilityCalls != 1 {
-		t.Fatalf("capabilityCalls = %d, want 1", recording.capabilityCalls)
+	if got := recording.capabilityCalls.Load(); got != 1 {
+		t.Fatalf("capabilityCalls = %d, want 1", got)
 	}
 
 	destination := &recordingWriter{}
 	if err := subject.Invoke(context.Background(), "conductor.fixture", request, destination); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if recording.invocationCalls != 1 {
-		t.Fatalf("invocationCalls = %d, want 1", recording.invocationCalls)
+	if got := recording.invocationCalls.Load(); got != 1 {
+		t.Fatalf("invocationCalls = %d, want 1", got)
 	}
 	if destination.closed != 1 || destination.failure == nil {
 		t.Fatalf("destination close = %d failure=%v, want one failure close", destination.closed, destination.failure)
@@ -171,9 +172,9 @@ func TestConductorRejectsContradictoryCapabilityDependenciesWithoutProviderIO(t 
 type recordingIntegration struct {
 	identity        inference.Identity
 	maximum         inference.CapabilitySet
-	discoveryCalls  int
-	capabilityCalls int
-	invocationCalls int
+	discoveryCalls  atomic.Int32
+	capabilityCalls atomic.Int32
+	invocationCalls atomic.Int32
 	invoke          func(context.Context, inference.InvocationRequest, inference.ResponseWriter) error
 }
 
@@ -182,14 +183,14 @@ func (r *recordingIntegration) MaximumCapabilities() inference.CapabilitySet {
 	return inference.NewCapabilitySet(r.maximum.Values()...)
 }
 func (r *recordingIntegration) Discover(context.Context) (inference.Discovery, error) {
-	r.discoveryCalls++
+	r.discoveryCalls.Add(1)
 	return inference.NewDiscovery(inference.ReadinessReady), nil
 }
 func (r *recordingIntegration) Capabilities(
 	_ context.Context,
 	request inference.InvocationRequest,
 ) (inference.CapabilitySet, error) {
-	r.capabilityCalls++
+	r.capabilityCalls.Add(1)
 	return request.RequiredCapabilities(), nil
 }
 func (r *recordingIntegration) Invoke(
@@ -197,7 +198,7 @@ func (r *recordingIntegration) Invoke(
 	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
-	r.invocationCalls++
+	r.invocationCalls.Add(1)
 	if r.invoke != nil {
 		return r.invoke(ctx, request, writer)
 	}
@@ -291,12 +292,15 @@ func assertEscalationRejection(t *testing.T, err error, capability inference.Cap
 
 func assertNoProviderIO(t *testing.T, recording *recordingIntegration) {
 	t.Helper()
-	if recording.discoveryCalls != 0 || recording.capabilityCalls != 0 || recording.invocationCalls != 0 {
+	discovery := recording.discoveryCalls.Load()
+	capabilities := recording.capabilityCalls.Load()
+	invocations := recording.invocationCalls.Load()
+	if discovery != 0 || capabilities != 0 || invocations != 0 {
 		t.Fatalf(
 			"provider I/O occurred: discovery=%d capabilities=%d invoke=%d",
-			recording.discoveryCalls,
-			recording.capabilityCalls,
-			recording.invocationCalls,
+			discovery,
+			capabilities,
+			invocations,
 		)
 	}
 }
