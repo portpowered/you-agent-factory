@@ -35,6 +35,7 @@ const (
 	ruleInitializerTransport             = "initializer-transport-import"
 	ruleInitializerConstruction          = "initializer-product-construction"
 	rulePlatformDomainImport             = "platform-domain-service-import"
+	rulePeerServiceImplementation        = "peer-service-implementation-import"
 	ruleMappingFilesystem                = "mapping-filesystem-behavior"
 	ruleMappingProcess                   = "mapping-process-behavior"
 	ruleMappingTimer                     = "mapping-timer-behavior"
@@ -46,6 +47,7 @@ var deletionGates = map[string]string{
 	ruleInitializerTransport:             "inject an already-constructed transport operation and remove the transport import from Initializer",
 	ruleInitializerConstruction:          "construct the product dependency in pkg/wire and inject its exact operation into Initializer",
 	rulePlatformDomainImport:             "move domain policy to its owning service and leave Platform implementing an exact external-effect port",
+	rulePeerServiceImplementation:        "import only the peer service root contract (pkg/services/<peer>) instead of a peer implementation or nested subservice",
 	ruleMappingFilesystem:                "move filesystem behavior behind an injected service or exact external-effect port",
 	ruleMappingProcess:                   "move process discovery or execution behind an injected service-owned port",
 	ruleMappingTimer:                     "move timer lifecycle behind an injected clock or owning service",
@@ -172,6 +174,10 @@ func run(cfg config, stdout, stderr io.Writer) error {
 }
 
 func scan(repoRoot string) ([]finding, error) {
+	inventory, err := loadOwnerInventory(repoRoot)
+	if err != nil {
+		return nil, err
+	}
 	var findings []finding
 	for _, scanRoot := range []string{initializerRoot, platformRoot, mappingRoot} {
 		path := filepath.Join(repoRoot, filepath.FromSlash(scanRoot))
@@ -198,7 +204,7 @@ func scan(repoRoot string) ([]finding, error) {
 				return err
 			}
 			relative = filepath.ToSlash(relative)
-			fileFindings, err := scanFile(path, relative)
+			fileFindings, err := scanFile(path, relative, inventory)
 			if err != nil {
 				return err
 			}
@@ -209,12 +215,17 @@ func scan(repoRoot string) ([]finding, error) {
 			return nil, fmt.Errorf("scan %s: %w", scanRoot, err)
 		}
 	}
+	peerFindings, err := scanPeerServiceImports(repoRoot, inventory)
+	if err != nil {
+		return nil, fmt.Errorf("scan peer service imports: %w", err)
+	}
+	findings = append(findings, peerFindings...)
 	findings = uniqueFindings(findings)
 	sort.Slice(findings, func(i, j int) bool { return findingKey(findings[i]) < findingKey(findings[j]) })
 	return findings, nil
 }
 
-func scanFile(path, relative string) ([]finding, error) {
+func scanFile(path, relative string, inventory ownerInventory) ([]finding, error) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
 	if err != nil {
@@ -227,7 +238,7 @@ func scanFile(path, relative string) ([]finding, error) {
 	var findings []finding
 	switch {
 	case within(relative, initializerRoot):
-		findings = append(findings, scanInitializerImports(fileSet, imports, relative)...)
+		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory)...)
 		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative)...)
 	case within(relative, platformRoot):
 		findings = append(findings, scanPlatformImports(fileSet, imports, relative)...)
@@ -263,14 +274,19 @@ func importInventory(file *ast.File) (map[string]string, []importedPackage) {
 	return aliases, imports
 }
 
-func scanInitializerImports(fileSet *token.FileSet, imports []importedPackage, relative string) []finding {
+func scanInitializerImports(
+	fileSet *token.FileSet,
+	imports []importedPackage,
+	relative string,
+	inventory ownerInventory,
+) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		rule := ""
 		switch {
 		case strings.HasPrefix(imported.Path, transportsImport):
 			rule = ruleInitializerTransport
-		case serviceImplementationImport(imported.Path):
+		case serviceImplementationImport(imported.Path, inventory):
 			rule = ruleInitializerServiceImplementation
 		}
 		if rule != "" {
@@ -292,12 +308,23 @@ func scanInitializerImports(fileSet *token.FileSet, imports []importedPackage, r
 	return findings
 }
 
-func serviceImplementationImport(importPath string) bool {
+func serviceImplementationImport(importPath string, inventory ownerInventory) bool {
 	if !strings.HasPrefix(importPath, servicesImport) {
 		return false
 	}
-	remainder := strings.TrimPrefix(importPath, servicesImport)
-	return strings.Contains(remainder, "/")
+	repositoryPath := "pkg/services/" + strings.TrimPrefix(importPath, servicesImport)
+	_, surface := inventory.classify(repositoryPath)
+	switch surface {
+	case surfaceNonRoot:
+		return true
+	case surfaceRoot:
+		return false
+	default:
+		// Fixtures without a committed service tree keep the path-shape rule so
+		// existing initializer implementation findings remain actionable.
+		remainder := strings.TrimPrefix(importPath, servicesImport)
+		return strings.Contains(remainder, "/")
+	}
 }
 
 func scanInitializerCalls(
@@ -586,6 +613,10 @@ func validateEntry(item baselineEntry) error {
 }
 
 func writeFinding(writer io.Writer, label string, item finding) {
+	remediation := deletionGates[item.Rule]
+	if item.Rule == rulePeerServiceImplementation {
+		remediation = peerViolationMessage(item)
+	}
 	fmt.Fprintf(
 		writer,
 		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s; %s\n",
@@ -594,6 +625,6 @@ func writeFinding(writer io.Writer, label string, item finding) {
 		item.Line,
 		item.Rule,
 		item.Target,
-		deletionGates[item.Rule],
+		remediation,
 	)
 }

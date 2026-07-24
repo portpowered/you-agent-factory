@@ -1,0 +1,170 @@
+{
+  "requestId": "functional-tests-expansion-wave0-foundations-001",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "fnd-001-domain-layout-enforcement",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Enforce domain-mirrored functional test layout",
+        "sourcePath": "docs/temp/functional-tests-expansion/plan.md",
+        "currentProgress": [
+          "The intended functional suite shape is documented under docs/temp/functional-tests-expansion/.",
+          "Destination paths use domain nouns: transport, workers, orchestration, workstations, work, sessions, factory, and supporting domains.",
+          "The old transport-first features/ layout and catch-all packages (smoke, workflow, runtime_api) must not remain valid long-term owners."
+        ],
+        "requestedOutcome": "Update the normative backend standard and packaged-structure guidance, then teach make pkg-structure to require tests/functional/<domain>/<subsection>/... while preserving tests/functional/internal/support as the only shared harness exception. Reject new shallow, catch-all, or unclassified scenario packages.",
+        "acceptanceCriteria": [
+          "docs/internal/standards and packaged-structure docs describe the domain tree from the functional-tests-expansion plan.",
+          "make pkg-structure accepts the intended domain layout and rejects new catch-all or unclassified functional packages.",
+          "tests/functional/internal/support remains the only shared support exception.",
+          "runtime_api remains deletion-only debt and cannot receive new scenarios."
+        ],
+        "verification": [
+          "make pkg-structure",
+          "Focused structure-checker tests for the new layout rules",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "fnd-002-test-metadata-parser",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Parse functional test metadata with the Go AST",
+        "sourcePath": "docs/temp/functional-tests-expansion/plan.md",
+        "currentProgress": [
+          "The visualization plan requires inventorying every top-level Test* with its first Go-doc sentence.",
+          "No durable AST-backed metadata parser yet exists for functional catalog generation."
+        ],
+        "requestedOutcome": "Implement a Go AST-backed parser that inventories top-level Test* declarations, Go doc comments, build constraints, and golden declarations under tests/functional. Exclude helpers and tests/functional/internal/** from customer counts, and add an exact deletion-only undocumented-test baseline.",
+        "acceptanceCriteria": [
+          "Parser returns stable metadata for file, package, Test* name, description, build tags, and golden references.",
+          "Helper-only files and tests/functional/internal/** are excluded from customer scenario counts.",
+          "An exact undocumented-test baseline exists and is deletion-only.",
+          "Focused tests cover malformed source, Windows paths, build tags, table tests, and Markdown-sensitive descriptions."
+        ],
+        "verification": [
+          "Focused parser package tests",
+          "make test",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "fnd-003-coverage-json",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Expose deterministic coverage JSON from gocoveragecheck",
+        "sourcePath": "docs/temp/functional-tests-expansion/plan.md",
+        "currentProgress": [
+          "cmd/gocoveragecheck already enforces functional statement-coverage floors.",
+          "The visualizer must not invent a second coverage parser."
+        ],
+        "requestedOutcome": "Add optional JSON output to cmd/gocoveragecheck that reports covered/measurable statements, percentage, package floor, and measurement exception while preserving existing behavior when the option is absent. Write results after a completed run even when a floor fails.",
+        "acceptanceCriteria": [
+          "Optional JSON output is deterministic and machine-readable.",
+          "Existing non-JSON behavior remains unchanged when the option is absent.",
+          "Failed floors still emit JSON diagnostics after the run completes.",
+          "Focused tests cover totals, package floors, and exception reporting."
+        ],
+        "verification": [
+          "Focused cmd/gocoveragecheck tests",
+          "make test",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "fnd-006-provider-golden-harness",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Add provider-session golden harness and tracked fixture root",
+        "sourcePath": "docs/temp/functional-tests-expansion/provider-session-goldens.md",
+        "currentProgress": [
+          "The golden contract is documented in provider-session-goldens.md.",
+          "docs/temp/** is gitignored today, so the fixture root needs a narrow tracked exception."
+        ],
+        "requestedOutcome": "Add a narrow .gitignore exception for docs/temp/functional/provider-sessions/**, implement manifest validation and golden loading/normalization helpers, and ensure missing goldens fail clearly rather than silently skipping. Compare Provider Session, response-event, and invocation-result goldens using only manifest-declared normalized fields.",
+        "acceptanceCriteria": [
+          "docs/temp/functional/provider-sessions/** is tracked despite the general docs/temp ignore.",
+          "manifest.json validation rejects secrets, absolute host paths, credentials, and unsanitized prompts.",
+          "Helpers load request/process/stdout/stderr and expected public metadata goldens.",
+          "Expected output rewrite requires an explicit update environment variable.",
+          "Missing required goldens fail with actionable diagnostics."
+        ],
+        "verification": [
+          "Focused golden-harness tests",
+          "git check-ignore / tracking proof for the fixture root",
+          "make test",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "fnd-007-migration-ledger",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Map existing functional tests onto the domain destination tree",
+        "sourcePath": "docs/temp/functional-tests-expansion/test-file-checklist.md",
+        "currentProgress": [
+          "The destination checklist is domain-mirrored under tests/functional/<domain>/...",
+          "Existing catch-alls such as smoke, workflow, guards_batch, bootstrap_portability, replay_contracts, and runtime_api still own scenarios."
+        ],
+        "requestedOutcome": "Produce a migration ledger that maps every current functional scenario to one checklist destination file or an approved wrong-layer rationale. Preserve short/long membership and specialty Make targets, and identify deletion-only batches for runtime_api and featureless catch-alls.",
+        "acceptanceCriteria": [
+          "Every current scenario maps to one destination checklist cell or an approved non-functional layer.",
+          "runtime_api, smoke, workflow, guards_batch, bootstrap_portability, and replay_contracts have explicit move/split plans.",
+          "Short/long membership and specialty Make targets are preserved in the ledger.",
+          "The ledger is durable under docs/temp/functional-tests-expansion/ and usable by later move batches."
+        ],
+        "verification": [
+          "Ledger completeness against current tests/functional inventory",
+          "Cross-check against test-file-checklist.md destinations",
+          "make pkg-structure"
+        ]
+      }
+    },
+    {
+      "name": "functional-tests-wave0-foundations-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review Wave 0 foundation outcomes before viz and domain cells",
+        "sourcePath": "docs/temp/functional-tests-expansion/plan.md",
+        "requestedOutcome": "After the independent Wave 0 foundations complete, reconcile queue evidence, decide whether to submit FND-004/FND-005 (Markdown generator and make/CI integration) next, and only then open Wave 1 domain cells whose harness prerequisites are satisfied."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "functional-tests-wave0-foundations-loopback",
+      "targetWorkName": "fnd-001-domain-layout-enforcement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "functional-tests-wave0-foundations-loopback",
+      "targetWorkName": "fnd-002-test-metadata-parser",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "functional-tests-wave0-foundations-loopback",
+      "targetWorkName": "fnd-003-coverage-json",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "functional-tests-wave0-foundations-loopback",
+      "targetWorkName": "fnd-006-provider-golden-harness",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "functional-tests-wave0-foundations-loopback",
+      "targetWorkName": "fnd-007-migration-ledger",
+      "requiredState": "complete"
+    }
+  ]
+}

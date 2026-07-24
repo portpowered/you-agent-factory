@@ -19,6 +19,9 @@ docs/temp/**
 !docs/temp/functional/
 !docs/temp/functional/provider-sessions/
 !docs/temp/functional/provider-sessions/**
+## Wave 0 functional-tests-expansion planning authority (durable)
+!docs/temp/functional-tests-expansion/
+!docs/temp/functional-tests-expansion/**
 ## Do not include temporary files in general for worktree progress
 prd.json
 prd.md
