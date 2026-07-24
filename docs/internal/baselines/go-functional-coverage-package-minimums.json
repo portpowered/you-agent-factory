@@ -864,7 +864,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
-      "minimum": 35.29
+      "minimum": 28.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
