@@ -32,8 +32,11 @@ type RequestIDGenerator func() string
 // Filesystem policy is selected at the process edge rather than by Work.
 type SubmittedFileReader func(string) ([]byte, error)
 
-// Service is the public Work submission and movement contract. Runtime state
-// and event queries belong to Factory Runtime and Recordings.
+// Service is the singular Work root contract for cross-service peers.
+// Published slices (admission, content staging/materialization, state access,
+// and invocation/return policy) are additive methods on this interface and use
+// plain Work-owned request, result, value, and typed-error contracts.
+// Runtime state and event queries belong to Factory Runtime and Recordings.
 type Service interface {
 	SubmitWorkRequestForSession(context.Context, string, WorkRequest) (WorkRequestSubmitResult, error)
 	MoveWorkForSession(context.Context, string, string, string, string) (OperatorMoveResult, error)
@@ -43,7 +46,8 @@ type Service interface {
 }
 
 // FileSubmissionService is the exact Work role for path-backed submission.
-// General Work consumers should depend on Service unless they submit files.
+// Path decoding stays adapter-owned; peers that need only the domain root
+// should depend on Service rather than this file-submission role.
 type FileSubmissionService interface {
 	Service
 	SubmitFileForSession(context.Context, string, string) (WorkRequestSubmitResult, error)
