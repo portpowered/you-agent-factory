@@ -682,6 +682,13 @@ under the 1000-line maint limit. When characterization coverage forces a
 split (as with distribute + six-slice seal proof), add a focused sibling
 such as `service_contract_distribute_test.go` and ratchet
 `backend-package-file-count.json` for that unavoidable growth.
+Keep assignability stubs for not-yet-wired CTR-DEF slices on root
+`UnimplementedService` (with focused root tests covering typed outcomes
+and `AtomicFactoryWriteFailure` / `FactoryDefinitionValidationFailure`
+`Error`/`Unwrap`/`Is` paths) and embed that type from
+`definition.Service` rather than duplicating stub bodies in the
+definition package—otherwise package-coverage minima regress on both
+unit and functional lanes.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
