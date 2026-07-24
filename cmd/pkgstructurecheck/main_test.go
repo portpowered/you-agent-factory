@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestScanAcceptsRecursiveServiceShapeAndFeatureSubsectionTests(t *testing.T) {
+func TestScanAcceptsRecursiveServiceShapeAndDomainSubsectionTests(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
 	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", `package orders
@@ -20,7 +20,8 @@ type Response struct { ID string }
 	writeTestFile(t, repoRoot, "pkg/services/orders/wire/providers.go", "package wire\nfunc provide() {}\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/transports/http/handler.go", "package http\ntype Handler struct{}\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/service.go", "package history\ntype Service interface { List() []Result }\ntype Result struct { ID string }\n")
-	writeTestFile(t, repoRoot, "tests/functional/orders/http/create_test.go", "package http_test\nfunc TestCreate() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/workers/script/execution_test.go", "package script_test\nfunc TestExecution() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/models/model_invoke/ready_test.go", "package model_invoke_test\nfunc TestReady() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/internal/support/process.go", "package support\n")
 
 	findings, err := scan(repoRoot)
@@ -30,6 +31,56 @@ type Response struct { ID string }
 	if len(findings) != 0 {
 		t.Fatalf("scan() findings = %#v, want none", findings)
 	}
+}
+
+func TestAllowedFunctionalDomainsMatchExpansionPlan(t *testing.T) {
+	t.Parallel()
+	want := []string{
+		"transport", "workers", "orchestration", "workstations", "work", "sessions",
+		"factory", "provider_sessions", "events", "models", "guards", "resources",
+		"observability", "product", "resilience",
+	}
+	if len(allowedFunctionalDomains) != len(want) {
+		t.Fatalf("allowedFunctionalDomains len = %d, want %d", len(allowedFunctionalDomains), len(want))
+	}
+	for _, domain := range want {
+		if !isAllowedFunctionalDomain(domain) {
+			t.Fatalf("domain %q missing from allowlist", domain)
+		}
+	}
+	if isAllowedFunctionalDomain("orders") || isAllowedFunctionalDomain("smoke") || isAllowedFunctionalDomain("workflow") {
+		t.Fatal("catch-all or unclassified roots must not be approved domains")
+	}
+}
+
+func TestScanAcceptsApprovedDomainSubsectionWithoutDebt(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/workers/script/create_test.go", "package script_test\nfunc TestCreate() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/transport/cli/flag_parsing_test.go", "package cli_test\nfunc TestFlagParsing() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/work/visualization/graph_test.go", "package visualization_test\nfunc TestGraph() {}\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("approved domain/subsection paths must not be structure debt; findings = %#v", findings)
+	}
+}
+
+func TestScanStillRequiresSubsectionDepthForApprovedDomains(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/workers/shallow_test.go", "package workers_test\nfunc TestShallow() {}\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleFunctionalShallowFile + "|tests/functional/workers/shallow_test.go|workers",
+	})
 }
 
 func TestScanFindsServiceRootContractAndDirectoryViolations(t *testing.T) {
