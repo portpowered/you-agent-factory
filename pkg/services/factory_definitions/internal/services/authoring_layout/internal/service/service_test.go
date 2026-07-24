@@ -326,6 +326,168 @@ func TestRootAuthoringSurfaceSucceedsThroughPrivateOwnership(t *testing.T) {
 	}
 }
 
+func TestPublicRootPreservesCTRDEFAuthoringSuccessEquivalence(t *testing.T) {
+	t.Parallel()
+
+	// Peer-facing subject is the public Definitions root Service only; private
+	// authoring_layout stays behind the adapter and is not a peer import surface.
+	payload := []byte(`{"name":"alpha"}`)
+	var root factorydefinitions.Service = newPublicRootDelegatingToAuthoringLayout(t, authoringlayout.Ports{
+		Prepare: func(_ context.Context, _ string, got []byte) (factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			return factorydefinitions.PreparedFactoryLayoutPayload{Canonical: append([]byte(nil), got...)}, nil
+		},
+		Flatten: func(string) ([]byte, error) {
+			return append([]byte(nil), payload...), nil
+		},
+		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			return path, factorydefinitions.LayoutExpansionReport{}, nil
+		},
+		Create: func(_, name string, _ factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			return "/factories/" + name, nil
+		},
+		Replace: func(_, name string, _ factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			return "/factories/" + name, nil
+		},
+	})
+
+	prepared, err := root.PrepareFactoryLayout(
+		context.Background(),
+		factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: payload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout: %v", err)
+	}
+	if string(prepared.Prepared.Canonical) != string(payload) {
+		t.Fatalf("PrepareFactoryLayout canonical = %q, want %q", prepared.Prepared.Canonical, payload)
+	}
+
+	flattened, err := root.FlattenFactoryLayout(
+		context.Background(),
+		factorydefinitions.FlattenFactoryLayoutRequest{Path: "/factories/alpha"},
+	)
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout: %v", err)
+	}
+	if string(flattened.Canonical) != string(payload) {
+		t.Fatalf("FlattenFactoryLayout canonical = %q, want %q", flattened.Canonical, payload)
+	}
+
+	expanded, err := root.ExpandFactoryLayout(
+		context.Background(),
+		factorydefinitions.ExpandFactoryLayoutRequest{Path: "/factories/alpha"},
+	)
+	if err != nil {
+		t.Fatalf("ExpandFactoryLayout: %v", err)
+	}
+	if expanded.FactoryDir != "/factories/alpha" {
+		t.Fatalf("ExpandFactoryLayout factoryDir = %q, want /factories/alpha", expanded.FactoryDir)
+	}
+
+	created, err := root.CreateNamedFactory(
+		context.Background(),
+		factorydefinitions.CreateNamedFactoryRequest{
+			RootDir:  "/factories",
+			Name:     "alpha",
+			Prepared: prepared.Prepared,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateNamedFactory: %v", err)
+	}
+	if created.Name != "alpha" || created.FactoryDir != "/factories/alpha" {
+		t.Fatalf("CreateNamedFactory result = %#v, want alpha identity facts", created)
+	}
+
+	replaced, err := root.ReplaceNamedFactory(
+		context.Background(),
+		factorydefinitions.ReplaceNamedFactoryRequest{
+			RootDir:  "/factories",
+			Name:     "alpha",
+			Prepared: prepared.Prepared,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ReplaceNamedFactory: %v", err)
+	}
+	if replaced.Name != "alpha" || replaced.FactoryDir != "/factories/alpha" {
+		t.Fatalf("ReplaceNamedFactory result = %#v, want alpha identity facts", replaced)
+	}
+}
+
+func TestPublicRootPreservesCTRDEFAuthoringTypedFailureEquivalence(t *testing.T) {
+	t.Parallel()
+
+	var root factorydefinitions.Service = newPublicRootDelegatingToAuthoringLayout(t, authoringlayout.Ports{
+		Prepare: func(_ context.Context, _ string, payload []byte) (factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			if len(payload) == 0 || string(payload) == "{" {
+				return factorydefinitions.PreparedFactoryLayoutPayload{}, errors.New("decode failed")
+			}
+			return factorydefinitions.PreparedFactoryLayoutPayload{Canonical: append([]byte(nil), payload...)}, nil
+		},
+		Flatten: func(string) ([]byte, error) {
+			return nil, errors.New("unused")
+		},
+		Expand: func(string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			return "", factorydefinitions.LayoutExpansionReport{}, errors.New("unused")
+		},
+		Create: func(_, name string, _ factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			if name == "fail-write" {
+				return "/factories/alpha", errors.New("disk full")
+			}
+			return "/factories/" + name, nil
+		},
+		Replace: func(_, name string, _ factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			if name == "fail-write" {
+				return "/factories/alpha", errors.New("disk full")
+			}
+			return "/factories/" + name, nil
+		},
+	})
+
+	_, malformedErr := root.PrepareFactoryLayout(
+		context.Background(),
+		factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: []byte("{")},
+	)
+	if !errors.Is(malformedErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatalf(
+			"PrepareFactoryLayout malformed error = %v, want %v",
+			malformedErr,
+			factorydefinitions.ErrMalformedFactoryLayoutPayload,
+		)
+	}
+
+	_, createErr := root.CreateNamedFactory(
+		context.Background(),
+		factorydefinitions.CreateNamedFactoryRequest{RootDir: "/factories", Name: "fail-write"},
+	)
+	var writeFailure *factorydefinitions.AtomicFactoryWriteFailure
+	if !errors.As(createErr, &writeFailure) {
+		t.Fatalf("CreateNamedFactory error = %v, want AtomicFactoryWriteFailure", createErr)
+	}
+	if !writeFailure.PreviousPreserved {
+		t.Fatal("AtomicFactoryWriteFailure.PreviousPreserved = false, want true")
+	}
+	if !errors.Is(createErr, factorydefinitions.ErrAtomicFactoryWriteFailed) {
+		t.Fatalf(
+			"CreateNamedFactory error = %v, want %v",
+			createErr,
+			factorydefinitions.ErrAtomicFactoryWriteFailed,
+		)
+	}
+	if errors.Is(createErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatal("atomic write failure must not also match ErrMalformedFactoryLayoutPayload")
+	}
+}
+
+func newPublicRootDelegatingToAuthoringLayout(t *testing.T, ports authoringlayout.Ports) factorydefinitions.Service {
+	t.Helper()
+	authoring, err := authoringlayoutwire.NewService(ports)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	return rootAuthoringAdapter{authoring: authoring}
+}
+
 func TestAuthoringLayoutMapsMalformedAndAtomicWriteFailures(t *testing.T) {
 	t.Parallel()
 
