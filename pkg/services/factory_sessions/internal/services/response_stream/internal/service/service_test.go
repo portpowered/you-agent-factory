@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -437,6 +438,156 @@ func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 	}
 	if accounting := store.RetentionAccounting(); accounting.EventCount > store.RetentionLimits().MaxEvents {
 		t.Fatalf("retention accounting = %#v, exceeds limits %#v", accounting, store.RetentionLimits())
+	}
+}
+
+func TestService_CompleteMakesStreamObservablyCompletedForLateSubscribers(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	second := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+
+	service.Complete(store)
+	service.Complete(store) // idempotent; must not double-own completion
+
+	if !store.Completed() {
+		t.Fatal("Completed() = false after service.Complete")
+	}
+	if _, err := service.Publish(store, publishDraft(responseevents.KindMessage, "dispatch-1")); !errors.Is(err, responseeventstore.ErrStoreCompleted) {
+		t.Fatalf("Publish after complete = %v, want ErrStoreCompleted", err)
+	}
+	if got := len(store.Events()); got != 2 {
+		t.Fatalf("retained events after rejected post-complete publish = %d, want 2", got)
+	}
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe after complete: %v", err)
+	}
+	defer cursor.Detach()
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("SubscriberCount after late Subscribe = %d, want 0 (completed streams do not register live subscribers)", got)
+	}
+
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next catch-up: %v", err)
+	}
+	if len(events) != 2 || events[0].Sequence != first.Sequence || events[1].Sequence != second.Sequence {
+		t.Fatalf("catch-up = %#v, want sequences %d,%d", events, first.Sequence, second.Sequence)
+	}
+	if _, err := cursor.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drained completed stream = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestService_LiveSubscriberObservesCompletionWithoutHanging(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+	retained := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+
+	waiting := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(waiting)
+		events, err := cursor.Next(context.Background())
+		if err != nil {
+			done <- err
+			return
+		}
+		if len(events) != 1 || events[0].Sequence != retained.Sequence {
+			done <- fmt.Errorf("catch-up = %#v, want sequence %d", events, retained.Sequence)
+			return
+		}
+		_, err = cursor.Next(context.Background())
+		done <- err
+	}()
+
+	select {
+	case <-waiting:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start waiting")
+	}
+	time.Sleep(20 * time.Millisecond)
+	service.Complete(store)
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+			t.Fatalf("live subscriber terminal outcome = %v, want ErrSubscriptionClosed", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for live subscriber to observe completion")
+	}
+	if !store.Completed() {
+		t.Fatal("Completed() = false after overlapping subscribe/complete")
+	}
+}
+
+func TestService_ConcurrentPublishSubscribeCompleteDoesNotHang(t *testing.T) {
+	service := newService(t)
+	store := newStore(t, service)
+	const workers = 16
+
+	var wg sync.WaitGroup
+	wg.Add(workers * 3)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+			if err != nil {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			for {
+				_, err := cursor.Next(ctx)
+				if err != nil {
+					cursor.Detach()
+					return
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for range 8 {
+				_, _ = service.Publish(store, publishDraft(responseevents.KindMessage, "dispatch-1"))
+			}
+		}()
+		go func(i int) {
+			defer wg.Done()
+			time.Sleep(time.Duration(i%5) * time.Millisecond)
+			switch i % 3 {
+			case 0:
+				service.Complete(store)
+			case 1:
+				cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+				if err == nil {
+					cursor.Detach()
+				}
+			default:
+				service.Close(store)
+			}
+		}(i)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for overlapping publish/subscribe/complete schedules")
 	}
 }
 
