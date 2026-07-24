@@ -94,7 +94,7 @@ authority; the companion must not diverge from these required fields.
 | [Remaining packages and wrong-layer approvals](#remaining-packages-and-wrong-layer-approvals) | FND-007-006 | Map non-catch-all packages |
 | [Specialty Make target bindings](#specialty-make-target-bindings) | FND-007-003…007 | Current vs intended post-move bindings |
 | [Deletion-only batch index](#deletion-only-batch-index) | FND-007-003…007 | Ordered batch ids for later move work |
-| [Completeness audit](#completeness-audit) | FND-007-007 | Zero-unmapped proof against live tree + checklist |
+| [Completeness audit](#completeness-audit) | FND-007-007 | Zero-unmapped proof against live tree + checklist (**done**) |
 
 ---
 
@@ -1654,7 +1654,7 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 
 ## Specialty Make target bindings
 
-_Status: partial — runtime_api, smoke, and remaining-package bindings filled by FND-007-003…006; completeness audit in FND-007-007._
+_Status: complete — FND-007-003…007. Every functional specialty binding listed below is recorded with current and intended post-move targets._
 
 Each specialty Make target that currently selects a functional package or
 `-run` pattern records its current binding and intended post-move
@@ -1677,7 +1677,7 @@ documentation comment is required to point at this ledger.
 
 ## Deletion-only batch index
 
-_Status: partial — runtime_api batches filled by FND-007-003; smoke and workflow batches filled by FND-007-004; guards_batch, bootstrap_portability, and replay_contracts batches filled by FND-007-005._
+_Status: complete — FND-007-003…007. Fifty-two deletion-only batches cover all six named catch-alls in consumption order below._
 
 Ordered list of named deletion-only batches that later move work can consume
 without inventing destinations. Prefer independent, reviewable batch sizes.
@@ -1739,13 +1739,14 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 
 ## Completeness audit
 
-_Status: empty — filled by FND-007-007._
+_Status: complete — FND-007-007. Fresh live-tree rescan at `2026-07-24T02:36:31Z` (UTC); validated by `go run ./cmd/migrationledgercheck`._
 
 | Check | Result |
 | --- | --- |
-| Unmapped customer scenarios vs fresh `tests/functional` inventory | TBD |
-| Destination paths exist in `test-file-checklist.md` or approved wrong-layer | TBD |
-| Short/long membership preserved on every row | TBD |
-| Specialty Make targets fully accounted for | TBD |
-| Deletion-only batch index covers runtime_api + featureless catch-alls | TBD |
-| `make pkg-structure` | TBD |
+| Unmapped customer scenarios vs fresh `tests/functional` inventory | **0** unmapped — live AST scan found **503** customer `Test*`; ledger companion has **503** rows with no `TBD` destinations or deletion-only batch ids |
+| Destination paths exist in `test-file-checklist.md` or approved wrong-layer | **434** checklist destinations + **69** approved wrong-layer rationales; **0** invented destinations |
+| Short/long membership preserved on every row | **381** `short` + **122** `functionallong`; live scan lane matches every ledger row |
+| Specialty Make targets fully accounted for | **11** functional specialty bindings documented (see [Specialty Make target bindings](#specialty-make-target-bindings)); no dropped `-run` selectors |
+| Deletion-only batch index covers runtime_api + featureless catch-alls | **52** batches (**11** runtime_api + **22** smoke/workflow + **19** guards/bootstrap/replay); **142** non-catch-all rows use `n/a` |
+| `make pkg-structure` | pass (2026-07-24T02:36:31Z UTC) |
+| `go run ./cmd/migrationledgercheck` | pass — machine-readable companion cross-check |

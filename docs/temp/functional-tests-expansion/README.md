@@ -26,7 +26,10 @@ the repository's customer-level functional tests.
   mapped into named `*-delete-*` split batches (FND-007-005). Remaining
   non-catch-all packages (`acceptance`, `cli`, `config_init`, `models`,
   `operator_settings`, `providers`, `sessionparity`, `work`) are fully mapped
-  with `deletion_only_batch` = `n/a` (FND-007-006).
+  with `deletion_only_batch` = `n/a` (FND-007-006). Completeness is proven by
+  `go run ./cmd/migrationledgercheck` and documented in the ledger
+  [Completeness audit](migration-ledger.md#completeness-audit) section
+  (FND-007-007).
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.

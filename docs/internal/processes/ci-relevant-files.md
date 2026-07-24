@@ -87,7 +87,9 @@
   consume its rows and deletion-only batch ids). The Inventory companion
   `migration-ledger-inventory.json` mirrors the same required row fields for
   tooling. Destination topology remains `test-file-checklist.md`; ownership
-  rules remain `plan.md`.
+  rules remain `plan.md`. `cmd/migrationledgercheck` validates live
+  `tests/functional` inventory coverage, checklist destination validity, and
+  lane preservation against the companion JSON.
   When merging `main` into a branch, retain `main`'s reviewed package-minimum
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing

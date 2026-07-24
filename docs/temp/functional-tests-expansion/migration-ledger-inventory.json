@@ -5322,5 +5322,20 @@
       "sessionparity": 13,
       "work": 1
     }
+  },
+  "completeness_audit": {
+    "audited_at_utc": "2026-07-24T02:36:31Z",
+    "story": "fnd-007-migration-ledger-007",
+    "live_customer_scenarios": 503,
+    "ledger_rows": 503,
+    "unmapped_scenarios": 0,
+    "checklist_destinations": 434,
+    "wrong_layer_destinations": 69,
+    "invalid_destinations": 0,
+    "lane_short": 381,
+    "lane_functionallong": 122,
+    "specialty_targets_documented": 11,
+    "deletion_only_batches": 52,
+    "validator": "go run ./cmd/migrationledgercheck"
   }
 }
