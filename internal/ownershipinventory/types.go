@@ -27,7 +27,27 @@ const (
 
 	OwnerRationaleSortKeyDescription         = "serviceID ascending byte order"
 	ResponsibilityClusterSortKeyDescription  = "owner then clusterID ascending byte order"
+	CrossServiceEdgeSortKeyDescription       = "fromOwner then toOwner ascending byte order"
+
+	EdgeClassCommand              = "command"
+	EdgeClassQuery                = "query"
+	EdgeClassEvent                = "event"
+	EdgeClassProtocolComposition  = "protocol_composition"
+	EdgeClassConstruction         = "construction"
+	EdgeClassLifecycle            = "lifecycle"
+	EdgeClassExternalEffect       = "external_effect"
 )
+
+// AllowedEdgeClasses is the closed cross-service edge classification set.
+var AllowedEdgeClasses = []string{
+	EdgeClassCommand,
+	EdgeClassQuery,
+	EdgeClassEvent,
+	EdgeClassProtocolComposition,
+	EdgeClassConstruction,
+	EdgeClassLifecycle,
+	EdgeClassExternalEffect,
+}
 
 // Inventory is the frozen PSS-F01 ownership inventory artifact.
 type Inventory struct {
@@ -41,7 +61,18 @@ type Inventory struct {
 	AdditionalCurrentRoots   []string                `json:"additionalCurrentRoots"`
 	OwnerRationales          []OwnerRationaleCard    `json:"ownerRationales"`
 	ResponsibilityClusters   []ResponsibilityCluster `json:"responsibilityClusters"`
+	CrossServiceEdges        []CrossServiceEdge      `json:"crossServiceEdges"`
 	Packages                 []PackageRow            `json:"packages"`
+}
+
+// CrossServiceEdge records one distinct-owner production dependency edge and
+// its Packaged Service Structure interaction class.
+type CrossServiceEdge struct {
+	FromOwner              string `json:"fromOwner"`
+	ToOwner                string `json:"toOwner"`
+	Class                  string `json:"class"`
+	ArchitectureException  bool   `json:"architectureException,omitempty"`
+	Evidence               string `json:"evidence"`
 }
 
 // OwnerRationaleCard records authority, state, lifecycle, consumers,
@@ -127,10 +158,15 @@ type Report struct {
 	MissingNestedRationales        []string
 	InvalidRationaleFields         []string
 	MissingResponsibilityClusters  []string
+	MissingCrossServiceEdges       []string
+	UnexpectedCrossServiceEdges    []string
+	InvalidEdgeClassifications     []string
+	MissingCrossServiceEdgeTable   bool
 	MissingProcessEdgesException   bool
 	UnstableSort                   bool
 	UnstableRationaleSort          bool
 	UnstableResponsibilitySort     bool
+	UnstableEdgeSort               bool
 	ReusedFND01Seed                bool
 }
 
@@ -146,8 +182,13 @@ func (r Report) OK() bool {
 		len(r.MissingNestedRationales) == 0 &&
 		len(r.InvalidRationaleFields) == 0 &&
 		len(r.MissingResponsibilityClusters) == 0 &&
+		len(r.MissingCrossServiceEdges) == 0 &&
+		len(r.UnexpectedCrossServiceEdges) == 0 &&
+		len(r.InvalidEdgeClassifications) == 0 &&
+		!r.MissingCrossServiceEdgeTable &&
 		!r.MissingProcessEdgesException &&
 		!r.UnstableSort &&
 		!r.UnstableRationaleSort &&
-		!r.UnstableResponsibilitySort
+		!r.UnstableResponsibilitySort &&
+		!r.UnstableEdgeSort
 }

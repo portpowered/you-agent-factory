@@ -19,8 +19,11 @@ that were not lowered or removed when the corresponding package shrank.
 It maps every production `pkg` package to one committed owner, approved family,
 Process Edges exception, or deletion/move successor. It also freezes owner and
 nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
-transaction boundary, failure/recovery) plus large responsibility clusters from
-the Packaged Service Structure committed target tree. When
+transaction boundary, failure/recovery), large responsibility clusters, and a
+cross-service edge table that classifies each distinct-owner production import
+as command, query, event, protocol composition, construction, lifecycle, or
+external effect. Process Edges edges are marked as the architecture exception
+and restricted to construction or external effect. When
 `package-target-manifest.json` (FND-01) is present, validators reuse that seed
 for package rows instead of inventing a second destination catalog. Regenerate
 with `go run ./cmd/ownershipinventoryfreeze` and prove with

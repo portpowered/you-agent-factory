@@ -90,7 +90,8 @@ func TestValidateRequiresResponsibilityClusters(t *testing.T) {
 }
 
 func TestBuildInventoryIncludesCommittedRationaleCards(t *testing.T) {
-	inventory, err := ownershipinventory.BuildInventory([]string{"pkg/services/work"})
+	root := repositoryRoot(t)
+	inventory, err := ownershipinventory.BuildInventory(root, []string{"pkg/services/work"})
 	if err != nil {
 		t.Fatalf("BuildInventory() error = %v", err)
 	}

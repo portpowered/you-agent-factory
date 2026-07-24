@@ -1027,6 +1027,696 @@
       "note": "Private Workers registry backing runner subservices; not a separate product owner."
     }
   ],
+  "crossServiceEdges": [
+    {
+      "fromOwner": "automations",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/automations -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "automations",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/automations -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "automations",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/automations/service -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "automations",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers/services/hosted_logic"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_definitions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_runtime",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_sessions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "models",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "operator_settings",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/platform/browser"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "provider_sessions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "providers",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "recordings",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "system_initialization",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "work",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "workers",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_definitions/internal/testcomposition -\u003e pkg/platform/portablefiles"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/service -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/platform/logging"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/runtimeopening -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "edges",
+      "class": "construction",
+      "architectureException": true,
+      "evidence": "pkg/services/factory_sessions/internal/applicationopening -\u003e pkg/services/edges"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_visualization",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/applicationopening -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/factory_sessions/internal/processlifecycle -\u003e pkg/initializer/lifecycle"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_sessions/internal/runtimehosting -\u003e pkg/platform/httpserver"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "provider_sessions",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/execution -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_sessions/internal/controlplane -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/transports/cli/session -\u003e pkg/transports/cli/clidiag"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/internal/contracts -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "initializer",
+      "toOwner": "platform",
+      "class": "lifecycle",
+      "evidence": "pkg/initializer -\u003e pkg/platform/runtimeartifact"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/models/transports/http -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/initializer/process"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/models/internal/local -\u003e pkg/platform/process"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/transports/cli/clidiag"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/models -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "operator_settings",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/operator_settings -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "platform",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/platform/contentstaging -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/workers/agypty -\u003e pkg/platform/clock"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/workers/provider/adapter -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/recordings/artifacts -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/recordings/replay -\u003e pkg/platform/replay"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "edges",
+      "class": "construction",
+      "architectureException": true,
+      "evidence": "pkg/root -\u003e pkg/services/edges"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "initializer",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/initializer/application"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "wire",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/wire"
+    },
+    {
+      "fromOwner": "system_initialization",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/system_initialization -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "system_initialization",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/system_initialization -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_definitions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/commandregistry -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_runtime",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_sessions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/climanifestcobra -\u003e pkg/services/factory_sessions/transports/cli/session"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_visualization",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/run -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/transports/cli/mcp -\u003e pkg/initializer/process"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "models",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli -\u003e pkg/services/models/transports/cli"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "operator_settings",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "platform",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/baseline -\u003e pkg/platform/generatedartifacts"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "provider_sessions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/http -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "recordings",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "system_initialization",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/configinit -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "work",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/batchload -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "workers",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "edges",
+      "class": "construction",
+      "architectureException": true,
+      "evidence": "pkg/wire -\u003e pkg/services/edges"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_definitions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_runtime",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_sessions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_sessions/transports/cli/session"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_visualization",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "initializer",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/initializer"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "models",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/models/transports/cli"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "operator_settings",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "platform",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/platform/clock"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "provider_sessions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "providers",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "recordings",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "system_initialization",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "transports",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/transports/cli"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "work",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "workers",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/workers/service"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/workers/service -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/workers/service -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/workers/execution/recording -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/platform/filesystem"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "provider_sessions",
+      "class": "command",
+      "evidence": "pkg/services/workers -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/services/workers/provider"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/workers -\u003e pkg/services/work"
+    }
+  ],
   "packages": [
     {
       "packagePath": "pkg/initializer",

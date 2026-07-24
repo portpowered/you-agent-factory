@@ -16,7 +16,7 @@ func TestFrozenInventoryMatchesCommittedPackageMappings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProductionPackages() error = %v", err)
 	}
-	want, err := ownershipinventory.BuildInventory(packages)
+	want, err := ownershipinventory.BuildInventory(root, packages)
 	if err != nil {
 		t.Fatalf("BuildInventory() error = %v", err)
 	}

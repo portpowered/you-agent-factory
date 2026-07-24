@@ -110,7 +110,7 @@ func moveRow(packagePath, destination, successor, condition string) PackageRow {
 
 // BuildInventory constructs the frozen ownership inventory for the provided
 // production package list using FND-01 destination vocabulary and plan mappings.
-func BuildInventory(packages []string) (Inventory, error) {
+func BuildInventory(root string, packages []string) (Inventory, error) {
 	rows := make([]PackageRow, 0, len(packages))
 	for _, packagePath := range packages {
 		row, err := MapPackage(packagePath)
@@ -118,6 +118,10 @@ func BuildInventory(packages []string) (Inventory, error) {
 			return Inventory{}, err
 		}
 		rows = append(rows, row)
+	}
+	edges, err := DiscoverCrossServiceEdges(root, rows)
+	if err != nil {
+		return Inventory{}, err
 	}
 	return Inventory{
 		Version:                1,
@@ -130,6 +134,7 @@ func BuildInventory(packages []string) (Inventory, error) {
 		AdditionalCurrentRoots: append([]string(nil), AdditionalCurrentRoots...),
 		OwnerRationales:        BuildOwnerRationales(),
 		ResponsibilityClusters: BuildResponsibilityClusters(),
+		CrossServiceEdges:      edges,
 		Packages:               rows,
 	}, nil
 }

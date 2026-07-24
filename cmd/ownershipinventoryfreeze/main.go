@@ -19,7 +19,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ownership-inventory-freeze: list packages: %v\n", err)
 		os.Exit(1)
 	}
-	inventory, err := ownershipinventory.BuildInventory(packages)
+	inventory, err := ownershipinventory.BuildInventory(root, packages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ownership-inventory-freeze: build inventory: %v\n", err)
 		os.Exit(1)
