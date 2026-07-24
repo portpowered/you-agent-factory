@@ -112,7 +112,6 @@ pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithLogge
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithPetriMutationRecorder
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBuffer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBufferDrainObserver
-pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithSubmissionRecorder
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithTokenTransformer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithWorkstationResponseRecorder
 pkg/services/factory_runtime/runtime/factory.go: unreachable func: WorkflowContext
