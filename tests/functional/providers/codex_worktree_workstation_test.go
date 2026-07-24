@@ -77,8 +77,8 @@ Process the input task.
 				},
 			})
 			support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-			session := support.GetDefaultSession(t, server.URL())
-			assertCursorProviderCompleted(t, session)
+			listed := support.ListDefaultSessionWork(t, server.URL())
+			assertCursorProviderCompleted(t, listed)
 
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())

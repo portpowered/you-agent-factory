@@ -9,6 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestWorkstationStopWords_ThroughCustomerProcess(t *testing.T) {
@@ -82,12 +84,12 @@ func TestWorkstationStopWords_ThroughCustomerProcess(t *testing.T) {
 				workerexecution.InferenceResponse{Content: test.response},
 			)
 
-			session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
-			if got := support.SessionPlaceTokenCount(session, test.wantPlace); got != 1 {
+			_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+			if got := support.CountWorkAtCustomerState(listed, test.wantPlace); got != 1 {
 				t.Errorf("%s token count = %d, want 1", test.wantPlace, got)
 			}
 			for _, placeID := range test.emptyPlaces {
-				if got := support.SessionPlaceTokenCount(session, placeID); got != 0 {
+				if got := support.CountWorkAtCustomerState(listed, placeID); got != 0 {
 					t.Errorf("%s token count = %d, want 0", placeID, got)
 				}
 			}

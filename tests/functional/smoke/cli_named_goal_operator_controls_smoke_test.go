@@ -42,12 +42,12 @@ func TestNamedGoalOperatorControls_PauseBuffersSubmitUntilResume(t *testing.T) {
 
 	submitted := submitNamedGoalRoutingWork(t, server, "paused-operator-submit", "customer goal request text")
 	workID := stringPointerValue(submitted.WorkId)
-	session := support.GetDefaultSession(t, server.URL())
-	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:init") {
-		t.Fatalf("paused submit reached goal:init while session was paused: %#v", session.Runtime.Petri)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:init") {
+		t.Fatalf("paused submit reached goal:init while session was paused: %#v", listed.Results)
 	}
-	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
-		t.Fatalf("paused submit reached goal:complete before resume: %#v", session.Runtime.Petri)
+	if markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:complete") {
+		t.Fatalf("paused submit reached goal:complete before resume: %#v", listed.Results)
 	}
 
 	resume := postNamedGoalOperatorLifecycleControl(
@@ -92,9 +92,9 @@ func TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder(t *t
 	firstID := stringPointerValue(first.WorkId)
 	secondID := stringPointerValue(second.WorkId)
 
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	for _, workID := range []string{firstID, secondID} {
-		if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
+		if markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:complete") {
 			t.Fatalf("work %q reached goal:complete before resume", workID)
 		}
 	}
@@ -216,12 +216,12 @@ func TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStop
 		t.Fatalf("work latestDispatch = %#v, want INTERRUPTED dispatch context", work.StopSummary.LatestDispatch)
 	}
 
-	session = support.GetDefaultSession(t, server.URL())
-	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:complete") {
 		t.Fatalf("interrupted work %q reached goal:complete", workID)
 	}
-	if !markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:interrupted") {
-		t.Fatalf("marking missing goal:interrupted token for work %q", workID)
+	if !markingContainsNamedGoalRoutingWorkAtPlace(listed, workID, "goal:interrupted") {
+		t.Fatalf("work listing missing goal:interrupted for work %q: %#v", workID, listed.Results)
 	}
 }
 

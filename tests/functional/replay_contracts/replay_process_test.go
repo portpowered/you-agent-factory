@@ -37,12 +37,12 @@ func observeReplayThroughRoot(
 
 func assertReplayPlaceCounts(
 	t testing.TB,
-	session factoryapi.FactorySession,
+	listed factoryapi.ListWorkResponse,
 	wants map[string]int,
 ) {
 	t.Helper()
 	for placeID, want := range wants {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

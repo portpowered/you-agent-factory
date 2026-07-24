@@ -9,6 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 // TestWorkflowModificationAndReload validates that different workflow versions
@@ -30,8 +32,8 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	sessionV1 := support.RunFactoryToCompletion(t, v1Dir, providerV1, 10*time.Second)
-	assertWorkflowSessionPlaces(t, sessionV1, map[string]int{
+	sessionV1, listedV1 := support.RunFactoryToCompletionWithEdgesAndWork(t, v1Dir, serviceedges.Edges{ProviderOverride: providerV1}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedV1, map[string]int{
 		"task:complete": 1, "task:init": 0, "task:processing": 0,
 	})
 
@@ -51,8 +53,8 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	sessionV2 := support.RunFactoryToCompletion(t, v2Dir, providerV2, 10*time.Second)
-	assertWorkflowSessionPlaces(t, sessionV2, map[string]int{
+	sessionV2, listedV2 := support.RunFactoryToCompletionWithEdgesAndWork(t, v2Dir, serviceedges.Edges{ProviderOverride: providerV2}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedV2, map[string]int{
 		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:in-review": 0,
 	})
 
@@ -82,8 +84,8 @@ func TestWorkflowModificationRejectionLoop(t *testing.T) {
 		"drafter":  {{Content: "draft COMPLETE"}, {Content: "revised draft COMPLETE"}},
 		"approver": {{Content: "needs revision"}, {Content: "approved COMPLETE"}},
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"doc:complete": 1, "doc:init": 0, "doc:processing": 0,
 	})
 
@@ -113,8 +115,8 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 		"processor": {{Content: "Done. COMPLETE"}},
 	})
 
-	sessionA := support.RunFactoryToCompletion(t, dirA, providerA, 10*time.Second)
-	assertWorkflowSessionPlaces(t, sessionA, map[string]int{"task:complete": 1})
+	sessionA, listedA := support.RunFactoryToCompletionWithEdgesAndWork(t, dirA, serviceedges.Edges{ProviderOverride: providerA}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedA, map[string]int{"task:complete": 1})
 
 	dirB := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, dirB, "task", []byte("task for B"))
@@ -124,7 +126,7 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
 
-	sessionB := support.RunFactoryToCompletion(t, dirB, providerB, 10*time.Second)
-	assertWorkflowSessionPlaces(t, sessionB, map[string]int{"task:complete": 1})
-	assertWorkflowSessionPlaces(t, sessionA, map[string]int{"task:complete": 1, "task:init": 0})
+	sessionB, listedB := support.RunFactoryToCompletionWithEdgesAndWork(t, dirB, serviceedges.Edges{ProviderOverride: providerB}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedB, map[string]int{"task:complete": 1})
+	assertWorkflowSessionPlaces(t, listedA, map[string]int{"task:complete": 1, "task:init": 0})
 }

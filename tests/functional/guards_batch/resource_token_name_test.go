@@ -26,7 +26,7 @@ func TestResourceGated_DispatchTokenName(t *testing.T) {
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
 	)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 2, "task:init": 0})
+	assertGuardSessionPlaces(t, listedWork, map[string]int{"task:complete": 2, "task:init": 0})
 	assertGuardResourceAvailability(t, session, "slot", 1)
 
 	dispatchedWorkIDs := map[string]bool{}

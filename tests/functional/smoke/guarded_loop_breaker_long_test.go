@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t *testing.T) {
@@ -40,14 +42,14 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 		Name:       "guarded loop breaker smoke",
 		Payload:    []byte("prove guarded loop breaker"),
 	})
-	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
 	for placeID, want := range map[string]int{
 		"story:failed":    1,
 		"story:init":      0,
 		"story:in-review": 0,
 		"story:complete":  0,
 	} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

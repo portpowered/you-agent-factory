@@ -28,8 +28,8 @@ func TestPartialBatch_SomeTokensFail(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Task incomplete, no stop token"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:failed": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:failed": 1, "task:init": 0})
 }
 
 func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
@@ -44,8 +44,8 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Work needs review, no stop token"},
 	)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{
 		"task:complete": 1, "task:rejected": 1, "task:init": 0, "task:failed": 0,
 	})
 }
@@ -72,10 +72,10 @@ Process the task input.
 		platformprocess.CommandResult{Stdout: []byte("Work done. COMPLETE")},
 	)
 
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
@@ -121,10 +121,10 @@ Process the input task.
 		},
 	)
 
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
@@ -163,10 +163,10 @@ Process the input task.
 		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Done. COMPLETE","session_id":"retry-success"}` + "\n")},
 	)
 
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() != 3 {
 		t.Fatalf("expected provider runner called 3 times, got %d", runner.CallCount())
@@ -181,10 +181,10 @@ Process the input task.
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
 	support.SkipLongFunctional(t, "slow partial-batch throttled-provider failure sweep")
 	dir, runner := throttledProviderFailureFixture(t)
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 5*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
 	if runner.CallCount() != 4 {
 		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())

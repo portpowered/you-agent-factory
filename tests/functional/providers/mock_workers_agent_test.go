@@ -24,9 +24,9 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{"task:done": 1, "task:init": 0} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
@@ -93,9 +93,9 @@ func rejectedAgentMockConfig(exitCode int) *workers.MockWorkersConfig {
 
 func assertMockAgentRejected(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Helper()
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{"task:failed": 1, "task:init": 0} {
-		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}

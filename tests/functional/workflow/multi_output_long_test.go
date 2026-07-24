@@ -25,8 +25,8 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
 }
@@ -40,8 +40,8 @@ func TestMultiOutput_WithoutStopWord(t *testing.T) {
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "I tried but could not finish"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"request:failed": 1, "plan:init": 0, "task:init": 0, "plan:complete": 0, "task:complete": 0,
 	})
 }
@@ -57,8 +57,8 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
 }
@@ -74,8 +74,8 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"plan:complete": 1, "task:complete": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"plan:complete": 1, "task:complete": 1})
 }
 
 func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
@@ -95,10 +95,10 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"plan:complete": 1, "task:complete": 1})
+	assertWorkflowSessionPlaces(t, listedWork, map[string]int{"plan:complete": 1, "task:complete": 1})
 	assertListedLineage(t, listedWork, map[string]string{"plan": inputTraceID, "task": inputTraceID})
 }
 
