@@ -132,6 +132,26 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	return &clone
 }
 
+// WithExecutionFactories returns a service copy that uses replacement provider
+// and script factories while preserving registry-backed runner selection and
+// provider-identity resolution wiring.
+func (s *Service) WithExecutionFactories(
+	providerFactory *workerprovider.Factory,
+	scriptFactory *workerexecutor.ScriptFactory,
+) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	if providerFactory != nil {
+		clone.providerFactory = providerFactory
+	}
+	if scriptFactory != nil {
+		clone.scriptFactory = scriptFactory
+	}
+	return &clone
+}
+
 // Build constructs one configured worker executor from direct collaborators.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *Service) Build(
