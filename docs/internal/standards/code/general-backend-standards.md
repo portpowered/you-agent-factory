@@ -203,13 +203,25 @@ Repository package-boundary policy:
   published external-effect contracts unchanged. It **MUST NOT** import a
   composed Models service or runtime, redefine or alias those contracts, or
   receive a general peer-service subpackage exemption.
-- External provider inference follows the same leaf-effect rule:
-  `pkg/services/workers/provider/inferencecontract` owns the single provider
-  inference port consumed by Worker adapters, composition, replay, and
-  `pkg/services/edges`. The Workers service root **MUST NOT** redeclare or alias
-  that port. The package-boundary guard permits only this exact contract
-  package across peer services; it does not exempt provider implementations or
-  other Worker subpackages.
+- External provider inference and process effects follow the same leaf-effect
+  rule as Models: the Providers Execution leaf that directly performs the
+  effect declares the leaf effect contract for that provider inference or
+  process port. `pkg/services/edges` may import those exact Providers leaf
+  effect contracts solely to aggregate them unchanged as the
+  `root.BuildProcess` and functional-test override bag. It **MUST NOT** own,
+  redefine, or alias those contracts, or receive a general peer-service
+  subpackage exemption for Providers implementations. Workers consumes the
+  Providers root for provider execution capability and **MUST NOT** redeclare
+  or alias the leaf effect port as a peer-owned contract. Catalog enumeration
+  and one-attempt execution absorb the accepted Standardized Providers
+  protocol, registry, open-config, and testkit source of truth; maintainers
+  **MUST NOT** introduce a second Providers catalog, registry, conductor, or
+  execution-contract family beside that model. Code still living under
+  `pkg/services/workers/provider/inferencecontract` is migration debt until
+  later Providers packets land; that Workers path is not the durable normative
+  owner. The package-boundary guard permits only the exact Providers leaf
+  effect contract packages across peer services as injection ports; it does
+  not exempt Providers implementations or other peer subpackages.
 - Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
 - Run `make pkg-boundary` for dependency and ownership boundaries and
   `make pkg-structure` for recursive service and functional-test package shape;
