@@ -107,7 +107,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	submittedFileReader := provideWorkSubmittedFileReader(edges2)
-	v12 := provideWorkFactory(submittedFileReader)
+	contentStagingService, err := provideWorkContentStagingService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	contentHostPlatform := provideWorkContentHostPlatform(edges2)
+	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
+	if err != nil {
+		return nil, err
+	}
+	v12 := provideWorkFactory(submittedFileReader, contentStagingService, contentMaterializer)
 	v13 := provideAutomationFactory()
 	sessionResultProjectionOperation := factory.NewSessionResultProjectionOperation()
 	invocationInterpolationService := provideInvocationInterpolationService()
@@ -217,11 +226,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	inputDirectoryWalker := provideFactoryRuntimeInputDirectoryWalker(edges2)
 	runtimeFactory := service.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker)
 	assembly, err := service.NewAssembly(runtimeFactory)
-	if err != nil {
-		return nil, err
-	}
-	contentHostPlatform := provideWorkContentHostPlatform(edges2)
-	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
 	if err != nil {
 		return nil, err
 	}
@@ -391,10 +395,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	contentPreparation := work.NewContentPreparation()
 	httpBinder, err := composition.NewHTTPBinder(factoryStatusProjector, contentPreparation)
-	if err != nil {
-		return nil, err
-	}
-	contentStagingService, err := provideWorkContentStagingService(edges2)
 	if err != nil {
 		return nil, err
 	}

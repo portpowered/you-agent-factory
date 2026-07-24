@@ -28,7 +28,7 @@ func queryReadRuntime() *readRuntime {
 }
 
 func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	for _, tc := range []struct {
 		name    string
 		options work.ListOptions
@@ -49,7 +49,7 @@ func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
 }
 
 func TestListWork_FiltersBeforePagination(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	got, err := service.ListWork(context.Background(), "session-1", work.ListOptions{WorkTypeName: "story", MaxResults: 2})
 	if err != nil || len(got.Results) != 2 || got.NextToken != "" {
 		t.Fatalf("ListWork = %#v, %v", got, err)
@@ -57,7 +57,7 @@ func TestListWork_FiltersBeforePagination(t *testing.T) {
 }
 
 func TestListWork_FiltersByStateNameAndType(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	got, err := service.ListWork(context.Background(), "session-1", work.ListOptions{StateName: "review", StateType: work.StateTypeProcessing})
 	if err != nil || len(got.Results) != 1 || got.Results[0].WorkID != "work-story" {
 		t.Fatalf("ListWork = %#v, %v", got, err)
@@ -65,7 +65,7 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 }
 
 func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	got, err := service.ListWork(context.Background(), "session-1", work.ListOptions{})
 	if err != nil || len(got.Results) != 3 || got.Results[0].WorkID != "work-bug" || got.Results[1].WorkID != "work-story" || got.Results[2].WorkID != "work-plan" {
 		t.Fatalf("ListWork = %#v, %v", got, err)
@@ -73,7 +73,7 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 }
 
 func TestListWork_SortsByStateType(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	got, err := service.ListWork(context.Background(), "session-1", work.ListOptions{SortBy: "state.type"})
 	if err != nil || len(got.Results) != 3 || got.Results[0].State.Type != work.StateTypeInitial || got.Results[2].State.Type != work.StateTypeTerminal {
 		t.Fatalf("ListWork = %#v, %v", got, err)
@@ -81,7 +81,7 @@ func TestListWork_SortsByStateType(t *testing.T) {
 }
 
 func TestListWork_InvalidStateTypeAndSortReturnValidationErrors(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	for _, options := range []work.ListOptions{{StateType: "BROKEN"}, {SortBy: "broken"}} {
 		_, err := service.ListWork(context.Background(), "session-1", options)
 		var validation *work.ValidationError
@@ -92,7 +92,7 @@ func TestListWork_InvalidStateTypeAndSortReturnValidationErrors(t *testing.T) {
 }
 
 func TestListWork_NonPositiveMaxResultsDefaultsAndNextTokenContinues(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	first, err := service.ListWork(context.Background(), "session-1", work.ListOptions{MaxResults: 1})
 	if err != nil || len(first.Results) != 1 || first.NextToken == "" {
 		t.Fatalf("first ListWork = %#v, %v", first, err)
@@ -108,7 +108,7 @@ func TestListWork_NonPositiveMaxResultsDefaultsAndNextTokenContinues(t *testing.
 }
 
 func TestGetWork_ByTokenAndWorkIDAndNotFound(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: queryReadRuntime()}, nil, nil, nil)
 	for _, id := range []string{"tok-story", "work-story"} {
 		got, err := service.GetWork(context.Background(), "session-1", id)
 		if err != nil || got.WorkID != "work-story" {
@@ -145,7 +145,7 @@ func TestListWorkOwnsSelectionOrderingPaginationAndDetachesResults(t *testing.T)
 		{CursorID: "tok-active-2", WorkID: "work-active-2", Name: "Alpha second", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 		{CursorID: "tok-active-1", WorkID: "work-active-1", Name: "Alpha first", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 	}}}
-	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil)
 	first, err := service.ListWork(context.Background(), "session-1", work.ListOptions{Name: "alpha", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("ListWork: %v", err)
@@ -165,7 +165,7 @@ func TestListWorkOwnsSelectionOrderingPaginationAndDetachesResults(t *testing.T)
 
 func TestGetWorkAndMoveWorkAndReadOwnDetachedReadSemantics(t *testing.T) {
 	runtime := &readRuntime{snapshot: work.ReadSnapshot{Items: []work.ReadModel{{CursorID: "tok-1", WorkID: "work-1", Name: "one", State: &work.State{Name: "review", Type: work.StateTypeProcessing}}}}}
-	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, nil)
+	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil)
 	read, err := service.GetWork(context.Background(), "session-1", "work-1")
 	if err != nil || read.CursorID != "tok-1" {
 		t.Fatalf("GetWork = %#v, %v", read, err)

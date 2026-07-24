@@ -49,6 +49,27 @@ type Service interface {
 	ListWork(context.Context, string, ListOptions) (ListResult, error)
 	GetWork(context.Context, string, string) (ReadModel, error)
 	MoveWorkAndRead(context.Context, string, string, string, string) (ReadModel, error)
+
+	// StageContent is part of the published content staging slice. Peers stage
+	// already-decoded content bytes through plain StageContentRequest and receive
+	// an opaque StageContentResult reference without supplying filesystem effect
+	// interfaces on the request shape.
+	StageContent(context.Context, StageContentRequest) (StageContentResult, error)
+	// PrepareContent resolves staged submission items into detached Work content
+	// parts peers can attach to admission requests.
+	PrepareContent(context.Context, []StagedSubmissionItem) ([]WorkContentPart, error)
+	// ResolveContent resolves an opaque staged reference to a local path and URL,
+	// or returns a typed staging failure such as ErrInvalidStagedContentRef or
+	// ErrStagedContentExpired.
+	ResolveContent(context.Context, string) (ResolvedStagedContent, error)
+	// CleanupContent releases resources owned by an opaque staged reference.
+	CleanupContent(context.Context, string) error
+	// MaterializeContentURL is the published content materialization slice. Peers
+	// supply a content URL and receive an immutable local path plus ContentCleanup
+	// handle, or a typed materialization failure such as ErrUnsafeContentURL or
+	// ErrContentURLInaccessible. Callers do not supply HTTP or filesystem effect
+	// interfaces on the request shape.
+	MaterializeContentURL(context.Context, string) (string, ContentCleanup, error)
 }
 
 // FileSubmissionService is the exact Work role for path-backed submission.

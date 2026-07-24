@@ -30,7 +30,7 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 
 func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 	runtime := &recordingFactory{}
-	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile)
+	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil)
 
 	request := work.WorkRequest{RequestID: "request-root-contract"}
 	if _, err := service.SubmitWorkRequestForSession(
@@ -76,7 +76,7 @@ func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot,
 }
 
 func TestNewServicePropagatesRuntimeResolverError(t *testing.T) {
-	service := workservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile)
+	service := workservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil)
 	_, err := service.SubmitWorkRequestForSession(context.Background(), "missing", work.WorkRequest{})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
@@ -108,7 +108,7 @@ func TestSubmitFileForSessionUsesInjectedReaderAndRuntime(t *testing.T) {
 	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, func(path string) ([]byte, error) {
 		readPath = path
 		return []byte(`{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[]}`), nil
-	})
+	}, nil, nil)
 
 	result, err := service.SubmitFileForSession(context.Background(), "session-1", "edge.json")
 	if err != nil {

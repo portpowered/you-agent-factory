@@ -915,8 +915,12 @@ func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFile
 	return os.ReadFile
 }
 
-func provideWorkFactory(readFile work.SubmittedFileReader) factorysessionwire.WorkFactory {
+func provideWorkFactory(
+	readFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
-		return workservice.NewService(runtimes, readFile)
+		return workservice.NewService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }

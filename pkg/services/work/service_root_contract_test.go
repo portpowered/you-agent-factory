@@ -22,12 +22,29 @@ type rootServiceFake struct {
 	movedRead    work.ReadModel
 	movedReadErr error
 
-	lastSessionID string
-	lastRequest   work.WorkRequest
-	lastListOpts  work.ListOptions
-	lastWorkID    string
-	lastStateName string
-	lastRequestID string
+	stageResult      work.StageContentResult
+	stageErr         error
+	prepareResult    []work.WorkContentPart
+	prepareErr       error
+	resolveResult    work.ResolvedStagedContent
+	resolveErr       error
+	cleanupErr       error
+	materializePath  string
+	materializeClean work.ContentCleanup
+	materializeErr   error
+
+	lastSessionID     string
+	lastRequest       work.WorkRequest
+	lastListOpts      work.ListOptions
+	lastWorkID        string
+	lastStateName     string
+	lastRequestID     string
+	lastStageRequest  work.StageContentRequest
+	lastPrepareItems  []work.StagedSubmissionItem
+	lastStagedRef     string
+	lastContentURL    string
+	cleanupCalled     bool
+	materializeCleaned bool
 }
 
 func (f *rootServiceFake) SubmitWorkRequestForSession(
@@ -86,6 +103,48 @@ func (f *rootServiceFake) MoveWorkAndRead(
 	f.lastStateName = stateName
 	f.lastRequestID = requestID
 	return f.movedRead, f.movedReadErr
+}
+
+func (f *rootServiceFake) StageContent(
+	_ context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	f.lastStageRequest = request
+	return f.stageResult, f.stageErr
+}
+
+func (f *rootServiceFake) PrepareContent(
+	_ context.Context,
+	items []work.StagedSubmissionItem,
+) ([]work.WorkContentPart, error) {
+	f.lastPrepareItems = append([]work.StagedSubmissionItem(nil), items...)
+	return f.prepareResult, f.prepareErr
+}
+
+func (f *rootServiceFake) ResolveContent(
+	_ context.Context,
+	ref string,
+) (work.ResolvedStagedContent, error) {
+	f.lastStagedRef = ref
+	return f.resolveResult, f.resolveErr
+}
+
+func (f *rootServiceFake) CleanupContent(_ context.Context, ref string) error {
+	f.lastStagedRef = ref
+	f.cleanupCalled = true
+	return f.cleanupErr
+}
+
+func (f *rootServiceFake) MaterializeContentURL(
+	_ context.Context,
+	rawURL string,
+) (string, work.ContentCleanup, error) {
+	f.lastContentURL = rawURL
+	cleanup := f.materializeClean
+	if cleanup == nil && f.materializeErr == nil {
+		cleanup = func() { f.materializeCleaned = true }
+	}
+	return f.materializePath, cleanup, f.materializeErr
 }
 
 var _ work.Service = (*rootServiceFake)(nil)
@@ -279,6 +338,146 @@ func TestServiceRootContract_AdmissionTypedFailures(t *testing.T) {
 			_, err := service.SubmitWorkRequestForSession(ctx, "session-1", request)
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("SubmitWorkRequestForSession error = %v, want %v", err, tc.err)
+			}
+		})
+	}
+}
+
+func TestServiceRootContract_ContentStagingAndMaterializationSuccess(t *testing.T) {
+	fake := &rootServiceFake{
+		stageResult: work.StageContentResult{
+			StagedFileRef: "submit-work-stage:v1:opaque-ref",
+			FileName:      "photo.png",
+			MediaType:     "image/png",
+			URL:           "file:///tmp/staged/photo.png",
+		},
+		prepareResult: []work.WorkContentPart{{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         "file:///tmp/staged/photo.png",
+			ContentType: "image/png",
+		}},
+		resolveResult: work.ResolvedStagedContent{
+			Path: "/tmp/staged/photo.png",
+			URL:  "file:///tmp/staged/photo.png",
+		},
+		materializePath: "/tmp/materialized/photo.png",
+	}
+	var service work.Service = fake
+	ctx := context.Background()
+
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "photo.png",
+		MediaType: "image/png",
+		Content:   []byte("png-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	if staged.StagedFileRef == "" || staged.URL == "" {
+		t.Fatalf("stage result = %#v, want opaque staged ref and URL", staged)
+	}
+	if fake.lastStageRequest.FileName != "photo.png" || len(fake.lastStageRequest.Content) == 0 {
+		t.Fatalf("stage request = %#v, want photo.png payload", fake.lastStageRequest)
+	}
+
+	prepared, err := service.PrepareContent(ctx, []work.StagedSubmissionItem{{
+		ItemType:      "image",
+		StagedFileRef: staged.StagedFileRef,
+		FileName:      "photo.png",
+		MediaType:     "image/png",
+	}})
+	if err != nil {
+		t.Fatalf("PrepareContent: %v", err)
+	}
+	if len(prepared) != 1 || prepared[0].URL == "" {
+		t.Fatalf("prepare result = %#v, want one content part with URL", prepared)
+	}
+
+	resolved, err := service.ResolveContent(ctx, staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("ResolveContent: %v", err)
+	}
+	if resolved.Path == "" || resolved.URL == "" {
+		t.Fatalf("resolve result = %#v, want local path and URL", resolved)
+	}
+	if fake.lastStagedRef != staged.StagedFileRef {
+		t.Fatalf("resolve ref = %q, want staged ref", fake.lastStagedRef)
+	}
+
+	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+		t.Fatalf("CleanupContent: %v", err)
+	}
+	if !fake.cleanupCalled {
+		t.Fatal("CleanupContent was not routed through the root Service")
+	}
+
+	localPath, cleanup, err := service.MaterializeContentURL(ctx, "file:///fixtures/photo.png")
+	if err != nil {
+		t.Fatalf("MaterializeContentURL: %v", err)
+	}
+	if localPath == "" || cleanup == nil {
+		t.Fatalf("materialize = (%q, %v), want local path and cleanup handle", localPath, cleanup)
+	}
+	if fake.lastContentURL != "file:///fixtures/photo.png" {
+		t.Fatalf("materialize URL = %q, want file:///fixtures/photo.png", fake.lastContentURL)
+	}
+	cleanup()
+	if !fake.materializeCleaned {
+		t.Fatal("materialize cleanup handle did not run")
+	}
+}
+
+func TestServiceRootContract_ContentTypedFailures(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		call func(work.Service) error
+		want error
+	}{
+		{
+			name: "invalid staged ref",
+			call: func(service work.Service) error {
+				_, err := service.ResolveContent(ctx, "not-a-staged-ref")
+				return err
+			},
+			want: work.ErrInvalidStagedContentRef,
+		},
+		{
+			name: "expired staged ref",
+			call: func(service work.Service) error {
+				_, err := service.ResolveContent(ctx, "submit-work-stage:v1:expired")
+				return err
+			},
+			want: work.ErrStagedContentExpired,
+		},
+		{
+			name: "unsafe content URL",
+			call: func(service work.Service) error {
+				_, _, err := service.MaterializeContentURL(ctx, "http://127.0.0.1/secret")
+				return err
+			},
+			want: work.ErrUnsafeContentURL,
+		},
+		{
+			name: "remote content inaccessible",
+			call: func(service work.Service) error {
+				_, _, err := service.MaterializeContentURL(ctx, "https://example.invalid/missing.png")
+				return err
+			},
+			want: work.ErrContentURLInaccessible,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &rootServiceFake{
+				resolveErr:     tc.want,
+				materializeErr: tc.want,
+			}
+			var service work.Service = fake
+			if err := tc.call(service); !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
 			}
 		})
 	}
