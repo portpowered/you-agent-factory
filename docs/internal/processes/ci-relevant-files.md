@@ -150,14 +150,16 @@ Wave 0 functional-tests-expansion planning authority lives under
   at `docs/internal/packaged-service-structure/package-target-manifest.json` and
   may only use the closed destination vocabulary (13 product owners, approved
   non-service families, and the `edges` architecture exception). Nested
-  destinations are limited to `<owner>/internal/services/<subservice>`. The
-  top-level `inventory` array is the stable-sorted (byte-order / slash path
-  sort) ledger seed of every production `pkg/` package (directories with at
-  least one non-test `.go` file); regenerate with
-  `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Keep validators
-  beside this checker rather than inventing alternate destination trees; later
-  FND stories fill package destination rows and coverage gates without
-  reopening that vocabulary.
+  destinations are limited to `<owner>/internal/services/<subservice>` using the
+  plan's committed nested subservice names. The top-level `inventory` array is
+  the stable-sorted (byte-order / slash path) ledger seed of every production
+  `pkg/` package (directories with at least one non-test `.go` file); regenerate
+  with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
+  product-owner destination rows (including Providers extraction moves from
+  `workers/provider*` / `cliprovider` / `agypty`) regenerate with
+  `-write-owner-packages`. Keep validators beside this checker rather than
+  inventing alternate destination trees; later FND stories fill residual /
+  edges rows and coverage gates without reopening that vocabulary.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`

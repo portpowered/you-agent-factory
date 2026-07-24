@@ -200,6 +200,9 @@ func validateDestination(destination string, closed map[string]struct{}) error {
 	if subservice == "" || strings.Contains(subservice, "/") {
 		return fmt.Errorf("%q must name exactly one internal/services/<subservice> segment", destination)
 	}
+	if _, isOwner := productOwnerSet()[root]; isOwner && !isCommittedNestedSubservice(root, subservice) {
+		return fmt.Errorf("%q uses nested subservice %q outside the committed plan tree for %s", destination, subservice, root)
+	}
 	return nil
 }
 
