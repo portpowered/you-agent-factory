@@ -108,3 +108,15 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 		t.Fatalf("Markdown generator missing default output path:\n%s", output)
 	}
 }
+
+// TestFunctionalTestVizContract_DefaultWiringIgnoresAmbientCIVizDir proves the
+// default-path contract still holds when the suite process inherits
+// FUNCTIONAL_TEST_VIZ_DIR from required Backend Functional Coverage CI.
+func TestFunctionalTestVizContract_DefaultWiringIgnoresAmbientCIVizDir(t *testing.T) {
+	t.Setenv("FUNCTIONAL_TEST_VIZ_DIR", ".artifacts/backend-functional-coverage")
+	t.Setenv("GO_FUNCTIONAL_COVERAGE_PROFILE", ".artifacts/backend-functional-coverage/coverage.out")
+	t.Setenv("GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT", ".artifacts/backend-functional-coverage/coverage-summary.json")
+
+	// Reuse the dry-run contract assertions; helpers scrub ambient overrides.
+	TestFunctionalTestVizContract_DefaultWiringDryRun(t)
+}

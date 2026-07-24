@@ -56,6 +56,11 @@ func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...st
 
 	cmd := exec.Command(makePath, makeArgs...)
 	cmd.Dir = repoRoot
+	// Drop ambient CI/local Make overrides so contract proofs observe Makefile
+	// defaults (or explicit command-line args). Required Backend Functional
+	// Coverage exports FUNCTIONAL_TEST_VIZ_DIR into the suite process; without
+	// scrubbing, make -n / stubbed default-path assertions inherit that path.
+	cmd.Env = scrubMakeOverrideEnv(os.Environ(), functionalCoverageMakeOverrideVars...)
 
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -63,6 +68,39 @@ func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...st
 
 	err = cmd.Run()
 	return output.String(), err
+}
+
+// functionalCoverageMakeOverrideVars are Make variables the functional viz /
+// coverage surface accepts from the environment. Contract and fail-closed
+// smokes must not inherit CI values for these when proving defaults or when
+// the caller already passes an explicit Make command-line override.
+var functionalCoverageMakeOverrideVars = []string{
+	"FUNCTIONAL_TEST_VIZ_DIR",
+	"FUNCTIONAL_TEST_VIZ_PROFILE",
+	"FUNCTIONAL_TEST_VIZ_JSON",
+	"FUNCTIONAL_TEST_VIZ_MARKDOWN",
+	"GO_FUNCTIONAL_COVERAGE_PROFILE",
+	"GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT",
+}
+
+func scrubMakeOverrideEnv(environ []string, dropNames ...string) []string {
+	drop := make(map[string]struct{}, len(dropNames))
+	for _, name := range dropNames {
+		drop[name] = struct{}{}
+	}
+	out := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			out = append(out, entry)
+			continue
+		}
+		if _, dropIt := drop[name]; dropIt {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func writeMakeEchoScript(t *testing.T, label string) string {

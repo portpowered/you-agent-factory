@@ -136,7 +136,10 @@
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
   dry-run / stubbed Make wrapper smoke under
   `tests/functional/observability/coverage/functional_test_viz_contract_test.go`
-  rather than the full functional suite.
+  rather than the full functional suite. Those Make helpers scrub ambient
+  `FUNCTIONAL_TEST_VIZ_*` / `GO_FUNCTIONAL_COVERAGE_*` from the child Make
+  environment so default-path assertions still hold when the suite inherits
+  CI's `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
