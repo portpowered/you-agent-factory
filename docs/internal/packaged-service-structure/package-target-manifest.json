@@ -31,6 +31,13 @@
   "architectureExceptionNotes": {
     "edges": "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
   },
+  "futureDebt": [
+    {
+      "id": "FND-06",
+      "packagePath": "pkg/services/edges",
+      "description": "Narrow Edges implementation imports and the broad external-effect surface; deferred to FND-06. This packet only records the architecture exception."
+    }
+  ],
   "inventory": [
     "pkg/initializer",
     "pkg/initializer/application",
@@ -346,6 +353,11 @@
       "packagePath": "pkg/services/automations/timework",
       "disposition": "move",
       "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/edges",
+      "disposition": "retain",
+      "destination": "edges"
     },
     {
       "packagePath": "pkg/services/factory_definitions",

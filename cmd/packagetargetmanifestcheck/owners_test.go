@@ -179,6 +179,7 @@ func TestValidateManifestRejectsUncommittedNestedSubservice(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 		Packages: []PackageMapping{{
 			PackagePath: "pkg/services/work/mystery",
 			Disposition: DispositionMove,

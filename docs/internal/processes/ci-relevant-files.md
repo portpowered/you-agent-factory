@@ -157,9 +157,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
   product-owner destination rows (including Providers extraction moves from
   `workers/provider*` / `cliprovider` / `agypty`) regenerate with
-  `-write-owner-packages`. Keep validators beside this checker rather than
-  inventing alternate destination trees; later FND stories fill residual /
-  edges rows and coverage gates without reopening that vocabulary.
+  `-write-owner-packages`. Process Edges rows retain destination `edges` as the
+  sole broad external-effect architecture exception; regenerate with
+  `-write-edges-packages`, which also records FND-06 Edges-narrowing
+  `futureDebt` without performing that migration. Keep validators beside this
+  checker rather than inventing alternate destination trees; later FND stories
+  fill residual rows and coverage gates without reopening that vocabulary.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`

@@ -73,6 +73,7 @@ func TestValidateManifestRequiresCompleteStableInventory(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 	}
 
 	missing := base

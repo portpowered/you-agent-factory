@@ -40,6 +40,9 @@ type Manifest struct {
 	Stage                      string                `json:"stage"`
 	DestinationVocabulary      DestinationVocabulary `json:"destinationVocabulary"`
 	ArchitectureExceptionNotes map[string]string     `json:"architectureExceptionNotes"`
+	// FutureDebt records deferred migration work intentionally left outside
+	// this packet (for example FND-06 Edges narrowing).
+	FutureDebt []FutureDebt `json:"futureDebt"`
 	// Inventory is the stable-sorted ledger seed of every production pkg package
 	// path (repository-relative, slash-separated). Package destination rows are
 	// filled separately under Packages.
@@ -126,14 +129,20 @@ func validateManifestSchema(manifest Manifest) error {
 	if err := validateVocabulary(manifest.DestinationVocabulary); err != nil {
 		return err
 	}
-	if note := strings.TrimSpace(manifest.ArchitectureExceptionNotes["edges"]); note == "" {
-		return fmt.Errorf("architectureExceptionNotes.edges must record the Process Edges exception")
+	if note := manifest.ArchitectureExceptionNotes["edges"]; note != edgesArchitectureExceptionNote {
+		return fmt.Errorf("architectureExceptionNotes.edges must record the Process Edges exception exactly")
+	}
+	if err := validateFutureDebt(manifest.FutureDebt); err != nil {
+		return err
 	}
 	closed := closedDestinationSet()
 	for i, row := range manifest.Packages {
 		if err := validatePackageMapping(i, row, closed); err != nil {
 			return err
 		}
+	}
+	if err := validateEdgesExceptionCoverage(manifest); err != nil {
+		return err
 	}
 	return nil
 }

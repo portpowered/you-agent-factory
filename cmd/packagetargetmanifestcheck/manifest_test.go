@@ -51,6 +51,7 @@ func TestValidateManifestAcceptsRetainMoveAndNestedOwnerDestination(t *testing.T
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 		Packages: []PackageMapping{
 			{
 				PackagePath: "pkg/services/work",
@@ -85,6 +86,7 @@ func TestValidateManifestRejectsDestinationOutsideClosedSet(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 		Packages: []PackageMapping{
 			{
 				PackagePath: "pkg/services/mystery",
@@ -116,6 +118,7 @@ func TestValidateManifestRejectsNestedDestinationWithUnknownOwner(t *testing.T) 
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 		Packages: []PackageMapping{
 			{
 				PackagePath: "pkg/services/work/legacy",
@@ -144,6 +147,7 @@ func TestValidateManifestRequiresDeletionSuccessorAndCondition(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 	}
 
 	missingBoth := base
@@ -192,6 +196,7 @@ func TestValidateManifestRejectsAlteredVocabulary(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
+		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 	}
 
 	err := validateManifest(manifest)
