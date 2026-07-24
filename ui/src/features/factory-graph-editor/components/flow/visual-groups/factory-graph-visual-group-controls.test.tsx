@@ -67,10 +67,7 @@ describe("FactoryGraphVisualGroupControls", () => {
       }),
     );
 
-    expect(onToggleNodeMembership).toHaveBeenCalledWith(
-      "worker:writer",
-      true,
-    );
+    expect(onToggleNodeMembership).toHaveBeenCalledWith("worker:writer", true);
   });
 
   it("invokes color selection when a group color option is activated", async () => {
@@ -271,9 +268,7 @@ describe("FactoryGraphVisualGroupControls", () => {
 
     render(
       <FactoryGraphVisualGroupControls
-        canvasNodeOptions={[
-          { id: "workstation:draft", label: "Draft" },
-        ]}
+        canvasNodeOptions={[{ id: "workstation:draft", label: "Draft" }]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
         boundsError={null}

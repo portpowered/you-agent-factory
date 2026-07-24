@@ -1,15 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
-
-import { resolveFactoryGraphEditorDirtyState } from "../lib/editor-runtime/factory-graph-editor-dirty-state";
-import { resolveProjectedLayoutPositions } from "../lib/layout/factory-graph-layout-operations";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
 } from "../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import { createFactoryGraphWorkstationResolver } from "../lib/editor/factory-graph-editor-connections";
+import { resolveFactoryGraphEditorDirtyState } from "../lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
 import { updateFactoryGraphNodeField } from "../lib/editor-runtime/factory-graph-field-operations";
+import { resolveProjectedLayoutPositions } from "../lib/layout/factory-graph-layout-operations";
 import {
   addFactoryGraphNode,
   buildFactoryGraphState,

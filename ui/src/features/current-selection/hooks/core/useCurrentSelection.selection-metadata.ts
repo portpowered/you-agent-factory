@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-
-import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../../api/events/types";
 import {
   findFactoryWorkerInSnapshot,

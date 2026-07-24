@@ -15,17 +15,15 @@ import {
 } from "../../widget/current-selection-widget-test-utils";
 
 const graphBulkSelectionBridgeState = vi.hoisted(() => ({
-  value: null as
-    | {
-        bulkSelectionSummary: {
-          totalCount: number;
-          kindCounts: Array<{ count: number; kind: string }>;
-        } | null;
-        primaryTarget: { kind: "node"; id: string } | null;
-        selectedEdgeIds: string[];
-        selectedNodeIds: string[];
-      }
-    | null,
+  value: null as {
+    bulkSelectionSummary: {
+      totalCount: number;
+      kindCounts: Array<{ count: number; kind: string }>;
+    } | null;
+    primaryTarget: { kind: "node"; id: string } | null;
+    selectedEdgeIds: string[];
+    selectedNodeIds: string[];
+  } | null,
 }));
 
 vi.mock(
@@ -214,7 +212,9 @@ describe("CurrentSelectionWidget graph bulk selection restoration", () => {
       />,
     );
 
-    const restoredPanel = screen.getByRole("article", { name: "Current selection" });
+    const restoredPanel = screen.getByRole("article", {
+      name: "Current selection",
+    });
     expect(
       within(restoredPanel).queryByText("Multiple graph items selected"),
     ).toBeNull();

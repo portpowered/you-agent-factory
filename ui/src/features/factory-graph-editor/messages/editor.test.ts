@@ -25,29 +25,32 @@ describe("getFactoryGraphEditorMessages", () => {
   it.each([
     ["en", "Factory graph editor tools", "Add entity", "Observe"],
     ["zh-CN", "工厂图编辑器工具", "添加实体", "观察"],
-  ] as const)("resolves %s editor catalog copy", (locale, expectedToolbarLabel, expectedAddEntityAction, expectedObserveMode) => {
-    const messages = getFactoryGraphEditorMessages(locale);
+  ] as const)(
+    "resolves %s editor catalog copy",
+    (locale, expectedToolbarLabel, expectedAddEntityAction, expectedObserveMode) => {
+      const messages = getFactoryGraphEditorMessages(locale);
 
-    expect(messages.toolbarAriaLabel).toBe(expectedToolbarLabel);
-    expect(messages.addDialogAddEntityAction).toBe(expectedAddEntityAction);
-    expect(messages.modeObserve).toBe(expectedObserveMode);
-    expect(messages.modeEnterEditor).toBe(
-      locale === "en" ? "Edit mode" : "编辑模式",
-    );
-    expect(messages.modeLeaveEditor).toBe(
-      locale === "en" ? "Leave editor" : "离开编辑器",
-    );
-    expect(messages.toolbarAddLabel).toBe(locale === "en" ? "Add" : "添加");
-    expect(messages.toolbarConnectLabel).toBe(
-      locale === "en" ? "Connect" : "连接",
-    );
-    expect(messages.toolbarDeleteLabel).toBe(
-      locale === "en" ? "Delete" : "删除",
-    );
-    expect(messages.modeUnsavedChanges).toBe(
-      locale === "en" ? "Unsaved changes" : "未保存的更改",
-    );
-  });
+      expect(messages.toolbarAriaLabel).toBe(expectedToolbarLabel);
+      expect(messages.addDialogAddEntityAction).toBe(expectedAddEntityAction);
+      expect(messages.modeObserve).toBe(expectedObserveMode);
+      expect(messages.modeEnterEditor).toBe(
+        locale === "en" ? "Edit mode" : "编辑模式",
+      );
+      expect(messages.modeLeaveEditor).toBe(
+        locale === "en" ? "Leave editor" : "离开编辑器",
+      );
+      expect(messages.toolbarAddLabel).toBe(locale === "en" ? "Add" : "添加");
+      expect(messages.toolbarConnectLabel).toBe(
+        locale === "en" ? "Connect" : "连接",
+      );
+      expect(messages.toolbarDeleteLabel).toBe(
+        locale === "en" ? "Delete" : "删除",
+      );
+      expect(messages.modeUnsavedChanges).toBe(
+        locale === "en" ? "Unsaved changes" : "未保存的更改",
+      );
+    },
+  );
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getFactoryGraphEditorMessages("en");
@@ -86,12 +89,15 @@ describe("getFactoryGraphEditorMessages", () => {
       "Add work state",
       "Append a new ordered state to an existing work type.",
     ],
-  ] as const)("describes English add-dialog copy for %s drafts", (kind, expectedTitle, expectedDescription) => {
-    const messages = getFactoryGraphEditorMessages("en");
+  ] as const)(
+    "describes English add-dialog copy for %s drafts",
+    (kind, expectedTitle, expectedDescription) => {
+      const messages = getFactoryGraphEditorMessages("en");
 
-    expect(messages.addDialogTitle(kind)).toBe(expectedTitle);
-    expect(messages.addDialogDescription(kind)).toBe(expectedDescription);
-  });
+      expect(messages.addDialogTitle(kind)).toBe(expectedTitle);
+      expect(messages.addDialogDescription(kind)).toBe(expectedDescription);
+    },
+  );
 
   it.each([
     ["resource", "Resource"],
@@ -226,176 +232,178 @@ describe("getFactoryGraphEditorMessages", () => {
     ).toBe("此保存将应用 2 个新增实体、1 个删除实体 和 1 条更改边。");
   });
 
-  it.each([
-    "en",
-    "zh-CN",
-  ] as const)("exercises the full %s dynamic message catalog", (locale) => {
-    const messages = getFactoryGraphEditorMessages(locale);
-    const addKinds = [
-      "workstation",
-      "worker",
-      "resource",
-      "work-type",
-      "work-state",
-    ] as const;
-    const anchorIds = [
-      "worker-resource-source",
-      "workstation-resource-source",
-      "worker-input-target",
-      "worker-assignment-source",
-      "workstation-input-source",
-      "workstation-input-target",
-      "workstation-output-source",
-      "work-state-input-target",
-      "workstation-on-continue-source",
-      "work-state-input-target",
-      "workstation-on-failure-source",
-      "work-state-input-target",
-      "workstation-on-rejection-source",
-      "work-state-input-target",
-      "worker-assignment-target",
-      "workstation-resource-target",
-      "unknown-anchor",
-    ] as const;
-    const edgeKinds = [
-      "worker-assignment",
-      "worker-resource",
-      "work-type-state",
-      "workstation-input",
-      "workstation-output",
-      "workstation-on-continue",
-      "workstation-on-failure",
-      "workstation-on-rejection",
-      "workstation-resource",
-    ] as const;
+  it.each(["en", "zh-CN"] as const)(
+    "exercises the full %s dynamic message catalog",
+    (locale) => {
+      const messages = getFactoryGraphEditorMessages(locale);
+      const addKinds = [
+        "workstation",
+        "worker",
+        "resource",
+        "work-type",
+        "work-state",
+      ] as const;
+      const anchorIds = [
+        "worker-resource-source",
+        "workstation-resource-source",
+        "worker-input-target",
+        "worker-assignment-source",
+        "workstation-input-source",
+        "workstation-input-target",
+        "workstation-output-source",
+        "work-state-input-target",
+        "workstation-on-continue-source",
+        "work-state-input-target",
+        "workstation-on-failure-source",
+        "work-state-input-target",
+        "workstation-on-rejection-source",
+        "work-state-input-target",
+        "worker-assignment-target",
+        "workstation-resource-target",
+        "unknown-anchor",
+      ] as const;
+      const edgeKinds = [
+        "worker-assignment",
+        "worker-resource",
+        "work-type-state",
+        "workstation-input",
+        "workstation-output",
+        "workstation-on-continue",
+        "workstation-on-failure",
+        "workstation-on-rejection",
+        "workstation-resource",
+      ] as const;
 
-    for (const kind of addKinds) {
-      expect(messages.addDialogTitle(kind)).toEqual(expect.any(String));
-      expect(messages.addDialogDescription(kind)).toEqual(expect.any(String));
-      expect(messages.addMenuAction(kind)).toEqual({
-        description: expect.any(String),
-        label: expect.any(String),
-      });
-      expect(messages.kindLabel(kind)).toEqual(expect.any(String));
-      expect(messages.validationMissingRequiredIdentifier(kind)).toEqual(
+      for (const kind of addKinds) {
+        expect(messages.addDialogTitle(kind)).toEqual(expect.any(String));
+        expect(messages.addDialogDescription(kind)).toEqual(expect.any(String));
+        expect(messages.addMenuAction(kind)).toEqual({
+          description: expect.any(String),
+          label: expect.any(String),
+        });
+        expect(messages.kindLabel(kind)).toEqual(expect.any(String));
+        expect(messages.validationMissingRequiredIdentifier(kind)).toEqual(
+          expect.any(String),
+        );
+        expect(
+          messages.removalDescription({
+            connectedEdgeCount: kind === "worker" ? 0 : 2,
+            impactedStateCount: 3,
+            kind,
+            label: "story",
+          }),
+        ).toEqual(expect.any(String));
+        expect(messages.removalEntityConfirmLabel("story", kind)).toEqual(
+          expect.any(String),
+        );
+        expect(messages.removalEntityTitle("story", kind)).toEqual(
+          expect.any(String),
+        );
+      }
+
+      for (const anchorId of anchorIds) {
+        expect(messages.connectionAnchorDescription(anchorId)).toEqual(
+          expect.any(String),
+        );
+        expect(messages.connectionAnchorLabel(anchorId)).toEqual(
+          expect.any(String),
+        );
+      }
+
+      for (const edgeKind of edgeKinds) {
+        expect(messages.edgeKindLabel(edgeKind)).toEqual(expect.any(String));
+        expect(
+          messages.removalEdgeDescription(edgeKind, "source", "target"),
+        ).toEqual(expect.any(String));
+        expect(messages.removalEdgeLabel(edgeKind, "source")).toEqual(
+          expect.any(String),
+        );
+      }
+
+      for (const stateType of [
+        "INITIAL",
+        "PROCESSING",
+        "TERMINAL",
+        "FAILED",
+      ] as const) {
+        expect(messages.stateTypeLabel(stateType)).toEqual(expect.any(String));
+        expect(messages.workStatePhaseLegendLabel(stateType)).toEqual(
+          expect.any(String),
+        );
+      }
+
+      for (const status of [
+        "active",
+        "errored",
+        "idle",
+        "unavailable",
+      ] as const) {
+        expect(messages.workerStatusLabel(status)).toEqual(expect.any(String));
+      }
+
+      expect(messages.edgeAriaLabel("route", "source", "target")).toEqual(
+        expect.any(String),
+      );
+      expect(messages.modeClassifierRoutesUnavailable("classifier")).toEqual(
         expect.any(String),
       );
       expect(
-        messages.removalDescription({
-          connectedEdgeCount: kind === "worker" ? 0 : 2,
-          impactedStateCount: 3,
-          kind,
-          label: "story",
+        messages.connectionIncompatibleNotice(
+          "output",
+          "review",
+          "input",
+          "done",
+        ),
+      ).toEqual(expect.any(String));
+      expect(messages.validationDuplicateIdentifier("duplicate")).toEqual(
+        expect.any(String),
+      );
+      expect(
+        messages.validationIncompatibleEdge("route", "source", "target"),
+      ).toEqual(expect.any(String));
+      expect(messages.validationMissingWorkerAssignment("review")).toEqual(
+        expect.any(String),
+      );
+      expect(messages.validationUnknownEdgeNode("route", "source")).toEqual(
+        expect.any(String),
+      );
+      expect(messages.validationUnknownEdgeNode("route", "target")).toEqual(
+        expect.any(String),
+      );
+      expect(
+        messages.saveSummaryDescription({
+          changedEdges: 0,
+          createdEntities: 0,
+          removedEntities: 0,
         }),
       ).toEqual(expect.any(String));
-      expect(messages.removalEntityConfirmLabel("story", kind)).toEqual(
-        expect.any(String),
-      );
-      expect(messages.removalEntityTitle("story", kind)).toEqual(
-        expect.any(String),
-      );
-    }
-
-    for (const anchorId of anchorIds) {
-      expect(messages.connectionAnchorDescription(anchorId)).toEqual(
-        expect.any(String),
-      );
-      expect(messages.connectionAnchorLabel(anchorId)).toEqual(
-        expect.any(String),
-      );
-    }
-
-    for (const edgeKind of edgeKinds) {
-      expect(messages.edgeKindLabel(edgeKind)).toEqual(expect.any(String));
       expect(
-        messages.removalEdgeDescription(edgeKind, "source", "target"),
+        messages.saveSummaryDescription({
+          changedEdges: 1,
+          createdEntities: 0,
+          removedEntities: 0,
+        }),
       ).toEqual(expect.any(String));
-      expect(messages.removalEdgeLabel(edgeKind, "source")).toEqual(
+      expect(
+        messages.saveSummaryDescription({
+          changedEdges: 1,
+          createdEntities: 1,
+          removedEntities: 1,
+        }),
+      ).toEqual(expect.any(String));
+      expect(messages.removalEdgeConfirmLabel("route")).toEqual(
         expect.any(String),
       );
-    }
-
-    for (const stateType of [
-      "INITIAL",
-      "PROCESSING",
-      "TERMINAL",
-      "FAILED",
-    ] as const) {
-      expect(messages.stateTypeLabel(stateType)).toEqual(expect.any(String));
-      expect(messages.workStatePhaseLegendLabel(stateType)).toEqual(
+      expect(messages.removalEdgeTitle("route")).toEqual(expect.any(String));
+      expect(messages.removalWorkerAssignedReason(2, "writer")).toEqual(
         expect.any(String),
       );
-    }
-
-    for (const status of [
-      "active",
-      "errored",
-      "idle",
-      "unavailable",
-    ] as const) {
-      expect(messages.workerStatusLabel(status)).toEqual(expect.any(String));
-    }
-
-    expect(messages.edgeAriaLabel("route", "source", "target")).toEqual(
-      expect.any(String),
-    );
-    expect(messages.modeClassifierRoutesUnavailable("classifier")).toEqual(
-      expect.any(String),
-    );
-    expect(
-      messages.connectionIncompatibleNotice(
-        "output",
-        "review",
-        "input",
-        "done",
-      ),
-    ).toEqual(expect.any(String));
-    expect(messages.validationDuplicateIdentifier("duplicate")).toEqual(
-      expect.any(String),
-    );
-    expect(
-      messages.validationIncompatibleEdge("route", "source", "target"),
-    ).toEqual(expect.any(String));
-    expect(messages.validationMissingWorkerAssignment("review")).toEqual(
-      expect.any(String),
-    );
-    expect(messages.validationUnknownEdgeNode("route", "source")).toEqual(
-      expect.any(String),
-    );
-    expect(messages.validationUnknownEdgeNode("route", "target")).toEqual(
-      expect.any(String),
-    );
-    expect(
-      messages.saveSummaryDescription({
-        changedEdges: 0,
-        createdEntities: 0,
-        removedEntities: 0,
-      }),
-    ).toEqual(expect.any(String));
-    expect(
-      messages.saveSummaryDescription({
-        changedEdges: 1,
-        createdEntities: 0,
-        removedEntities: 0,
-      }),
-    ).toEqual(expect.any(String));
-    expect(
-      messages.saveSummaryDescription({
-        changedEdges: 1,
-        createdEntities: 1,
-        removedEntities: 1,
-      }),
-    ).toEqual(expect.any(String));
-    expect(messages.removalEdgeConfirmLabel("route")).toEqual(
-      expect.any(String),
-    );
-    expect(messages.removalEdgeTitle("route")).toEqual(expect.any(String));
-    expect(messages.removalWorkerAssignedReason(2, "writer")).toEqual(
-      expect.any(String),
-    );
-    expect(messages.zAxisIncompleteConnectionHint).toEqual(expect.any(String));
-    expect(messages.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
-  });
+      expect(messages.zAxisIncompleteConnectionHint).toEqual(
+        expect.any(String),
+      );
+      expect(messages.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+    },
+  );
 
   it("resolves layout dirty-state, save confirm, and toolbar history copy", () => {
     const messages = getFactoryGraphEditorMessages("en");

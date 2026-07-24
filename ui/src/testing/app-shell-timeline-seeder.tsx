@@ -20,10 +20,7 @@ interface AppShellTimelineSeederProps {
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
   traceFixtures: Record<string, DashboardTrace>;
-  workstationRequestsByDispatchID: Record<
-    string,
-    DashboardWorkstationRequest
-  >;
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
 }
 
 interface AppShellSeededAppProps extends AppShellTimelineSeederProps {

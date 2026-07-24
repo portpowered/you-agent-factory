@@ -26,27 +26,25 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
-vi.mock(
-  "@you-agent-factory/components/overlays",
-  async (importOriginal) => {
-    const actual = await importOriginal<
+vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
+  const actual =
+    await importOriginal<
       typeof import("@you-agent-factory/components/overlays")
     >();
-    const mockDialog = await import("../../../testing/mock-dashboard-dialog");
+  const mockDialog = await import("../../../testing/mock-dashboard-dialog");
 
-    return {
-      ...actual,
-      Dialog: mockDialog.Dialog,
-      DialogContent: mockDialog.DialogContent,
-      DialogDescription: mockDialog.DialogDescription,
-      DialogFooter: mockDialog.DialogFooter,
-      DialogHeader: mockDialog.DialogHeader,
-      DialogOverlay: mockDialog.DialogOverlay,
-      DialogPortal: mockDialog.DialogPortal,
-      DialogTitle: mockDialog.DialogTitle,
-    };
-  },
-);
+  return {
+    ...actual,
+    Dialog: mockDialog.Dialog,
+    DialogContent: mockDialog.DialogContent,
+    DialogDescription: mockDialog.DialogDescription,
+    DialogFooter: mockDialog.DialogFooter,
+    DialogHeader: mockDialog.DialogHeader,
+    DialogOverlay: mockDialog.DialogOverlay,
+    DialogPortal: mockDialog.DialogPortal,
+    DialogTitle: mockDialog.DialogTitle,
+  };
+});
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -388,48 +386,47 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       ],
       menuAction: "Workstation",
     },
-  ])("renders newly added $menuAction nodes from the sample factory toolbar flow", async ({
-    expectedNodeNames,
-    fields,
-    menuAction,
-  }) => {
-    const sampleFactoryDocument = loadSampleFactoryDocument();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: sampleFactoryDocument,
-      error: null,
-      status: "success",
-    } as never);
+  ])(
+    "renders newly added $menuAction nodes from the sample factory toolbar flow",
+    async ({ expectedNodeNames, fields, menuAction }) => {
+      const sampleFactoryDocument = loadSampleFactoryDocument();
+      vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+        data: sampleFactoryDocument,
+        error: null,
+        status: "success",
+      } as never);
 
-    renderCurrentActivity(createSnapshot(sampleFactoryDocument));
-    enterEditorMode();
+      renderCurrentActivity(createSnapshot(sampleFactoryDocument));
+      enterEditorMode();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
-    fireEvent.click(screen.getByRole("button", { name: menuAction }));
-    const user = userEvent.setup();
-    for (const field of fields) {
-      if ("role" in field && field.role === "combobox") {
-        await selectLabeledComboboxOption(
-          user,
-          field.label,
-          "optionLabel" in field && field.optionLabel
-            ? field.optionLabel
-            : field.value,
-        );
-        continue;
+      fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+      fireEvent.click(screen.getByRole("button", { name: menuAction }));
+      const user = userEvent.setup();
+      for (const field of fields) {
+        if ("role" in field && field.role === "combobox") {
+          await selectLabeledComboboxOption(
+            user,
+            field.label,
+            "optionLabel" in field && field.optionLabel
+              ? field.optionLabel
+              : field.value,
+          );
+          continue;
+        }
+
+        fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
+          target: { value: field.value },
+        });
       }
+      fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
-      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
-        target: { value: field.value },
-      });
-    }
-    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
-
-    for (const expectedNodeName of expectedNodeNames) {
-      expect(
-        await screen.findByRole("button", { name: expectedNodeName }),
-      ).toBeTruthy();
-    }
-  });
+      for (const expectedNodeName of expectedNodeNames) {
+        expect(
+          await screen.findByRole("button", { name: expectedNodeName }),
+        ).toBeTruthy();
+      }
+    },
+  );
 
   it("confirms workstation deletion before removing it from the rendered graph", async () => {
     renderCurrentActivity();

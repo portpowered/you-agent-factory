@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import { PackageCheckbox } from "./package-checkbox";
 import { PackageFileInput } from "./package-file-input";
 import { PackageInput } from "./package-input";
@@ -49,10 +45,7 @@ function ControlledTextareaExample() {
 
 function UncontrolledTextareaExample() {
   return (
-    <PackageTextarea
-      aria-label="Factory notes"
-      defaultValue="Initial notes"
-    />
+    <PackageTextarea aria-label="Factory notes" defaultValue="Initial notes" />
   );
 }
 
@@ -72,10 +65,7 @@ function ControlledCheckboxExample() {
 
 function UncontrolledCheckboxExample() {
   return (
-    <PackageCheckbox
-      aria-label="Enable cron trigger"
-      defaultChecked={false}
-    />
+    <PackageCheckbox aria-label="Enable cron trigger" defaultChecked={false} />
   );
 }
 
@@ -87,17 +77,15 @@ describe("Package input primitive value state", () => {
       <ControlledInputExample />,
     );
 
-    const controlledInput = screen.getByLabelText<HTMLInputElement>(
-      "Factory name",
-    );
+    const controlledInput =
+      screen.getByLabelText<HTMLInputElement>("Factory name");
     await user.type(controlledInput, "Alpha");
     expect(controlledInput.value).toBe("Alpha");
     unmountControlled();
 
     renderPackageComponent(<UncontrolledInputExample />);
-    const uncontrolledInput = screen.getByLabelText<HTMLInputElement>(
-      "Factory name",
-    );
+    const uncontrolledInput =
+      screen.getByLabelText<HTMLInputElement>("Factory name");
     expect(uncontrolledInput.value).toBe("Initial value");
     await user.clear(uncontrolledInput);
     await user.type(uncontrolledInput, "Beta");
@@ -111,17 +99,15 @@ describe("Package input primitive value state", () => {
       <ControlledTextareaExample />,
     );
 
-    const controlledTextarea = screen.getByLabelText<HTMLTextAreaElement>(
-      "Factory notes",
-    );
+    const controlledTextarea =
+      screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
     await user.type(controlledTextarea, "Updated notes");
     expect(controlledTextarea.value).toBe("Updated notes");
     unmountControlled();
 
     renderPackageComponent(<UncontrolledTextareaExample />);
-    const uncontrolledTextarea = screen.getByLabelText<HTMLTextAreaElement>(
-      "Factory notes",
-    );
+    const uncontrolledTextarea =
+      screen.getByLabelText<HTMLTextAreaElement>("Factory notes");
     expect(uncontrolledTextarea.value).toBe("Initial notes");
     await user.clear(uncontrolledTextarea);
     await user.type(uncontrolledTextarea, "Revised notes");
@@ -167,13 +153,12 @@ describe("Package input primitive value state", () => {
     const onChange = vi.fn();
 
     renderPackageComponent(
-      <PackageFileInput
-        aria-label="Factory cover image"
-        onChange={onChange}
-      />,
+      <PackageFileInput aria-label="Factory cover image" onChange={onChange} />,
     );
 
-    const input = screen.getByLabelText<HTMLInputElement>("Factory cover image");
+    const input = screen.getByLabelText<HTMLInputElement>(
+      "Factory cover image",
+    );
     const file = new File(["cover"], "cover.png", { type: "image/png" });
 
     await user.upload(input, file);
@@ -217,7 +202,9 @@ describe("Package input primitive disabled behavior", () => {
     );
 
     const input = screen.getByLabelText("Disabled name");
-    const checkbox = screen.getByRole("checkbox", { name: "Disabled checkbox" });
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Disabled checkbox",
+    });
     const fileInput = screen.getByLabelText("Disabled file");
 
     expect(input).toBeDisabled();
@@ -321,8 +308,12 @@ describe("Package input primitive invalid and error relationships", () => {
     );
 
     expect(input.className).toContain("aria-invalid:border-af-danger-border");
-    expect(textarea.className).toContain("aria-invalid:border-af-danger-border");
-    expect(fileInput.className).toContain("aria-invalid:border-af-danger-border");
+    expect(textarea.className).toContain(
+      "aria-invalid:border-af-danger-border",
+    );
+    expect(fileInput.className).toContain(
+      "aria-invalid:border-af-danger-border",
+    );
 
     const checkboxIndicator = checkbox.nextElementSibling;
     expect(checkboxIndicator?.className).toContain(

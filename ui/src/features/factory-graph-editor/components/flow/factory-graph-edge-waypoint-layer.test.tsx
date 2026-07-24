@@ -13,7 +13,9 @@ function enablePointerCapture(element: HTMLElement) {
 }
 
 function renderWaypointLayer(
-  props: Partial<React.ComponentProps<typeof FactoryGraphEdgeWaypointLayer>> = {},
+  props: Partial<
+    React.ComponentProps<typeof FactoryGraphEdgeWaypointLayer>
+  > = {},
 ) {
   const onMoveWaypoint = vi.fn();
   const onRemoveWaypoint = vi.fn();

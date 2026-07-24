@@ -40,9 +40,7 @@ export const LongSingleLine: Story = {
 export const LongMultiLine: Story = {
   render: () => (
     <div className="w-full max-w-md">
-      <CodePanel maxHeight="md">
-        {LONG_MULTI_LINE}
-      </CodePanel>
+      <CodePanel maxHeight="md">{LONG_MULTI_LINE}</CodePanel>
     </div>
   ),
 };

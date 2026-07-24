@@ -10,7 +10,8 @@ export interface FactorySessionWidgetMessages {
 
 const factorySessionWidgetMessagesByLocale = {
   en: {
-    emptyState: "Select a live factory session to inspect orchestrator runtime.",
+    emptyState:
+      "Select a live factory session to inspect orchestrator runtime.",
     title: "Factory session",
   },
   "zh-CN": {

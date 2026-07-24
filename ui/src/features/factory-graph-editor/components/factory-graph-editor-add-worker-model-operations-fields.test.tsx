@@ -37,7 +37,8 @@ describe("FactoryGraphEditorAddWorkerModelOperationsFields", () => {
               name: "Operation names must be uppercase letters, digits, or underscores.",
             },
           },
-          summary: "Fix model operation contract errors before adding this worker.",
+          summary:
+            "Fix model operation contract errors before adding this worker.",
         }}
         onChange={onChange}
         operations={operations}

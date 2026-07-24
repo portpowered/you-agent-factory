@@ -32,9 +32,7 @@ describe("dashboard typography components", () => {
     );
 
     expect(screen.getByText("Body copy").tagName).toBe("P");
-    expect(screen.getByText("Body copy").className).toContain(
-      "af-body-text",
-    );
+    expect(screen.getByText("Body copy").className).toContain("af-body-text");
     expect(screen.getByText("Supporting copy").tagName).toBe("SPAN");
     expect(screen.getByText("Supporting copy").className).toContain(
       "af-supporting-text",

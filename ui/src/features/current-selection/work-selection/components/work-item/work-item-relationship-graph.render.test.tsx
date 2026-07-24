@@ -204,7 +204,9 @@ describe("WorkRelationshipsSection repeated DEPENDS_ON rendering", () => {
     });
 
     expect(within(traceGraph).getByText("Dependency Story")).toBeTruthy();
-    expect(within(traceGraph).getByText("Second Dependency Story")).toBeTruthy();
+    expect(
+      within(traceGraph).getByText("Second Dependency Story"),
+    ).toBeTruthy();
     expect(within(traceGraph).getByText("Active Story")).toBeTruthy();
 
     await waitFor(() => {
@@ -263,7 +265,9 @@ describe("WorkRelationshipsSection repeated DEPENDS_ON rendering", () => {
     });
 
     await waitFor(() => {
-      expect(renderedEdgeCount(traceGraph)).toBe(relationshipGraph.relations.length);
+      expect(renderedEdgeCount(traceGraph)).toBe(
+        relationshipGraph.relations.length,
+      );
     });
 
     const edgePayload = traceGraph
@@ -272,8 +276,10 @@ describe("WorkRelationshipsSection repeated DEPENDS_ON rendering", () => {
     if (!edgePayload) {
       throw new Error("Expected rendered edge payload.");
     }
-    const loopbackEdges = (JSON.parse(edgePayload) as Array<{ id: string }>).filter(
-      (edge) => edge.id.includes("work-local-agent-cli-runtime-loopback"),
+    const loopbackEdges = (
+      JSON.parse(edgePayload) as Array<{ id: string }>
+    ).filter((edge) =>
+      edge.id.includes("work-local-agent-cli-runtime-loopback"),
     );
     expect(loopbackEdges).toHaveLength(5);
     expect(

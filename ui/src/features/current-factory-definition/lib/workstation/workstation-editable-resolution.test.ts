@@ -16,7 +16,9 @@ describe("workstation editable resolution lookups", () => {
   it("resolves canonical workstations by transition id or workstation name", () => {
     const factory = {
       name: "Factory",
-      workers: [{ name: "writer", model: "gpt-5", type: "MODEL_WORKER" as const }],
+      workers: [
+        { name: "writer", model: "gpt-5", type: "MODEL_WORKER" as const },
+      ],
       workstations: [
         { id: "review-id", name: "Review", worker: "writer" },
         { name: "Plan", worker: "writer" },
@@ -137,7 +139,9 @@ describe("workstation editable resolution projections", () => {
       },
     ]);
     expect(
-      applyEditableWorkstationInputs(resolveEditableWorkstationInputs(workstation)),
+      applyEditableWorkstationInputs(
+        resolveEditableWorkstationInputs(workstation),
+      ),
     ).toEqual([
       {
         state: "queued",

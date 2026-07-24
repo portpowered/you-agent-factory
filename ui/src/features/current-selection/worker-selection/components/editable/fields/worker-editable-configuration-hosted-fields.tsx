@@ -1,14 +1,14 @@
 import { EDITABLE_HOSTED_PROVIDERS } from "../../../../../current-factory-definition/lib/worker-editable-values";
-import type {
-  ReadyWorkerEditableConfigurationState,
-  ReadyWorkerEditableValidationErrors,
-  WorkerEditableConfigurationMessages,
-} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationServerChangedHint,
   WorkerOptionalEnumSelect,
 } from "./primitives/worker-editable-configuration-field-primitives";
+import type {
+  ReadyWorkerEditableConfigurationState,
+  ReadyWorkerEditableValidationErrors,
+  WorkerEditableConfigurationMessages,
+} from "./primitives/worker-editable-configuration-field-types";
 import { LinearHostedWorkerEditableFields } from "./worker-editable-configuration-linear-hosted-fields";
 
 export function WorkerEditableConfigurationHostedFields({

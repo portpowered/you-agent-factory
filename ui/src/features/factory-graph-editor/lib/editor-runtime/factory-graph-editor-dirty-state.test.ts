@@ -45,7 +45,9 @@ describe("factory graph editor dirty state", () => {
     });
 
     expect(resolveFactoryGraphSaveSummaryKind(mixed)).toBe("mixed");
-    expect(resolveFactoryGraphSaveSummaryKind(topologyOnly)).toBe("topology-only");
+    expect(resolveFactoryGraphSaveSummaryKind(topologyOnly)).toBe(
+      "topology-only",
+    );
   });
 
   it("reports when any editor surface changed including preferences", () => {
@@ -56,10 +58,12 @@ describe("factory graph editor dirty state", () => {
     });
 
     expect(hasAnyFactoryGraphEditorChanges(dirty)).toBe(true);
-    expect(hasAnyFactoryGraphEditorChanges({
-      layoutDirty: false,
-      preferencesDirty: false,
-      topologyDirty: false,
-    })).toBe(false);
+    expect(
+      hasAnyFactoryGraphEditorChanges({
+        layoutDirty: false,
+        preferencesDirty: false,
+        topologyDirty: false,
+      }),
+    ).toBe(false);
   });
 });

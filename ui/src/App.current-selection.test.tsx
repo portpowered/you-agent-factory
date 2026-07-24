@@ -323,9 +323,7 @@ describe("App current selection", () => {
       expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
     });
 
-    fireEvent.click(
-      await screen.findByLabelText("Select Review workstation"),
-    );
+    fireEvent.click(await screen.findByLabelText("Select Review workstation"));
 
     const workstationDetail = await screen.findByRole("article", {
       name: "Current selection",
@@ -474,8 +472,9 @@ describe("App current selection", () => {
         .getAttribute("aria-pressed"),
     ).toBeNull();
     expect(
-      within(screen.getByRole("article", { name: "Current selection" }))
-        .getByText(activeWorkID),
+      within(
+        screen.getByRole("article", { name: "Current selection" }),
+      ).getByText(activeWorkID),
     ).toBeTruthy();
 
     const planButton = await screen.findByLabelText("Select Plan workstation");
@@ -635,9 +634,9 @@ describe("App current selection", () => {
         expect(traceGridItem.getAttribute("style")).toBe(movedStyle);
       });
       expect(
-        (await screen.findByLabelText("Select Review workstation")).getAttribute(
-          "aria-pressed",
-        ),
+        (
+          await screen.findByLabelText("Select Review workstation")
+        ).getAttribute("aria-pressed"),
       ).toBe(initialGraphSelectionState);
       expect(
         await within(dashboardGrid).findByText("Trace dispatch grid"),

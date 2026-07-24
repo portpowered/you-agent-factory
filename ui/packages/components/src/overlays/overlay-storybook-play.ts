@@ -13,12 +13,12 @@ export async function verifyDialogKeyboardFocus({
 
   const dialog = await page.findByRole("dialog", { name: "Package dialog" });
   expect(dialog).toBeVisible();
-  expect(
-    within(dialog).getByRole("button", { name: "Close" }),
-  ).toHaveFocus();
+  expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
 
   await userEvent.keyboard("{Escape}");
-  await expect(page.queryByRole("dialog", { name: "Package dialog" })).toBeNull();
+  await expect(
+    page.queryByRole("dialog", { name: "Package dialog" }),
+  ).toBeNull();
   await expect(trigger).toHaveFocus();
 }
 
@@ -30,10 +30,14 @@ export async function verifyDialogEscapeClose({
   const canvas = within(canvasElement);
   const page = within(canvasElement.ownerDocument.body);
 
-  const trigger = canvas.getByRole("button", { name: "Open dialog for Escape" });
+  const trigger = canvas.getByRole("button", {
+    name: "Open dialog for Escape",
+  });
   await userEvent.click(trigger);
 
-  const dialog = await page.findByRole("dialog", { name: "Escape close dialog" });
+  const dialog = await page.findByRole("dialog", {
+    name: "Escape close dialog",
+  });
   expect(dialog).toBeVisible();
 
   await userEvent.keyboard("{Escape}");

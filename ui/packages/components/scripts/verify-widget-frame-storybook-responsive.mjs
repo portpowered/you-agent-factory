@@ -3,8 +3,8 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -15,9 +15,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(path.join(uiRoot, "node_modules/playwright"));
 
 const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
-const port = Number(
-  process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3818",
-);
+const port = Number(process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3818");
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const OVERFLOW_TOLERANCE_PX = 4;
@@ -168,10 +166,12 @@ async function verifyResponsiveStory(browser, story, viewport) {
     }
 
     const [titleBox, refreshBox, expandBox] = await Promise.all([
-      frame.getByRole("heading", {
-        level: 3,
-        name: "Example widget with a longer heading label",
-      }).boundingBox(),
+      frame
+        .getByRole("heading", {
+          level: 3,
+          name: "Example widget with a longer heading label",
+        })
+        .boundingBox(),
       refreshButton.boundingBox(),
       expandButton.boundingBox(),
     ]);
@@ -215,7 +215,9 @@ async function main() {
         return;
       }
 
-      reject(new Error(`build-storybook exited with code ${code ?? "unknown"}`));
+      reject(
+        new Error(`build-storybook exited with code ${code ?? "unknown"}`),
+      );
     });
   });
 

@@ -1,5 +1,5 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useState } from "react";
-
 import type { components } from "../../../../api/generated/openapi";
 import {
   AlertPanel,
@@ -9,9 +9,6 @@ import {
   Text,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useFactorySessionArtifactDrilldown } from "../../hooks/use-factory-session-artifact-drilldown";
 import { hasUsableArtifactDownload } from "../../lib/factory-session-artifact-drilldown";
@@ -123,7 +120,9 @@ function ArtifactDrilldownBody({
   const state = useFactorySessionArtifactDrilldown(sessionID, artifactID, true);
 
   if (state.status === "loading") {
-    return <WidgetDetailCopy>{messages.artifactDetailLoadingState}</WidgetDetailCopy>;
+    return (
+      <WidgetDetailCopy>{messages.artifactDetailLoadingState}</WidgetDetailCopy>
+    );
   }
 
   if (state.status === "error") {
@@ -142,8 +141,14 @@ function ArtifactDrilldownBody({
     <div className="grid gap-3">
       <Heading as="h4">{messages.artifactDetailHeading}</Heading>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.artifactIdLabel} value={state.artifact.artifactId} />
-        <Metric label={messages.artifactKindLabel} value={state.artifact.kind} />
+        <Metric
+          label={messages.artifactIdLabel}
+          value={state.artifact.artifactId}
+        />
+        <Metric
+          label={messages.artifactKindLabel}
+          value={state.artifact.kind}
+        />
         <Metric
           label={messages.artifactVisibilityLabel}
           value={state.artifact.visibility}
@@ -221,9 +226,7 @@ function ArtifactDrilldownBody({
         ) : state.artifact.preview.kind === "download" &&
           hasUsableArtifactDownload(state.artifact) ? (
           <div className="grid gap-2">
-            <Text variant="supporting">
-              {messages.artifactDownloadState}
-            </Text>
+            <Text variant="supporting">{messages.artifactDownloadState}</Text>
             <ButtonLink
               className="w-fit"
               href={state.artifact.preview.contentRef.href}

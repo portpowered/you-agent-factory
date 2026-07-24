@@ -64,8 +64,12 @@ describe("dashboard overlay package migration", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Open export" }));
-    expect(screen.getByRole("dialog", { name: "Export factory" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close dialog" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Export factory" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Close dialog" }),
+    ).toBeInTheDocument();
 
     rerender(
       <main>

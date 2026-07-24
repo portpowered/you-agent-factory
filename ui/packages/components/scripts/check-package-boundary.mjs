@@ -9,7 +9,12 @@ import { resolveRelativeImport } from "./resolve-relative-import.mjs";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageDir = path.resolve(scriptDir, "..");
 const defaultPackageSrcDir = path.join(defaultPackageDir, "src");
-const defaultDashboardSrcDir = path.resolve(defaultPackageDir, "..", "..", "src");
+const defaultDashboardSrcDir = path.resolve(
+  defaultPackageDir,
+  "..",
+  "..",
+  "src",
+);
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [
   ".test.js",
@@ -112,24 +117,21 @@ function classifyDashboardSrcImport(relativeToDashboardSrc) {
   if (relativeToDashboardSrc.startsWith("api/")) {
     return {
       kind: "dashboard-api-import",
-      message:
-        "Package source must not import dashboard app API modules.",
+      message: "Package source must not import dashboard app API modules.",
     };
   }
 
   if (relativeToDashboardSrc.startsWith("features/dashboard/session/")) {
     return {
       kind: "dashboard-session-provider-import",
-      message:
-        "Package source must not import dashboard session providers.",
+      message: "Package source must not import dashboard session providers.",
     };
   }
 
   if (relativeToDashboardSrc.startsWith("features/")) {
     return {
       kind: "dashboard-feature-import",
-      message:
-        "Package source must not import dashboard feature modules.",
+      message: "Package source must not import dashboard feature modules.",
     };
   }
 

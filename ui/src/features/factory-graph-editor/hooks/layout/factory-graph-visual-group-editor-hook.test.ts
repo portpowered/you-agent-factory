@@ -1,12 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
+import { createDefaultFactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
   createFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
 } from "../../lib/layout/visual-groups/factory-graph-layout-groups";
-import { createDefaultFactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import { useFactoryGraphVisualGroupEditor } from "./factory-graph-visual-group-editor-hook";
 
 function layoutWithGroup() {

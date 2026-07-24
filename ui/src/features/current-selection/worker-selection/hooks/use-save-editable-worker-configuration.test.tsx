@@ -378,46 +378,49 @@ describe("useSaveEditableWorkerConfiguration", () => {
     ["factory.workers[0].provider", "provider"],
     ["factory.workers[0].type", "type"],
     ["factory.workers[0].model", "model"],
-  ] as const)("maps save validation target %s onto %s", async (_field, expectedField) => {
-    const message = `Invalid ${expectedField}.`;
-    const saveAsync = vi.fn().mockRejectedValue(
-      new CurrentFactoryDefinitionError(message, {
-        code: "BAD_REQUEST",
-        status: 400,
-        targets: [workerFieldValidationTarget(expectedField, message)],
-      }),
-    );
-    vi.spyOn(
-      factoryDocumentSaveHooks,
-      "useFactoryDocumentSave",
-    ).mockReturnValue({
-      isPending: false,
-      saveAsync,
-    } as never);
-
-    const { result } = renderHook(
-      () =>
-        useSaveEditableWorkerConfiguration({
-          editableConfigurationState: buildReadyEditableConfigurationState(),
-          scopeKey: "reviewer",
+  ] as const)(
+    "maps save validation target %s onto %s",
+    async (_field, expectedField) => {
+      const message = `Invalid ${expectedField}.`;
+      const saveAsync = vi.fn().mockRejectedValue(
+        new CurrentFactoryDefinitionError(message, {
+          code: "BAD_REQUEST",
+          status: 400,
+          targets: [workerFieldValidationTarget(expectedField, message)],
         }),
-      { wrapper: createQueryClientWrapper() },
-    );
+      );
+      vi.spyOn(
+        factoryDocumentSaveHooks,
+        "useFactoryDocumentSave",
+      ).mockReturnValue({
+        isPending: false,
+        saveAsync,
+      } as never);
 
-    await act(async () => {
-      await result.current.save();
-    });
+      const { result } = renderHook(
+        () =>
+          useSaveEditableWorkerConfiguration({
+            editableConfigurationState: buildReadyEditableConfigurationState(),
+            scopeKey: "reviewer",
+          }),
+        { wrapper: createQueryClientWrapper() },
+      );
 
-    await waitFor(() => {
-      expect(result.current.saveState).toEqual({
-        errorMessage: message,
-        fieldErrors: {
-          [expectedField]: message,
-        },
-        status: "error",
+      await act(async () => {
+        await result.current.save();
       });
-    });
-  });
+
+      await waitFor(() => {
+        expect(result.current.saveState).toEqual({
+          errorMessage: message,
+          fieldErrors: {
+            [expectedField]: message,
+          },
+          status: "error",
+        });
+      });
+    },
+  );
 });
 
 function createQueryClientWrapper() {

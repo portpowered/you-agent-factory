@@ -1,7 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-
-import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import {
   createLongParagraphs,
   POPOVER_CONTROLLED_ANCHOR,
@@ -14,6 +12,7 @@ import {
   verifyPopoverKeyboardFocus,
   verifyPopoverKeyboardOpen,
 } from "./overlay-storybook-play";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 
 const meta = {
   title: "Overlays/Popover",

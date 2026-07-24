@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { buildDraftAppliedFactoryDefinition } from "./draft/factory-graph-draft-apply";
 import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
+import {
+  applyFactoryGraphAddEntityDraft,
+  validateFactoryGraphAddEntityDraft,
+} from "./editor/factory-graph-editor-additions";
 import {
   applyFactoryGraphDocRemoval,
   buildFactoryGraphDocRemovalIntent,
   factoryGraphDocNodeIdForTargetPath,
   suggestDefaultDocFileName,
 } from "./factory-graph-doc-editor";
-import { buildDraftAppliedFactoryDefinition } from "./draft/factory-graph-draft-apply";
-import {
-  applyFactoryGraphAddEntityDraft,
-  validateFactoryGraphAddEntityDraft,
-} from "./editor/factory-graph-editor-additions";
 
 const baseFactory: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -66,11 +66,14 @@ describe("factory graph doc editor", () => {
   });
 
   it("validates and applies doc additions to the graph draft", () => {
-    const draft = applyFactoryGraphAddEntityDraft(createEmptyFactoryGraphDraft(), {
-      fileName: "notes.md",
-      inlineContent: "# Notes\n",
-      kind: "doc",
-    });
+    const draft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        fileName: "notes.md",
+        inlineContent: "# Notes\n",
+        kind: "doc",
+      },
+    );
 
     expect(draft.additions.docs).toEqual([
       {
@@ -134,11 +137,14 @@ describe("factory graph doc editor", () => {
   });
 
   it("removes draft-only docs without recording a persisted removal", () => {
-    const draft = applyFactoryGraphAddEntityDraft(createEmptyFactoryGraphDraft(), {
-      fileName: "draft-only.md",
-      inlineContent: "# Draft\n",
-      kind: "doc",
-    });
+    const draft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        fileName: "draft-only.md",
+        inlineContent: "# Draft\n",
+        kind: "doc",
+      },
+    );
 
     const nextDraft = applyFactoryGraphDocRemoval(
       draft,
@@ -151,8 +157,8 @@ describe("factory graph doc editor", () => {
   });
 
   it("builds canonical doc node ids for target paths", () => {
-    expect(
-      factoryGraphDocNodeIdForTargetPath("factory/docs/guide.md"),
-    ).toBe("doc:factory/docs/guide.md");
+    expect(factoryGraphDocNodeIdForTargetPath("factory/docs/guide.md")).toBe(
+      "doc:factory/docs/guide.md",
+    );
   });
 });

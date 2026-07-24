@@ -1,8 +1,8 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: session lifecycle replay cases share lifecycleEvent helper and replay harness.
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
 import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
-import { reconstructFactoryReplayState } from "./buildSnapshot";
 import { emptyReplayWorldState } from "./replayWorldStateSupport";
 
 function lifecycleEvent(
@@ -35,10 +35,16 @@ describe("reconstructWorldState session lifecycle replay", () => {
         sourceRef: "workflow/main.js",
         startedAt: "2026-06-09T12:00:00Z",
       }),
-      lifecycleEvent(FACTORY_EVENT_TYPES.sessionResultUpdated, "partial", 2, 2, {
-        artifactIds: ["artifact-partial"],
-        resultStatus: "PARTIAL",
-      }),
+      lifecycleEvent(
+        FACTORY_EVENT_TYPES.sessionResultUpdated,
+        "partial",
+        2,
+        2,
+        {
+          artifactIds: ["artifact-partial"],
+          resultStatus: "PARTIAL",
+        },
+      ),
       lifecycleEvent(FACTORY_EVENT_TYPES.sessionCompleted, "completed", 3, 3, {
         artifactIds: ["artifact-final"],
         completedAt: "2026-06-09T12:00:05Z",
@@ -297,7 +303,6 @@ describe("reconstructWorldState dispatch and artifact replay", () => {
       }),
     ]);
   });
-
 });
 
 describe("reconstructWorldState dispatch lifecycle bootstrap", () => {
@@ -440,7 +445,6 @@ describe("reconstructWorldState dispatch interruption replay", () => {
       status: "COMPLETED",
     });
   });
-
 });
 
 describe("lifecycle replay edge cases", () => {
@@ -528,11 +532,17 @@ describe("reconstructWorldState failed session replay", () => {
           tick: 1,
         },
       },
-      lifecycleEvent(FACTORY_EVENT_TYPES.sessionResultUpdated, "partial", 2, 2, {
-        artifactIds: ["artifact-partial"],
-        resultStatus: "FAILED_WITH_PARTIAL",
-        resultSummary: [{ text: "partial output", type: "TEXT" }],
-      }),
+      lifecycleEvent(
+        FACTORY_EVENT_TYPES.sessionResultUpdated,
+        "partial",
+        2,
+        2,
+        {
+          artifactIds: ["artifact-partial"],
+          resultStatus: "FAILED_WITH_PARTIAL",
+          resultSummary: [{ text: "partial output", type: "TEXT" }],
+        },
+      ),
       lifecycleEvent(FACTORY_EVENT_TYPES.sessionCompleted, "completed", 3, 3, {
         artifactIds: ["artifact-partial"],
         completedAt: "2026-06-09T12:00:05Z",

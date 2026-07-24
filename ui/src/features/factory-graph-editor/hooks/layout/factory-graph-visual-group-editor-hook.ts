@@ -1,18 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type { FactoryGraphEditorTool } from "../../components/controls/factory-graph-editor-controls";
-import {
-  factoryLayoutGroupById,
-  factoryLayoutGroupContainsNode,
-  factoryLayoutGroups,
-  type FactoryLayoutGroupCanvasNodeOption,
-  type FactoryLayoutGroupColorToken,
-} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
-import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-layout-validation";
 import type {
   FactoryLayout,
   FactoryLayoutPoint,
 } from "../../lib/layout/factory-graph-layout-operations";
+import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-layout-validation";
+import {
+  type FactoryLayoutGroupCanvasNodeOption,
+  type FactoryLayoutGroupColorToken,
+  factoryLayoutGroupById,
+  factoryLayoutGroupContainsNode,
+  factoryLayoutGroups,
+} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 function canEditFactoryGraphVisualGroups(input: {

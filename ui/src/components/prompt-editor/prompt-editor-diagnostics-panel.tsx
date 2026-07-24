@@ -1,8 +1,8 @@
 import {
   AlertPanel,
   AlertPanelText,
-  CodePanel,
   Code,
+  CodePanel,
   Label,
   SurfacePanel,
 } from "../../components/ui";

@@ -54,14 +54,17 @@ describe("getTerminalWorkMessages", () => {
   it.each([
     ["ko", "completed", "3개 항목"],
     ["zh-CN", "failed", "5 个项目"],
-  ] as const)("keeps %s count and empty-state helpers available for coverage-sensitive locales", (locale, status, expectedCountLabel) => {
-    const messages = getTerminalWorkMessages(locale);
+  ] as const)(
+    "keeps %s count and empty-state helpers available for coverage-sensitive locales",
+    (locale, status, expectedCountLabel) => {
+      const messages = getTerminalWorkMessages(locale);
 
-    expect(
-      messages.itemCountLabel(Number.parseInt(expectedCountLabel, 10)),
-    ).toBe(expectedCountLabel);
-    expect(messages.emptyState(status)).not.toHaveLength(0);
-    expect(messages.sessionSummaryFallback(status)).not.toHaveLength(0);
-    expect(messages.summary(status, "Workstation")).not.toHaveLength(0);
-  });
+      expect(
+        messages.itemCountLabel(Number.parseInt(expectedCountLabel, 10)),
+      ).toBe(expectedCountLabel);
+      expect(messages.emptyState(status)).not.toHaveLength(0);
+      expect(messages.sessionSummaryFallback(status)).not.toHaveLength(0);
+      expect(messages.summary(status, "Workstation")).not.toHaveLength(0);
+    },
+  );
 });

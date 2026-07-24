@@ -4,12 +4,12 @@ import {
   normalizeFactoryDefinition,
 } from "../../../../api/factory-definition";
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
+import { goDurationFromWorkerTimeoutPicker } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import {
   isModelProviderWorkerType,
   isPollerWorkerType,
   isScriptWorkerType,
 } from "../../../current-factory-definition/public";
-import { goDurationFromWorkerTimeoutPicker } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
 export type EditableWorkerValidationField =

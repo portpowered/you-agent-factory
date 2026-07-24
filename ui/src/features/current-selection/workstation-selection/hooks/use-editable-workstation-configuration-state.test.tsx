@@ -48,7 +48,9 @@ const planSelection: DashboardSelection = {
 
 function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
-  selectedNode: typeof semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review | null,
+  selectedNode:
+    | typeof semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review
+    | null,
   locale?: string | null,
 ) {
   const currentFactoryDocument = useCurrentFactoryDocument(false) as {
@@ -673,7 +675,14 @@ describe("useEditableWorkstationConfigurationState", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
+      runnerOptions: [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi",
+      ],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -901,7 +910,14 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
+      runnerOptions: [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi",
+      ],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],

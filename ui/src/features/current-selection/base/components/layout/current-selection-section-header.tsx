@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import {
   Heading,
-  Text,
   surfacePanelVariants,
+  Text,
 } from "../../../../../components/ui";
 
 export function CurrentSelectionSectionHeader({
@@ -30,10 +30,7 @@ export function CurrentSelectionSectionHeader({
           {title}
         </Heading>
         {supportingText ? (
-          <Text
-            className="m-0 text-on-surface-subtle"
-            variant="supporting"
-          >
+          <Text className="m-0 text-on-surface-subtle" variant="supporting">
             {supportingText}
           </Text>
         ) : null}

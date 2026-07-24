@@ -5,14 +5,13 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { axe } from "jest-axe";
-import { useState } from "react";
-
-import { SessionFactoryAPIError } from "../../../api/session-factory";
 import {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SECTION_HEADING_CLASS,
 } from "@you-agent-factory/components/recipes";
+import { axe } from "jest-axe";
+import { useState } from "react";
+import { SessionFactoryAPIError } from "../../../api/session-factory";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 import {
   DashboardImportPreviewDialog,
@@ -370,27 +369,30 @@ describe("DashboardImportPreviewDialog", () => {
       "Activation failed in an unexpected way.",
       "Activation failed in an unexpected way.",
     ],
-  ] as const)("renders the mapped activation copy for %s errors", async (code, message, expectedCopy) => {
-    renderDialog({
-      activationState: {
-        error: new SessionFactoryAPIError(message, { code }),
-        status: "error",
-      },
-    });
-    const messages = getImportPreviewDialogMessages("en");
+  ] as const)(
+    "renders the mapped activation copy for %s errors",
+    async (code, message, expectedCopy) => {
+      renderDialog({
+        activationState: {
+          error: new SessionFactoryAPIError(message, { code }),
+          status: "error",
+        },
+      });
+      const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", {
-      name: messages.title,
-    });
-    const alert = within(previewDialog).getByRole("alert");
-    const title = within(alert).getByText(messages.activationErrorTitle);
-    const copy = within(alert).getByText(expectedCopy);
+      const previewDialog = await screen.findByRole("dialog", {
+        name: messages.title,
+      });
+      const alert = within(previewDialog).getByRole("alert");
+      const title = within(alert).getByText(messages.activationErrorTitle);
+      const copy = within(alert).getByText(expectedCopy);
 
-    expect(alert.textContent).toContain(messages.activationErrorTitle);
-    expect(alert.textContent).toContain(expectedCopy);
-    expect(title.className).toContain(WIDGET_FRAME_SECTION_HEADING_CLASS);
-    expect(copy.className).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
-  });
+      expect(alert.textContent).toContain(messages.activationErrorTitle);
+      expect(alert.textContent).toContain(expectedCopy);
+      expect(title.className).toContain(WIDGET_FRAME_SECTION_HEADING_CLASS);
+      expect(copy.className).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
+    },
+  );
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {
     const activateImport = vi.fn().mockResolvedValue(undefined);

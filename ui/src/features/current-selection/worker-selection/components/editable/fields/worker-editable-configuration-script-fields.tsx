@@ -1,13 +1,13 @@
 import { Input, Textarea } from "../../../../../../components/ui";
+import {
+  WorkerEditableConfigurationField,
+  WorkerEditableConfigurationServerChangedHint,
+} from "./primitives/worker-editable-configuration-field-primitives";
 import type {
   ReadyWorkerEditableConfigurationState,
   ReadyWorkerEditableValidationErrors,
   WorkerEditableConfigurationMessages,
 } from "./primitives/worker-editable-configuration-field-types";
-import {
-  WorkerEditableConfigurationField,
-  WorkerEditableConfigurationServerChangedHint,
-} from "./primitives/worker-editable-configuration-field-primitives";
 
 export function WorkerEditableConfigurationScriptFields({
   messages,

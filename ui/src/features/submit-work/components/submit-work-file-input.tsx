@@ -57,10 +57,7 @@ export function FileSubmissionItemEditor({
       <ChooseFileField
         afterControl={
           item.stagingStatus === "failure" && item.stagingError ? (
-            <Text
-              className="text-on-error-container"
-              variant="supporting"
-            >
+            <Text className="text-on-error-container" variant="supporting">
               {item.stagingError}
             </Text>
           ) : null

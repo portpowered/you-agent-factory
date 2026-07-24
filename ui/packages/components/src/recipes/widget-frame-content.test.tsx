@@ -2,10 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-} from "../testing/render";
+import { renderPackageComponent, screen } from "../testing/render";
 import {
   WidgetDetailCopy,
   WidgetEmptyState,

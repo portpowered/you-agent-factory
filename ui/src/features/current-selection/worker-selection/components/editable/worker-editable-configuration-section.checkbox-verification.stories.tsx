@@ -1,10 +1,10 @@
-import { expect, userEvent, within } from "storybook/test";
 import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../../../styles.css";
+import { expectStyledCheckboxInStory } from "../../../../../testing/checkbox-story-helpers";
 import type { EditableWorkerSaveValidationErrors } from "../../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../../messages/worker-detail";
-import { expectStyledCheckboxInStory } from "../../../../../testing/checkbox-story-helpers";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 
 const messages = getWorkerDetailMessages();

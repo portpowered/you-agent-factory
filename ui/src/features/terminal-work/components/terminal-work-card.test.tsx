@@ -46,9 +46,7 @@ describe("CompletedFailedWorkstationCard", () => {
     const failedHeading = screen.getByRole("heading", {
       name: messages.rowTitle("failed"),
     });
-    expect(completedHeading.className).toContain(
-      "af-section-heading",
-    );
+    expect(completedHeading.className).toContain("af-section-heading");
     expect(failedHeading.className).toContain("af-section-heading");
     const completedTitle = completedHeading.closest(
       "[data-terminal-work-title]",

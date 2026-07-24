@@ -140,10 +140,12 @@ function childDispatchCountsFromDurableProgress(
 ): components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"] {
   const total = progress?.totalDispatches ?? 0;
   const completed = progress?.completedDispatches ?? 0;
-  const inFlight = progress?.runningDispatches ?? progress?.inFlightDispatches ?? 0;
+  const inFlight =
+    progress?.runningDispatches ?? progress?.inFlightDispatches ?? 0;
   const failed = progress?.failedDispatches ?? 0;
   const queued =
-    progress?.queuedDispatches ?? Math.max(total - completed - inFlight - failed, 0);
+    progress?.queuedDispatches ??
+    Math.max(total - completed - inFlight - failed, 0);
 
   return {
     completed,

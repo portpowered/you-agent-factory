@@ -81,8 +81,13 @@ describe("FactoryInvocationWidget extra rendering coverage", () => {
     await user.click(screen.getByRole("button", { name: "Use default" }));
     await user.type(screen.getByRole("textbox", { name: /tag/i }), "alpha");
     await user.click(screen.getByRole("button", { name: "Add tag" }));
-    await user.type(screen.getAllByRole("textbox", { name: /tag/i })[1], "beta");
-    await user.click(screen.getByRole("button", { name: "Remove tag value 2" }));
+    await user.type(
+      screen.getAllByRole("textbox", { name: /tag/i })[1],
+      "beta",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Remove tag value 2" }),
+    );
     await user.click(screen.getByRole("button", { name: "Run factory" }));
 
     await waitFor(() => {
@@ -110,7 +115,9 @@ describe("FactoryInvocationWidget extra rendering coverage", () => {
       isLoading: false,
     });
     invokeSessionFactory.mockResolvedValue({
-      primaryResult: [{ kind: "image", uri: "https://example.test/result.png" }] as never,
+      primaryResult: [
+        { kind: "image", uri: "https://example.test/result.png" },
+      ] as never,
       requestId: "request-1",
       status: "COMPLETED",
       traceId: "trace-1",

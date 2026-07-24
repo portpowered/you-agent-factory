@@ -8,11 +8,11 @@ import {
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openBrowserPage,
+  openDashboardWithSeededCheckpoint,
   resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   waitForDurableCheckpoint,
-  openDashboardWithSeededCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
   buildStreamIdentity,
@@ -64,15 +64,12 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
             }),
         );
 
-        await waitForDurableCheckpoint(
-          "restart cursor reuse",
-          async () => {
-            const urls = await network.readEventStreamURLs();
-            return urls.some((url) =>
-              eventStreamHasCursor(url, "manual-restart-event-5"),
-            );
-          },
-        );
+        await waitForDurableCheckpoint("restart cursor reuse", async () => {
+          const urls = await network.readEventStreamURLs();
+          return urls.some((url) =>
+            eventStreamHasCursor(url, "manual-restart-event-5"),
+          );
+        });
 
         await network.resetEventStreamURLs();
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
@@ -298,4 +295,3 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
     browserScenarioTimeoutMs,
   );
 });
-

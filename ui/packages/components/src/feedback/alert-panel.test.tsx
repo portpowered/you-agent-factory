@@ -2,15 +2,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-} from "../testing/render";
-import {
-  AlertPanel,
-  AlertPanelText,
-  AlertPanelTitle,
-} from "./alert-panel";
+import { renderPackageComponent, screen } from "../testing/render";
+import { AlertPanel, AlertPanelText, AlertPanelTitle } from "./alert-panel";
 import { ALERT_PANEL_SEMANTIC_CONFIG } from "./alert-panel-semantics";
 
 describe("AlertPanel", () => {
@@ -128,7 +121,10 @@ describe("AlertPanel", () => {
       ALERT_PANEL_SEMANTIC_CONFIG,
     )) {
       const { unmount } = renderPackageComponent(
-        <AlertPanel data-testid={`panel-${semantic}`} semantic={semantic as never}>
+        <AlertPanel
+          data-testid={`panel-${semantic}`}
+          semantic={semantic as never}
+        >
           <AlertPanelText>{semantic}</AlertPanelText>
         </AlertPanel>,
       );

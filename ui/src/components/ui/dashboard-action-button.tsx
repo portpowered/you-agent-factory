@@ -1,10 +1,9 @@
-import { forwardRef, type ReactNode } from "react";
-
 import {
   Button,
-  IconButtonShell,
   type ButtonProps,
+  IconButtonShell,
 } from "@you-agent-factory/components/primitives";
+import { forwardRef, type ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
 const DASHBOARD_ACTION_BUTTON_BASE_CLASS =

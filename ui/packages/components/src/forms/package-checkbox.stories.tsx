@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-
+import { PackageCheckbox } from "./package-checkbox";
 import {
   ControlledCheckboxStoryExample,
   PACKAGE_CHECKBOX_STORY_LABEL,
@@ -7,7 +7,6 @@ import {
   UncontrolledCheckboxStoryExample,
   withMobileWidth,
 } from "./package-form-story-support";
-import { PackageCheckbox } from "./package-checkbox";
 
 const meta = {
   title: "Forms/PackageCheckbox",

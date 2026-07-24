@@ -1,12 +1,11 @@
-/* biome-ignore lint/style/noExcessiveLinesPerFile: keeps one dispatch-history renderer together while the current-selection card migration is still settling. */
+/* biome-ignore-all lint/style/noExcessiveLinesPerFile: keeps one dispatch-history renderer together while the current-selection card migration is still settling. */
+
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
   formatDurationMillis,
   formatLocalDateTime,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
@@ -329,9 +328,13 @@ function DispatchRequestContent({
 }) {
   return (
     <div className="grid gap-2">
-      <CurrentSelectionLabel>{messages.requestDetailsTitle}</CurrentSelectionLabel>
+      <CurrentSelectionLabel>
+        {messages.requestDetailsTitle}
+      </CurrentSelectionLabel>
       {view.isScriptBackedRequest ? (
-        <WidgetDetailCopy>{messages.promptDetailsNotApplicable}</WidgetDetailCopy>
+        <WidgetDetailCopy>
+          {messages.promptDetailsNotApplicable}
+        </WidgetDetailCopy>
       ) : null}
       <WorkItemPayloadList
         messages={{
@@ -411,7 +414,9 @@ function DispatchTraceContent({
 }) {
   return (
     <div className="grid gap-2">
-      <CurrentSelectionLabel>{messages.traceDetailsTitle}</CurrentSelectionLabel>
+      <CurrentSelectionLabel>
+        {messages.traceDetailsTitle}
+      </CurrentSelectionLabel>
       <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}

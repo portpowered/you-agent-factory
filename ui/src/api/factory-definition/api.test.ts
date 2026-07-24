@@ -484,10 +484,7 @@ describe("normalizeFactoryDefinition", () => {
         parameters: [
           {
             aliases: ["out"],
-            bindings: [
-              { kind: "POSITIONAL", position: 1 },
-              { kind: "NAMED" },
-            ],
+            bindings: [{ kind: "POSITIONAL", position: 1 }, { kind: "NAMED" }],
             choices: ["summary", "json"],
             defaultValue: "summary",
             description: "Output format",
@@ -1168,42 +1165,44 @@ const SUPPORTED_WORKER_MODEL_PROVIDERS = [
 ] as const;
 
 describe("worker modelProvider validation", () => {
-  it.each(
-    SUPPORTED_WORKER_MODEL_PROVIDERS,
-  )("parses and round-trips MODEL_WORKER modelProvider %s", (modelProvider) => {
-    const input = {
-      name: "provider-factory",
-      workers: [
-        {
-          modelProvider,
-          name: "writer",
-          type: "MODEL_WORKER",
-        },
-      ],
-    };
-    const normalized = normalizeFactoryDefinition(input);
-    expect(normalized.workers?.[0]?.modelProvider).toBe(modelProvider);
-    expect(
-      normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized))),
-    ).toEqual(normalized);
-  });
+  it.each(SUPPORTED_WORKER_MODEL_PROVIDERS)(
+    "parses and round-trips MODEL_WORKER modelProvider %s",
+    (modelProvider) => {
+      const input = {
+        name: "provider-factory",
+        workers: [
+          {
+            modelProvider,
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+      };
+      const normalized = normalizeFactoryDefinition(input);
+      expect(normalized.workers?.[0]?.modelProvider).toBe(modelProvider);
+      expect(
+        normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized))),
+      ).toEqual(normalized);
+    },
+  );
 
-  it.each(
-    SUPPORTED_WORKER_MODEL_PROVIDERS,
-  )("parses factory-level throttle guard modelProvider %s", (modelProvider) => {
-    const normalized = normalizeFactoryDefinition({
-      name: "provider-factory",
-      guards: [
-        {
-          modelProvider,
-          model: "example-model",
-          refreshWindow: "15m",
-          type: "INFERENCE_THROTTLE_GUARD",
-        },
-      ],
-    });
-    expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
-  });
+  it.each(SUPPORTED_WORKER_MODEL_PROVIDERS)(
+    "parses factory-level throttle guard modelProvider %s",
+    (modelProvider) => {
+      const normalized = normalizeFactoryDefinition({
+        name: "provider-factory",
+        guards: [
+          {
+            modelProvider,
+            model: "example-model",
+            refreshWindow: "15m",
+            type: "INFERENCE_THROTTLE_GUARD",
+          },
+        ],
+      });
+      expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
+    },
+  );
 
   it("accepts exact invocation placeholders for worker modelProvider when the signature declares the parameter", () => {
     const normalized = normalizeFactoryDefinition({

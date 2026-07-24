@@ -1,6 +1,5 @@
-import type { ReactNode } from "react";
-
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
+import type { ReactNode } from "react";
 import { DashboardWidgetFrame } from "../../bento/public";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";

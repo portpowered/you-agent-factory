@@ -1,12 +1,12 @@
 import { Button, Checkbox } from "../../../components/ui";
 import {
+  createEmptyFactoryGraphAddModelOperationDraft,
+  createEmptyFactoryGraphAddModelOperationSlotDraft,
   FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES,
   type FactoryGraphAddModelOperationDraft,
   type FactoryGraphAddModelOperationItemFieldErrors,
   type FactoryGraphAddModelOperationSlotDraft,
   type FactoryGraphAddModelOperationValidationErrors,
-  createEmptyFactoryGraphAddModelOperationDraft,
-  createEmptyFactoryGraphAddModelOperationSlotDraft,
 } from "../lib/factory-graph-add-model-operation-draft";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {

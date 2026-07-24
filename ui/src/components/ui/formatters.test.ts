@@ -125,10 +125,7 @@ describe("formatGraphDurationMillis", () => {
       formatGraphDurationMillis(1_000_000 * 365 * 24 * 60 * 60 * 1000, "en"),
     ).toBe("1M");
     expect(
-      formatGraphDurationMillis(
-        1_000_000 * 365 * 24 * 60 * 60 * 1000,
-        "zh-CN",
-      ),
+      formatGraphDurationMillis(1_000_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN"),
     ).toBe("1百万");
     expect(
       formatGraphDurationMillis(1_000_000 * 365 * 24 * 60 * 60 * 1000, "ja"),

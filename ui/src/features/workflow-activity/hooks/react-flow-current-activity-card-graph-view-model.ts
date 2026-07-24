@@ -1,5 +1,10 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: graph view-model composes projection, selection bridge, and React Flow presentation in one hook module.
-import type { FitViewOptions, NodeChange, OnSelectionChangeFunc, EdgeChange } from "@xyflow/react";
+import type {
+  EdgeChange,
+  FitViewOptions,
+  NodeChange,
+  OnSelectionChangeFunc,
+} from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import type {
@@ -27,6 +32,7 @@ import {
 } from "../lib/react-flow-current-activity-card-graph";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { createCurrentActivityGraphSelectionBridgePublisher } from "./current-activity-graph-selection-bridge-publisher";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
@@ -35,7 +41,6 @@ import {
   useCurrentActivityGraphEdgePresentation,
   useCurrentActivityGraphSelectionGestures,
 } from "./react-flow-current-activity-card-graph-selection-gestures";
-import { createCurrentActivityGraphSelectionBridgePublisher } from "./current-activity-graph-selection-bridge-publisher";
 
 const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,

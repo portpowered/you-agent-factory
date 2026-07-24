@@ -1,5 +1,5 @@
 import type { Node, NodeProps } from "@xyflow/react";
-
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type {
   DashboardActiveExecution,
   DashboardWorkItemRef,
@@ -22,7 +22,6 @@ import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/curr
 import { workstationGraphPresentation } from "../../flowchart/lib/workstation-graph-presentation";
 import { getActivityGraphMessages } from "../../flowchart/messages/activity-graph";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type {
   ActivityGraphNodeHandle,
   ZAxisIncompleteHints,

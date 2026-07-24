@@ -22,9 +22,7 @@ export function fetchCallPaths(fetchMock: FetchMock) {
   );
 }
 
-export function nonPromptTemplateFetchPaths(
-  fetchMock: FetchMock,
-) {
+export function nonPromptTemplateFetchPaths(fetchMock: FetchMock) {
   return fetchCallPaths(fetchMock).filter(
     (path) =>
       !path.includes("/prompt-template-contract") &&

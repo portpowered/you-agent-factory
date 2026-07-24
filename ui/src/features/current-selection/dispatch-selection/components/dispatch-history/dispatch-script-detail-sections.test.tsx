@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-
 import { WIDGET_FRAME_BODY_TEXT_CLASS } from "@you-agent-factory/components/recipes";
+import { describe, expect, it } from "vitest";
 
 import {
   ScriptArgsSection,
@@ -12,13 +11,9 @@ describe("dispatch script detail sections", () => {
   it("renders script args as current-selection code values", () => {
     render(<ScriptArgsSection args={["--work", "work-1"]} label="Args" />);
 
-    expect(screen.getByText("Args").className).toContain(
-      "af-supporting-label",
-    );
+    expect(screen.getByText("Args").className).toContain("af-supporting-label");
     expect(screen.getByText("--work").tagName).toBe("CODE");
-    expect(screen.getByText("work-1").className).toContain(
-      "af-body-code",
-    );
+    expect(screen.getByText("work-1").className).toContain("af-body-code");
   });
 
   it("omits empty arg sections", () => {
@@ -39,9 +34,7 @@ describe("dispatch script detail sections", () => {
     );
 
     expect(screen.getByText("hello").tagName).toBe("PRE");
-    expect(screen.getByText("hello").className).toContain(
-      "text-code-medium",
-    );
+    expect(screen.getByText("hello").className).toContain("text-code-medium");
 
     rerender(
       <ScriptOutputSection

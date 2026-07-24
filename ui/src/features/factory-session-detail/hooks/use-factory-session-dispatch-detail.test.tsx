@@ -174,10 +174,13 @@ describe("useFactorySessionDispatchDetail success and error states", () => {
 
   it("returns an error state when the dispatch detail read fails", async () => {
     vi.mocked(getFactorySessionDispatchDetail).mockRejectedValue(
-      new FactorySessionsAPIError("The factory sessions API rejected the request.", {
-        code: "INTERNAL_ERROR",
-        status: 500,
-      }),
+      new FactorySessionsAPIError(
+        "The factory sessions API rejected the request.",
+        {
+          code: "INTERNAL_ERROR",
+          status: 500,
+        },
+      ),
     );
 
     const { result } = renderHook(

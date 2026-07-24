@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
+  inputVariants,
   PackageCheckbox,
   PackageFileInput,
   PackageInput,
   PackageTextarea,
-  inputVariants,
   textareaVariants,
 } from "@you-agent-factory/components";
 import {
@@ -18,6 +16,7 @@ import {
   inputVariants as formsInputVariants,
   textareaVariants as formsTextareaVariants,
 } from "@you-agent-factory/components/forms";
+import { describe, expect, it } from "vitest";
 
 describe("@you-agent-factory/components input primitive imports", () => {
   it("imports input primitives from the package root", () => {

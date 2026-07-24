@@ -1,11 +1,7 @@
 import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
 
-import {
-  Label,
-  Text,
-  FormWarning,
-} from "../../../../../../../components/ui";
+import { FormWarning, Label, Text } from "../../../../../../../components/ui";
 import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,

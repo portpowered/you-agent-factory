@@ -27,6 +27,10 @@ import {
   removeFactoryLayoutEdgeWaypoint,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
 import {
+  createDefaultFactoryLayout,
+  moveFactoryLayoutNode,
+} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import {
   addFactoryLayoutGroup,
   addNodeToFactoryLayoutGroup,
   createFactoryLayoutGroup,
@@ -38,10 +42,6 @@ import {
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../features/factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
-import {
-  createDefaultFactoryLayout,
-  moveFactoryLayoutNode,
-} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
@@ -342,10 +342,14 @@ function createMockVisualGroupLayoutActions(state: {
       return group;
     }),
     renameVisualGroup: vi.fn((groupId: string, label: string) => {
-      state.layout = updateFactoryLayoutGroup(state.layout, groupId, (group) => ({
-        ...group,
-        label,
-      }));
+      state.layout = updateFactoryLayoutGroup(
+        state.layout,
+        groupId,
+        (group) => ({
+          ...group,
+          label,
+        }),
+      );
       state.hasChanges = true;
       state.layoutDirty = true;
     }),
@@ -367,11 +371,7 @@ function createMockVisualGroupLayoutActions(state: {
       },
     ),
     addNodeToVisualGroup: vi.fn((groupId: string, nodeId: string) => {
-      state.layout = addNodeToFactoryLayoutGroup(
-        state.layout,
-        groupId,
-        nodeId,
-      );
+      state.layout = addNodeToFactoryLayoutGroup(state.layout, groupId, nodeId);
       state.hasChanges = true;
       state.layoutDirty = true;
     }),
@@ -597,7 +597,8 @@ function createMockEditableFactoryGraphActions(
             nodeIds: selection.nodeIds,
           })
         : {
-            message: "Load the current factory before removing graph selection.",
+            message:
+              "Load the current factory before removing graph selection.",
             ok: false as const,
             reason: "NODE_NOT_FOUND" as const,
           };

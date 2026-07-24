@@ -49,9 +49,7 @@ function getCurrentSelection(): HTMLElement {
 }
 
 function openReviewWorkstation(): void {
-  fireEvent.click(
-    screen.getByLabelText("Select Review workstation"),
-  );
+  fireEvent.click(screen.getByLabelText("Select Review workstation"));
 }
 
 function switchLocale(localeLabel: "English" | "简体中文"): void {

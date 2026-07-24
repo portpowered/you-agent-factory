@@ -1,14 +1,14 @@
 import { Input, Textarea } from "../../../../../../components/ui";
-import type {
-  ReadyWorkerEditableConfigurationState,
-  ReadyWorkerEditableValidationErrors,
-  WorkerEditableConfigurationMessages,
-} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationFieldHelp,
   WorkerEditableConfigurationServerChangedHint,
 } from "./primitives/worker-editable-configuration-field-primitives";
+import type {
+  ReadyWorkerEditableConfigurationState,
+  ReadyWorkerEditableValidationErrors,
+  WorkerEditableConfigurationMessages,
+} from "./primitives/worker-editable-configuration-field-types";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: hosted Linear poller fields stay grouped for parity with other worker sections.
 export function LinearHostedWorkerEditableFields({

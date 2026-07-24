@@ -1,13 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { userEvent, within } from "storybook/test";
-
+import { PackageFileInput } from "./package-file-input";
 import {
   PACKAGE_FILE_INPUT_STORY_LABEL,
   PackageFormStoryField,
   SelectedFileInputStoryExample,
   withMobileWidth,
 } from "./package-form-story-support";
-import { PackageFileInput } from "./package-file-input";
 
 const meta = {
   title: "Forms/PackageFileInput",

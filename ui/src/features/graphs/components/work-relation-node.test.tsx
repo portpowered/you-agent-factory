@@ -2,10 +2,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NodeProps } from "@xyflow/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { activityGraphNodeSurfaceClassName } from "../../flowchart/components/current-activity-node-chrome";
 import type { WorkRelationNode } from "./work-relation-node";
 import { WORK_RELATION_NODE_TYPES } from "./work-relation-node";
-import { activityGraphNodeSurfaceClassName } from "../../flowchart/components/current-activity-node-chrome";
 
 const RelationNode = WORK_RELATION_NODE_TYPES.workRelation;
 
@@ -182,7 +181,9 @@ describe("WorkRelationNodeView semantic surfaces", () => {
         />,
       );
 
-      const node = screen.getByText(`${relationState} Story`).closest("article");
+      const node = screen
+        .getByText(`${relationState} Story`)
+        .closest("article");
       if (!node) {
         throw new Error("Expected relation node shell to render.");
       }

@@ -86,7 +86,9 @@ describe("paused durable session actions", () => {
       if (url.endsWith(`/factory-sessions/${pausedReplaySessionID}`)) {
         return jsonResponse(buildPausedDurableSession());
       }
-      if (url.endsWith(`/factory-sessions/${pausedReplaySessionID}/dispatches`)) {
+      if (
+        url.endsWith(`/factory-sessions/${pausedReplaySessionID}/dispatches`)
+      ) {
         return jsonResponse({
           dispatches: [],
           sessionId: pausedReplaySessionID,

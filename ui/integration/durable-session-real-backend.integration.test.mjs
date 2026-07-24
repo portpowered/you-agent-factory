@@ -8,11 +8,11 @@ import {
   expectNoBrowserErrors,
   gotoDashboardAndWaitForWidgetPicker,
   openBrowserPage,
+  readyTimeoutMs,
   selectComboboxOption,
   startBrowserPreview,
-  stopBrowserPreview,
   startRealBackendBrowserHarness,
-  readyTimeoutMs,
+  stopBrowserPreview,
   uiInteractionTimeoutMs,
   waitForDashboardSyncPreflight,
   waitForDashboardWidgetPicker,
@@ -33,7 +33,9 @@ async function openFactorySessionWidget(
     page.getByRole("combobox", { name: "Browse widgets" }),
     "Factory session",
   );
-  await page.getByRole("button", { name: "Add widget: Factory session" }).click();
+  await page
+    .getByRole("button", { name: "Add widget: Factory session" })
+    .click();
   await page
     .getByRole("heading", {
       exact: true,

@@ -12,7 +12,22 @@ import {
   surfacePanelVariants as packageSurfacePanelVariants,
 } from "@you-agent-factory/components";
 
-import { TrendSummaryGrid, TrendSummaryMetric } from "../../features/work-outcome/components/trend-summary";
+import {
+  TrendSummaryGrid,
+  TrendSummaryMetric,
+} from "../../features/work-outcome/components/trend-summary";
+import { AlertPanel } from "./alert-panel";
+import { DashboardActionButton } from "./dashboard-action-button";
+import { DashboardActionRow } from "./dashboard-action-row";
+import { DashboardDescriptionList } from "./dashboard-description-list";
+import { DashboardStatusPill } from "./dashboard-status-pill";
+import {
+  DashboardCode,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
+} from "./dashboard-typography-components";
+import { FormDescription, FormError, FormWarning } from "./form-field";
 import {
   ActionRow,
   Code,
@@ -20,21 +35,10 @@ import {
   Heading,
   Label,
   SurfacePanel,
-  Text,
   surfacePanelVariants,
+  Text,
 } from "./index";
-import { AlertPanel } from "./alert-panel";
-import { DashboardActionRow } from "./dashboard-action-row";
-import { DashboardDescriptionList } from "./dashboard-description-list";
-import {
-  DashboardCode,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
-} from "./dashboard-typography-components";
-import { DashboardActionButton } from "./dashboard-action-button";
-import { DashboardStatusPill } from "./dashboard-status-pill";
-import { FormDescription, FormError, FormWarning } from "./form-field";
+
 describe("dashboard typography layout package migration", () => {
   it("re-exports package typography and layout primitives from dashboard UI entrypoints", () => {
     expect(Text).toBe(PackageText);
@@ -106,8 +110,12 @@ describe("dashboard typography layout package migration", () => {
         <ActionRow
           actions={
             <>
-              <DashboardActionButton type="button">Discard</DashboardActionButton>
-              <DashboardActionButton type="button">Save draft</DashboardActionButton>
+              <DashboardActionButton type="button">
+                Discard
+              </DashboardActionButton>
+              <DashboardActionButton type="button">
+                Save draft
+              </DashboardActionButton>
               <DashboardActionButton type="button">
                 Publish changes
               </DashboardActionButton>
@@ -169,9 +177,7 @@ describe("dashboard typography layout package migration", () => {
     expect(screen.getByRole("alert").textContent).toBe(
       "Host validation message",
     );
-    expect(screen.getByRole("status").textContent).toBe(
-      "Host warning message",
-    );
+    expect(screen.getByRole("status").textContent).toBe("Host warning message");
     expect(screen.getByText("Host success message").className).toContain(
       "bg-success-container",
     );

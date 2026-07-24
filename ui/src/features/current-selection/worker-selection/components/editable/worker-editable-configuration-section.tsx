@@ -1,10 +1,6 @@
 import { useId } from "react";
 
-import {
-  AlertPanel,
-  AlertPanelText,
-  Text,
-} from "../../../../../components/ui";
+import { AlertPanel, AlertPanelText, Text } from "../../../../../components/ui";
 import { formatList } from "../../../../../components/ui/formatters";
 import {
   isModelProviderWorkerType,
@@ -209,10 +205,7 @@ function WorkerEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <Text
-        className="m-0 text-on-surface-subtle"
-        variant="supporting"
-      >
+      <Text className="m-0 text-on-surface-subtle" variant="supporting">
         {messages.editableConfigurationSaveDisabledValidationDetail}
       </Text>
     </CurrentSelectionFormField>

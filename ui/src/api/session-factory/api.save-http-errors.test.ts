@@ -191,35 +191,38 @@ describe("saveSessionFactory operator error mapping", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)("maps %s PUT failures to canonical operator copy", async (code, message) => {
-    await expect(
-      saveSessionFactory(
-        {
-          sessionID: "~default",
-          factory: sessionFactoryFixture,
-        },
-        {
-          fetch: vi.fn().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                code,
-                message: "Ignored API diagnostic.",
-              }),
-              {
-                headers: {
-                  "Content-Type": "application/json",
+  ] as const)(
+    "maps %s PUT failures to canonical operator copy",
+    async (code, message) => {
+      await expect(
+        saveSessionFactory(
+          {
+            sessionID: "~default",
+            factory: sessionFactoryFixture,
+          },
+          {
+            fetch: vi.fn().mockResolvedValue(
+              new Response(
+                JSON.stringify({
+                  code,
+                  message: "Ignored API diagnostic.",
+                }),
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  status: 409,
+                  statusText: "Conflict",
                 },
-                status: 409,
-                statusText: "Conflict",
-              },
+              ),
             ),
-          ),
-        },
-      ),
-    ).rejects.toMatchObject({
-      code,
-      message,
-      status: 409,
-    });
-  });
+          },
+        ),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 409,
+      });
+    },
+  );
 });

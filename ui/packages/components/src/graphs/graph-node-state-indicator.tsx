@@ -23,7 +23,9 @@ export function GraphNodeStateIndicator({
       className={cn(
         GRAPH_NODE_STATE_INDICATOR_HEIGHT_CLASS,
         "flex items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
-        state === "error" ? "text-on-error-container" : "text-on-surface-variant",
+        state === "error"
+          ? "text-on-error-container"
+          : "text-on-surface-variant",
         !showIndicator && "invisible",
       )}
       data-graph-node-state-indicator={showIndicator ? state : undefined}

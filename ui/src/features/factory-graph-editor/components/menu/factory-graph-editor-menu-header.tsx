@@ -11,11 +11,7 @@ export function FactoryGraphEditorMenuHeader({
 }) {
   return (
     <div className="grid gap-1">
-      <Text
-        as="p"
-        className="m-0 font-semibold text-on-surface"
-        variant="body"
-      >
+      <Text as="p" className="m-0 font-semibold text-on-surface" variant="body">
         {title}
       </Text>
       {description ? (

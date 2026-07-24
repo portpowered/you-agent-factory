@@ -3,13 +3,13 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../utilities/cn";
 import {
   Table,
-  type TableSize,
   TableBody,
   TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  type TableSize,
 } from "./table";
 
 export type DataTableState = "empty" | "error" | "loading" | "success";
@@ -66,11 +66,7 @@ function DataTableStatusRow({
   return (
     <TableRow>
       <TableCell className={cellClassName} colSpan={colSpan}>
-        <div
-          aria-busy={ariaBusy || undefined}
-          aria-live={ariaLive}
-          role={role}
-        >
+        <div aria-busy={ariaBusy || undefined} aria-live={ariaLive} role={role}>
           {children}
         </div>
       </TableCell>

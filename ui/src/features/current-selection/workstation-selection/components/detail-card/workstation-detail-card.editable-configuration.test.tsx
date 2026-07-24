@@ -1,14 +1,19 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
-
 import {
   semanticWorkflowDashboardSnapshot,
   workstationKindParityDashboardSnapshot,
 } from "../../../../../components/dashboard/test-fixtures";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { expectNoInlineSaveOutcomesIn } from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import { buildDetailCardEditableFactoryDocument } from "../../../base/components/detail-card/detail-card-test-helpers";
 import type {
@@ -248,7 +253,14 @@ function buildReadyEditableConfigurationState(overrides?: {
         source: "workstation",
       },
       runnerName: "gemini",
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
+      runnerOptions: [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi",
+      ],
       runnerSelectionSource: "workstation",
       workerModelProvider: null,
       sharedWorkerWorkstationNamesByWorkerName: {

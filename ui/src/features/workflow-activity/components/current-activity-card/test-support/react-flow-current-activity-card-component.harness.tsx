@@ -12,6 +12,12 @@ import type { ImportFactoryValue } from "../../../../../api/session-factory";
 import { factoryFromDashboardTopology } from "../../../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../../../testing/dashboard-session-test-provider";
+import {
+  baseFactoryDefinitionDocument,
+  createMockGraphEditorDraftState,
+  wireMockEditableFactoryGraph,
+} from "../../../../../testing/graph-editor-harness";
 import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -23,12 +29,6 @@ import type { CurrentActivityImportController } from "../../../hooks/current-act
 import { resetCurrentActivityGraphLayoutCacheForTests } from "../../../hooks/react-flow-current-activity-card-graph-layout";
 import type { CurrentActivitySelection } from "../../../lib/react-flow-current-activity-card-types";
 import { ReactFlowCurrentActivityCard } from "../../react-flow-current-activity-card";
-import { DashboardSessionTestProvider } from "../../../../../testing/dashboard-session-test-provider";
-import {
-  baseFactoryDefinitionDocument,
-  createMockGraphEditorDraftState,
-  wireMockEditableFactoryGraph,
-} from "../../../../../testing/graph-editor-harness";
 
 export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 

@@ -2,11 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import { CodePanel, codePanelVariants } from "./code-panel";
 
 const LONG_SINGLE_LINE =
@@ -62,7 +58,9 @@ describe("CodePanel", () => {
       <CodePanel maxHeight="md">{LONG_MULTI_LINE}</CodePanel>,
     );
 
-    const codePanel = screen.getByText(/line 1: repeated worker output context/);
+    const codePanel = screen.getByText(
+      /line 1: repeated worker output context/,
+    );
     expect(codePanel.tagName).toBe("PRE");
     expect(codePanel.className).toContain("max-h-72");
     expect(codePanel.className).toContain("overflow-y-auto");
@@ -86,7 +84,9 @@ describe("CodePanel", () => {
     await user.tab();
     expect(copyButton).toHaveFocus();
 
-    const codePanel = screen.getByText(/line 1: repeated worker output context/);
+    const codePanel = screen.getByText(
+      /line 1: repeated worker output context/,
+    );
     await user.tab();
     expect(codePanel).toHaveFocus();
     expect(codePanel.className).toContain("focus-visible:outline");

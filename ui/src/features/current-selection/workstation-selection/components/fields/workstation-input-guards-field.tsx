@@ -1,13 +1,16 @@
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
+import {
+  EnumSelect,
+  OptionalEnumSelect,
+} from "@you-agent-factory/components/forms";
 import { useId } from "react";
 
 import {
-  Label,
-  Text,
   FormDescription,
   FormError,
   Input,
+  Label,
   SurfacePanel,
+  Text,
 } from "../../../../../components/ui";
 import type { EditableWorkstationInputDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
 import {
@@ -114,10 +117,7 @@ function WorkstationInputSlotGuardRow({
             {messages.workstationInputSlotHeading(input.workType, input.state)}
           </h6>
           {guard ? (
-            <Text
-              className="m-0 text-on-surface-subtle"
-              variant="supporting"
-            >
+            <Text className="m-0 text-on-surface-subtle" variant="supporting">
               {messages.localizeInputGuardType(guard.type)} ·{" "}
               {formatInputGuardSummary(guard)}
             </Text>

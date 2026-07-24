@@ -86,10 +86,12 @@ describe("editable workstation model invoke mutators", () => {
   });
 
   it("updates only the targeted binding slot", () => {
-    const updater = vi.fn((binding: (typeof baseDraft.operationBindings)[number]) => ({
-      ...binding,
-      configText: "updated",
-    }));
+    const updater = vi.fn(
+      (binding: (typeof baseDraft.operationBindings)[number]) => ({
+        ...binding,
+        configText: "updated",
+      }),
+    );
 
     expect(
       updateEditableModelInvokeBindingDraft(

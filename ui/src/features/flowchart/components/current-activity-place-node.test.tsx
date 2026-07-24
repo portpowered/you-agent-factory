@@ -60,23 +60,26 @@ describe("CurrentActivity place node work-state phase styling", () => {
     ["PROCESSING", "PROCESSING"],
     ["TERMINAL", "TERMINAL"],
     ["FAILED", "FAILED"],
-  ] as const)("applies lifecycle surface classes for work_state with state_category %s", (stateCategory) => {
-    const place: DashboardPlaceRef = {
-      kind: "work_state",
-      place_id: `story:${stateCategory.toLowerCase()}`,
-      state_category: stateCategory,
-      state_value: stateCategory.toLowerCase(),
-      type_id: "story",
-    };
-    const { container } = render(
-      <StatePositionNodeView {...statePositionNodeProps(place)} />,
-    );
-    const shell = nodeShell(container);
+  ] as const)(
+    "applies lifecycle surface classes for work_state with state_category %s",
+    (stateCategory) => {
+      const place: DashboardPlaceRef = {
+        kind: "work_state",
+        place_id: `story:${stateCategory.toLowerCase()}`,
+        state_category: stateCategory,
+        state_value: stateCategory.toLowerCase(),
+        type_id: "story",
+      };
+      const { container } = render(
+        <StatePositionNodeView {...statePositionNodeProps(place)} />,
+      );
+      const shell = nodeShell(container);
 
-    expect(shell?.className).toContain(
-      workStatePhaseSurfaceClassName(stateCategory),
-    );
-  });
+      expect(shell?.className).toContain(
+        workStatePhaseSurfaceClassName(stateCategory),
+      );
+    },
+  );
 
   it("uses neutral surface styling when work_state has no state_category", () => {
     const place: DashboardPlaceRef = {

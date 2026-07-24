@@ -189,67 +189,70 @@ describe("timeline checkpoint independent stream writes", () => {
     ],
     ["logical session key", { logicalSessionKeyID: "logical-other" }],
     ["stream generation", { streamGenerationID: "2026-07-14T00:00:00Z" }],
-  ] as const)("allows a stream with a different %s to reach IndexedDB concurrently", async (_label, identityDifference) => {
-    const fixture =
-      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
-    const otherIdentity = {
-      ...streamIdentity,
-      ...identityDifference,
-    } satisfies TimelineCheckpointStreamIdentity;
-    let firstSettled = false;
-    let otherSettled = false;
+  ] as const)(
+    "allows a stream with a different %s to reach IndexedDB concurrently",
+    async (_label, identityDifference) => {
+      const fixture =
+        createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+      const otherIdentity = {
+        ...streamIdentity,
+        ...identityDifference,
+      } satisfies TimelineCheckpointStreamIdentity;
+      let firstSettled = false;
+      let otherSettled = false;
 
-    const first = persistTimelineCheckpoint(
-      fixture.indexedDB,
-      checkpoint(61, "event-61", 61),
-      streamIdentity,
-    ).then(() => {
-      firstSettled = true;
-    });
-    const other = persistTimelineCheckpoint(
-      fixture.indexedDB,
-      checkpoint(72, "event-72", 72, otherIdentity),
-      otherIdentity,
-    ).then(() => {
-      otherSettled = true;
-    });
+      const first = persistTimelineCheckpoint(
+        fixture.indexedDB,
+        checkpoint(61, "event-61", 61),
+        streamIdentity,
+      ).then(() => {
+        firstSettled = true;
+      });
+      const other = persistTimelineCheckpoint(
+        fixture.indexedDB,
+        checkpoint(72, "event-72", 72, otherIdentity),
+        otherIdentity,
+      ).then(() => {
+        otherSettled = true;
+      });
 
-    expect(fixture.controls.pendingOperations()).toEqual(["open", "open"]);
-    fixture.controls.succeed("open");
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("get");
-    fixture.controls.succeed("get");
-    expect(fixture.controls.pendingOperations()).toEqual(["put", "put"]);
+      expect(fixture.controls.pendingOperations()).toEqual(["open", "open"]);
+      fixture.controls.succeed("open");
+      fixture.controls.succeed("open");
+      await flushPromiseContinuations();
+      fixture.controls.succeed("get");
+      fixture.controls.succeed("get");
+      expect(fixture.controls.pendingOperations()).toEqual(["put", "put"]);
 
-    fixture.controls.succeed("put");
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction(1);
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
+      fixture.controls.succeed("put");
+      fixture.controls.succeed("put");
+      fixture.controls.completeTransaction(1);
+      await flushPromiseContinuations();
+      await flushPromiseContinuations();
+      await flushPromiseContinuations();
+      await flushPromiseContinuations();
 
-    expect(otherSettled).toBe(true);
-    expect(firstSettled).toBe(false);
-    expect([...fixture.records.values()]).toEqual([
-      expect.objectContaining({
-        checkpoint: expect.objectContaining({
-          afterEventId: "event-72",
-          afterSequence: 72,
-          materializedWorkOutcomeState: expect.objectContaining({
-            counts: expect.objectContaining({ completed: 72 }),
+      expect(otherSettled).toBe(true);
+      expect(firstSettled).toBe(false);
+      expect([...fixture.records.values()]).toEqual([
+        expect.objectContaining({
+          checkpoint: expect.objectContaining({
+            afterEventId: "event-72",
+            afterSequence: 72,
+            materializedWorkOutcomeState: expect.objectContaining({
+              counts: expect.objectContaining({ completed: 72 }),
+            }),
           }),
+          streamIdentity: otherIdentity,
         }),
-        streamIdentity: otherIdentity,
-      }),
-    ]);
+      ]);
 
-    fixture.controls.failTransaction(new Error("first stream failed"));
-    await Promise.all([first, other]);
+      fixture.controls.failTransaction(new Error("first stream failed"));
+      await Promise.all([first, other]);
 
-    expect([...fixture.records.values()]).toHaveLength(1);
-  });
+      expect([...fixture.records.values()]).toHaveLength(1);
+    },
+  );
 });
 
 describe("timeline checkpoint lane lifecycle", () => {

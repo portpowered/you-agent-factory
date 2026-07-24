@@ -45,7 +45,10 @@ describe("widget frame layout helpers", () => {
     });
 
     expect(
-      widgetFrameHasNoHorizontalOverflow(shell, WIDGET_FRAME_OVERFLOW_TOLERANCE_PX),
+      widgetFrameHasNoHorizontalOverflow(
+        shell,
+        WIDGET_FRAME_OVERFLOW_TOLERANCE_PX,
+      ),
     ).toBe(true);
 
     Object.defineProperty(shell, "scrollWidth", {
@@ -54,7 +57,10 @@ describe("widget frame layout helpers", () => {
     });
 
     expect(
-      widgetFrameHasNoHorizontalOverflow(shell, WIDGET_FRAME_OVERFLOW_TOLERANCE_PX),
+      widgetFrameHasNoHorizontalOverflow(
+        shell,
+        WIDGET_FRAME_OVERFLOW_TOLERANCE_PX,
+      ),
     ).toBe(false);
     expect(widgetFrameHasNoHorizontalOverflow(shell, 6)).toBe(true);
   });

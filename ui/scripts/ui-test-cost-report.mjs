@@ -135,11 +135,7 @@ export function formatElapsedMs(elapsedMs) {
 
 export function formatSlowFileSummaryLines(
   slowFiles,
-  {
-    limit = defaultSlowFileSummaryLimit,
-    logPrefix,
-    summaryTitle,
-  },
+  { limit = defaultSlowFileSummaryLimit, logPrefix, summaryTitle },
 ) {
   if (slowFiles.length === 0) {
     return [`${logPrefix} ${summaryTitle}: none reported`];

@@ -10,7 +10,6 @@ export function workstationRequiresWorkerAssignment(
   workstation: Pick<CanonicalWorkstation, "type">,
 ): boolean {
   return (
-    resolveEditableWorkstationType(workstation) !==
-    WorkstationType.LOGICAL_MOVE
+    resolveEditableWorkstationType(workstation) !== WorkstationType.LOGICAL_MOVE
   );
 }

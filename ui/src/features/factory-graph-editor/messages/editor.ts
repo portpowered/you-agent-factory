@@ -107,9 +107,7 @@ export interface FactoryGraphEditorMessages {
   visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
   visualGroupSelectedLabel: string;
   visualGroupDeleteLabel: string;
-  visualGroupResizeHandleLabel: (
-    corner: "ne" | "nw" | "se" | "sw",
-  ) => string;
+  visualGroupResizeHandleLabel: (corner: "ne" | "nw" | "se" | "sw") => string;
   toolbarCreateGroupDescription: string;
   toolbarCreateGroupLabel: string;
   edgeKindLabel: (
@@ -721,9 +719,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupInvalidBoundsError:
         "Group bounds contain non-finite geometry. Resize the group to correct them before saving.",
       visualGroupLabelFieldLabel: "Group label",
-      visualGroupMembershipEmptyLabel: "No canvas nodes are available to assign.",
+      visualGroupMembershipEmptyLabel:
+        "No canvas nodes are available to assign.",
       visualGroupMembershipLabel: "Group members",
-      visualGroupMembershipNodeLabel: (label) => `Include ${label} in this group`,
+      visualGroupMembershipNodeLabel: (label) =>
+        `Include ${label} in this group`,
       visualGroupMembershipStaleNodeLabel: (nodeId) =>
         `Saved member ${nodeId} is no longer on the canvas.`,
       visualGroupSelectedLabel: "Selected visual group",
@@ -1353,7 +1353,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarDeleteDisabledNonDeletableDescription: "所选图项无法删除",
       toolbarDeleteDisabledNonDeletableLabel: "删除，所选图项无法删除",
       toolbarDeleteLabel: "删除",
-      toolbarDeleteMultiSelectionDescription: (count) => `删除 ${count} 个所选图项`,
+      toolbarDeleteMultiSelectionDescription: (count) =>
+        `删除 ${count} 个所选图项`,
       toolbarDeleteMultiSelectionLabel: (count) => `删除 ${count} 个所选图项`,
       toolbarDeleteSelectionDescription: "删除所选图项",
       toolbarDeleteSingleSelectionDescription: "删除所选图项",

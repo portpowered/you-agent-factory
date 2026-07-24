@@ -3,17 +3,22 @@ export const COMPONENTS_CATEGORY = "primitives" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
-export { Button, buttonVariants } from "./button";
 export type { ButtonProps } from "./button";
-export { ButtonLink } from "./button-link";
+export { Button, buttonVariants } from "./button";
 export type { ButtonLinkProps } from "./button-link";
-export { IconButtonShell } from "./icon-button-shell";
+export { ButtonLink } from "./button-link";
 export type { IconButtonShellProps } from "./icon-button-shell";
-export { PackageText } from "./package-text";
+export { IconButtonShell } from "./icon-button-shell";
 export type { PackageTextProps, PackageTextVariant } from "./package-text";
-
+export { PackageText } from "./package-text";
+export type {
+  CodeProps,
+  HeadingProps,
+  LabelProps,
+  TextProps,
+  TextVariant,
+} from "./typography";
 export { Code, Heading, Label, Text } from "./typography";
-export type { CodeProps, HeadingProps, LabelProps, TextProps, TextVariant } from "./typography";
 
 export {
   BODY_CODE_CLASS,

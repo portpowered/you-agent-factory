@@ -90,10 +90,13 @@ export async function verifyFactoryGraphEditorCheckboxSurface({
     height: viewport.height,
     width: viewport.width,
   });
-  await page.goto(storyUrl(storybookUrl, FACTORY_GRAPH_EDITOR_CHECKBOX_STORY_ID), {
-    timeout: 90_000,
-    waitUntil: "networkidle",
-  });
+  await page.goto(
+    storyUrl(storybookUrl, FACTORY_GRAPH_EDITOR_CHECKBOX_STORY_ID),
+    {
+      timeout: 90_000,
+      waitUntil: "networkidle",
+    },
+  );
   await waitForStoryRender(page);
   await expectNoHorizontalOverflow(
     page,
@@ -154,7 +157,10 @@ export async function verifySharedCheckboxStates({ page, storybookUrl }) {
     await assertStyledCheckboxTreatment(checkbox, label);
   }
 
-  await assertCheckboxDisabledState(disabledCheckbox, "shared disabled setting");
+  await assertCheckboxDisabledState(
+    disabledCheckbox,
+    "shared disabled setting",
+  );
   await assertCheckboxInvalidState(invalidCheckbox, "shared invalid setting");
 
   await page.goto(

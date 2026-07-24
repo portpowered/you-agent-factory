@@ -103,9 +103,7 @@ function buildReadyEditableWorkStateConfigurationState({
   sessionState,
   setSessionState,
 }: {
-  editableDefinition: NonNullable<
-    CurrentFactoryDocument
-  >;
+  editableDefinition: NonNullable<CurrentFactoryDocument>;
   placeId: string;
   selectedEditableValues: NonNullable<
     ReturnType<typeof resolveEditableWorkStateValues>

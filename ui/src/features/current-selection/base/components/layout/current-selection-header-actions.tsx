@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  DashboardActionButton,
-  ActionRow,
-} from "../../../../../components/ui";
+import { ActionRow, DashboardActionButton } from "../../../../../components/ui";
 
 const CURRENT_SELECTION_HEADER_ACTIONS_GROUP_CLASS = "w-full justify-end";
 const CURRENT_SELECTION_ICON_CLASS = "size-4";

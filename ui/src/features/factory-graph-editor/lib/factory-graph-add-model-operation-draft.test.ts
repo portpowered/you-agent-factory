@@ -16,9 +16,7 @@ describe("factory graph add model operation draft", () => {
         {
           inputs: [
             {
-              contentTypes: [
-                ModelOperationContentType.TEXT,
-              ],
+              contentTypes: [ModelOperationContentType.TEXT],
               name: "text",
               required: true,
             },
@@ -26,9 +24,7 @@ describe("factory graph add model operation draft", () => {
           name: "tts",
           outputs: [
             {
-              contentTypes: [
-                ModelOperationContentType.AUDIO,
-              ],
+              contentTypes: [ModelOperationContentType.AUDIO],
               name: "audio",
               required: false,
             },
@@ -53,9 +49,7 @@ describe("factory graph add model operation draft", () => {
               required: true,
             },
             {
-              contentTypes: [
-                ModelOperationContentType.TEXT,
-              ],
+              contentTypes: [ModelOperationContentType.TEXT],
               name: "text",
               required: false,
             },
@@ -72,9 +66,7 @@ describe("factory graph add model operation draft", () => {
         {
           inputs: [
             {
-              contentTypes: [
-                ModelOperationContentType.TEXT,
-              ],
+              contentTypes: [ModelOperationContentType.TEXT],
               name: "text",
               required: true,
             },
@@ -82,9 +74,7 @@ describe("factory graph add model operation draft", () => {
           name: "TTS",
           outputs: [
             {
-              contentTypes: [
-                ModelOperationContentType.AUDIO,
-              ],
+              contentTypes: [ModelOperationContentType.AUDIO],
               name: "audio",
               required: false,
             },

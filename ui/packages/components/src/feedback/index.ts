@@ -3,12 +3,6 @@ export const COMPONENTS_CATEGORY = "feedback" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
-export {
-  AlertPanel,
-  AlertPanelStatusLabel,
-  AlertPanelText,
-  AlertPanelTitle,
-} from "./alert-panel";
 export type {
   AlertPanelProps,
   AlertPanelSemanticVariant,
@@ -17,5 +11,11 @@ export type {
   AlertPanelTitleProps,
   AlertPanelTone,
   AlertPanelVariant,
+} from "./alert-panel";
+export {
+  AlertPanel,
+  AlertPanelStatusLabel,
+  AlertPanelText,
+  AlertPanelTitle,
 } from "./alert-panel";
 export { Skeleton } from "./skeleton";

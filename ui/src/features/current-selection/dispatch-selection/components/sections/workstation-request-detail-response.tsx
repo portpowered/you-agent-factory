@@ -1,8 +1,6 @@
 import { CodePanel } from "@you-agent-factory/components/data-display";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,

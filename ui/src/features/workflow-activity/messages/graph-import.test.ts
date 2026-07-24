@@ -22,14 +22,17 @@ describe("getWorkflowActivityGraphImportMessages", () => {
       "ダイアログを閉じる",
       "変更フロー",
     ],
-  ] as const)("resolves %s graph-import shell copy", (locale, expectedTitle, expectedDismiss, expectedCloseLabel, expectedFlowLabel) => {
-    const messages = getWorkflowActivityGraphImportMessages(locale);
+  ] as const)(
+    "resolves %s graph-import shell copy",
+    (locale, expectedTitle, expectedDismiss, expectedCloseLabel, expectedFlowLabel) => {
+      const messages = getWorkflowActivityGraphImportMessages(locale);
 
-    expect(messages.graphDropTitle).toBe(expectedTitle);
-    expect(messages.dismissAction).toBe(expectedDismiss);
-    expect(messages.dialogCloseLabel).toBe(expectedCloseLabel);
-    expect(messages.dialogFlowLabel).toBe(expectedFlowLabel);
-  });
+      expect(messages.graphDropTitle).toBe(expectedTitle);
+      expect(messages.dismissAction).toBe(expectedDismiss);
+      expect(messages.dialogCloseLabel).toBe(expectedCloseLabel);
+      expect(messages.dialogFlowLabel).toBe(expectedFlowLabel);
+    },
+  );
 
   it.each([
     [
@@ -52,18 +55,21 @@ describe("getWorkflowActivityGraphImportMessages", () => {
       "factory.png をローカルで解析して検証しています。完了するとインポートが続行されます。",
       "この PNG は未対応の you-agent-factory ファクトリーメタデータバージョン portos.agent-factory.png.v9 を使用しています。",
     ],
-  ] as const)("resolves %s helper copy", (locale, expectedReadingMessage, expectedUnsupportedVersion) => {
-    const messages = getWorkflowActivityGraphImportMessages(locale);
+  ] as const)(
+    "resolves %s helper copy",
+    (locale, expectedReadingMessage, expectedUnsupportedVersion) => {
+      const messages = getWorkflowActivityGraphImportMessages(locale);
 
-    expect(messages.graphDropReadingMessage("factory.png")).toBe(
-      expectedReadingMessage,
-    );
-    expect(
-      messages.importErrorUnsupportedSchemaVersion(
-        "portos.agent-factory.png.v9",
-      ),
-    ).toBe(expectedUnsupportedVersion);
-  });
+      expect(messages.graphDropReadingMessage("factory.png")).toBe(
+        expectedReadingMessage,
+      );
+      expect(
+        messages.importErrorUnsupportedSchemaVersion(
+          "portos.agent-factory.png.v9",
+        ),
+      ).toBe(expectedUnsupportedVersion);
+    },
+  );
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getWorkflowActivityGraphImportMessages("en");

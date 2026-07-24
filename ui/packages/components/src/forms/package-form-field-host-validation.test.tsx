@@ -3,11 +3,7 @@
 import { type ChangeEvent, useState } from "react";
 import { describe, expect, it } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import {
   buildFormFieldAriaDescribedBy,
   FormDescription,
@@ -143,9 +139,9 @@ describe("Package form-field host-supplied messaging", () => {
     expect(screen.getByText("Used for exported filenames.")).toHaveTextContent(
       "Used for exported filenames.",
     );
-    expect(screen.getByText("Shown on exported factory cards.")).toHaveTextContent(
-      "Shown on exported factory cards.",
-    );
+    expect(
+      screen.getByText("Shown on exported factory cards."),
+    ).toHaveTextContent("Shown on exported factory cards.");
     expect(screen.getByText("Server value changed.")).toHaveTextContent(
       "Server value changed.",
     );

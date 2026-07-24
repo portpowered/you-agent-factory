@@ -305,9 +305,7 @@ describe("App shell export submission flows", () => {
         });
       }
       await waitFor(() => {
-        expect(exportProbe.getDownloadedFilename()).toBe(
-          "factory-poster.png",
-        );
+        expect(exportProbe.getDownloadedFilename()).toBe("factory-poster.png");
       });
       await settleAppShellDashboardEffects();
 

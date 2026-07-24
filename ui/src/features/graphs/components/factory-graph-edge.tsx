@@ -1,8 +1,8 @@
+import type { EdgeProps } from "@xyflow/react";
 import {
   GraphEdge,
   type GraphEdgeData,
 } from "@you-agent-factory/components/graphs";
-import type { EdgeProps } from "@xyflow/react";
 
 export type { GraphEdgeData as FactoryGraphEdgeData };
 

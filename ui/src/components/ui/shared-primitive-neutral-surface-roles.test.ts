@@ -52,25 +52,29 @@ describe("shared primitive neutral surface roles", () => {
   it.each([["dashboard-shell.tsx", readComponentSource]])(
     "uses role-based neutral surfaces in %s",
     (fileName, readSource) => {
-    const source = readSource(fileName);
+      const source = readSource(fileName);
 
-    expect(source).toContain("border-outline");
-    expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
-    expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
-    expectNoTransitionalNeutralSurfaces(source);
-  });
+      expect(source).toContain("border-outline");
+      expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
+      expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
+      expectNoTransitionalNeutralSurfaces(source);
+    },
+  );
 
   it.each([
     ["dialog.tsx", readPackageOverlaySource],
     ["popover.tsx", readPackageOverlaySource],
-  ])("uses role-based neutral surfaces in package overlay %s", (fileName, readSource) => {
-    const source = readSource(fileName);
+  ])(
+    "uses role-based neutral surfaces in package overlay %s",
+    (fileName, readSource) => {
+      const source = readSource(fileName);
 
-    expect(source).toContain("border-outline");
-    expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
-    expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
-    expectNoTransitionalNeutralSurfaces(source);
-  });
+      expect(source).toContain("border-outline");
+      expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
+      expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
+      expectNoTransitionalNeutralSurfaces(source);
+    },
+  );
 
   it("keeps package-backed input primitives on role-based neutral surfaces", () => {
     expectRoleBasedNeutralSurfaces(inputVariants());

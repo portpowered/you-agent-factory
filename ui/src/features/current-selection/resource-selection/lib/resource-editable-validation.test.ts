@@ -208,27 +208,30 @@ describe("mergeEditableResourceContractValidationErrors", () => {
     ["provider", "provider"],
     ["type", "type"],
     ["name", "name"],
-  ] as const)("maps contract failures onto %s when decode reports factory.resources[0].%s", (field) => {
-    vi.spyOn(
-      factoryDefinitionApi,
-      "normalizeFactoryDefinition",
-    ).mockImplementation(() => {
-      throw new FactoryDefinitionAPIError(
-        `factory.resources[0].${field} is invalid.`,
-      );
-    });
+  ] as const)(
+    "maps contract failures onto %s when decode reports factory.resources[0].%s",
+    (field) => {
+      vi.spyOn(
+        factoryDefinitionApi,
+        "normalizeFactoryDefinition",
+      ).mockImplementation(() => {
+        throw new FactoryDefinitionAPIError(
+          `factory.resources[0].${field} is invalid.`,
+        );
+      });
 
-    expect(
-      mergeEditableResourceContractValidationErrors(
-        {},
-        buildPendingFactory([{ capacity: 1, name: "agent-slot" }]),
-        "agent-slot",
-        messages,
-      ),
-    ).toMatchObject({
-      [field]: expect.stringContaining(
-        messages.editableConfigurationContractInvalidPrefix,
-      ),
-    });
-  });
+      expect(
+        mergeEditableResourceContractValidationErrors(
+          {},
+          buildPendingFactory([{ capacity: 1, name: "agent-slot" }]),
+          "agent-slot",
+          messages,
+        ),
+      ).toMatchObject({
+        [field]: expect.stringContaining(
+          messages.editableConfigurationContractInvalidPrefix,
+        ),
+      });
+    },
+  );
 });

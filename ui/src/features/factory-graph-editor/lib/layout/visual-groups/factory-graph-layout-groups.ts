@@ -45,9 +45,7 @@ const FACTORY_LAYOUT_GROUP_COLOR_TOKEN_SET = new Set<string>(
 export function isApprovedFactoryLayoutGroupColor(
   color: string | undefined,
 ): color is FactoryLayoutGroupColorToken {
-  return (
-    color !== undefined && FACTORY_LAYOUT_GROUP_COLOR_TOKEN_SET.has(color)
-  );
+  return color !== undefined && FACTORY_LAYOUT_GROUP_COLOR_TOKEN_SET.has(color);
 }
 
 export function factoryLayoutGroupColorCssVariable(
@@ -250,7 +248,10 @@ export function addNodeToFactoryLayoutGroup(
   groupId: string,
   nodeId: string,
 ): FactoryLayout {
-  const layoutWithoutNode = removeNodeFromAllFactoryLayoutGroups(layout, nodeId);
+  const layoutWithoutNode = removeNodeFromAllFactoryLayoutGroups(
+    layout,
+    nodeId,
+  );
 
   return updateFactoryLayoutGroup(layoutWithoutNode, groupId, (group) => {
     const nodeIds = group.nodeIds ?? [];
@@ -305,14 +306,18 @@ export function moveFactoryLayoutGroupByDelta(
     return layout;
   }
 
-  const nextLayout = updateFactoryLayoutGroup(layout, groupId, (currentGroup) => ({
-    ...currentGroup,
-    bounds: {
-      ...currentGroup.bounds,
-      x: currentGroup.bounds.x + delta.x,
-      y: currentGroup.bounds.y + delta.y,
-    },
-  }));
+  const nextLayout = updateFactoryLayoutGroup(
+    layout,
+    groupId,
+    (currentGroup) => ({
+      ...currentGroup,
+      bounds: {
+        ...currentGroup.bounds,
+        x: currentGroup.bounds.x + delta.x,
+        y: currentGroup.bounds.y + delta.y,
+      },
+    }),
+  );
 
   const memberNodeIds = group.nodeIds ?? [];
   if (memberNodeIds.length === 0) {

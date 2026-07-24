@@ -1,14 +1,10 @@
-import type { ReactNode } from "react";
-
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
-import {
-  DashboardActionButton,
-  ActionRow,
-} from "../../../../components/ui";
+import type { ReactNode } from "react";
+import { ActionRow, DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import {
@@ -42,12 +38,11 @@ import { FactoryGraphEditorMenuItemButton } from "../menu/factory-graph-editor-m
 import { FactoryGraphEditorMenuItemCopy } from "../menu/factory-graph-editor-menu-item-copy";
 import { FactoryGraphEditorFloatingSurface } from "../surface/factory-graph-editor-floating-surface";
 
+export type { FactoryGraphEditorToolbarSelectionState } from "../../lib/selection/factory-graph-editor-toolbar-selection";
 export {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
 } from "../factory-graph-editor-dialogs";
-
-export type { FactoryGraphEditorToolbarSelectionState } from "../../lib/selection/factory-graph-editor-toolbar-selection";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorVisibilityPreset =
@@ -211,7 +206,9 @@ export function FactoryGraphEditorToolbar({
           <FactoryGraphEditorToolbarButton
             active={false}
             description={messages.toolbarCreateGroupDescription}
-            disabled={toolbarButtonsDisabled || onCreateVisualGroup === undefined}
+            disabled={
+              toolbarButtonsDisabled || onCreateVisualGroup === undefined
+            }
             icon={<GroupIcon />}
             label={messages.toolbarCreateGroupLabel}
             onClick={() => onCreateVisualGroup?.()}

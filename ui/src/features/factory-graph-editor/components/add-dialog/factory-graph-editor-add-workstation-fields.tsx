@@ -1,15 +1,13 @@
-import {
-  WorkstationKind,
-} from "../../../../api/generated/openapi";
+import { WorkstationKind } from "../../../../api/generated/openapi";
 import { Checkbox } from "../../../../components/ui";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import type { EditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
-import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
-import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/public";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
+import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/public";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type {
@@ -67,16 +65,17 @@ export function FactoryGraphEditorAddWorkstationFields({
               draft,
               workstationType,
               {
-                defaultWorkerName:
-                  currentFactoryDefinition?.workers?.[0]?.name,
+                defaultWorkerName: currentFactoryDefinition?.workers?.[0]?.name,
               },
             ),
           );
         }}
-        options={FACTORY_GRAPH_ADD_WORKSTATION_TYPE_OPTIONS.map((workstationType) => ({
-          label: workstationMessages.localizeWorkstationType(workstationType),
-          value: workstationType,
-        }))}
+        options={FACTORY_GRAPH_ADD_WORKSTATION_TYPE_OPTIONS.map(
+          (workstationType) => ({
+            label: workstationMessages.localizeWorkstationType(workstationType),
+            value: workstationType,
+          }),
+        )}
         value={draft.workstationType}
       />
       <FactoryGraphEditorSelectField

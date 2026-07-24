@@ -46,7 +46,7 @@ const dashboardRecoveryMessagesByLocale = {
     recoveryFailedRetryLabel: "セッションストリームを再試行",
     recoveryFailedTitle: "セッションの再生を復旧できません",
     sessionNotFoundDetailTemplate:
-      'バックエンドは「{{sessionId}}」のライブセッションを解決できませんでした。キャッシュされたダッシュボード状態は消去されました。セッションを再度開いてから、クリーンな再生を再試行してください。',
+      "バックエンドは「{{sessionId}}」のライブセッションを解決できませんでした。キャッシュされたダッシュボード状態は消去されました。セッションを再度開いてから、クリーンな再生を再試行してください。",
     sessionNotFoundTitle: "セッションの復旧が必要です",
     unknownRecoveryDetail:
       "バックエンドがキャッシュされたダッシュボード復旧状態を拒否しました。キャッシュされた再生データは消去されました。セッションの準備ができたら、クリーンな再生を再試行してください。",
@@ -80,7 +80,7 @@ const dashboardRecoveryMessagesByLocale = {
     recoveryFailedRetryLabel: "重试会话事件流",
     recoveryFailedTitle: "会话重放需要处理",
     sessionNotFoundDetailTemplate:
-      '后端无法解析“{{sessionId}}”的活动会话。缓存的仪表板状态已清除。重新打开该会话后，再重试一次干净回放。',
+      "后端无法解析“{{sessionId}}”的活动会话。缓存的仪表板状态已清除。重新打开该会话后，再重试一次干净回放。",
     sessionNotFoundTitle: "需要恢复会话",
     unknownRecoveryDetail:
       "后端拒绝了缓存的仪表板恢复状态。缓存的回放数据已清除。会话准备好后，请重试干净回放。",

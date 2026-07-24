@@ -1,12 +1,10 @@
+import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
 } from "../../../../current-factory-definition/lib/workstation-editable-values";
-import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
-import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
-import {
-  resolveModelInvokeDraftForWorkerChange,
-} from "../model-invoke/editable-workstation-model-invoke-mutators";
+import { resolveModelInvokeDraftForWorkerChange } from "../model-invoke/editable-workstation-model-invoke-mutators";
 
 export function resolveDraftForWorkstationTypeChange(
   draft: EditableWorkstationDraft,

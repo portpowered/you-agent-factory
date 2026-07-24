@@ -1,13 +1,14 @@
-import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
+import {
+  type EditableModelInvokeBindingDraft,
+  isModelInvokeWorkstationType,
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../../current-factory-definition/lib/workstation-behavior";
-import {
-  isModelInvokeWorkstationType,
-  type EditableModelInvokeBindingDraft,
-} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
@@ -20,15 +21,13 @@ import {
   resolveDraftForBehaviorChange,
   updateEditableWorkstationCronDraft,
 } from "../editing/editable-workstation-cron-draft-mutators";
+import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   resolveModelInvokeDraftForOperationChange,
   resolveModelInvokeDraftForWorkerChange,
 } from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
 import { resolveDraftForWorkstationTypeChange } from "../editing/type/editable-workstation-type-mutators";
-import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import { resolveModelInvokeOperationOptionsState } from "../lib/editable-workstation-model-invoke-options";
-import type { ApiRunnerID } from "../messages/runner-openapi-enums";
-import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
@@ -39,6 +38,7 @@ import {
   hasEditableWorkstationValidationErrors,
   resolveWorkerOptionsState,
 } from "../lib/validation/editable-workstation-configuration-validation";
+import type { ApiRunnerID } from "../messages/runner-openapi-enums";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface EditableWorkstationSessionState {
@@ -167,7 +167,9 @@ function createEditableWorkstationDraftHandlers(
         ),
       );
     },
-    onOperationBindingsChange: (bindings: EditableModelInvokeBindingDraft[]) => {
+    onOperationBindingsChange: (
+      bindings: EditableModelInvokeBindingDraft[],
+    ) => {
       updateDraft((draft) => ({ ...draft, operationBindings: bindings }));
     },
   };

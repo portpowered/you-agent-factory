@@ -1,20 +1,15 @@
 // @vitest-environment happy-dom
 
 import { ReactFlowProvider } from "@xyflow/react";
-import type { ReactElement } from "react";
-import { describe, expect, it, vi } from "vitest";
-
 import {
   GraphNodeButton,
-  GraphNodeShell,
   type GraphNodeHandle,
+  GraphNodeShell,
   type GraphNodeState,
 } from "@you-agent-factory/components/graphs";
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import type { ReactElement } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 
 const genericHandles: GraphNodeHandle[] = [
   {
@@ -78,7 +73,9 @@ describe("graph node states", () => {
     expect(
       document.querySelector('[data-graph-node-loading-spinner="true"]'),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Loading node" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Loading node" }),
+    ).toBeInTheDocument();
     expect(shell?.querySelector(".min-h-12")).toBeInTheDocument();
   });
 
@@ -89,7 +86,9 @@ describe("graph node states", () => {
       </GraphNodeShell>,
     );
 
-    const loadingShell = document.querySelector('[data-graph-node-state="loading"]');
+    const loadingShell = document.querySelector(
+      '[data-graph-node-state="loading"]',
+    );
     const loadingHeight = loadingShell?.getBoundingClientRect().height ?? 0;
 
     rerender(
@@ -100,7 +99,9 @@ describe("graph node states", () => {
       </ReactFlowProvider>,
     );
 
-    const loadedShell = document.querySelector('[data-graph-node-kind="example"]');
+    const loadedShell = document.querySelector(
+      '[data-graph-node-kind="example"]',
+    );
     const loadedHeight = loadedShell?.getBoundingClientRect().height ?? 0;
 
     expect(loadedHeight).toBe(loadingHeight);
@@ -119,7 +120,11 @@ describe("graph node states", () => {
 
     renderNode(
       <GraphNodeShell handles={genericHandles}>
-        <GraphNodeButton graphState="disabled" onClick={onClick} stateLabel="Disabled node">
+        <GraphNodeButton
+          graphState="disabled"
+          onClick={onClick}
+          stateLabel="Disabled node"
+        >
           Disabled node
         </GraphNodeButton>
       </GraphNodeShell>,
@@ -141,7 +146,11 @@ describe("graph node states", () => {
 
     renderNode(
       <GraphNodeShell handles={genericHandles}>
-        <GraphNodeButton graphState="loading" onClick={onClick} stateLabel="Loading node">
+        <GraphNodeButton
+          graphState="loading"
+          onClick={onClick}
+          stateLabel="Loading node"
+        >
           Loading node
         </GraphNodeButton>
       </GraphNodeShell>,
@@ -164,9 +173,8 @@ describe("graph node states", () => {
       </GraphNodeShell>,
     );
 
-    expect(screen.getByRole("button", { name: "Selected node" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: "Selected node" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });

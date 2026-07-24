@@ -33,12 +33,7 @@ export const PackageCheckbox = forwardRef<
 >(function PackageCheckbox({ className, ...props }, ref) {
   return (
     <span className={cn(CHECKBOX_ROOT_CLASS, className)}>
-      <input
-        className="peer sr-only"
-        ref={ref}
-        type="checkbox"
-        {...props}
-      />
+      <input className="peer sr-only" ref={ref} type="checkbox" {...props} />
       <span
         aria-hidden="true"
         className="pointer-events-none flex size-4 items-center justify-center rounded border border-outline bg-surface-container-high text-on-primary transition-colors peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-af-focus-ring peer-disabled:border-outline peer-disabled:bg-surface-container-low peer-checked:border-primary peer-checked:bg-primary peer-aria-invalid:ring-2 peer-aria-invalid:ring-af-danger-border peer-checked:[&_svg]:opacity-100"

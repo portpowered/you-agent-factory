@@ -1,17 +1,17 @@
 export {
   ActionRow,
+  type ActionRowProps,
   Code,
+  type CodeProps,
   DescriptionList,
+  type DescriptionListProps,
   Heading,
+  type HeadingProps,
   Label,
   SurfacePanel,
-  Text,
-  surfacePanelVariants,
-  type ActionRowProps,
-  type CodeProps,
-  type DescriptionListProps,
-  type HeadingProps,
   type SurfacePanelProps,
+  surfacePanelVariants,
+  Text,
   type TextProps,
 } from "@you-agent-factory/components";
 
@@ -35,6 +35,7 @@ export * from "./dashboard-typography-components";
 export * from "./data-table";
 export * from "./dialog";
 export * from "./disclosure-button";
+export * from "./enum-select";
 export * from "./expandable-panel-icon";
 export * from "./expandable-panel-trigger";
 export * from "./file-input";
@@ -47,7 +48,6 @@ export * from "./place-labels";
 export * from "./popover";
 export * from "./resizable";
 export * from "./scroll-area";
-export * from "./enum-select";
 export * from "./select";
 export * from "./selectable-card-button";
 export * from "./skeleton";

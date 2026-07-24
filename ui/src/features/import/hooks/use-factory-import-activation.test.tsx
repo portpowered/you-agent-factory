@@ -174,16 +174,15 @@ describe("useFactoryImportActivation", () => {
     });
 
     await waitFor(() => {
-      expect(mockedActivateImportedFactoryDocumentForSession).toHaveBeenCalledWith(
-        canonicalFactory,
-        {
-          choice: "replace_current",
-          createFactoryName: "Factory Roundtrip-2",
-          currentDocument: staleDocument,
-          existingFactoryNames: ["alpha", "Factory Roundtrip"],
-          sessionID: "session-2",
-        },
-      );
+      expect(
+        mockedActivateImportedFactoryDocumentForSession,
+      ).toHaveBeenCalledWith(canonicalFactory, {
+        choice: "replace_current",
+        createFactoryName: "Factory Roundtrip-2",
+        currentDocument: staleDocument,
+        existingFactoryNames: ["alpha", "Factory Roundtrip"],
+        sessionID: "session-2",
+      });
     });
     expect(mockedGetCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(

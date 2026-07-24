@@ -13,7 +13,8 @@ import {
 
 import { cn } from "../utilities/cn";
 
-const BUTTON_LOADING_CONTENT_CLASS = "inline-flex items-center justify-center gap-2";
+const BUTTON_LOADING_CONTENT_CLASS =
+  "inline-flex items-center justify-center gap-2";
 const BUTTON_LOADING_HIDDEN_CONTENT_CLASS = "opacity-0";
 const BUTTON_LOADING_OVERLAY_CLASS =
   "pointer-events-none absolute inset-0 inline-flex items-center justify-center";
@@ -95,10 +96,7 @@ function ButtonLoadingSpinner() {
   );
 }
 
-function renderButtonContent(
-  children: ReactNode,
-  loading: boolean,
-): ReactNode {
+function renderButtonContent(children: ReactNode, loading: boolean): ReactNode {
   if (!loading) {
     return children;
   }
@@ -158,28 +156,28 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>): Ref<T> {
   };
 }
 
-function renderBlockedAsChildButton(
-  {
-    children,
-    className,
-    loading,
-    props,
-    ref,
-    size,
-    tone,
-  }: {
-    children: ReactNode;
-    className?: string;
-    loading: boolean;
-    props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">;
-    ref: Ref<HTMLButtonElement>;
-    size: NonNullable<ButtonProps["size"]>;
-    tone: NonNullable<ButtonProps["tone"]>;
-  },
-) {
+function renderBlockedAsChildButton({
+  children,
+  className,
+  loading,
+  props,
+  ref,
+  size,
+  tone,
+}: {
+  children: ReactNode;
+  className?: string;
+  loading: boolean;
+  props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">;
+  ref: Ref<HTMLButtonElement>;
+  size: NonNullable<ButtonProps["size"]>;
+  tone: NonNullable<ButtonProps["tone"]>;
+}) {
   const child = Children.only(children);
   if (!isValidElement<SlottedChildProps>(child)) {
-    throw new Error("Button with asChild requires a single React element child.");
+    throw new Error(
+      "Button with asChild requires a single React element child.",
+    );
   }
 
   return cloneElement(child, {

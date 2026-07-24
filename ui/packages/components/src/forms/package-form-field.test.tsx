@@ -150,10 +150,7 @@ describe("Package form-field representative compositions", () => {
     renderPackageComponent(
       <FormField>
         <FormLabel htmlFor="status-select">Status</FormLabel>
-        <NativeSelect
-          aria-describedby="status-description"
-          id="status-select"
-        >
+        <NativeSelect aria-describedby="status-description" id="status-select">
           <option value="active">Active</option>
           <option value="paused">Paused</option>
         </NativeSelect>

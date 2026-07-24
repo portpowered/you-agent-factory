@@ -6,11 +6,7 @@ import {
   WidgetEmptyStateTitle,
   WidgetSubtitle,
 } from "@you-agent-factory/components/recipes";
-import {
-  Label,
-  Text,
-  SurfacePanel,
-} from "../../../components/ui";
+import { Label, SurfacePanel, Text } from "../../../components/ui";
 import {
   formatDurationMillis,
   formatTraceOutcome,

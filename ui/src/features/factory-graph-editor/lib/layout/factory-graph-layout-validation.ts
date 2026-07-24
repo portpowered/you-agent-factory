@@ -1,14 +1,14 @@
-import type { components } from "../../../../api/generated/openapi";
 import type { FactoryValidationTarget } from "../../../../api/factory-validation";
+import type { components } from "../../../../api/generated/openapi";
 import type { FactoryGraphTopology } from "../draft/factory-graph-draft-types";
 import {
+  type FactoryLayoutEdge,
   factoryLayoutEdgeWaypoints,
   isValidFactoryLayoutPoint,
-  type FactoryLayoutEdge,
 } from "./factory-graph-layout-edge-waypoints";
 import {
-  type FactoryLayout,
   FACTORY_LAYOUT_SCHEMA_VERSION,
+  type FactoryLayout,
 } from "./factory-graph-layout-operations";
 
 type FactoryLayoutGroup = NonNullable<
@@ -176,14 +176,13 @@ export function pruneFactoryLayoutEdgesForTopology(
     }
 
     const nextEdge: FactoryLayoutEdge = { id: edge.id };
-    const validWaypoints = (edge.waypoints ?? []).filter(isValidFactoryLayoutPoint);
+    const validWaypoints = (edge.waypoints ?? []).filter(
+      isValidFactoryLayoutPoint,
+    );
     if (validWaypoints.length > 0) {
       nextEdge.waypoints = validWaypoints;
     }
-    if (
-      edge.labelPosition &&
-      isValidFactoryLayoutPoint(edge.labelPosition)
-    ) {
+    if (edge.labelPosition && isValidFactoryLayoutPoint(edge.labelPosition)) {
       nextEdge.labelPosition = edge.labelPosition;
     } else if (edge.labelPosition) {
       didChange = true;
@@ -349,8 +348,7 @@ function toFactoryValidationTarget(
 ): FactoryValidationTarget {
   const edgeId = resolveEdgeIdFromValidationPath(layout, target.path);
   const groupId = resolveGroupIdFromValidationPath(layout, target.path);
-  const subjectId =
-    edgeId ?? groupId ?? layoutGeometrySubjectId(target.path);
+  const subjectId = edgeId ?? groupId ?? layoutGeometrySubjectId(target.path);
 
   return {
     code: target.code,
@@ -394,7 +392,9 @@ function resolveNodeIdFromGroupValidationPath(
   layout: FactoryLayout,
   path: string,
 ): string | undefined {
-  const match = /^factory\.layout\.groups\[(\d+)\]\.nodeIds\[(\d+)\]/.exec(path);
+  const match = /^factory\.layout\.groups\[(\d+)\]\.nodeIds\[(\d+)\]/.exec(
+    path,
+  );
   if (!match) {
     return undefined;
   }

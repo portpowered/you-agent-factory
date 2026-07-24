@@ -84,7 +84,9 @@ describe("FactorySessionDetailPanel non-success session and lifecycle states", (
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {
     mockPetriRuntimeDetailFetch();
 
-    renderWithQueryClient(<FactorySessionDetailPanel sessionID={PETRI_SESSION_ID} />);
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID={PETRI_SESSION_ID} />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("1 token")).toBeTruthy();

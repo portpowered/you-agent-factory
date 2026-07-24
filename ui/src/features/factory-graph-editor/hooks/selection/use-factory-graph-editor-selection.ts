@@ -101,7 +101,9 @@ export function useFactoryGraphEditorSelection(
   );
 
   const clearSelection = useCallback(() => {
-    commitSelectionState((current) => clearFactoryGraphEditorSelection(current));
+    commitSelectionState((current) =>
+      clearFactoryGraphEditorSelection(current),
+    );
   }, [commitSelectionState]);
 
   const resolvePrimaryTarget = useCallback(

@@ -1,6 +1,6 @@
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
+import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
 import {
   type ReactFlowCurrentActivityCardProps,
   ReactFlowCurrentActivityCardView,

@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
-import { jsonResponse } from "./factory-session-detail-panel.test-helpers";
 import { BASELINE_SESSION_ID } from "./factory-session-detail-panel.baseline-fixtures";
+import { jsonResponse } from "./factory-session-detail-panel.test-helpers";
 
 export const DISPATCH_NOT_FOUND_ID = "dispatch-404";
 export const DISPATCH_REPLACEMENT_ALPHA_ID = "dispatch-alpha";

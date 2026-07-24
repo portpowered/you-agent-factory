@@ -110,12 +110,16 @@ export async function assertScopedComponentsResolved(installRoot) {
 export async function verifyFreshNpmInstall(options = {}) {
   const uiDir = path.resolve(options.uiDir ?? defaultUiDir);
   const workDir =
-    options.workDir ?? (await createIsolatedWorkDir("verify-fresh-npm-install-"));
+    options.workDir ??
+    (await createIsolatedWorkDir("verify-fresh-npm-install-"));
   const npmCommand = options.npmCommand ?? "npm";
   const ownsWorkDir = !options.workDir;
 
   try {
-    await cp(path.join(uiDir, "package.json"), path.join(workDir, "package.json"));
+    await cp(
+      path.join(uiDir, "package.json"),
+      path.join(workDir, "package.json"),
+    );
     await cp(path.join(uiDir, "packages"), path.join(workDir, "packages"), {
       recursive: true,
     });
@@ -161,7 +165,9 @@ async function main() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await main().catch((error) => {
     console.error(
-      error instanceof Error ? error.message : "Fresh npm install verification failed.",
+      error instanceof Error
+        ? error.message
+        : "Fresh npm install verification failed.",
     );
     process.exitCode = 1;
   });

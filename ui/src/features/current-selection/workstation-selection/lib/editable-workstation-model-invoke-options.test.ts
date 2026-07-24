@@ -87,7 +87,8 @@ describe("editable workstation model invoke options", () => {
         messages,
       ),
     ).toEqual({
-      operations: selectedEditableValues.modelOperationsByWorkerName["tts-worker"],
+      operations:
+        selectedEditableValues.modelOperationsByWorkerName["tts-worker"],
       options: ["TTS"],
       status: "ready",
     });
@@ -101,13 +102,15 @@ describe("editable workstation model invoke options", () => {
         messages,
       ),
     ).toEqual({
-      operations: selectedEditableValues.modelOperationsByWorkerName["tts-worker"],
+      operations:
+        selectedEditableValues.modelOperationsByWorkerName["tts-worker"],
       options: ["TTS"],
       status: "ready",
     });
 
     expect(
-      resolveSelectedModelInvokeOperation(baseDraft, selectedEditableValues)?.name,
+      resolveSelectedModelInvokeOperation(baseDraft, selectedEditableValues)
+        ?.name,
     ).toBe("TTS");
     expect(
       resolveModelInvokeBindingInputSlots(baseDraft, selectedEditableValues),

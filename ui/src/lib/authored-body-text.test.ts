@@ -21,10 +21,11 @@ describe("AUTHORED_BODY_TEXT_CLASS color roles", () => {
     expect(AUTHORED_BODY_TEXT_CLASS).toContain("[&_code]:bg-surface-container");
   });
 
-  it.each(
-    FORBIDDEN_TRANSITIONAL_PATTERNS.map((pattern) => [pattern.source]),
-  )("does not include transitional token %s", (patternSource) => {
-    const pattern = new RegExp(patternSource);
-    expect(AUTHORED_BODY_TEXT_CLASS).not.toMatch(pattern);
-  });
+  it.each(FORBIDDEN_TRANSITIONAL_PATTERNS.map((pattern) => [pattern.source]))(
+    "does not include transitional token %s",
+    (patternSource) => {
+      const pattern = new RegExp(patternSource);
+      expect(AUTHORED_BODY_TEXT_CLASS).not.toMatch(pattern);
+    },
+  );
 });

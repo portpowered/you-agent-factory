@@ -3,12 +3,12 @@
 import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen, within } from "../testing/render";
+import { WidgetFrame } from "./widget-frame";
 import {
   WidgetErrorState,
   WidgetLoadingState,
   WidgetSuccessState,
 } from "./widget-frame-states";
-import { WidgetFrame } from "./widget-frame";
 
 describe("widget frame host content", () => {
   it("renders arbitrary host slot content without requiring a dashboard content shape", () => {

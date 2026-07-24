@@ -145,7 +145,9 @@ describe("WorkerEditableConfigurationScriptFields", () => {
       "editable-worker-args-error",
     );
     expect(
-      screen.getByText(messages.editableConfigurationScriptCommandOrBodyRequired),
+      screen.getByText(
+        messages.editableConfigurationScriptCommandOrBodyRequired,
+      ),
     ).toHaveAttribute("id", "editable-worker-body-error");
   });
 

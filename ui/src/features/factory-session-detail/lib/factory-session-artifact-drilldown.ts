@@ -177,7 +177,9 @@ function normalizeArtifactInlineContent(content: WorkContent): WorkContent {
   });
 }
 
-function isOutputTextPart(part: unknown): part is { text: string; type: "output_text" } {
+function isOutputTextPart(
+  part: unknown,
+): part is { text: string; type: "output_text" } {
   return (
     typeof part === "object" &&
     part !== null &&
@@ -198,7 +200,10 @@ function isFactorySessionsAPIError(
   );
 }
 
-function buildArtifactDetailPath(sessionId: string, artifactId: string): string {
+function buildArtifactDetailPath(
+  sessionId: string,
+  artifactId: string,
+): string {
   // hardcoded-ui-copy-exception: non-product-diagnostic
   return `/factory-sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`;
 }

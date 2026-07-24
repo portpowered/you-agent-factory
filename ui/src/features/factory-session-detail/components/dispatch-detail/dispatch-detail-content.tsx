@@ -1,14 +1,14 @@
+import type { ReactNode } from "react";
 import {
   ButtonLink,
+  DashboardStatusPill,
   DescriptionList,
   Label,
-  DashboardStatusPill,
   Text,
 } from "../../../../components/ui";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 import { resolveFactoryDispatchStatusTone } from "../../messages/factory-session-runtime-display";
-import type { ReactNode } from "react";
 
 export function DispatchDetailContent({
   data,
@@ -88,11 +88,15 @@ function DispatchSummaryMetrics({
           value={String(data.attempt)}
         />
       ) : null}
-      {data.phase ? <Metric label={messages.phaseLabel} value={data.phase} /> : null}
+      {data.phase ? (
+        <Metric label={messages.phaseLabel} value={data.phase} />
+      ) : null}
       {data.runnerID ? (
         <Metric label={messages.runnerIdLabel} value={data.runnerID} />
       ) : null}
-      {data.model ? <Metric label={messages.modelLabel} value={data.model} /> : null}
+      {data.model ? (
+        <Metric label={messages.modelLabel} value={data.model} />
+      ) : null}
       {data.provider ? (
         <Metric label={messages.providerLabel} value={data.provider} />
       ) : null}
@@ -212,7 +216,10 @@ function DispatchProviderSessionsSection({
         keyForItem={(ref) => `${ref.provider}:${ref.kind}:${ref.id}`}
         renderItem={(ref) => (
           <DescriptionList>
-            <DispatchDetailItem label={messages.providerLabel} value={ref.provider} />
+            <DispatchDetailItem
+              label={messages.providerLabel}
+              value={ref.provider}
+            />
             <DispatchDetailItem
               label={messages.providerSessionRefLabel}
               value={`${ref.kind} · ${ref.id}`}

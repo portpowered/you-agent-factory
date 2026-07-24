@@ -4,10 +4,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-
+import { compileDashboardStyles } from "../test-support/compile-dashboard-styles";
 import { applyDocumentColorPalette } from "../theme/app-color-palette";
 import { COLOR_PALETTE_IDS } from "../theme/color-palette";
-import { compileDashboardStyles } from "../test-support/compile-dashboard-styles";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
 const uiRoot = path.resolve(stylesDir, "../..");
@@ -76,16 +75,17 @@ describe("theme role migration regression (US-010)", () => {
     expect(readCssVariable("--color-outline")).toBeTruthy();
   });
 
-  it.each(
-    COLOR_PALETTE_IDS,
-  )("switches foundation background when palette %s is applied", (paletteId) => {
-    applyDocumentColorPalette(paletteId);
-    expect(document.documentElement.dataset.colorPalette).toBe(paletteId);
+  it.each(COLOR_PALETTE_IDS)(
+    "switches foundation background when palette %s is applied",
+    (paletteId) => {
+      applyDocumentColorPalette(paletteId);
+      expect(document.documentElement.dataset.colorPalette).toBe(paletteId);
 
-    const background = readCssVariable("--color-af-foundation-background");
-    expect(background).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(background.toLowerCase()).not.toBe("");
-  });
+      const background = readCssVariable("--color-af-foundation-background");
+      expect(background).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(background.toLowerCase()).not.toBe("");
+    },
+  );
 
   it("separates factory-dark page background from shared surface roles", () => {
     applyDocumentColorPalette("factory-dark");
@@ -101,32 +101,33 @@ describe("theme role migration regression (US-010)", () => {
     expect(surface).toBe("#181f2b");
   });
 
-  it.each(
-    COLOR_PALETTE_IDS,
-  )("resolves readable primary on-accent ink for palette %s", (paletteId) => {
-    applyDocumentColorPalette(paletteId);
+  it.each(COLOR_PALETTE_IDS)(
+    "resolves readable primary on-accent ink for palette %s",
+    (paletteId) => {
+      applyDocumentColorPalette(paletteId);
 
-    const primary = readCssVariable("--color-af-foundation-accent");
-    const accentInk = readCssVariable("--color-af-foundation-accent-ink");
-    const canvas = readCssVariable("--color-af-foundation-canvas");
+      const primary = readCssVariable("--color-af-foundation-accent");
+      const accentInk = readCssVariable("--color-af-foundation-accent-ink");
+      const canvas = readCssVariable("--color-af-foundation-canvas");
 
-    expect(primary).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(accentInk).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(accentInk.toLowerCase()).not.toBe(primary.toLowerCase());
+      expect(primary).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(accentInk).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(accentInk.toLowerCase()).not.toBe(primary.toLowerCase());
 
-    const contrast = contrastRatio(
-      parseHexColor(accentInk),
-      parseHexColor(primary),
-    );
-    expect(contrast).toBeGreaterThanOrEqual(4.5);
-
-    if (paletteId === "factory-light") {
-      expect(accentInk.toLowerCase()).not.toBe(canvas.toLowerCase());
-      expect(relativeLuminance(parseHexColor(accentInk))).toBeLessThan(
-        relativeLuminance(parseHexColor(primary)),
+      const contrast = contrastRatio(
+        parseHexColor(accentInk),
+        parseHexColor(primary),
       );
-    }
-  });
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+
+      if (paletteId === "factory-light") {
+        expect(accentInk.toLowerCase()).not.toBe(canvas.toLowerCase());
+        expect(relativeLuminance(parseHexColor(accentInk))).toBeLessThan(
+          relativeLuminance(parseHexColor(primary)),
+        );
+      }
+    },
+  );
 
   it("keeps yellow primary accent across palette switches", () => {
     for (const paletteId of COLOR_PALETTE_IDS) {

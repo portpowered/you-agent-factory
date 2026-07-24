@@ -295,28 +295,31 @@ describe("materialized work outcome resume ordering", () => {
     ["active dispatch", 5],
     ["accepted response", 7],
     ["failed response", 10],
-  ])("matches uninterrupted reduction after a JSON-round-tripped %s checkpoint", (_boundary, prefixLength) => {
-    const events = baselineEvents();
-    const uninterrupted = reduceMaterializedWorkOutcomeEvents(
-      createMaterializedWorkOutcomeState(),
-      events,
-    );
-    const prefix = reduceMaterializedWorkOutcomeEvents(
-      createMaterializedWorkOutcomeState(),
-      events.slice(0, prefixLength),
-    );
-    const serializedPrefix = JSON.parse(
-      JSON.stringify(prefix),
-    ) as MaterializedWorkOutcomeState;
+  ])(
+    "matches uninterrupted reduction after a JSON-round-tripped %s checkpoint",
+    (_boundary, prefixLength) => {
+      const events = baselineEvents();
+      const uninterrupted = reduceMaterializedWorkOutcomeEvents(
+        createMaterializedWorkOutcomeState(),
+        events,
+      );
+      const prefix = reduceMaterializedWorkOutcomeEvents(
+        createMaterializedWorkOutcomeState(),
+        events.slice(0, prefixLength),
+      );
+      const serializedPrefix = JSON.parse(
+        JSON.stringify(prefix),
+      ) as MaterializedWorkOutcomeState;
 
-    const resumed = reduceMaterializedWorkOutcomeEvents(
-      serializedPrefix,
-      events.slice(prefixLength),
-    );
+      const resumed = reduceMaterializedWorkOutcomeEvents(
+        serializedPrefix,
+        events.slice(prefixLength),
+      );
 
-    expect(resumed).toEqual(uninterrupted);
-    expect(serializedPrefix).toEqual(prefix);
-  });
+      expect(resumed).toEqual(uninterrupted);
+      expect(serializedPrefix).toEqual(prefix);
+    },
+  );
 
   it("canonically orders shuffled suffixes without mutating the batch", () => {
     const events = baselineEvents();
@@ -340,20 +343,26 @@ describe("materialized work outcome resume ordering", () => {
 
   it("preserves factory-definition order when resuming queued work with multiple initial states", () => {
     const events = [
-      factoryEvent("initial", 0, 0, FACTORY_EVENT_TYPES.initialStructureRequest, {
-        factory: {
-          ...factoryDefinition(),
-          workTypes: [
-            {
-              name: "task",
-              states: [
-                { name: "ready-b", type: "INITIAL" as const },
-                { name: "ready-a", type: "INITIAL" as const },
-              ],
-            },
-          ],
+      factoryEvent(
+        "initial",
+        0,
+        0,
+        FACTORY_EVENT_TYPES.initialStructureRequest,
+        {
+          factory: {
+            ...factoryDefinition(),
+            workTypes: [
+              {
+                name: "task",
+                states: [
+                  { name: "ready-b", type: "INITIAL" as const },
+                  { name: "ready-a", type: "INITIAL" as const },
+                ],
+              },
+            ],
+          },
         },
-      }),
+      ),
       factoryEvent("work", 1, 1, FACTORY_EVENT_TYPES.workRequest, {
         works: [
           {

@@ -3,8 +3,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./styles.css";
-import { dashboardComponentsPackageName } from "./lib/components-package-resolution";
 import { App } from "./App";
+import { dashboardComponentsPackageName } from "./lib/components-package-resolution";
 
 void dashboardComponentsPackageName;
 

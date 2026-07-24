@@ -33,8 +33,6 @@ describe("CurrentSelectionSubtleCode", () => {
   it("renders compact code with dashboard code typography", () => {
     render(<CurrentSelectionSubtleCode>input.foo</CurrentSelectionSubtleCode>);
 
-    expect(screen.getByText("input.foo").className).toContain(
-      "af-body-code",
-    );
+    expect(screen.getByText("input.foo").className).toContain("af-body-code");
   });
 });

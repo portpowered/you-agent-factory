@@ -82,7 +82,8 @@ describe("dashboard-session-sync-preflight resolution", () => {
         buildPreflightResponse({
           checkpointReusable: false,
           factorySessionId: "session-remapped-002",
-          reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+          reasonCode:
+            FactorySessionSyncPreflightReasonCode.logical_session_remap,
           requestedSessionId: "session-stale-001",
         }),
         "session-stale-001",
@@ -91,7 +92,8 @@ describe("dashboard-session-sync-preflight resolution", () => {
     expect(
       shouldClearCheckpointAfterPreflight(
         buildPreflightResponse({
-          reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+          reasonCode:
+            FactorySessionSyncPreflightReasonCode.logical_session_remap,
         }),
       ),
     ).toBe(true);
@@ -110,7 +112,8 @@ describe("dashboard-session-sync-preflight resolution", () => {
     expect(resolution).toEqual({
       kind: "non-recoverable",
       recovery: {
-        reasonCode: FactorySessionSyncPreflightReasonCode.invalid_target_reference,
+        reasonCode:
+          FactorySessionSyncPreflightReasonCode.invalid_target_reference,
         requestedSessionId: "session-live-001",
       },
     });

@@ -1,7 +1,3 @@
-import { useState } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-
-import { useAppLocale } from "../../i18n";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,6 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@you-agent-factory/components/overlays";
+import { useState } from "react";
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { useAppLocale } from "../../i18n";
 import {
   Button,
   Calendar,

@@ -75,9 +75,7 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
         operations: [
           {
             name: "REVIEW",
-            inputs: [
-              { name: "text", contentTypes: ["TEXT"], required: true },
-            ],
+            inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
             outputs: [{ name: "result", contentTypes: ["TEXT"] }],
           },
         ],

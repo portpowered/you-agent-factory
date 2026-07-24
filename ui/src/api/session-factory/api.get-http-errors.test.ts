@@ -162,31 +162,34 @@ describe("getSessionFactory HTTP error mapping", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)("maps %s GET failures to canonical operator copy", async (code, message) => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              code,
-              message: "Ignored API diagnostic.",
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
+  ] as const)(
+    "maps %s GET failures to canonical operator copy",
+    async (code, message) => {
+      await expect(
+        getSessionFactory("~default", {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code,
+                message: "Ignored API diagnostic.",
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 400,
+                statusText: "Bad Request",
               },
-              status: 400,
-              statusText: "Bad Request",
-            },
+            ),
           ),
-        ),
-      }),
-    ).rejects.toMatchObject({
-      code,
-      message,
-      status: 400,
-    });
-  });
+        }),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 400,
+      });
+    },
+  );
 });
 
 describe("saveSessionFactory HTTP error mapping", () => {
@@ -201,36 +204,39 @@ describe("saveSessionFactory HTTP error mapping", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)("maps %s PUT failures to canonical operator copy", async (code, message) => {
-    await expect(
-      saveSessionFactory(
-        {
-          sessionID: "session-review",
-          factory: sessionFactoryFixture,
-          mode: "REPLACE_CURRENT",
-        },
-        {
-          fetch: vi.fn().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                code,
-                message: "Ignored API diagnostic.",
-              }),
-              {
-                headers: {
-                  "Content-Type": "application/json",
+  ] as const)(
+    "maps %s PUT failures to canonical operator copy",
+    async (code, message) => {
+      await expect(
+        saveSessionFactory(
+          {
+            sessionID: "session-review",
+            factory: sessionFactoryFixture,
+            mode: "REPLACE_CURRENT",
+          },
+          {
+            fetch: vi.fn().mockResolvedValue(
+              new Response(
+                JSON.stringify({
+                  code,
+                  message: "Ignored API diagnostic.",
+                }),
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  status: 409,
+                  statusText: "Conflict",
                 },
-                status: 409,
-                statusText: "Conflict",
-              },
+              ),
             ),
-          ),
-        },
-      ),
-    ).rejects.toMatchObject({
-      code,
-      message,
-      status: 409,
-    });
-  });
+          },
+        ),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 409,
+      });
+    },
+  );
 });

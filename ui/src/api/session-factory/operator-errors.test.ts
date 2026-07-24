@@ -28,16 +28,19 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)("maps %s to the canonical operator message regardless of API copy", (code, expectedMessage) => {
-    expect(
-      resolveSessionFactoryAPIErrorMessage({
-        apiMessage: "Backend-specific diagnostic text.",
-        code,
-        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
-        status: 409,
-      }),
-    ).toBe(expectedMessage);
-  });
+  ] as const)(
+    "maps %s to the canonical operator message regardless of API copy",
+    (code, expectedMessage) => {
+      expect(
+        resolveSessionFactoryAPIErrorMessage({
+          apiMessage: "Backend-specific diagnostic text.",
+          code,
+          rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+          status: 409,
+        }),
+      ).toBe(expectedMessage);
+    },
+  );
 
   it("maps network failures to the session factory network copy", () => {
     expect(
@@ -124,37 +127,40 @@ describe("session factory HTTP error mapping", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)("surfaces canonical %s copy from mocked PUT failures", async (code, message) => {
-    await expect(
-      saveSessionFactory(
-        {
-          sessionID: "~default",
-          factory: sessionFactoryFixture,
-        },
-        {
-          fetch: vi.fn().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                code,
-                message: "Ignored API diagnostic.",
-              }),
-              {
-                headers: {
-                  "Content-Type": "application/json",
+  ] as const)(
+    "surfaces canonical %s copy from mocked PUT failures",
+    async (code, message) => {
+      await expect(
+        saveSessionFactory(
+          {
+            sessionID: "~default",
+            factory: sessionFactoryFixture,
+          },
+          {
+            fetch: vi.fn().mockResolvedValue(
+              new Response(
+                JSON.stringify({
+                  code,
+                  message: "Ignored API diagnostic.",
+                }),
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  status: 409,
+                  statusText: "Conflict",
                 },
-                status: 409,
-                statusText: "Conflict",
-              },
+              ),
             ),
-          ),
-        },
-      ),
-    ).rejects.toMatchObject({
-      code,
-      message,
-      status: 409,
-    });
-  });
+          },
+        ),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 409,
+      });
+    },
+  );
 
   it("surfaces canonical not-idle copy from mocked GET failures", async () => {
     await expect(

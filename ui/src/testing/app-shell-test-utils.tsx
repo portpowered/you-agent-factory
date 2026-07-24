@@ -45,9 +45,7 @@ import {
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
-import {
-  AppShellSeededApp,
-} from "./app-shell-timeline-seeder";
+import { AppShellSeededApp } from "./app-shell-timeline-seeder";
 import {
   DashboardSessionStoreTestProvider,
   DashboardSessionTestProvider,

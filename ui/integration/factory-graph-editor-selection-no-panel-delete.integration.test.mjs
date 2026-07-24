@@ -6,9 +6,9 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
-  openBrowserPage,
   fillModelWorkerAddOperationDraft,
   modelProviderOptionLabel,
+  openBrowserPage,
   selectLabeledComboboxOption,
   startBrowserPreview,
   startFactoryApiServer,
@@ -193,13 +193,17 @@ async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
 async function marqueeSelectGraphNode(page, nodeLocator) {
   const nodeBox = await nodeLocator.boundingBox();
   if (!nodeBox) {
-    throw new Error("Expected graph node to have a bounding box for marquee selection.");
+    throw new Error(
+      "Expected graph node to have a bounding box for marquee selection.",
+    );
   }
 
   const viewport = page.getByRole("region", { name: "Work graph viewport" });
   const viewportBox = await viewport.boundingBox();
   if (!viewportBox) {
-    throw new Error("Expected graph viewport to have a bounding box for marquee selection.");
+    throw new Error(
+      "Expected graph viewport to have a bounding box for marquee selection.",
+    );
   }
 
   const startX = Math.max(viewportBox.x + 4, nodeBox.x - 12);
@@ -376,7 +380,9 @@ describe.sequential("factory graph editor selection panel delete browser integra
         await expect
           .poll(
             async () =>
-              await browserPage.page.locator('[data-id="worker:spare"]').count(),
+              await browserPage.page
+                .locator('[data-id="worker:spare"]')
+                .count(),
             {
               timeout: uiInteractionTimeoutMs,
             },

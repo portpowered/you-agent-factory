@@ -11,7 +11,10 @@ type CanonicalWorkstation = NonNullable<
 
 export type EditableWorkstationType = NonNullable<CanonicalWorkstation["type"]>;
 
-export { DEFAULT_WORKSTATION_TYPE, EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS };
+export {
+  DEFAULT_WORKSTATION_TYPE,
+  EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS,
+};
 
 export function resolveEditableWorkstationType(
   workstation: Pick<CanonicalWorkstation, "type">,

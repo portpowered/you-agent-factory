@@ -98,7 +98,8 @@ describe("resolveWorkstationSaveValidationFieldName", () => {
     expect(
       resolveWorkstationSaveValidationFieldName({
         code: "workstation-model-invoke-operation",
-        message: "MODEL_INVOKE workstation requires an uppercase operation name.",
+        message:
+          "MODEL_INVOKE workstation requires an uppercase operation name.",
         severity: "error",
         subject: {
           id: "operation",

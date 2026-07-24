@@ -3,14 +3,11 @@ import { ReactFlowProvider } from "@xyflow/react";
 
 import { GraphInteractiveExample } from "./graph-interactive-example";
 import {
-  GraphNodeButton,
-  GraphNodeShell,
-} from "./index";
-import {
   desktopInteractiveGraphNodes,
   genericGraphHandles,
   narrowInteractiveGraphNodes,
 } from "./graph-story-fixtures";
+import { GraphNodeButton, GraphNodeShell } from "./index";
 
 function GraphNodeStatePanel({
   buttonLabel,

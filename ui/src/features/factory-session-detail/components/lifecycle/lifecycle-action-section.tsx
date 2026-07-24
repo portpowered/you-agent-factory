@@ -1,24 +1,20 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
+  ActionRow,
   AlertPanel,
   AlertPanelText,
   DashboardActionButton,
-  ActionRow,
-  Label,
   DashboardStatusPill,
+  Label,
   Text,
 } from "../../../../components/ui";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
-import {
-  type LifecycleControlFeedbackState,
-  getFactorySessionLifecycleActionLabel,
-  resolveFactorySessionLifecycleFeedbackDisplay,
-} from "../../lib/lifecycle/factory-session-lifecycle-feedback";
 import type { FactorySessionLifecycleActionID } from "../../lib/factory-session-lifecycle-controls";
 import {
-  getFactorySessionDetailMessages,
-} from "../../messages/factory-session-detail";
+  getFactorySessionLifecycleActionLabel,
+  type LifecycleControlFeedbackState,
+  resolveFactorySessionLifecycleFeedbackDisplay,
+} from "../../lib/lifecycle/factory-session-lifecycle-feedback";
+import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 
 interface LifecycleActionSectionProps {
   availability: {
@@ -49,9 +45,7 @@ export function LifecycleActionSection({
       <ActionRow
         actions={availability.actions.map((action) => (
           <DashboardActionButton
-            disabled={
-              isLifecycleRequestPending && pendingActionID !== action
-            }
+            disabled={isLifecycleRequestPending && pendingActionID !== action}
             executing={pendingActionID === action}
             key={action}
             onClick={() => {
@@ -74,10 +68,14 @@ export function LifecycleActionSection({
         </Text>
       ) : null}
       {availability.showDispatchSelectionHint ? (
-        <WidgetDetailCopy>{messages.lifecycleControlsRetrySelectionHint}</WidgetDetailCopy>
+        <WidgetDetailCopy>
+          {messages.lifecycleControlsRetrySelectionHint}
+        </WidgetDetailCopy>
       ) : null}
       {availability.showEmptyState ? (
-        <WidgetDetailCopy>{messages.lifecycleControlsEmptyState}</WidgetDetailCopy>
+        <WidgetDetailCopy>
+          {messages.lifecycleControlsEmptyState}
+        </WidgetDetailCopy>
       ) : null}
     </section>
   );

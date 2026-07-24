@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildEmptyReplayEventStream,
   buildSuccessfulDurableSession,
   buildWarningDurableSession,
-  buildEmptyReplayEventStream,
   successfulReplaySessionID,
   warningReplaySessionID,
 } from "../../../../testing/factory-session-event-replay-fixtures";
@@ -33,7 +33,9 @@ describe("FactorySessionDetailPanel event replay disclosure loading and empty st
       if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
         return jsonResponse(buildSuccessfulDurableSession());
       }
-      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
+      if (
+        url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)
+      ) {
         return replayResponse.promise;
       }
       return new Response("not found", { status: 404 });
@@ -82,7 +84,9 @@ describe("FactorySessionDetailPanel event replay disclosure loading and empty st
       if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
         return jsonResponse(buildSuccessfulDurableSession());
       }
-      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
+      if (
+        url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)
+      ) {
         return new Response(buildEmptyReplayEventStream(), {
           headers: {
             "Content-Type": "text/event-stream",

@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { Label, Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import type { WorkContent } from "../lib/work-content-types";
 import {
   getWorkContentInspectMessages,
   type WorkContentInspectMessages,
 } from "../messages/work-content";
-import type { WorkContent } from "../lib/work-content-types";
 import { WorkContentPartList } from "./work-content-part-list";
 
 export interface WorkContentReadOnlyListProps {

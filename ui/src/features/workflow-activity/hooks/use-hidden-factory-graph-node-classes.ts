@@ -16,7 +16,10 @@ export function useHiddenFactoryGraphNodeClasses(
   const normalizedScopeKey = factoryViewScopeKey ?? null;
   const [hiddenNodeClasses, setHiddenNodeClasses] = useState<
     ReadonlySet<FactoryGraphNodeKind>
-  >(() => new Set(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses));
+  >(
+    () =>
+      new Set(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses),
+  );
   const [visibilityPreset, setVisibilityPresetState] =
     useState<FactoryGraphEditorVisibilityPreset>(
       DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
@@ -35,7 +38,9 @@ export function useHiddenFactoryGraphNodeClasses(
 
     if (normalizedScopeKey === null) {
       setHiddenNodeClasses(
-        new Set(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses),
+        new Set(
+          DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses,
+        ),
       );
       setVisibilityPresetState(
         DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
@@ -44,9 +49,8 @@ export function useHiddenFactoryGraphNodeClasses(
       return;
     }
 
-    const storedPreferences = readFactoryGraphEditorPreferencesForScope(
-      normalizedScopeKey,
-    );
+    const storedPreferences =
+      readFactoryGraphEditorPreferencesForScope(normalizedScopeKey);
     setHiddenNodeClasses(new Set(storedPreferences.hiddenNodeClasses));
     setVisibilityPresetState(storedPreferences.visibilityPreset);
     hasHydratedPreferencesRef.current = true;

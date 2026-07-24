@@ -1,8 +1,8 @@
 import { type ComponentProps, useState } from "react";
 
 import {
-  Select,
   SELECT_EMPTY_STATE_VALUE,
+  Select,
   SelectContent,
   SelectEmpty,
   SelectItem,

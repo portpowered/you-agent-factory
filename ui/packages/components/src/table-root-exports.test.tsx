@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
-
 import {
   DataTable,
   Table,
@@ -13,6 +11,7 @@ import {
   tableCellWrapClassName,
 } from "@you-agent-factory/components";
 import * as dataDisplay from "@you-agent-factory/components/data-display";
+import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "./testing/render";
 
@@ -49,7 +48,11 @@ describe("@you-agent-factory/components table root exports", () => {
       />,
     );
 
-    expect(screen.getByRole("table", { name: "Root export table" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Package row" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Root export table" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "Package row" }),
+    ).toBeInTheDocument();
   });
 });

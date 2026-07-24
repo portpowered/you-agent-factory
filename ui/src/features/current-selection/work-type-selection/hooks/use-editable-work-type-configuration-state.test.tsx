@@ -370,7 +370,6 @@ describe("useEditableWorkTypeConfigurationState", () => {
       useEditableWorkTypeConfigurationState(storySelection, "story"),
     );
     expect(loadingResult.current).toEqual({ status: "loading" });
-
   });
 
   it("returns empty when the selected work type is missing from the factory document", () => {

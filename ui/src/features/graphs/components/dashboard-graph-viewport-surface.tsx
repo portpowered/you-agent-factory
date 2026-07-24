@@ -1,6 +1,6 @@
 import {
-  GraphViewportSurface as PackageGraphViewportSurface,
   type GraphViewportSurfaceProps,
+  GraphViewportSurface as PackageGraphViewportSurface,
 } from "@you-agent-factory/components/graphs";
 import { forwardRef } from "react";
 

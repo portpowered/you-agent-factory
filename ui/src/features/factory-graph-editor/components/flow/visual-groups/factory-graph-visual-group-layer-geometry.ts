@@ -1,10 +1,9 @@
 import type { CSSProperties } from "react";
-
+import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
 import {
   FACTORY_LAYOUT_GROUP_MIN_SIZE,
   type FactoryLayoutGroup,
 } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
-import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
 
 export const DRAG_CLICK_THRESHOLD_PX = 4;
 

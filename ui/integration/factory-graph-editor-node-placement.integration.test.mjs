@@ -516,7 +516,11 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
+        await waitForDashboardReady(
+          browserPage.page,
+          preview.previewURL,
+          server,
+        );
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -220, 160);
@@ -576,7 +580,11 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
+        await waitForDashboardReady(
+          browserPage.page,
+          preview.previewURL,
+          server,
+        );
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await addWorker(browserPage.page, toolbar, { name: "center-anchor" });
@@ -641,7 +649,11 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
+        await waitForDashboardReady(
+          browserPage.page,
+          preview.previewURL,
+          server,
+        );
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -180, 140);
@@ -717,7 +729,11 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
+        await waitForDashboardReady(
+          browserPage.page,
+          preview.previewURL,
+          server,
+        );
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await addResource(browserPage.page, toolbar, { name: "extra-gpu" });

@@ -1,3 +1,11 @@
+import {
+  ChartContainer,
+  ChartLegendContent,
+  type ChartPresentation,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@you-agent-factory/components/charts";
+import { Button } from "@you-agent-factory/components/primitives";
 import { useMemo } from "react";
 import {
   CartesianGrid,
@@ -9,14 +17,6 @@ import {
   YAxis,
 } from "recharts";
 import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
-import { Button } from "@you-agent-factory/components/primitives";
-import {
-  ChartContainer,
-  ChartLegendContent,
-  type ChartPresentation,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@you-agent-factory/components/charts";
 import { cn } from "../../../lib/cn";
 import { dashboardChartAxisLabelClassName } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";

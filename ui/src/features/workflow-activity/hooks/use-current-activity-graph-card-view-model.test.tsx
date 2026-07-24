@@ -254,9 +254,9 @@ describe("useCurrentActivityGraphCardViewModel visual groups", () => {
     expect(result.current.visualGroupControls.selectedGroup?.label).toBe(
       "Review lane",
     );
-    expect(result.current.visualGroupControls.visualGroupControls?.group.id).toBe(
-      "group-1",
-    );
+    expect(
+      result.current.visualGroupControls.visualGroupControls?.group.id,
+    ).toBe("group-1");
   });
 });
 

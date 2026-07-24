@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 
 import "../../../../../styles.css";
-import type { CurrentActivitySelection } from "../../../../workflow-activity/lib/react-flow-current-activity-card-types";
 import { ReactFlowCurrentActivityCard } from "../../../../workflow-activity/components/react-flow-current-activity-card";
+import type { CurrentActivitySelection } from "../../../../workflow-activity/lib/react-flow-current-activity-card-types";
 import {
   buildVisualGroupEditorFetchMocks,
   buildVisualGroupEditorSnapshot,
@@ -15,10 +15,7 @@ function VisualGroupEditorStory() {
   const snapshot = useMemo(() => buildVisualGroupEditorSnapshot(), []);
 
   return (
-    <div
-      data-visual-group-editor-story=""
-      style={{ minHeight: "760px" }}
-    >
+    <div data-visual-group-editor-story="" style={{ minHeight: "760px" }}>
       <ReactFlowCurrentActivityCard
         now={Date.parse("2026-06-14T12:00:00Z")}
         onSelectDoc={() => {}}
@@ -29,9 +26,7 @@ function VisualGroupEditorStory() {
         onSelectWorkID={() => {}}
         onSelectWorker={() => {}}
         onSelectWorkType={() => {}}
-        onSelectWorkstation={(nodeId) =>
-          setSelection({ kind: "node", nodeId })
-        }
+        onSelectWorkstation={(nodeId) => setSelection({ kind: "node", nodeId })}
         selection={selection}
         snapshot={snapshot}
       />

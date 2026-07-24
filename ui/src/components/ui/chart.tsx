@@ -1,10 +1,10 @@
 export {
+  type ChartConfig,
+  type ChartConfigEntry,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
+  type ChartPresentation,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
-  type ChartConfigEntry,
-  type ChartPresentation,
 } from "@you-agent-factory/components/charts";

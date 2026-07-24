@@ -130,7 +130,9 @@ describe("DocDetailCard editable configuration", () => {
 
     expect(document.activeElement).toBe(editorTextarea);
     expect(
-      document.querySelector('[data-monaco-editor="factory-doc-text"] textarea'),
+      document.querySelector(
+        '[data-monaco-editor="factory-doc-text"] textarea',
+      ),
     ).toBe(editorTextarea);
   });
 
@@ -150,9 +152,7 @@ describe("DocDetailCard editable configuration", () => {
       targetPath: "factory/docs/overview.md",
     });
     rerender(<DocDetailCard targetPath="factory/docs/overview.md" />);
-    expect(
-      screen.getByText(/Unable to load the selected doc\./),
-    ).toBeTruthy();
+    expect(screen.getByText(/Unable to load the selected doc\./)).toBeTruthy();
     expect(screen.getByText(/Network dropped/)).toBeTruthy();
 
     mockUseDocDetailState.mockReturnValue({
@@ -161,7 +161,9 @@ describe("DocDetailCard editable configuration", () => {
     });
     rerender(<DocDetailCard targetPath="factory/docs/overview.md" />);
     expect(
-      screen.getByText("This doc is no longer attached to the current factory."),
+      screen.getByText(
+        "This doc is no longer attached to the current factory.",
+      ),
     ).toBeTruthy();
   });
 
@@ -223,7 +225,9 @@ describe("DocDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(screen.getByText("Enter doc content before saving.")).toBeTruthy();
     expect(
-      screen.getByText(/Resolve the highlighted fields before saving this doc\./),
+      screen.getByText(
+        /Resolve the highlighted fields before saving this doc\./,
+      ),
     ).toBeTruthy();
     expect(screen.getByText(/Saving failed\./)).toBeTruthy();
     expect(screen.getByText(/Factory definition is invalid\./)).toBeTruthy();

@@ -37,30 +37,30 @@ describe("useFactoryDocumentSave operator errors", () => {
     {
       code: "INVALID_FACTORY_DEFINITION" as const,
     },
-  ])("surfaces $code through saveAsync rejections", async ({
-    code,
-    status,
-  }) => {
-    const error = new CurrentFactoryDefinitionError(
-      `Save failed with ${code}.`,
-      {
+  ])(
+    "surfaces $code through saveAsync rejections",
+    async ({ code, status }) => {
+      const error = new CurrentFactoryDefinitionError(
+        `Save failed with ${code}.`,
+        {
+          code,
+          status,
+        },
+      );
+      vi.mocked(saveFactoryForSessionDocument).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useFactoryDocumentSave(), {
+        wrapper: createFactoryDocumentSaveQueryClientWrapper(),
+      });
+
+      await expect(
+        result.current.saveAsync({
+          factory: editableFactoryDefinition,
+        }),
+      ).rejects.toMatchObject({
         code,
-        status,
-      },
-    );
-    vi.mocked(saveFactoryForSessionDocument).mockRejectedValue(error);
-
-    const { result } = renderHook(() => useFactoryDocumentSave(), {
-      wrapper: createFactoryDocumentSaveQueryClientWrapper(),
-    });
-
-    await expect(
-      result.current.saveAsync({
-        factory: editableFactoryDefinition,
-      }),
-    ).rejects.toMatchObject({
-      code,
-      name: "CurrentFactoryDefinitionError",
-    });
-  });
+        name: "CurrentFactoryDefinitionError",
+      });
+    },
+  );
 });

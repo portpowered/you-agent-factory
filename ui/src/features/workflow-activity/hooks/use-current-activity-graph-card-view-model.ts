@@ -1,12 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
+import { pruneFactoryGraphEditorSelectionAfterRemoval } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 import {
-  pruneFactoryGraphEditorSelectionAfterRemoval,
-} from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
-import {
-  resolveFactoryGraphEditorToolbarSelectionState,
   type FactoryGraphEditorToolbarSelectionState,
+  resolveFactoryGraphEditorToolbarSelectionState,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-toolbar-selection";
 import {
   factoryGraphNodeIdForAddEntityDraft,

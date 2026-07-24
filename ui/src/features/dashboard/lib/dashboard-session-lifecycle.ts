@@ -30,7 +30,9 @@ export function sessionIDFromDashboardSessionKey(
     return null;
   }
   const separatorIndex = sessionKey.lastIndexOf("::");
-  return separatorIndex === -1 ? sessionKey : sessionKey.slice(0, separatorIndex);
+  return separatorIndex === -1
+    ? sessionKey
+    : sessionKey.slice(0, separatorIndex);
 }
 
 export function shouldResumeFromPersistedCheckpoint({
@@ -139,9 +141,14 @@ export function clearDashboardSessionRuntimeQueries(
 ): void {
   const resolvedStreamIdentity =
     streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
-  const backendScopeID = resolveSessionRuntimeCacheScope(resolvedStreamIdentity);
+  const backendScopeID = resolveSessionRuntimeCacheScope(
+    resolvedStreamIdentity,
+  );
   queryClient.removeQueries({
-    queryKey: currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
+    queryKey: currentFactoryDefinitionQueryKey(
+      sessionID,
+      resolvedStreamIdentity,
+    ),
     exact: false,
   });
   queryClient.removeQueries({

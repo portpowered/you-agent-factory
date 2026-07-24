@@ -4,14 +4,14 @@ export const COMPONENTS_CATEGORY = "charts" as const;
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
 export {
+  type ChartConfig,
+  type ChartConfigEntry,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
+  type ChartPresentation,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
-  type ChartConfigEntry,
-  type ChartPresentation,
 } from "./chart";
 
 export {

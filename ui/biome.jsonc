@@ -11,6 +11,7 @@
       "!.vitest-reports",
       "!coverage",
       "!dist",
+      "!packages/client/src/generated/*.schema.json",
       "!storybook-static"
     ]
   },

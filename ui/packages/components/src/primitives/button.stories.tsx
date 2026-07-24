@@ -37,7 +37,10 @@ function SemanticButtonVariantsShowcase() {
   return (
     <div className="grid gap-6">
       <section aria-labelledby="semantic-tones-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="semantic-tones-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="semantic-tones-heading"
+        >
           Semantic button tones
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -61,7 +64,10 @@ function SemanticButtonVariantsShowcase() {
       </section>
 
       <section aria-labelledby="link-like-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="link-like-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="link-like-heading"
+        >
           Link-like actions
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -75,7 +81,10 @@ function SemanticButtonVariantsShowcase() {
       </section>
 
       <section aria-labelledby="disabled-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="disabled-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="disabled-heading"
+        >
           Disabled states
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -153,7 +162,10 @@ function LoadingAndIconOnlyShowcase() {
   return (
     <div className="grid gap-6">
       <section aria-labelledby="loading-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="loading-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="loading-heading"
+        >
           Loading states
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -167,7 +179,10 @@ function LoadingAndIconOnlyShowcase() {
       </section>
 
       <section aria-labelledby="icon-only-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="icon-only-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="icon-only-heading"
+        >
           Icon-only actions
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -192,12 +207,15 @@ function LoadingAndIconOnlyShowcase() {
       </section>
 
       <section aria-labelledby="focus-heading" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-on-surface" id="focus-heading">
+        <h2
+          className="m-0 text-lg font-semibold text-on-surface"
+          id="focus-heading"
+        >
           Focus-visible treatment
         </h2>
         <p className="m-0 text-sm text-on-surface-variant">
-          Tab through the controls below to verify the shared focus ring remains visible
-          for text, link-like, loading, and icon-only buttons.
+          Tab through the controls below to verify the shared focus ring remains
+          visible for text, link-like, loading, and icon-only buttons.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button">Focusable text</Button>
@@ -248,9 +266,9 @@ export const LoadingAndIconOnly: Story = {
       canvas.getByRole("button", { name: "Focusable icon action" }),
     ).toBeVisible();
 
-    const loadingButtons = canvas.getAllByRole("button").filter(
-      (button) => button.getAttribute("aria-busy") === "true",
-    );
+    const loadingButtons = canvas
+      .getAllByRole("button")
+      .filter((button) => button.getAttribute("aria-busy") === "true");
     await expect(loadingButtons.length).toBeGreaterThanOrEqual(2);
     for (const button of loadingButtons) {
       await expect(button.querySelector("svg.animate-spin")).toBeTruthy();

@@ -36,9 +36,13 @@ describe("factory graph layout keyboard shortcuts", () => {
     const textarea = document.createElement("textarea");
     document.body.append(editable, select, textarea);
 
-    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(editable)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(editable)).toBe(
+      false,
+    );
     expect(shouldHandleFactoryGraphEditorKeyboardShortcut(select)).toBe(false);
-    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(textarea)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(textarea)).toBe(
+      false,
+    );
 
     editable.remove();
     select.remove();
@@ -47,7 +51,9 @@ describe("factory graph layout keyboard shortcuts", () => {
 
   it("ignores non-element event targets", () => {
     expect(shouldHandleFactoryGraphEditorKeyboardShortcut(null)).toBe(false);
-    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(document)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(document)).toBe(
+      false,
+    );
   });
 
   it("detects undo and redo keyboard combinations", () => {

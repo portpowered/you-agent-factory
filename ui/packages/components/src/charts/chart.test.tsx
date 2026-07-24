@@ -1,20 +1,12 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it, vi } from "vitest";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
+import { describe, expect, it, vi } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 
-import {
-  ChartContainer,
-  ChartLegendContent,
-  type ChartConfig,
-} from "./chart";
+import { type ChartConfig, ChartContainer, ChartLegendContent } from "./chart";
 
 const sampleChartConfig: ChartConfig = {
   alpha: {
@@ -53,11 +45,7 @@ describe("chart package exports", () => {
     renderPackageComponent(
       <ChartContainer
         config={sampleChartConfig}
-        footer={
-          <ChartLegendContent
-            payload={sampleLegendPayload}
-          />
-        }
+        footer={<ChartLegendContent payload={sampleLegendPayload} />}
         title="Sample throughput chart"
       >
         <LineChart data={sampleChartData}>
@@ -70,7 +58,9 @@ describe("chart package exports", () => {
       </ChartContainer>,
     );
 
-    const chartRegion = screen.getByRole("img", { name: "Sample throughput chart" });
+    const chartRegion = screen.getByRole("img", {
+      name: "Sample throughput chart",
+    });
     expect(chartRegion).toBeInTheDocument();
     expect(chartRegion).toHaveAttribute("data-chart-container", "");
     expect(chartRegion).toHaveStyle({

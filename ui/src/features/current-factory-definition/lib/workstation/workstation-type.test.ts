@@ -11,9 +11,7 @@ import {
 describe("workstation type helpers", () => {
   it("defaults missing workstation types to AGENT_RUN", () => {
     expect(resolveEditableWorkstationType({})).toBe(DEFAULT_WORKSTATION_TYPE);
-    expect(DEFAULT_WORKSTATION_TYPE).toBe(
-      WorkstationType.AGENT_RUN,
-    );
+    expect(DEFAULT_WORKSTATION_TYPE).toBe(WorkstationType.AGENT_RUN);
   });
 
   it("limits LOGICAL_MOVE workstations to their current type", () => {
@@ -31,7 +29,9 @@ describe("workstation type helpers", () => {
       "INFERENCE_RUN",
     ]);
     expect(supportsEditableWorkstationTypeConversion("AGENT_RUN")).toBe(true);
-    expect(supportsEditableWorkstationTypeConversion("INFERENCE_RUN")).toBe(true);
+    expect(supportsEditableWorkstationTypeConversion("INFERENCE_RUN")).toBe(
+      true,
+    );
   });
 
   it("preserves legacy runnable workstation types in conversion options", () => {

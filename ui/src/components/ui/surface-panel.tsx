@@ -1,6 +1,6 @@
 /** @deprecated Use `SurfacePanel` from `@you-agent-factory/components`. */
 export {
   SurfacePanel,
-  surfacePanelVariants,
   type SurfacePanelProps,
+  surfacePanelVariants,
 } from "@you-agent-factory/components";

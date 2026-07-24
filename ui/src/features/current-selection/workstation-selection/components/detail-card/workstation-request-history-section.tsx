@@ -1,3 +1,4 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { DashboardWorkstationRequest } from "../../../../../api/dashboard/types";
 import { DashboardActionButton } from "../../../../../components/ui";
 import {
@@ -5,9 +6,6 @@ import {
   formatDurationMillis,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../../base/public";

@@ -4,17 +4,17 @@ import {
   EDITABLE_MODEL_LOCALITIES,
   EDITABLE_MODEL_PROVIDERS,
 } from "../../../../../current-factory-definition/lib/worker-editable-values";
-import type {
-  ReadyWorkerEditableConfigurationState,
-  ReadyWorkerEditableValidationErrors,
-  WorkerEditableConfigurationMessages,
-} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationFieldHelp,
   WorkerEditableConfigurationServerChangedHint,
   WorkerOptionalEnumSelect,
 } from "./primitives/worker-editable-configuration-field-primitives";
+import type {
+  ReadyWorkerEditableConfigurationState,
+  ReadyWorkerEditableValidationErrors,
+  WorkerEditableConfigurationMessages,
+} from "./primitives/worker-editable-configuration-field-types";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: model worker fields stay grouped for parity with script/hosted sections.
 export function WorkerEditableConfigurationModelFields({

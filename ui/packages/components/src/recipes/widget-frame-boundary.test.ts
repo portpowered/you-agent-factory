@@ -45,7 +45,9 @@ describe("widget frame package boundary", () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempRoots.map((tempRoot) => rm(tempRoot, { force: true, recursive: true })),
+      tempRoots.map((tempRoot) =>
+        rm(tempRoot, { force: true, recursive: true }),
+      ),
     );
     tempRoots = [];
   });
@@ -88,8 +90,7 @@ describe("widget frame package boundary", () => {
     expect(report.violations).toEqual([
       expect.objectContaining({
         kind: "dashboard-feature-import",
-        importPath:
-          "../../dashboard-src/features/bento/components/agent-bento",
+        importPath: "../../dashboard-src/features/bento/components/agent-bento",
         relativeFilePath: "src/recipes/bento-bridge.tsx",
       }),
     ]);

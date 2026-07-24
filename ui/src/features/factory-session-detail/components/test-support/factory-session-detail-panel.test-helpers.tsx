@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, type RenderResult } from "@testing-library/react";
+import { type RenderResult, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 export function renderWithQueryClient(
@@ -43,8 +43,13 @@ export function installCanonicalSupplementalReadDefaults(): void {
   mock.mockImplementation(async (input, init) => {
     const response = await configuredFetch(input, init);
     const url = String(input);
-    const dispatchMatch = url.match(/\/factory-sessions\/([^/?]+)\/dispatches$/);
-    if (dispatchMatch && (response.status === 404 || !(await hasDispatches(response)))) {
+    const dispatchMatch = url.match(
+      /\/factory-sessions\/([^/?]+)\/dispatches$/,
+    );
+    if (
+      dispatchMatch &&
+      (response.status === 404 || !(await hasDispatches(response)))
+    ) {
       return jsonResponse({
         dispatches: [],
         sessionId: decodeURIComponent(dispatchMatch[1]),
@@ -65,7 +70,9 @@ export function installCanonicalSupplementalReadDefaults(): void {
       liveResultMatch &&
       (response.status === 404 || (await isSessionReadResponse(response)))
     ) {
-      return jsonResponse({ sessionId: decodeURIComponent(liveResultMatch[1]) });
+      return jsonResponse({
+        sessionId: decodeURIComponent(liveResultMatch[1]),
+      });
     }
 
     // Some panel fixtures intentionally reuse one Response for every request.

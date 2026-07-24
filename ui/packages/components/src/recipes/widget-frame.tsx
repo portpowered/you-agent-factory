@@ -1,13 +1,12 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../utilities/cn";
-
-import { WIDGET_FRAME_BODY_TEXT_CLASS } from "./widget-frame-typography";
 import {
   WIDGET_FRAME_MIN_WIDTH_CLASS,
   WIDGET_FRAME_WIDE_BODY_CLASS,
   widgetFrameDetailCardClass,
 } from "./widget-frame-layout";
+import { WIDGET_FRAME_BODY_TEXT_CLASS } from "./widget-frame-typography";
 
 const WIDGET_FRAME_SHELL_CLASS =
   "flex min-w-0 flex-col rounded-lg border border-outline bg-surface-container-high text-on-surface shadow-af-card";

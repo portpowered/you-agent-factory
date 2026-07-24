@@ -3,11 +3,7 @@
 import { axe } from "jest-axe";
 import { describe, expect, it } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import { PackageText } from "./package-text";
 
 describe("PackageText", () => {

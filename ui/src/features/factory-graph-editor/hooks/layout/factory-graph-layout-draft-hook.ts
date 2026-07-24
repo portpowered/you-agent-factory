@@ -9,6 +9,17 @@ import {
   removeFactoryLayoutEdgeWaypoint,
 } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
+  type FactoryLayout,
+  type FactoryLayoutPoint,
+  type FactoryLayoutViewport,
+  factoryLayoutFromDefinition,
+  factoryLayoutNodePosition,
+  hasFactoryLayoutChanges,
+  moveFactoryLayoutNode,
+  moveFactoryLayoutNodesByDelta,
+  updateFactoryLayoutViewport,
+} from "../../lib/layout/factory-graph-layout-operations";
+import {
   createCreateFactoryLayoutGroupCommand,
   createDeleteFactoryLayoutGroupCommand,
   createMoveFactoryLayoutNodeCommand,
@@ -20,6 +31,16 @@ import {
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
 } from "../../lib/layout/history/factory-graph-layout-commands";
+import {
+  canRedoFactoryLayoutHistory,
+  canUndoFactoryLayoutHistory,
+  clearFactoryLayoutHistoryState,
+  type FactoryLayoutHistoryState,
+  pruneFactoryLayoutHistoryForNodeIds,
+  pushFactoryLayoutHistoryCommand,
+  redoFactoryLayoutHistory,
+  undoFactoryLayoutHistory,
+} from "../../lib/layout/history/factory-graph-layout-history";
 import {
   addFactoryLayoutGroup,
   addNodeToFactoryLayoutGroup,
@@ -34,27 +55,6 @@ import {
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../../lib/layout/visual-groups/factory-graph-layout-groups";
-import {
-  canRedoFactoryLayoutHistory,
-  canUndoFactoryLayoutHistory,
-  clearFactoryLayoutHistoryState,
-  type FactoryLayoutHistoryState,
-  pruneFactoryLayoutHistoryForNodeIds,
-  pushFactoryLayoutHistoryCommand,
-  redoFactoryLayoutHistory,
-  undoFactoryLayoutHistory,
-} from "../../lib/layout/history/factory-graph-layout-history";
-import {
-  type FactoryLayout,
-  type FactoryLayoutPoint,
-  type FactoryLayoutViewport,
-  factoryLayoutFromDefinition,
-  factoryLayoutNodePosition,
-  hasFactoryLayoutChanges,
-  moveFactoryLayoutNode,
-  moveFactoryLayoutNodesByDelta,
-  updateFactoryLayoutViewport,
-} from "../../lib/layout/factory-graph-layout-operations";
 
 export interface FactoryGraphLayoutDraftDerivedState {
   adoptSavedLayout: (layout: FactoryLayout) => void;
@@ -219,7 +219,8 @@ export function useFactoryGraphLayoutDraftState(
     setStore((currentStore) => ({
       history: clearFactoryLayoutHistoryState(),
       sessionState: {
-        baseLayout: currentStore.sessionState?.baseLayout ?? createDefaultLayoutState(),
+        baseLayout:
+          currentStore.sessionState?.baseLayout ?? createDefaultLayoutState(),
         layout: structuredClone(nextLayout),
       },
     }));
@@ -231,7 +232,8 @@ export function useFactoryGraphLayoutDraftState(
         setStore((currentStore) => ({
           history: clearFactoryLayoutHistoryState(),
           sessionState: {
-            baseLayout: currentStore.sessionState?.baseLayout ?? documentBaseLayout,
+            baseLayout:
+              currentStore.sessionState?.baseLayout ?? documentBaseLayout,
             layout: nextLayout,
           },
         }));
@@ -255,10 +257,7 @@ export function useFactoryGraphLayoutDraftState(
     });
   }, []);
   const commitEdgeWaypointUpdate = useCallback(
-    (
-      edgeId: string,
-      updater: (layout: FactoryLayout) => FactoryLayout,
-    ) => {
+    (edgeId: string, updater: (layout: FactoryLayout) => FactoryLayout) => {
       commitLayoutUpdate(({ currentLayout }) => {
         const nextLayout = updater(currentLayout);
         return {
@@ -274,11 +273,7 @@ export function useFactoryGraphLayoutDraftState(
     [commitLayoutUpdate],
   );
   const addEdgeWaypoint = useCallback(
-    (
-      edgeId: string,
-      position: FactoryLayoutPoint,
-      insertIndex?: number,
-    ) => {
+    (edgeId: string, position: FactoryLayoutPoint, insertIndex?: number) => {
       commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
         addFactoryLayoutEdgeWaypoint(
           currentLayout,
@@ -291,11 +286,7 @@ export function useFactoryGraphLayoutDraftState(
     [commitEdgeWaypointUpdate],
   );
   const moveEdgeWaypoint = useCallback(
-    (
-      edgeId: string,
-      waypointIndex: number,
-      position: FactoryLayoutPoint,
-    ) => {
+    (edgeId: string, waypointIndex: number, position: FactoryLayoutPoint) => {
       commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
         moveFactoryLayoutEdgeWaypoint(
           currentLayout,
@@ -310,11 +301,7 @@ export function useFactoryGraphLayoutDraftState(
   const removeEdgeWaypoint = useCallback(
     (edgeId: string, waypointIndex: number) => {
       commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
-        removeFactoryLayoutEdgeWaypoint(
-          currentLayout,
-          edgeId,
-          waypointIndex,
-        ),
+        removeFactoryLayoutEdgeWaypoint(currentLayout, edgeId, waypointIndex),
       );
     },
     [commitEdgeWaypointUpdate],
@@ -432,15 +419,18 @@ export function useFactoryGraphLayoutDraftState(
       isApplyingHistoryRef.current = false;
     }
   }, [documentBaseLayout]);
-  const pruneLayoutHistoryForNodeIds = useCallback((nodeIds: readonly string[]) => {
-    setStore((currentStore) => ({
-      ...currentStore,
-      history: pruneFactoryLayoutHistoryForNodeIds(
-        currentStore.history,
-        new Set(nodeIds),
-      ),
-    }));
-  }, []);
+  const pruneLayoutHistoryForNodeIds = useCallback(
+    (nodeIds: readonly string[]) => {
+      setStore((currentStore) => ({
+        ...currentStore,
+        history: pruneFactoryLayoutHistoryForNodeIds(
+          currentStore.history,
+          new Set(nodeIds),
+        ),
+      }));
+    },
+    [],
+  );
   const createVisualGroup = useCallback(
     (center: FactoryLayoutPoint): FactoryLayoutGroup | null => {
       let createdGroup: FactoryLayoutGroup | null = null;
@@ -576,7 +566,10 @@ export function useFactoryGraphLayoutDraftState(
     (
       groupId: string,
       delta: FactoryLayoutPoint,
-      resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
+      resolvedNodePositions: ReadonlyMap<
+        string,
+        FactoryLayoutPoint
+      > = new Map(),
     ) => {
       commitLayoutUpdate(({ currentLayout }) => {
         const nextLayout = moveFactoryLayoutGroupByDelta(

@@ -2,11 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  renderPackageComponent,
-  screen,
-  userEvent,
-} from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import {
   WidgetFrameDisclosure,
   WidgetFrameDisclosurePanel,
@@ -35,9 +31,7 @@ describe("WidgetFrameDisclosure", () => {
     expect(trigger.getAttribute("aria-controls")).toBe("details-panel");
     expect(trigger.className).toContain("focus-visible:outline-af-accent");
     expect(trigger.querySelector("svg")?.className).toContain("rotate-0");
-    expect(
-      screen.queryByText("Hidden details", { hidden: true }),
-    ).toBeTruthy();
+    expect(screen.queryByText("Hidden details", { hidden: true })).toBeTruthy();
     expect(
       document.getElementById("details-panel")?.hasAttribute("hidden"),
     ).toBe(true);

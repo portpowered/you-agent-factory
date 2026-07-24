@@ -41,16 +41,16 @@ import {
   parseFactoryBundledDocNodeId,
 } from "../factory-graph-doc-editor";
 import {
-  applyFactoryGraphSelectionBatchRemoval,
-  buildFactoryGraphSelectionBatchRemovalPlan,
-} from "../selection/factory-graph-editor-selection-batch-delete";
-import {
   applyPendingFactoryLayout,
   type FactoryLayout,
   factoryLayoutFromDefinition,
   hasFactoryLayoutChanges,
 } from "../layout/factory-graph-layout-operations";
 import { preparePendingFactoryLayoutForSave } from "../layout/factory-graph-layout-validation";
+import {
+  applyFactoryGraphSelectionBatchRemoval,
+  buildFactoryGraphSelectionBatchRemovalPlan,
+} from "../selection/factory-graph-editor-selection-batch-delete";
 import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
@@ -432,12 +432,16 @@ export function applyFactoryGraphPendingEdits(options: {
     options.baseFactoryDefinition,
     options.draft,
   );
-  const pendingTopology =
-    buildFactoryGraphTopologyFromDefinition(nextFactoryDefinition);
+  const pendingTopology = buildFactoryGraphTopologyFromDefinition(
+    nextFactoryDefinition,
+  );
   const preparedPendingLayoutResult =
     options.pendingLayout == null
       ? null
-      : preparePendingFactoryLayoutForSave(options.pendingLayout, pendingTopology);
+      : preparePendingFactoryLayoutForSave(
+          options.pendingLayout,
+          pendingTopology,
+        );
   const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
   const nextDefinition =
     preparedPendingLayout &&

@@ -1,13 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { vi } from "vitest";
 import {
+  buttonVariants,
+  IconButtonShell,
   Button as PackageButton,
   ButtonLink as PackageButtonLink,
-  IconButtonShell,
-  buttonVariants,
 } from "@you-agent-factory/components";
+import { vi } from "vitest";
 
 import { Button } from "./button";
 import { ButtonLink } from "./button-link";

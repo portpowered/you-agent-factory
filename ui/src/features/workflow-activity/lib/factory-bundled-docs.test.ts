@@ -143,7 +143,9 @@ describe("factory bundled docs", () => {
       },
     };
 
-    expect(factoryBundledDocExists(factory, "factory/docs/guide.md")).toBe(true);
+    expect(factoryBundledDocExists(factory, "factory/docs/guide.md")).toBe(
+      true,
+    );
     expect(factoryBundledDocExists(factory, "factory/docs/missing.md")).toBe(
       false,
     );

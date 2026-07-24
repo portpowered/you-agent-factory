@@ -11,7 +11,8 @@ const WIDGET_SUCCESS_STATE_CLASS =
   "rounded-2xl border border-af-success-border bg-success-container p-5 text-on-success-container";
 const WIDGET_LOADING_PLACEHOLDER_CLASS = "grid gap-2 pt-2";
 
-export interface WidgetLoadingStateProps extends HTMLAttributes<HTMLDivElement> {
+export interface WidgetLoadingStateProps
+  extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   placeholder?: ReactNode;
   showDefaultPlaceholder?: boolean;
@@ -43,10 +44,7 @@ export function WidgetLoadingState({
     >
       {children}
       {resolvedPlaceholder ? (
-        <div
-          aria-hidden="true"
-          className={WIDGET_LOADING_PLACEHOLDER_CLASS}
-        >
+        <div aria-hidden="true" className={WIDGET_LOADING_PLACEHOLDER_CLASS}>
           {resolvedPlaceholder}
         </div>
       ) : null}
@@ -65,7 +63,11 @@ export function WidgetErrorState({
 }: WidgetErrorStateProps) {
   return (
     <div
-      className={cn(WIDGET_ERROR_STATE_CLASS, WIDGET_STATE_PANEL_CLASS, className)}
+      className={cn(
+        WIDGET_ERROR_STATE_CLASS,
+        WIDGET_STATE_PANEL_CLASS,
+        className,
+      )}
       role="alert"
       {...props}
     >
@@ -74,7 +76,8 @@ export function WidgetErrorState({
   );
 }
 
-export interface WidgetSuccessStateProps extends HTMLAttributes<HTMLDivElement> {
+export interface WidgetSuccessStateProps
+  extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 

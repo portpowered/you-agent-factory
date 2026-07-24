@@ -8,11 +8,11 @@ import { VerticalResizableWidth } from "../../../../components/prompt-editor/ver
 import {
   AlertPanel,
   AlertPanelText,
-  Label,
-  Text,
   FormError,
   FormWarning,
   Input,
+  Label,
+  Text,
 } from "../../../../components/ui";
 import { FACTORY_DOCS_TARGET_PREFIX } from "../../../current-factory-definition/lib/doc-editable-values";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
@@ -73,10 +73,7 @@ export function DocEditableConfigurationSection({
               messages,
             ),
           )}
-          <Text
-            className="m-0 text-on-surface-subtle"
-            variant="supporting"
-          >
+          <Text className="m-0 text-on-surface-subtle" variant="supporting">
             {messages.editableConfigurationOverwriteWarningDetail}
           </Text>
         </FormWarning>

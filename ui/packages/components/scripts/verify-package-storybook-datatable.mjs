@@ -115,7 +115,9 @@ async function verifyLoadingStory(page, storyId) {
     .getByRole("cell", { name: "Signal Router" })
     .count();
   if (staleRowCount > 0) {
-    throw new Error(`Expected ${storyId} to hide stale row data while loading.`);
+    throw new Error(
+      `Expected ${storyId} to hide stale row data while loading.`,
+    );
   }
 
   console.log(`Verified DataTable loading DOM for ${storyId}.`);

@@ -9,13 +9,13 @@ import {
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openBrowserPage,
+  openDashboardWithSeededCheckpoint,
   resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   timelineCheckpointDBVersion,
   timelineCheckpointSchemaVersion,
   uiInteractionTimeoutMs,
-  openDashboardWithSeededCheckpoint,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
 
@@ -191,7 +191,11 @@ async function assertRecoveryPanelVisible(page, viewport) {
     timeout: uiInteractionTimeoutMs,
   });
   await retryButton.focus();
-  await expect.poll(async () => retryButton.evaluate((node) => node === document.activeElement)).toBe(true);
+  await expect
+    .poll(async () =>
+      retryButton.evaluate((node) => node === document.activeElement),
+    )
+    .toBe(true);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: browser recovery scenarios share one preview harness and IndexedDB seeding helpers.
@@ -241,7 +245,9 @@ describe.sequential("dashboard session recovery browser integration", () => {
           },
         );
 
-        const matchingURLs = await readCapturedEventStreamURLs(browserPage.page);
+        const matchingURLs = await readCapturedEventStreamURLs(
+          browserPage.page,
+        );
         expect(
           matchingURLs.some((url) =>
             url.includes("after_event_id=browser-checkpoint-event-7"),
@@ -268,20 +274,17 @@ describe.sequential("dashboard session recovery browser integration", () => {
         });
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
 
-        await waitForDurableCheckpoint(
-          "stale identity reconnect",
-          async () => {
-            const urls = await readCapturedEventStreamURLs(browserPage.page);
-            return urls.some(
-              (url) =>
-                url.includes(
-                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
-                ) &&
-                !url.includes("after_event_id=") &&
-                !url.includes("after_sequence="),
-            );
-          },
-        );
+        await waitForDurableCheckpoint("stale identity reconnect", async () => {
+          const urls = await readCapturedEventStreamURLs(browserPage.page);
+          return urls.some(
+            (url) =>
+              url.includes(
+                `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
+              ) &&
+              !url.includes("after_event_id=") &&
+              !url.includes("after_sequence="),
+          );
+        });
 
         const staleURLs = await readCapturedEventStreamURLs(browserPage.page);
         expect(
@@ -289,8 +292,7 @@ describe.sequential("dashboard session recovery browser integration", () => {
             (url) =>
               url.includes(
                 `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
-              ) &&
-              !url.includes("after_event_id=stale-checkpoint-event-9"),
+              ) && !url.includes("after_event_id=stale-checkpoint-event-9"),
           ),
         ).toBe(true);
         expectNoBrowserErrors(
@@ -339,7 +341,8 @@ describe.sequential("dashboard session recovery browser integration", () => {
             const acceptHeader = request.headers().accept ?? "";
             const url = request.url();
             const hasCursor =
-              url.includes("after_event_id=") || url.includes("after_sequence=");
+              url.includes("after_event_id=") ||
+              url.includes("after_sequence=");
 
             if (acceptHeader.includes("application/json")) {
               await route.fulfill({
@@ -378,7 +381,9 @@ describe.sequential("dashboard session recovery browser integration", () => {
           async () => {
             try {
               await browserPage.page
-                .getByRole("heading", { name: "Session replay needs attention" })
+                .getByRole("heading", {
+                  name: "Session replay needs attention",
+                })
                 .waitFor({ state: "visible", timeout: 1_000 });
               return true;
             } catch {

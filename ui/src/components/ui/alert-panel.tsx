@@ -1,9 +1,3 @@
-export {
-  AlertPanel,
-  AlertPanelStatusLabel,
-  AlertPanelText,
-  AlertPanelTitle,
-} from "@you-agent-factory/components/feedback";
 export type {
   AlertPanelProps,
   AlertPanelSemanticVariant,
@@ -12,4 +6,10 @@ export type {
   AlertPanelTitleProps,
   AlertPanelTone,
   AlertPanelVariant,
+} from "@you-agent-factory/components/feedback";
+export {
+  AlertPanel,
+  AlertPanelStatusLabel,
+  AlertPanelText,
+  AlertPanelTitle,
 } from "@you-agent-factory/components/feedback";

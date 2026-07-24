@@ -41,10 +41,7 @@ export const SCROLL_AREA_HORIZONTAL_ANCHOR =
 export const SCROLL_AREA_MOBILE_ANCHOR =
   "Mobile scroll area content remains reachable at narrow widths.";
 
-export function createLongParagraphs(
-  prefix: string,
-  count: number,
-): string[] {
+export function createLongParagraphs(prefix: string, count: number): string[] {
   return Array.from({ length: count }, (_, index) => {
     const paragraphNumber = index + 1;
     return `${prefix} paragraph ${paragraphNumber}.`;

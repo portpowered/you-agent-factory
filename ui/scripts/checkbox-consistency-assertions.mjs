@@ -32,7 +32,8 @@ export async function assertStyledCheckboxTreatment(checkboxLocator, label) {
     );
   }
 
-  const indicatorClassName = await readCheckboxIndicatorClassName(checkboxLocator);
+  const indicatorClassName =
+    await readCheckboxIndicatorClassName(checkboxLocator);
   for (const marker of STYLED_CHECKBOX_INDICATOR_MARKERS) {
     if (!indicatorClassName.includes(marker)) {
       throw new Error(
@@ -44,7 +45,9 @@ export async function assertStyledCheckboxTreatment(checkboxLocator, label) {
   const indicator = checkboxLocator.locator("xpath=following-sibling::*[1]");
   const svgCount = await indicator.locator("svg").count();
   if (svgCount === 0) {
-    throw new Error(`${label}: checkbox indicator is missing the checked mark.`);
+    throw new Error(
+      `${label}: checkbox indicator is missing the checked mark.`,
+    );
   }
 }
 
@@ -67,10 +70,9 @@ export async function assertCheckboxInvalidState(checkboxLocator, label) {
     throw new Error(`${label}: expected aria-invalid="true".`);
   }
 
-  const indicatorClassName = await readCheckboxIndicatorClassName(checkboxLocator);
-  if (
-    !indicatorClassName.includes("peer-aria-invalid:ring-af-danger-border")
-  ) {
+  const indicatorClassName =
+    await readCheckboxIndicatorClassName(checkboxLocator);
+  if (!indicatorClassName.includes("peer-aria-invalid:ring-af-danger-border")) {
     throw new Error(`${label}: invalid checkbox indicator styling is missing.`);
   }
 }
@@ -80,9 +82,12 @@ export async function assertCheckboxDisabledState(checkboxLocator, label) {
     throw new Error(`${label}: expected the checkbox to be disabled.`);
   }
 
-  const indicatorClassName = await readCheckboxIndicatorClassName(checkboxLocator);
+  const indicatorClassName =
+    await readCheckboxIndicatorClassName(checkboxLocator);
   if (!indicatorClassName.includes("peer-disabled:bg-surface-container-low")) {
-    throw new Error(`${label}: disabled checkbox indicator styling is missing.`);
+    throw new Error(
+      `${label}: disabled checkbox indicator styling is missing.`,
+    );
   }
 }
 

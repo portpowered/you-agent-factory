@@ -30,24 +30,30 @@ describe("getHeaderControlsMessages", () => {
     ["zh-CN", "语言"],
     ["ko", "언어"],
     ["ja", "言語"],
-  ] as const)("keeps language-switcher labels available for %s", (locale, expectedLabel) => {
-    const messages = getHeaderControlsMessages(locale);
+  ] as const)(
+    "keeps language-switcher labels available for %s",
+    (locale, expectedLabel) => {
+      const messages = getHeaderControlsMessages(locale);
 
-    expect(messages.languageLabel).toBe(expectedLabel);
-    expect(messages.languageMenuButtonLabel).toBeTruthy();
-  });
+      expect(messages.languageLabel).toBe(expectedLabel);
+      expect(messages.languageMenuButtonLabel).toBeTruthy();
+    },
+  );
 
   it.each([
     ["en", "Color palette"],
     ["zh-CN", "调色板"],
     ["ko", "색상 팔레트"],
     ["ja", "カラーパレット"],
-  ] as const)("keeps palette-switcher labels available for %s", (locale, expectedLabel) => {
-    const messages = getHeaderControlsMessages(locale);
+  ] as const)(
+    "keeps palette-switcher labels available for %s",
+    (locale, expectedLabel) => {
+      const messages = getHeaderControlsMessages(locale);
 
-    expect(messages.paletteLabel).toBe(expectedLabel);
-    expect(messages.paletteMenuButtonLabel).toBeTruthy();
-  });
+      expect(messages.paletteLabel).toBe(expectedLabel);
+      expect(messages.paletteMenuButtonLabel).toBeTruthy();
+    },
+  );
 
   it("keeps five localized palette option labels for English", () => {
     expect(getColorPaletteOptions("en").map((option) => option.label)).toEqual([
@@ -70,34 +76,34 @@ describe("getHeaderControlsMessages", () => {
     );
   });
 
-  it.each([
-    "en",
-    "ja",
-    "ko",
-    "zh-CN",
-  ] as const)("keeps compact tick-status templates and stream labels available for %s", (locale) => {
-    const messages = getHeaderControlsMessages(locale);
+  it.each(["en", "ja", "ko", "zh-CN"] as const)(
+    "keeps compact tick-status templates and stream labels available for %s",
+    (locale) => {
+      const messages = getHeaderControlsMessages(locale);
 
-    expect(messages.currentTickStatusTemplate).toContain(
-      HEADER_CURRENT_TICK_TOKEN,
-    );
-    expect(messages.currentTickStatusTemplate).toContain(HEADER_MAX_TICK_TOKEN);
-    expect(messages.currentTickStatusTemplate).toBe(
-      `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
-    );
-    expect(messages.streamStatusLiveLabel).toBeTruthy();
-    expect(messages.streamStatusConnectingLabel).toBeTruthy();
-    expect(messages.streamStatusOfflineLabel).toBeTruthy();
-    expect(messages.pauseSessionStreamLabelTemplate).toContain(
-      "{{sessionLabel}}",
-    );
-    expect(messages.resumeSessionStreamLabelTemplate).toContain(
-      "{{sessionLabel}}",
-    );
-    expect(messages.returnToCurrentTickLabel).toBeTruthy();
-    expect(messages.waitingForMoreTicks).toBeTruthy();
-    expect(messages.globalHeaderActionsLabel).toBeTruthy();
-    expect(messages.languageLabel).toBeTruthy();
-    expect(messages.languageMenuButtonLabel).toBeTruthy();
-  });
+      expect(messages.currentTickStatusTemplate).toContain(
+        HEADER_CURRENT_TICK_TOKEN,
+      );
+      expect(messages.currentTickStatusTemplate).toContain(
+        HEADER_MAX_TICK_TOKEN,
+      );
+      expect(messages.currentTickStatusTemplate).toBe(
+        `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
+      );
+      expect(messages.streamStatusLiveLabel).toBeTruthy();
+      expect(messages.streamStatusConnectingLabel).toBeTruthy();
+      expect(messages.streamStatusOfflineLabel).toBeTruthy();
+      expect(messages.pauseSessionStreamLabelTemplate).toContain(
+        "{{sessionLabel}}",
+      );
+      expect(messages.resumeSessionStreamLabelTemplate).toContain(
+        "{{sessionLabel}}",
+      );
+      expect(messages.returnToCurrentTickLabel).toBeTruthy();
+      expect(messages.waitingForMoreTicks).toBeTruthy();
+      expect(messages.globalHeaderActionsLabel).toBeTruthy();
+      expect(messages.languageLabel).toBeTruthy();
+      expect(messages.languageMenuButtonLabel).toBeTruthy();
+    },
+  );
 });

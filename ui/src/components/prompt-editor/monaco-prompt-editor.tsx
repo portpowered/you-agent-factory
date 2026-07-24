@@ -351,10 +351,7 @@ function PromptEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <Text
-        className="m-0 text-on-surface-variant"
-        variant="supporting"
-      >
+      <Text className="m-0 text-on-surface-variant" variant="supporting">
         {message}
       </Text>
       <Code

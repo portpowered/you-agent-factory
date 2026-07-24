@@ -4,8 +4,7 @@ import { WorkerType, WorkstationType } from "../../../api/generated/openapi";
 export type ApiWorkerType = components["schemas"]["WorkerType"];
 export type ApiWorkstationType = components["schemas"]["WorkstationType"];
 
-export const DEFAULT_WORKER_TYPE: ApiWorkerType =
-  WorkerType.INFERENCE_WORKER;
+export const DEFAULT_WORKER_TYPE: ApiWorkerType = WorkerType.INFERENCE_WORKER;
 
 export const DEFAULT_WORKSTATION_TYPE: ApiWorkstationType =
   WorkstationType.AGENT_RUN;
@@ -137,16 +136,12 @@ export function resolveEditableWorkstationTypeConversionOptions(
   if (workstationType === WorkstationType.LOGICAL_MOVE) {
     return [WorkstationType.LOGICAL_MOVE];
   }
-  if (
-    workstationType === WorkstationType.CLASSIFIER_WORKSTATION
-  ) {
+  if (workstationType === WorkstationType.CLASSIFIER_WORKSTATION) {
     return [WorkstationType.CLASSIFIER_WORKSTATION];
   }
 
   const preferred = EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS;
-  if (
-    (preferred as readonly ApiWorkstationType[]).includes(workstationType)
-  ) {
+  if ((preferred as readonly ApiWorkstationType[]).includes(workstationType)) {
     return preferred;
   }
   if (isLegacyRunnableWorkstationType(workstationType)) {

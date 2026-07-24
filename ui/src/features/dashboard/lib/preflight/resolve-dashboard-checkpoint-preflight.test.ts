@@ -142,32 +142,35 @@ describe("resolveDashboardCheckpointPreflight identity rejection", () => {
       { streamGenerationID: "generation-stale" },
       "stream_generation_mismatch",
     ],
-  ] as const)("returns a bounded identity rejection detail for a %s mismatch", async (_label, mismatch, expectedDetail) => {
-    const deps = dependencies();
-    deps.peekCheckpoint.mockResolvedValue({
-      checkpoint: {
-        afterEventId: "event-7",
-        afterSequence: 7,
-        replayState: {},
-        selectedTick: 7,
-      },
-      storageKey: "sensitive-storage-key",
-      streamIdentity: { ...identity, ...mismatch },
-    });
+  ] as const)(
+    "returns a bounded identity rejection detail for a %s mismatch",
+    async (_label, mismatch, expectedDetail) => {
+      const deps = dependencies();
+      deps.peekCheckpoint.mockResolvedValue({
+        checkpoint: {
+          afterEventId: "event-7",
+          afterSequence: 7,
+          replayState: {},
+          selectedTick: 7,
+        },
+        storageKey: "sensitive-storage-key",
+        streamIdentity: { ...identity, ...mismatch },
+      });
 
-    const result = await resolveDashboardCheckpointPreflight({
-      dependencies: deps,
-      indexedDB: undefined,
-      requestedSessionId: "session-a",
-    });
+      const result = await resolveDashboardCheckpointPreflight({
+        dependencies: deps,
+        indexedDB: undefined,
+        requestedSessionId: "session-a",
+      });
 
-    expect(result).toMatchObject({
-      clearRequestedSessionCheckpoint: true,
-      identityRejectionDetail: expectedDetail,
-    });
-    expect(result).not.toHaveProperty("identityRejectionScope");
-    expect(deps.readCheckpoint).not.toHaveBeenCalled();
-  });
+      expect(result).toMatchObject({
+        clearRequestedSessionCheckpoint: true,
+        identityRejectionDetail: expectedDetail,
+      });
+      expect(result).not.toHaveProperty("identityRejectionScope");
+      expect(deps.readCheckpoint).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("resolveDashboardCheckpointPreflight failures", () => {

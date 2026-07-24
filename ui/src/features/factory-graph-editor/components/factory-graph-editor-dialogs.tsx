@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import {
   Dialog,
   DialogContent,
@@ -11,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
+import type { ReactNode } from "react";
 import { Button } from "../../../components/ui";
 import { FactoryGraphEditorMenuHeader } from "./menu/factory-graph-editor-menu-header";
 

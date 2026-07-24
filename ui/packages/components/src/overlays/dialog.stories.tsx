@@ -49,7 +49,8 @@ export const Default: Story = {
           </DialogDescription>
         </DialogHeader>
         <p className="text-body-medium text-on-surface">
-          Host apps supply labels, ids, and children without dashboard providers.
+          Host apps supply labels, ids, and children without dashboard
+          providers.
         </p>
       </DialogContent>
     </Dialog>

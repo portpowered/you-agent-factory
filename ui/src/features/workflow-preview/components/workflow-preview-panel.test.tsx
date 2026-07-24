@@ -408,7 +408,9 @@ describe("WorkflowPreviewPanel", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/orchestrator\.javascript: workflow\.source\.syntaxError/),
+        screen.getByText(
+          /orchestrator\.javascript: workflow\.source\.syntaxError/,
+        ),
       ).toBeTruthy();
     });
     expect(screen.getByText(/\(line 9\)/)).toBeTruthy();

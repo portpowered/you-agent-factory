@@ -337,13 +337,19 @@ describe.sequential("factory graph editor browser integration", () => {
         (scenario) => scenario.id === "pngRoundTrip",
       );
 
-      expect(pngCoverageScenario).toEqual(expect.objectContaining({
-        description:
-          "Browser export/import PNG roundtrip layered on jsdom activation-body coverage and unit PNG helpers; jsdom no longer re-proves export dialog copy.",
-        id: "pngRoundTrip",
-        surfaces: ["png-export", "png-import-preview", "png-import-activation"],
-        verificationLayers: ["browser-integration", "jsdom", "unit"],
-      }));
+      expect(pngCoverageScenario).toEqual(
+        expect.objectContaining({
+          description:
+            "Browser export/import PNG roundtrip layered on jsdom activation-body coverage and unit PNG helpers; jsdom no longer re-proves export dialog copy.",
+          id: "pngRoundTrip",
+          surfaces: [
+            "png-export",
+            "png-import-preview",
+            "png-import-activation",
+          ],
+          verificationLayers: ["browser-integration", "jsdom", "unit"],
+        }),
+      );
 
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,

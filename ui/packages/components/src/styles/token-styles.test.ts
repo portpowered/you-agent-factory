@@ -15,17 +15,27 @@ describe("@you-agent-factory/components token styles entrypoint", () => {
   });
 
   it("exposes role tokens on the document root after importing package styles", () => {
-    expect(readDocumentCssVariable(documentRoot, "--color-primary")).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--color-primary"),
+    ).toBeTruthy();
     expect(readDocumentCssVariable(documentRoot, "--color-on-surface")).toBe(
       "#f7f2e8",
     );
   });
 
   it("exposes typography and layout tokens from the package styles entrypoint", () => {
-    expect(readDocumentCssVariable(documentRoot, "--text-title-large")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--text-body-medium")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--text-label-medium")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--color-af-foundation-surface")).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--text-title-large"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--text-body-medium"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--text-label-medium"),
+    ).toBeTruthy();
+    expect(
+      readDocumentCssVariable(documentRoot, "--color-af-foundation-surface"),
+    ).toBeTruthy();
   });
 
   it("switches palette foundation background when data-color-palette changes", () => {
