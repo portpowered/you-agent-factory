@@ -95,6 +95,20 @@ func (s *Service) Ready(context.Context, automations.ReadyRequest) (automations.
 	return automations.ReadyResult{Ready: true}, nil
 }
 
+// Reconcile is the published Automations root reconcile slice. Nested
+// reconciliation ownership remains an IMP-AUTO packet; this additive stub keeps
+// the concrete root aligned with the published Service contract.
+func (s *Service) Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error) {
+	if s == nil {
+		return automations.ReconcileResult{}, &automations.Error{
+			Op:   "Reconcile",
+			Code: automations.ErrorCodeNotReady,
+			Err:  automations.ErrNotReady,
+		}
+	}
+	return automations.ReconcileResult{}, nil
+}
+
 func (s *Service) logger() *zap.Logger {
 	if s == nil || s.loggerValue == nil {
 		return zap.NewNop()

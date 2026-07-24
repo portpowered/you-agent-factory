@@ -57,6 +57,7 @@ type RuntimeScheduler interface {
 // request, result, value, and typed-error contracts.
 type Service interface {
 	Ready(context.Context, ReadyRequest) (ReadyResult, error)
+	Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
 }
 
 // Root is the Wire-injectable Automations surface during migration. It composes
@@ -73,6 +74,57 @@ type ReadyRequest struct{}
 type ReadyResult struct {
 	Ready bool
 }
+
+// ReconcileRequest carries desired automation specs and observed instance facts
+// for one convergence pass. It stays free of WaitGroup, Factory Definition, and
+// cron/poller/watcher implementation types.
+type ReconcileRequest struct {
+	Desired  []DesiredSpec
+	Observed []ObservedInstance
+}
+
+// DesiredSpec is the plain desired automation configuration peers supply.
+type DesiredSpec struct {
+	AutomationID string
+	Kind         string
+	Enabled      bool
+}
+
+// ObservedInstance is a detached observation of one live automation instance.
+type ObservedInstance struct {
+	AutomationID string
+	InstanceID   string
+	Status       string
+}
+
+// ReconcileResult is the detached set of convergence outcomes peers consume.
+type ReconcileResult struct {
+	Outcomes []ConvergenceOutcome
+}
+
+// ConvergenceOutcome reports how one automation identity converged.
+type ConvergenceOutcome struct {
+	AutomationID string
+	InstanceID   string
+	Action       string
+	Status       string
+}
+
+// Convergence action vocabulary peers can branch on without importing
+// implementation packages.
+const (
+	ConvergenceActionCreated   = "created"
+	ConvergenceActionUpdated   = "updated"
+	ConvergenceActionUnchanged = "unchanged"
+	ConvergenceActionRemoved   = "removed"
+)
+
+// Instance status vocabulary shared by reconcile and later status slices.
+const (
+	InstanceStatusReady   = "ready"
+	InstanceStatusRunning = "running"
+	InstanceStatusStopped = "stopped"
+)
 
 // ErrorCode classifies typed Automations root failures peers can branch on.
 type ErrorCode string
