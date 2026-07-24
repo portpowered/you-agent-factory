@@ -119,7 +119,7 @@ endef
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
-.PHONY: fnd-12-cli-behavior-baselines
+.PHONY: fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
@@ -261,6 +261,9 @@ cli-contract-smoke:
 # Does not refresh or re-own PR #1262 CLI-manifest baselines.
 fnd-12-cli-behavior-baselines:
 	$(GO) test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+fnd-12-http-behavior-baselines:
+	$(GO) test ./tests/functional/runtime_api -run '^TestGeneratedAPIIntegrationSmoke_(OpenAPIGeneratedServerAndLiveRuntimeStayAligned|SubmitWorkItemsRejectEmptyStructuredSubmission)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
