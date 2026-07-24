@@ -859,7 +859,11 @@ response-stream output.
   `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
   first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
   keep only a thin aggregate delegate until the later legacy-branch deletion
-  story. Move Gemini-native failure and timeout parsing into the same package
+  story. After the migrated provider is registry+conductor exclusive, delete
+  only that provider's corresponding aggregate command/decode/failure/timeout/
+  session branches (and relocate aggregate-owned tests into the provider
+  package); leave the aggregate shell, ProviderOverride, and other providers
+  intact. Move Gemini-native failure and timeout parsing into the same package
   (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
   the conductor path consumes provider-owned normalized facts; aggregate exit
   and timeout bridges may only thin-delegate until legacy deletion. Bind the

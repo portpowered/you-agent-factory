@@ -269,61 +269,6 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	assertStringSlicesEqual(t, want, args)
 }
 
-func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name            string
-		req             workerexecution.ProviderInferenceRequest
-		skipPermissions bool
-		want            []string
-	}{
-		{
-			name: "BasicPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				UserMessage:   "summarize the workspace",
-			},
-			want: []string{"--prompt", "summarize the workspace"},
-		},
-		{
-			name: "WithModelAndSkipPermissions",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				Model:         "gemini-2.5-flash",
-				UserMessage:   "run the tests",
-			},
-			skipPermissions: true,
-			want:            []string{"--prompt", "run the tests", "--model", "gemini-2.5-flash", "--approval-mode", "yolo", "--sandbox", "false"},
-		},
-	}
-
-	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs returned error: %v", err)
-			}
-			assertStringSlicesEqual(t, tc.want, args)
-		})
-	}
-}
-
-func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
-	t.Parallel()
-	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderGemini),
-		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
-			workerexecution.RunnerOptionalCapabilityStructuredOutput,
-		},
-	}, false, nil)
-	if err == nil || err.Error() != "structured output is not supported by the gemini runner in v1" {
-		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
-	}
-}
-
 func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -803,19 +748,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 			wantEnv: "AGENT_FACTORY_PROVIDER=claude",
 		},
 		{
-			name: "Gemini",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				UserMessage:   "review this",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_PROVIDER": "gemini",
-				},
-				InputTokens: InputTokens(token),
-			},
-			args:    []string{"--prompt", "review this"},
-			wantEnv: "AGENT_FACTORY_PROVIDER=gemini",
-		},
-		{
 			name: "Kiro",
 			req: workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderKiro),
@@ -1026,23 +958,6 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 			unsafeArgCheck: func(args []string) bool {
 				return strings.Contains(strings.Join(args, " "), "--dangerously-bypass-approvals-and-sandbox")
-			},
-		},
-		{
-			provider:     modelprovider.ProviderGemini,
-			unsafeMarker: "--approval-mode",
-			unsafeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				UserMessage:   "run the tests",
-			},
-			safeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				UserMessage:   "run the tests",
-			},
-			unsafeArgCheck: func(args []string) bool {
-				joined := strings.Join(args, " ")
-				return strings.Contains(joined, "--approval-mode") && strings.Contains(joined, "yolo") &&
-					strings.Contains(joined, "--sandbox") && strings.Contains(joined, "false")
 			},
 		},
 		{

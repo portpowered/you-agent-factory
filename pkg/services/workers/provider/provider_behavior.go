@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 
 	"sync"
 )
@@ -125,11 +124,6 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
-type geminiProviderBehavior struct {
-	sharedNonCodexProviderBehavior
-	logger logging.Logger
-}
-
 type kiroProviderBehavior struct {
 	logger logging.Logger
 }
@@ -153,8 +147,6 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 	switch provider {
 	case string(modelprovider.ProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderGemini):
-		return geminiProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderKiro):
 		return kiroProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderCursor):
@@ -257,14 +249,6 @@ func BuildCodexStructuredCommand(
 	}
 	args = append(args[:1], append([]string{"--json"}, args[1:]...)...)
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
-}
-
-func (b geminiProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	return geminipkg.BuildArgs(req, skipPermissions)
-}
-
-func (geminiProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
-	return geminipkg.BuildCommandRequest(req, args)
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
