@@ -492,3 +492,142 @@ func TestSnapshotsPortability_TypedFailuresStayDistinct(t *testing.T) {
 		t.Fatal("unsafe materialize must not also match ErrInvalidFactorySnapshotPayload")
 	}
 }
+
+// assertCTRDEFRootSnapshotSuccessVocabulary exercises the published CTR-DEF
+// root snapshot success cases against a peer-facing factorydefinitions.Service
+// only — cross-service callers must not import snapshots_portability.
+func assertCTRDEFRootSnapshotSuccessVocabulary(
+	t *testing.T,
+	service factorydefinitions.Service,
+) {
+	t.Helper()
+
+	payload := []byte(`{
+		"name": "alpha",
+		"factoryDirectory": "/factories/alpha",
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+
+	captured, err := service.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{
+			FactoryDir: "/factories/alpha",
+			Canonical:  payload,
+			Name:       "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot: %v", err)
+	}
+	if captured.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	}
+	var capturedObject map[string]any
+	if decodeErr := captured.Snapshot.Decode(&capturedObject); decodeErr != nil {
+		t.Fatalf("CaptureFactorySnapshot decode: %v", decodeErr)
+	}
+	if capturedObject["name"] != "alpha" {
+		t.Fatalf("CaptureFactorySnapshot name = %#v, want alpha", capturedObject["name"])
+	}
+
+	imported, err := service.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
+	}
+	if imported.Snapshot == nil || imported.Name != "alpha" {
+		t.Fatalf("PrepareFactorySnapshotImport result = %#v, want alpha snapshot facts", imported)
+	}
+	if imported.Portable.FactoryDir != "/factories/alpha" || len(imported.Portable.Assets) == 0 {
+		t.Fatalf("PrepareFactorySnapshotImport portable = %#v, want portable success facts", imported.Portable)
+	}
+
+	materialized, err := service.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "/factories/alpha",
+			Snapshot:  imported.Snapshot,
+		},
+	)
+	if err != nil {
+		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+	}
+	if materialized.TargetDir != "/factories/alpha" ||
+		materialized.Portable.FactoryDir != "/factories/alpha" ||
+		len(materialized.Portable.Assets) == 0 {
+		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
+	}
+}
+
+// assertCTRDEFRootSnapshotTypedFailureVocabulary exercises the published
+// CTR-DEF root typed-failure cases against a peer-facing
+// factorydefinitions.Service only.
+func assertCTRDEFRootSnapshotTypedFailureVocabulary(
+	t *testing.T,
+	service factorydefinitions.Service,
+) {
+	t.Helper()
+
+	_, invalidErr := service.PrepareFactorySnapshotImport(
+		context.Background(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`["not-object"]`)},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"PrepareFactorySnapshotImport invalid-payload error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidFactorySnapshotPayload,
+		)
+	}
+
+	_, captureInvalidErr := service.CaptureFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureFactorySnapshotRequest{Canonical: []byte(`"string"`)},
+	)
+	if !errors.Is(captureInvalidErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf(
+			"CaptureFactorySnapshot invalid-payload error = %v, want %v",
+			captureInvalidErr,
+			factorydefinitions.ErrInvalidFactorySnapshotPayload,
+		)
+	}
+
+	_, unsafeErr := service.MaterializeFactorySnapshot(
+		context.Background(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: "../outside",
+			Snapshot:  nil,
+		},
+	)
+	if !errors.Is(unsafeErr, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatalf(
+			"MaterializeFactorySnapshot unsafe error = %v, want %v",
+			unsafeErr,
+			factorydefinitions.ErrUnsafeFactorySnapshotMaterialize,
+		)
+	}
+	if errors.Is(unsafeErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatal("unsafe materialize must not also match ErrInvalidFactorySnapshotPayload")
+	}
+}
+
+func TestRootService_SnapshotSlice_CTRDEFEquivalenceThroughPrivateOwner(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	// Peer-facing handle stays typed as the public Definitions root Service.
+	// Construction may use the private owner; cross-service callers must not.
+	var root factorydefinitions.Service = rootSnapshotFacade{portability: portability}
+
+	assertCTRDEFRootSnapshotSuccessVocabulary(t, root)
+	assertCTRDEFRootSnapshotTypedFailureVocabulary(t, root)
+}
