@@ -747,3 +747,14 @@ side effects; duplicate/conflict/rejection cases return CTR-WORK typed failures
 without requiring peers to import the nested admission package. Keep
 Session/Runtime/Petri types, filesystem/SQL/OS effect types, and Wire/root
 construction ownership off the admission public surface.
+
+Focused IMP-WORK-01 admission proof lives in
+`admission/internal/service/normalize_validate_test.go` (valid shape parity +
+typed rejection for empty works / unsupported type / relation-identity /
+unknown work-type), `admission/internal/service/accept_test.go` (first-time
+accept, duplicate conflict, incompatible-replay conflict, rejection-shaped
+accept), and `pkg/services/work/service/service_test.go` root equivalence
+coverage. Packet scope stays admission-only: do not expand that proof into
+content staging, materialization, state-access, Sessions/Recordings/Runtime
+leases, CLI-manifest/generation, provider-conductor workers construction, or
+OpenAPI package-motion edits.
