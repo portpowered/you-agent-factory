@@ -185,3 +185,11 @@
   `git check-ignore -q` (exit 1 = not ignored, exit 0 = ignored) plus a sibling
   `docs/temp/...` path that remains ignored. Shared helpers and fixture-root
   constants belong in `tests/functional/internal/support`.
+- Provider-session golden `manifest.json` validation lives in
+  `tests/functional/internal/support` (`LoadProviderSessionCaseManifest` /
+  `ValidateProviderSessionGoldenManifest`). Require schema version 1, identity
+  (`id`, `provider`, `providerVersion`, `case`), `fidelityClass` in
+  `{full-stream, partial-stream, snapshot-only, final-only}`, sanitizer/source,
+  `normalizedFields`, and relative file pointers for request/process/stdout/
+  stderr plus the three expected outputs. Diagnostics must name the case id and
+  failing field or rule; pointer resolution must stay inside the case directory.
