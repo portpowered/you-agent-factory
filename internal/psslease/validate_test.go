@@ -98,6 +98,95 @@ func TestCommittedProgramMetadataManifestPassesContractValidation(t *testing.T) 
 	}
 }
 
+func TestValidateCatalogRejectsMissingRequiredPacket(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-missing-cataloged-packet.json")
+	err := psslease.ValidateCatalog(manifest)
+	if err == nil {
+		t.Fatal("ValidateCatalog() error = nil, want missing required packet failure")
+	}
+	if !strings.Contains(err.Error(), `missing cataloged packet "FND-01"`) {
+		t.Fatalf("ValidateCatalog() error = %v, want missing FND-01", err)
+	}
+}
+
+func TestValidateCatalogRejectsMissingState(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-missing-packet-state.json")
+	err := psslease.ValidateCatalog(manifest)
+	if err == nil {
+		t.Fatal("ValidateCatalog() error = nil, want missing state failure")
+	}
+	if !strings.Contains(err.Error(), "missing packet state") && !strings.Contains(err.Error(), "unknown packet state") {
+		t.Fatalf("ValidateCatalog() error = %v, want missing/unknown state", err)
+	}
+}
+
+func TestValidateCatalogRejectsEmptyExclusivePaths(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-catalog-empty-exclusive-paths.json")
+	err := psslease.ValidateCatalog(manifest)
+	if err == nil {
+		t.Fatal("ValidateCatalog() error = nil, want empty exclusivePaths failure")
+	}
+	if !strings.Contains(err.Error(), "empty exclusivePaths") {
+		t.Fatalf("ValidateCatalog() error = %v, want empty exclusivePaths", err)
+	}
+}
+
+func TestValidateCatalogRejectsDuplicatePacketIDs(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-duplicate-packet-ids.json")
+	err := psslease.ValidateCatalog(manifest)
+	if err == nil {
+		t.Fatal("ValidateCatalog() error = nil, want duplicate packetId failure")
+	}
+	if !strings.Contains(err.Error(), `duplicate packetId "FND-10"`) {
+		t.Fatalf("ValidateCatalog() error = %v, want duplicate FND-10", err)
+	}
+}
+
+func TestCommittedProgramMetadataManifestPassesCatalogValidation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "docs", "internal", "projects", "packaged-service-structure", "path-lease-packet-manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read committed manifest: %v", err)
+	}
+	manifest, err := psslease.DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("DecodeManifest() error = %v", err)
+	}
+	if err := psslease.ValidateCatalog(manifest); err != nil {
+		t.Fatalf("ValidateCatalog() error = %v, want nil", err)
+	}
+
+	seen := make(map[string]psslease.Packet, len(manifest.Packets))
+	for _, packet := range manifest.Packets {
+		seen[packet.PacketID] = packet
+		if psslease.IsLeaseHoldingState(packet.State) {
+			t.Fatalf("catalog packet %q state = %q; undispatched catalog defaults must not silently use lease-holding states", packet.PacketID, packet.State)
+		}
+	}
+	for _, packetID := range psslease.RequiredCatalogPacketIDs {
+		packet, ok := seen[packetID]
+		if !ok {
+			t.Fatalf("committed manifest missing required packet %q", packetID)
+		}
+		if len(packet.ExclusivePaths) == 0 {
+			t.Fatalf("packet %q has empty exclusivePaths", packetID)
+		}
+		if strings.TrimSpace(packet.State) == "" {
+			t.Fatalf("packet %q missing state", packetID)
+		}
+	}
+}
+
 func loadFixture(t *testing.T, name string) *psslease.Manifest {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))

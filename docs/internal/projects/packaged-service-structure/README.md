@@ -27,6 +27,21 @@ Each packet entry requires:
 - `prerequisites` — optional list of packet IDs that must be satisfied first
 - `leaseClass` — optional Changed-Path Lease Matrix label for reviewers
 
+Undispatched packets use `blocked` or `ready` according to prerequisite
+readiness. Do not place packets into lease-holding states until a planner
+intentionally dispatches them.
+
+## Required catalog (Phase 0 + shared lanes)
+
+The committed ledger must include every Phase 0 `FND-01`..`FND-12` foundation
+packet plus shared foundation/integration lane IDs `PSS-F01`, `PSS-F02`, and
+`PSS-I01`..`PSS-I05`. `internal/psslease.ValidateCatalog` rejects manifests that
+omit any of those IDs, duplicate IDs, omit exclusive paths, or omit state.
+
+Exclusive path sets follow the plan’s Changed-Path Lease Matrix wording for each
+packet (for example FND-10 remains program-metadata files under this directory
+and `internal/psslease/`).
+
 ## Lease-holding states
 
 `active`, `review`, and `integration` hold exclusive path claims. Overlapping

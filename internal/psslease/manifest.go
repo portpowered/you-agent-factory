@@ -38,6 +38,30 @@ var LeaseHoldingStates = map[string]struct{}{
 	StateIntegration: {},
 }
 
+// RequiredCatalogPacketIDs is the Phase 0 foundation wave plus shared
+// foundation/integration lane IDs the lease matrix schedules against.
+var RequiredCatalogPacketIDs = []string{
+	"FND-01",
+	"FND-02",
+	"FND-03",
+	"FND-04",
+	"FND-05",
+	"FND-06",
+	"FND-07",
+	"FND-08",
+	"FND-09",
+	"FND-10",
+	"FND-11",
+	"FND-12",
+	"PSS-F01",
+	"PSS-F02",
+	"PSS-I01",
+	"PSS-I02",
+	"PSS-I03",
+	"PSS-I04",
+	"PSS-I05",
+}
+
 // Manifest is the program-metadata lease and packet-state ledger.
 type Manifest struct {
 	FormatVersion string   `json:"formatVersion"`
@@ -90,6 +114,9 @@ func ValidateManifest(manifest *Manifest) error {
 		}
 		seen[packetID] = index
 
+		if strings.TrimSpace(packet.State) == "" {
+			return fmt.Errorf("validate pss lease manifest: packet %q: missing packet state", packetID)
+		}
 		if _, ok := AllowedStates[packet.State]; !ok {
 			return fmt.Errorf("validate pss lease manifest: packet %q: unknown packet state %q", packetID, packet.State)
 		}
@@ -102,6 +129,25 @@ func ValidateManifest(manifest *Manifest) error {
 			if path == "" {
 				return fmt.Errorf("validate pss lease manifest: packet %q: exclusivePaths[%d] is empty", packetID, pathIndex)
 			}
+		}
+	}
+	return nil
+}
+
+// ValidateCatalog runs structural validation then requires every Phase 0
+// foundation and shared-lane packet ID to appear exactly once.
+func ValidateCatalog(manifest *Manifest) error {
+	if err := ValidateManifest(manifest); err != nil {
+		return err
+	}
+
+	present := make(map[string]struct{}, len(manifest.Packets))
+	for _, packet := range manifest.Packets {
+		present[strings.TrimSpace(packet.PacketID)] = struct{}{}
+	}
+	for _, packetID := range RequiredCatalogPacketIDs {
+		if _, ok := present[packetID]; !ok {
+			return fmt.Errorf("validate pss lease catalog: missing cataloged packet %q", packetID)
 		}
 	}
 	return nil
