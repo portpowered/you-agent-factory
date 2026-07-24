@@ -20,5 +20,7 @@ docs/temp/functional/provider-sessions/
       expected-invocation-result.json
 ```
 
-Case directories are added by later provider golden work. This README exists so
-the fixture root remains trackable before the first case lands.
+Harness-owned sample cases live under `harness/` (for example
+`harness/load-smoke`) so loader and comparison helpers can prove end-to-end
+fixture loading without claiming a real provider fidelity matrix. Provider
+cases land under `<provider>/<case>/` as provider golden work lands.

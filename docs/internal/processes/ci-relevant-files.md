@@ -201,3 +201,11 @@
   values (fake session/tool/item IDs, usage counts, finish reasons, error codes,
   `@example.com` emails). Run the gate after manifest validation and before
   golden comparison.
+- Provider-session golden loading (`LoadProviderSessionCase`) runs
+  manifest → sanitization → request/process/stdout/stderr → expected goldens.
+  `process.json` must expose argv (no secrets), provider/model, exitCode and/or
+  signal, stdout/stderr stream flags, `workingDirectoryRole`,
+  `timeoutCancelClass`, and `terminalErrorClass` without an env dump. Stdout
+  media type follows the declared filename (`*.jsonl`/`*.ndjson`, `*.json`, or
+  text). Expected response events decode as NDJSON records. Load failures use
+  `ProviderSessionLoadError` naming case id, role, and path/field.
