@@ -26,6 +26,7 @@ const (
 	ruleServiceInterfaceCount   = "service-root-interface-count"
 	ruleServiceExportedFunction = "service-root-exported-function"
 	ruleServiceUnexpectedDir    = "service-root-unexpected-directory"
+	ruleServiceMissingInternal  = "service-root-missing-internal"
 	ruleServiceContainerGoFile  = "service-container-go-file"
 	ruleFunctionalShallowFile   = "functional-test-missing-subsection"
 	ruleRuntimeAPIFile          = "deprecated-runtime-api-file"
@@ -36,6 +37,7 @@ var deletionGates = map[string]string{
 	ruleServiceInterfaceCount:   "reduce the service root to exactly one named interface and delete this exact entry",
 	ruleServiceExportedFunction: "move the exported function behind the service interface or into internal implementation and delete this exact entry",
 	ruleServiceUnexpectedDir:    "move the package under wire, internal, transports/<protocol>, or internal/services/<subservice> and delete this exact entry",
+	ruleServiceMissingInternal:  "add the subservice's private internal implementation directory and delete this exact entry",
 	ruleServiceContainerGoFile:  "move the Go file into a named subservice below internal/services and delete this exact entry",
 	ruleFunctionalShallowFile:   "move the functional source into tests/functional/<feature>/<subsection> and delete this exact entry",
 	ruleRuntimeAPIFile:          "move the runtime_api source to its durable feature/subsection owner and delete this exact entry",
@@ -151,7 +153,7 @@ func scanServices(repoRoot string) ([]finding, error) {
 			continue
 		}
 		root := filepath.Join(servicesRoot, entry.Name())
-		collected, scanErr := scanServiceRoot(repoRoot, root)
+		collected, scanErr := scanServiceRoot(repoRoot, root, false)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -160,7 +162,7 @@ func scanServices(repoRoot string) ([]finding, error) {
 	return findings, nil
 }
 
-func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
+func scanServiceRoot(repoRoot, serviceRoot string, requireInternal bool) ([]finding, error) {
 	relativeRoot, err := relativePath(repoRoot, serviceRoot)
 	if err != nil {
 		return nil, err
@@ -171,11 +173,15 @@ func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
 	}
 	var findings []finding
 	var interfaces []string
+	hasInternal := false
 	for _, entry := range entries {
 		path := filepath.Join(serviceRoot, entry.Name())
 		if entry.IsDir() {
 			if ignoredDirectory(entry.Name()) {
 				continue
+			}
+			if entry.Name() == "internal" {
+				hasInternal = true
 			}
 			if _, allowed := allowedServiceRootDirectories[entry.Name()]; !allowed {
 				childPath, relErr := relativePath(repoRoot, path)
@@ -203,6 +209,10 @@ func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
 			target = strings.Join(interfaces, ",")
 		}
 		findings = append(findings, finding{Rule: ruleServiceInterfaceCount, FilePath: relativeRoot, Target: target})
+	}
+	if requireInternal && !hasInternal {
+		internalPath := relativeRoot + "/internal"
+		findings = append(findings, finding{Rule: ruleServiceMissingInternal, FilePath: internalPath, Target: relativeRoot})
 	}
 
 	// Public sibling services/ is non-canonical (flagged above as unexpected)
@@ -235,7 +245,7 @@ func scanSubserviceContainer(repoRoot, relativeRoot, container string) ([]findin
 			if ignoredDirectory(entry.Name()) {
 				continue
 			}
-			collected, scanErr := scanServiceRoot(repoRoot, path)
+			collected, scanErr := scanServiceRoot(repoRoot, path, true)
 			if scanErr != nil {
 				return nil, scanErr
 			}

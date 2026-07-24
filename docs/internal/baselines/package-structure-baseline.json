@@ -2400,7 +2400,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
@@ -2455,27 +2455,52 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/hosted_logic",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/scripts",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/agents/internal",
+      "target": "pkg/services/workers/services/agents"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/hosted_logic/internal",
+      "target": "pkg/services/workers/services/hosted_logic"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/inference/internal",
+      "target": "pkg/services/workers/services/inference"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/scripts/internal",
+      "target": "pkg/services/workers/services/scripts"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/testing/internal",
+      "target": "pkg/services/workers/services/testing"
     },
     {
       "rule": "service-root-unexpected-directory",

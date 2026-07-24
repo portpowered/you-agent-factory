@@ -38,6 +38,7 @@ func TestScanRejectsPublicSiblingServicesContainer(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/services/history/internal/store.go", "package internal\n")
 
 	findings, err := scan(repoRoot)
 	if err != nil {
@@ -156,12 +157,77 @@ func TestScanRequiresOneInterfaceForNestedSubservice(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
 	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/result.go", "package history\ntype Result struct { ID string }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
 
 	findings, err := scan(repoRoot)
 	if err != nil {
 		t.Fatalf("scan() error = %v", err)
 	}
 	assertFindingKeys(t, findings, []string{ruleServiceInterfaceCount + "|pkg/services/orders/internal/services/history|<none>"})
+}
+
+func TestScanRejectsMissingSubserviceInternal(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleServiceMissingInternal + "|pkg/services/orders/internal/services/history/internal|pkg/services/orders/internal/services/history",
+	})
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err = run(config{root: repoRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want missing subservice internal violation")
+	}
+	if !strings.Contains(stderr.String(), ruleServiceMissingInternal) ||
+		!strings.Contains(stderr.String(), "pkg/services/orders/internal/services/history/internal") {
+		t.Fatalf("run() stderr = %q, want reviewer-visible rule and path for missing subservice internal", stderr.String())
+	}
+}
+
+func TestScanAcceptsSubserviceWithInternalDoesNotEmitMissingInternal(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	for _, item := range findings {
+		if item.Rule == ruleServiceMissingInternal {
+			t.Fatalf("scan() emitted unexpected missing-internal finding: %#v", item)
+		}
+	}
+	if len(findings) != 0 {
+		t.Fatalf("scan() findings = %#v, want none when subservice owns internal/", findings)
+	}
+}
+
+func TestScanRejectsMissingInternalAtDeeperNesting(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/services/archive/service.go", "package archive\ntype Service interface { Compact() }\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleServiceMissingInternal + "|pkg/services/orders/internal/services/history/internal/services/archive/internal|pkg/services/orders/internal/services/history/internal/services/archive",
+	})
 }
 
 func TestScanFindsShallowFunctionalSourcesAndRuntimeAPIDebt(t *testing.T) {
