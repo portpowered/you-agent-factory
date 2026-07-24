@@ -708,3 +708,14 @@ result-owner values. The outer service/runtime-host compatibility adapter maps
 generated open input before calling the gateway and assembles generated open,
 list, detail, reconnect, terminal-result, and partial-result responses only
 after the domain call returns.
+
+## Factory Runtime root contract slices
+
+Cross-service Factory Runtime consumers depend on the singular root `Service`
+in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
+`root_errors.go`. Do not publish a second peer-facing Runtime authority
+(hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
+`JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
+slices. Prove each published slice with a colocated `factory_test`
+characterization that implements a fake `Service` using only the root package
+and approved peer contracts, without importing `factory_runtime/internal`.

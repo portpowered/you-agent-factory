@@ -44,19 +44,24 @@ type APIFactory interface {
 	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
 }
 
-// Service is the customer-facing Factory Runtime control and observation
-// boundary. A service may route these operations to a replaceable hosted
+// Service is the singular Factory Runtime root contract and the only
+// cross-service runtime authority for control, observation, dispatch-plan, and
+// checkpoint slices published at this package root. Peers depend on this named
+// interface rather than hosting bundles, run-loop engines, or JavaScript-only
+// strategy seams. A service may route these operations to a replaceable hosted
 // engine and therefore does not expose the engine run loop.
 type Service interface {
 	WorkMover
 	APIFactory
 
 	// Pause pauses the factory loop. No transitions fire until resumed.
+	// Returns ErrNotRunning when the instance is not running.
 	Pause(ctx context.Context) error
 
 	// Resume resumes a paused factory loop and actively wakes the engine so
 	// already-buffered submissions and worker results can drain. When the
 	// factory is already running, resume is an accepted no-op.
+	// Returns ErrNotRunning when the instance is not running.
 	Resume(ctx context.Context) error
 
 	// GetFactoryEvents returns the current-process canonical event history.
@@ -69,7 +74,9 @@ type Service interface {
 	WaitToComplete() <-chan struct{}
 }
 
-// Factory is one concrete runtime engine. Hosting owns its blocking run loop.
+// Factory extends Service with a blocking run loop for hosting-owned engine
+// construction. Cross-service peers use Service, not Factory, as the runtime
+// authority for published root-contract slices.
 type Factory interface {
 	Service
 	// Run starts the factory loop. Blocks until ctx is cancelled or all
