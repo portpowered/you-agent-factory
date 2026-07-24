@@ -75,6 +75,58 @@ func TestScanAcceptsParentPrivateInternalServicesContainer(t *testing.T) {
 	}
 }
 
+func TestScanAcceptsDoubleNestedInternalServices(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/services/archive/service.go", "package archive\ntype Service interface { Compact() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/services/archive/internal/compact.go", "package internal\nfunc compact() {}\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("scan() findings = %#v, want none for double-nested internal/services/<child>/internal", findings)
+	}
+}
+
+func TestScanRejectsUnexpectedDirectoryAtNestedSubservice(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/legacy/note.go", "package legacy\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleServiceUnexpectedDir + "|pkg/services/orders/internal/services/history/legacy|pkg/services/orders/internal/services/history",
+	})
+}
+
+func TestScanRejectsGoFileInNestedInternalServicesContainer(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "pkg/services/orders/service.go", "package orders\ntype Service interface { Get() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/service.go", "package history\ntype Service interface { List() }\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/store.go", "package internal\n")
+	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/services/helpers.go", "package services\n")
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleServiceContainerGoFile + "|pkg/services/orders/internal/services/history/internal/services/helpers.go|pkg/services/orders/internal/services/history",
+	})
+}
+
 func TestScanFindsServiceRootContractAndDirectoryViolations(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
