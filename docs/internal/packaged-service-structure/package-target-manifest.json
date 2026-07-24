@@ -1,0 +1,1839 @@
+{
+  "version": 1,
+  "stage": "pss-fnd-01-package-target-manifest",
+  "destinationVocabulary": {
+    "productOwners": [
+      "factory_definitions",
+      "factory_sessions",
+      "factory_runtime",
+      "work",
+      "workers",
+      "providers",
+      "provider_sessions",
+      "models",
+      "automations",
+      "recordings",
+      "factory_visualization",
+      "operator_settings",
+      "system_initialization"
+    ],
+    "nonServiceFamilies": [
+      "initializer",
+      "root",
+      "wire",
+      "platform",
+      "transports"
+    ],
+    "architectureExceptions": [
+      "edges"
+    ]
+  },
+  "architectureExceptionNotes": {
+    "edges": "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
+  },
+  "futureDebt": [
+    {
+      "id": "FND-06",
+      "packagePath": "pkg/services/edges",
+      "description": "Narrow Edges implementation imports and the broad external-effect surface; deferred to FND-06. This packet only records the architecture exception."
+    }
+  ],
+  "inventory": [
+    "pkg/initializer",
+    "pkg/initializer/application",
+    "pkg/initializer/lifecycle",
+    "pkg/initializer/process",
+    "pkg/initializer/runtimeapplication",
+    "pkg/platform/browser",
+    "pkg/platform/clock",
+    "pkg/platform/contentstaging",
+    "pkg/platform/directoryreplace",
+    "pkg/platform/filesystem",
+    "pkg/platform/generatedartifacts",
+    "pkg/platform/httpserver",
+    "pkg/platform/inboxgitkeep",
+    "pkg/platform/internal/runtimeartifact",
+    "pkg/platform/logging",
+    "pkg/platform/metrics",
+    "pkg/platform/portablefiles",
+    "pkg/platform/process",
+    "pkg/platform/pty",
+    "pkg/platform/random",
+    "pkg/platform/replay",
+    "pkg/platform/runtimeartifact",
+    "pkg/platform/stdio",
+    "pkg/root",
+    "pkg/services/automations",
+    "pkg/services/automations/service",
+    "pkg/services/automations/timework",
+    "pkg/services/edges",
+    "pkg/services/factory_definitions",
+    "pkg/services/factory_definitions/authoredlayout",
+    "pkg/services/factory_definitions/contracts",
+    "pkg/services/factory_definitions/contracts/namevalue",
+    "pkg/services/factory_definitions/decisionenvelope",
+    "pkg/services/factory_definitions/definition",
+    "pkg/services/factory_definitions/editable",
+    "pkg/services/factory_definitions/internal/namedfactories",
+    "pkg/services/factory_definitions/internal/testcomposition",
+    "pkg/services/factory_definitions/invocationinterpolation",
+    "pkg/services/factory_definitions/invocationoutput",
+    "pkg/services/factory_definitions/invocationworktype",
+    "pkg/services/factory_definitions/loadedsource",
+    "pkg/services/factory_definitions/loading",
+    "pkg/services/factory_definitions/namedfactories",
+    "pkg/services/factory_definitions/namedpaths",
+    "pkg/services/factory_definitions/packagedinstallation",
+    "pkg/services/factory_definitions/packages/goal",
+    "pkg/services/factory_definitions/packages/packageassets",
+    "pkg/services/factory_definitions/packages/promptassets",
+    "pkg/services/factory_definitions/packages/review",
+    "pkg/services/factory_definitions/packages/subagent",
+    "pkg/services/factory_definitions/packages/tts",
+    "pkg/services/factory_definitions/persistence",
+    "pkg/services/factory_definitions/portableconfig",
+    "pkg/services/factory_definitions/quorumpolicy",
+    "pkg/services/factory_definitions/replayconfig",
+    "pkg/services/factory_definitions/resource",
+    "pkg/services/factory_definitions/runtimeconfig",
+    "pkg/services/factory_definitions/scaffold",
+    "pkg/services/factory_definitions/service",
+    "pkg/services/factory_definitions/snapshotcapture",
+    "pkg/services/factory_definitions/ttsobservability",
+    "pkg/services/factory_definitions/validation",
+    "pkg/services/factory_definitions/workers",
+    "pkg/services/factory_definitions/workers/taxonomy",
+    "pkg/services/factory_definitions/workpropagation",
+    "pkg/services/factory_definitions/workstationexecution",
+    "pkg/services/factory_runtime",
+    "pkg/services/factory_runtime/build",
+    "pkg/services/factory_runtime/checkpointstore",
+    "pkg/services/factory_runtime/checkpointsummary",
+    "pkg/services/factory_runtime/context",
+    "pkg/services/factory_runtime/definitionmapping",
+    "pkg/services/factory_runtime/engine",
+    "pkg/services/factory_runtime/ingest",
+    "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
+    "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
+    "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
+    "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
+    "pkg/services/factory_runtime/internal/orchestrators/petri",
+    "pkg/services/factory_runtime/javascript",
+    "pkg/services/factory_runtime/metrics",
+    "pkg/services/factory_runtime/orchestratorcontract",
+    "pkg/services/factory_runtime/replayhooks",
+    "pkg/services/factory_runtime/runtime",
+    "pkg/services/factory_runtime/runtime/buffers",
+    "pkg/services/factory_runtime/runtimecontract",
+    "pkg/services/factory_runtime/scheduler",
+    "pkg/services/factory_runtime/service",
+    "pkg/services/factory_runtime/service/host",
+    "pkg/services/factory_runtime/state",
+    "pkg/services/factory_runtime/state/validation",
+    "pkg/services/factory_runtime/subsystems",
+    "pkg/services/factory_runtime/testkit",
+    "pkg/services/factory_runtime/throttle",
+    "pkg/services/factory_runtime/token",
+    "pkg/services/factory_runtime/token_transformer",
+    "pkg/services/factory_runtime/tooling/javascript/callbehavior",
+    "pkg/services/factory_runtime/tooling/javascript/catalog",
+    "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+    "pkg/services/factory_sessions",
+    "pkg/services/factory_sessions/internal/applicationopening",
+    "pkg/services/factory_sessions/internal/artifactprojection",
+    "pkg/services/factory_sessions/internal/contracts",
+    "pkg/services/factory_sessions/internal/controlplane",
+    "pkg/services/factory_sessions/internal/cursors",
+    "pkg/services/factory_sessions/internal/cursors/persistence",
+    "pkg/services/factory_sessions/internal/execution",
+    "pkg/services/factory_sessions/internal/execution/fixtures",
+    "pkg/services/factory_sessions/internal/execution/livechild",
+    "pkg/services/factory_sessions/internal/execution/recordingreplay",
+    "pkg/services/factory_sessions/internal/execution/runtimepersist",
+    "pkg/services/factory_sessions/internal/executionopening",
+    "pkg/services/factory_sessions/internal/fileeffects",
+    "pkg/services/factory_sessions/internal/invocation",
+    "pkg/services/factory_sessions/internal/invocation/packagedtts",
+    "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+    "pkg/services/factory_sessions/internal/livesession",
+    "pkg/services/factory_sessions/internal/logicaltarget",
+    "pkg/services/factory_sessions/internal/processlifecycle",
+    "pkg/services/factory_sessions/internal/requestpreparation",
+    "pkg/services/factory_sessions/internal/responseevents",
+    "pkg/services/factory_sessions/internal/responseeventstore",
+    "pkg/services/factory_sessions/internal/responsestream",
+    "pkg/services/factory_sessions/internal/responsestream/fragmentmap",
+    "pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
+    "pkg/services/factory_sessions/internal/roles",
+    "pkg/services/factory_sessions/internal/runtime",
+    "pkg/services/factory_sessions/internal/runtimebinding",
+    "pkg/services/factory_sessions/internal/runtimehosting",
+    "pkg/services/factory_sessions/internal/runtimeopening",
+    "pkg/services/factory_sessions/internal/runtimeopening/invocation",
+    "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+    "pkg/services/factory_sessions/internal/scopedlisting",
+    "pkg/services/factory_sessions/internal/service",
+    "pkg/services/factory_sessions/internal/services/durable_execution",
+    "pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
+    "pkg/services/factory_sessions/internal/services/durable_execution/wire",
+    "pkg/services/factory_sessions/internal/services/identity",
+    "pkg/services/factory_sessions/internal/services/identity/internal/service",
+    "pkg/services/factory_sessions/internal/services/identity/wire",
+    "pkg/services/factory_sessions/internal/services/invocation",
+    "pkg/services/factory_sessions/internal/services/invocation/internal/service",
+    "pkg/services/factory_sessions/internal/services/invocation/wire",
+    "pkg/services/factory_sessions/internal/services/live_runtime",
+    "pkg/services/factory_sessions/internal/services/live_runtime/internal/service",
+    "pkg/services/factory_sessions/internal/services/live_runtime/wire",
+    "pkg/services/factory_sessions/internal/services/response_stream",
+    "pkg/services/factory_sessions/internal/services/response_stream/internal/service",
+    "pkg/services/factory_sessions/internal/services/response_stream/wire",
+    "pkg/services/factory_sessions/internal/sessionprojection",
+    "pkg/services/factory_sessions/internal/sessionregistry",
+    "pkg/services/factory_sessions/internal/sessionservice",
+    "pkg/services/factory_sessions/internal/sessionvalidation",
+    "pkg/services/factory_sessions/internal/stream",
+    "pkg/services/factory_sessions/transports/cli/session",
+    "pkg/services/factory_sessions/transports/cli/sessionexecution",
+    "pkg/services/factory_sessions/transports/http",
+    "pkg/services/factory_sessions/transports/mcp",
+    "pkg/services/factory_sessions/transports/mcp/catalog",
+    "pkg/services/factory_sessions/wire",
+    "pkg/services/factory_sessions/wire/contracts",
+    "pkg/services/factory_visualization",
+    "pkg/services/factory_visualization/internal/contracts",
+    "pkg/services/models",
+    "pkg/services/models/internal/artifacts",
+    "pkg/services/models/internal/assets",
+    "pkg/services/models/internal/catalog",
+    "pkg/services/models/internal/host",
+    "pkg/services/models/internal/inference",
+    "pkg/services/models/internal/local",
+    "pkg/services/models/internal/managedruntime",
+    "pkg/services/models/internal/service",
+    "pkg/services/models/transports/cli",
+    "pkg/services/models/transports/http",
+    "pkg/services/models/wire",
+    "pkg/services/operator_settings",
+    "pkg/services/operator_settings/identityinventory",
+    "pkg/services/provider_sessions",
+    "pkg/services/provider_sessions/codex",
+    "pkg/services/provider_sessions/cursor",
+    "pkg/services/provider_sessions/service",
+    "pkg/services/recordings",
+    "pkg/services/recordings/artifacts",
+    "pkg/services/recordings/events",
+    "pkg/services/recordings/events/kinds",
+    "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/projections",
+    "pkg/services/recordings/projections/dashboard",
+    "pkg/services/recordings/replay",
+    "pkg/services/recordings/service",
+    "pkg/services/system_initialization",
+    "pkg/services/work",
+    "pkg/services/work/materialize",
+    "pkg/services/work/service",
+    "pkg/services/workers",
+    "pkg/services/workers/agypty",
+    "pkg/services/workers/cliprovider",
+    "pkg/services/workers/construction",
+    "pkg/services/workers/diagnostics",
+    "pkg/services/workers/execution",
+    "pkg/services/workers/execution/recording",
+    "pkg/services/workers/executor",
+    "pkg/services/workers/executor/agentrun",
+    "pkg/services/workers/interface",
+    "pkg/services/workers/invocation",
+    "pkg/services/workers/process",
+    "pkg/services/workers/prompting",
+    "pkg/services/workers/provider",
+    "pkg/services/workers/provider/adapter",
+    "pkg/services/workers/provider/adapter/opencode",
+    "pkg/services/workers/provider/adapter/testkit",
+    "pkg/services/workers/provider/agy",
+    "pkg/services/workers/provider/claude",
+    "pkg/services/workers/provider/claude/exitfailure",
+    "pkg/services/workers/provider/codex",
+    "pkg/services/workers/provider/codex/exitfailure",
+    "pkg/services/workers/provider/codex/progress",
+    "pkg/services/workers/provider/commandenv",
+    "pkg/services/workers/provider/conductor",
+    "pkg/services/workers/provider/cursor",
+    "pkg/services/workers/provider/cursor/progress",
+    "pkg/services/workers/provider/functionaltests",
+    "pkg/services/workers/provider/gemini",
+    "pkg/services/workers/provider/inferencecontract",
+    "pkg/services/workers/provider/inferencecontract/testkit",
+    "pkg/services/workers/provider/kiro",
+    "pkg/services/workers/provider/pi",
+    "pkg/services/workers/provider/registry",
+    "pkg/services/workers/provider/structured",
+    "pkg/services/workers/runner",
+    "pkg/services/workers/service",
+    "pkg/services/workers/services/hosted_logic",
+    "pkg/services/workers/services/hosted_logic/linear",
+    "pkg/services/workers/services/inference",
+    "pkg/services/workers/services/testing",
+    "pkg/services/workers/skippermissions",
+    "pkg/services/workers/worktree",
+    "pkg/transports/cli",
+    "pkg/transports/cli/baseline",
+    "pkg/transports/cli/batchload",
+    "pkg/transports/cli/clicontract",
+    "pkg/transports/cli/clidiag",
+    "pkg/transports/cli/clihttp",
+    "pkg/transports/cli/cliinputs",
+    "pkg/transports/cli/climanifest",
+    "pkg/transports/cli/climanifestcobra",
+    "pkg/transports/cli/climanifestgen",
+    "pkg/transports/cli/cliserver",
+    "pkg/transports/cli/commandidentity",
+    "pkg/transports/cli/commandregistry",
+    "pkg/transports/cli/config",
+    "pkg/transports/cli/configinit",
+    "pkg/transports/cli/dashboard",
+    "pkg/transports/cli/default",
+    "pkg/transports/cli/docs",
+    "pkg/transports/cli/factory",
+    "pkg/transports/cli/factoryload",
+    "pkg/transports/cli/generated",
+    "pkg/transports/cli/mcp",
+    "pkg/transports/cli/observation",
+    "pkg/transports/cli/resolvedinput",
+    "pkg/transports/cli/run",
+    "pkg/transports/cli/runconfig",
+    "pkg/transports/cli/sessionpath",
+    "pkg/transports/cli/submit",
+    "pkg/transports/cli/terminalpolicy",
+    "pkg/transports/cli/timedisplay",
+    "pkg/transports/cli/work",
+    "pkg/transports/cli/workflow",
+    "pkg/transports/http",
+    "pkg/transports/http/apitypes",
+    "pkg/transports/http/application",
+    "pkg/transports/http/client",
+    "pkg/transports/http/generated",
+    "pkg/transports/http/servertests/factorysessionsse",
+    "pkg/transports/http/workstationprojection",
+    "pkg/transports/mapping",
+    "pkg/transports/mapping/composition",
+    "pkg/transports/mapping/factoryconfig",
+    "pkg/transports/mapping/factoryconfig/authored",
+    "pkg/transports/mapping/factoryconfig/diagnostics",
+    "pkg/transports/mapping/factoryconfig/openapitests",
+    "pkg/transports/mapping/factorydefinition",
+    "pkg/transports/mapping/factorydefinition/retiredboundary",
+    "pkg/transports/mapping/factoryeventprojection",
+    "pkg/transports/mapping/factorysession",
+    "pkg/transports/mapping/factorysnapshot",
+    "pkg/transports/mapping/globalconfig",
+    "pkg/transports/mapping/optional",
+    "pkg/transports/mapping/validationentry",
+    "pkg/transports/mapping/workcontent",
+    "pkg/transports/mapping/workerdiagnostics",
+    "pkg/transports/mapping/workerinference",
+    "pkg/transports/mcp/discoverygen",
+    "pkg/transports/mcp/generated",
+    "pkg/transports/mcp/server",
+    "pkg/transports/mcp/stdio",
+    "pkg/wire",
+    "pkg/wire/factorydefinitions"
+  ],
+  "packages": [
+    {
+      "packagePath": "pkg/initializer",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/application",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/lifecycle",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/process",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/runtimeapplication",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/platform/browser",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/clock",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/contentstaging",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/directoryreplace",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/filesystem",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/generatedartifacts",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/httpserver",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/inboxgitkeep",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/internal/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/logging",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/metrics",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/portablefiles",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/process",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/pty",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/random",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/replay",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/stdio",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/root",
+      "disposition": "retain",
+      "destination": "root"
+    },
+    {
+      "packagePath": "pkg/services/automations",
+      "disposition": "retain",
+      "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/service",
+      "disposition": "retain",
+      "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/timework",
+      "disposition": "move",
+      "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/edges",
+      "disposition": "retain",
+      "destination": "edges"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/authoredlayout",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/namevalue",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/definition",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/loadedsource",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/loading",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/goal",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/packageassets",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/promptassets",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/review",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/subagent",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/tts",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/portableconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/quorumpolicy",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/replayconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/runtimeconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/scaffold",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/service",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/snapshotcapture",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workers",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workers/taxonomy",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workpropagation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workstationexecution",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/build",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/checkpointstore",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/context",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/definitionmapping",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/ingest",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/javascript",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestratorcontract",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/replayhooks",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtimecontract",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/scheduler",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/service",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/service/host",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/state",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/state/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/testkit",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/throttle",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/token",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/token_transformer",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/catalog",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+      "disposition": "move",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/applicationopening",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/artifactprojection",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/controlplane",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/cursors",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/cursors/persistence",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/fixtures",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/livechild",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/recordingreplay",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/runtimepersist",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/executionopening",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/fileeffects",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation/packagedtts",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/livesession",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/logicaltarget",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/processlifecycle",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/requestpreparation",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responseevents",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responseeventstore",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream/fragmentmap",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/roles",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtime",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimebinding",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimehosting",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
+      "disposition": "move",
+      "destination": "factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
+      "disposition": "move",
+      "destination": "factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+      "disposition": "move",
+      "destination": "factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/scopedlisting",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/durable_execution"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/durable_execution"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/durable_execution"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/identity"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/identity"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/identity"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/invocation"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/invocation"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/invocation"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/live_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/live_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/live_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/response_stream"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/response_stream"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions/internal/services/response_stream"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionprojection",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionregistry",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionvalidation",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/stream",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/session",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/sessionexecution",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/http",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/mcp/catalog",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/wire/contracts",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/models",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/assets",
+      "disposition": "move",
+      "destination": "models/internal/services/assets"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/catalog",
+      "disposition": "move",
+      "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/host",
+      "disposition": "move",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/inference",
+      "disposition": "move",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/local",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/managedruntime",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/service",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/cli",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/wire",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/identityinventory",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/codex",
+      "disposition": "move",
+      "destination": "provider_sessions/internal/services/codex_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/cursor",
+      "disposition": "move",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
+      "packagePath": "pkg/services/recordings",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/artifacts",
+      "disposition": "move",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events/kinds",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events/snapshot",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections/dashboard",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/replay",
+      "disposition": "move",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/work/materialize",
+      "disposition": "move",
+      "destination": "work/internal/services/content_materialization"
+    },
+    {
+      "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/workers",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/agypty",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/cliprovider",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/construction",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/diagnostics",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/execution",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/execution/recording",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/executor",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/executor/agentrun",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/interface",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/invocation",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/process",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/prompting",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter/opencode",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter/testkit",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/agy",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/claude",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/claude/exitfailure",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex/exitfailure",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex/progress",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/commandenv",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/conductor",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/cursor",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/cursor/progress",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/functionaltests",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/gemini",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/inferencecontract",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/inferencecontract/testkit",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/kiro",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/pi",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/registry",
+      "disposition": "move",
+      "destination": "providers/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/structured",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/runner",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/service",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/hosted_logic",
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/inference",
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/testing",
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/skippermissions",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/worktree",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/transports/cli",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/baseline",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/batchload",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clicontract",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clidiag",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clihttp",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliinputs",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifest",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestcobra",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestgen",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliserver",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandidentity",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandregistry",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/config",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/configinit",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/dashboard",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/default",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/docs",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factory",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factoryload",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/mcp",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/observation",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/resolvedinput",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/run",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/runconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/sessionpath",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/submit",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/terminalpolicy",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/timedisplay",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/work",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/workflow",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/apitypes",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/application",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/client",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests/factorysessionsse",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/workstationprojection",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/composition",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/authored",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/diagnostics",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/openapitests",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryeventprojection",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysession",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysnapshot",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/globalconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/optional",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/validationentry",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workcontent",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerdiagnostics",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerinference",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/discoverygen",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/server",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/stdio",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/wire",
+      "disposition": "retain",
+      "destination": "wire"
+    },
+    {
+      "packagePath": "pkg/wire/factorydefinitions",
+      "disposition": "retain",
+      "destination": "wire"
+    }
+  ]
+}

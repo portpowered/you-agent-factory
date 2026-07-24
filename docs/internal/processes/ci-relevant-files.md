@@ -145,6 +145,32 @@ Wave 0 functional-tests-expansion planning authority lives under
   overrides directly and assert the runner is invoked, rather than supplying
   a prebuilt worker application that bypasses this composition boundary.
 
+- `cmd/packagetargetmanifestcheck` owns the Packaged Service Structure
+  package-to-target and deletion manifest schema. The committed inventory lives
+  at `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  may only use the closed destination vocabulary (13 product owners, approved
+  non-service families, and the `edges` architecture exception). Nested
+  destinations are limited to `<owner>/internal/services/<subservice>` using the
+  plan's committed nested subservice names. The top-level `inventory` array is
+  the stable-sorted (byte-order / slash path) ledger seed of every production
+  `pkg/` package (directories with at least one non-test `.go` file); regenerate
+  with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
+  product-owner destination rows (including Providers extraction moves from
+  `workers/provider*` / `cliprovider` / `agypty`) regenerate with
+  `-write-owner-packages`. Process Edges rows retain destination `edges` as the
+  sole broad external-effect architecture exception; regenerate with
+  `-write-edges-packages`, which also records FND-06 Edges-narrowing
+  `futureDebt` without performing that migration. Approved non-service family
+  rows (`initializer`, `root`, `wire`, `platform`, `transports`) and any
+  remaining residual deletion-queue mappings regenerate with
+  `-write-residual-packages`; unknown residuals must not invent top-level
+  owners. Focused validation requires exact one-destination coverage: every
+  `inventory[]` path has exactly one stable-sorted `packages[]` row, and the
+  checker fails on missing, duplicate, unsorted, closed-vocabulary, or incomplete
+  delete-row mappings. Keep `make package-target-manifest-check` in default
+  `make lint`. Keep validators beside this checker rather than inventing
+  alternate destination trees.
+
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`
   aggregation: it requires exactly one root Factory document per authored
