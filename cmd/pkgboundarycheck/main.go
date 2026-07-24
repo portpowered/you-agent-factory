@@ -369,6 +369,7 @@ type scanResult struct {
 	staleTransportBehaviorEntries      []transportBehaviorBaselineEntry
 	transportBehaviorBaselineCount     int
 	functionalProcessEdgeFindings      []functionalProcessEdgeFinding
+	constructedServiceEdgesFindings    []constructedServiceEdgesFinding
 	testWorkNormalizationFindings      []testWorkNormalizationFinding
 	productionDefaultFindings          []productionDefaultFinding
 	staleProductionDefaultEntries      []productionDefaultBaselineEntry
@@ -611,6 +612,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.functionalProcessEdgeFindings) +
+		len(findings.constructedServiceEdgesFindings) +
 		len(findings.testWorkNormalizationFindings) +
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
@@ -660,6 +662,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeTransportBehaviorFindings(stderr, findings.transportBehaviorFindings)
 	writeStaleTransportBehaviorBaselineEntries(stderr, findings.staleTransportBehaviorEntries)
 	writeFunctionalProcessEdgeFindings(stderr, findings.functionalProcessEdgeFindings)
+	writeConstructedServiceEdgesFindings(stderr, findings.constructedServiceEdgesFindings)
 	writeTestWorkNormalizationFindings(stderr, findings.testWorkNormalizationFindings)
 	writeTransportBehaviorBaselineSummary(stderr, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultFindings(stderr, findings.productionDefaultFindings)
@@ -838,6 +841,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 	result.transportBehaviorBaselineCount = len(transportBehaviorBaseline.Entries)
 	result.functionalProcessEdgeFindings, err = scanFunctionalProcessEdges(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.constructedServiceEdgesFindings, err = scanConstructedServiceEdges(repoRoot)
 	if err != nil {
 		return scanResult{}, err
 	}
