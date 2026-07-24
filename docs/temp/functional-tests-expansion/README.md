@@ -20,7 +20,8 @@ the repository's customer-level functional tests.
   row fields). Use it for later batch tooling; keep it in sync with the
   Markdown inventory when mapping stories update rows. `runtime_api` rows are
   fully mapped into named `runtime_api-delete-*` deletion-only batches
-  (FND-007-003).
+  (FND-007-003). `smoke` and `workflow` rows are fully mapped into named
+  `smoke-delete-*` and `workflow-delete-*` split batches (FND-007-004).
 - [`provider-session-goldens.md`](provider-session-goldens.md) defines how
   sanitized provider execution output becomes checked-in golden test input and
   expected public metadata.
