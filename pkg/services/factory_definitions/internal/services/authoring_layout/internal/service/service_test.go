@@ -374,6 +374,142 @@ func TestAuthoringLayoutMapsMalformedAndAtomicWriteFailures(t *testing.T) {
 	}
 }
 
+func TestAuthoringLayoutPreservesPriorContentOnFailedAtomicWrite(t *testing.T) {
+	t.Parallel()
+
+	// Stateful layout store: create succeeds, replace fails without mutating prior bytes.
+	store := map[string][]byte{}
+	factoryPath := func(rootDir, name string) string {
+		return rootDir + "/" + name
+	}
+	priorCanonical := []byte(`{"name":"alpha","workStations":[{"id":"intake"}]}`)
+	attemptedCanonical := []byte(`{"name":"alpha","workStations":[{"id":"corrupt"}]}`)
+
+	svc, err := authoringlayoutwire.NewService(authoringlayout.Ports{
+		Prepare: func(_ context.Context, _ string, got []byte) (factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			if string(got) == "{" {
+				return factorydefinitions.PreparedFactoryLayoutPayload{}, errors.New("decode failed")
+			}
+			return factorydefinitions.PreparedFactoryLayoutPayload{
+				Canonical: append([]byte(nil), got...),
+			}, nil
+		},
+		Create: func(rootDir, name string, prepared factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			path := factoryPath(rootDir, name)
+			store[path] = append([]byte(nil), prepared.Canonical...)
+			return path, nil
+		},
+		Replace: func(rootDir, name string, prepared factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
+			path := factoryPath(rootDir, name)
+			if _, ok := store[path]; !ok {
+				t.Fatalf("Replace missing prior content at %q", path)
+			}
+			if string(prepared.Canonical) != string(attemptedCanonical) {
+				t.Fatalf("Replace prepared = %q, want attempted %q", prepared.Canonical, attemptedCanonical)
+			}
+			// Fail without writing: prior on-disk (in-memory) content stays unchanged.
+			return path, errors.New("atomic rename failed")
+		},
+		Flatten: func(path string) ([]byte, error) {
+			canonical, ok := store[path]
+			if !ok {
+				return nil, errors.New("missing authored layout")
+			}
+			return append([]byte(nil), canonical...), nil
+		},
+		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			if _, ok := store[path]; !ok {
+				return "", factorydefinitions.LayoutExpansionReport{}, errors.New("missing authored layout")
+			}
+			return path, factorydefinitions.LayoutExpansionReport{FactoryConfigPaths: 1}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	preparedPrior, err := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{
+		Name: "alpha", Payload: priorCanonical,
+	})
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout prior: %v", err)
+	}
+	created, err := svc.CreateNamedFactory(ctx, factorydefinitions.CreateNamedFactoryRequest{
+		RootDir: "/factories", Name: "alpha", Prepared: preparedPrior.Prepared,
+	})
+	if err != nil {
+		t.Fatalf("CreateNamedFactory: %v", err)
+	}
+
+	baseline, err := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{
+		Path: created.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout baseline: %v", err)
+	}
+	if string(baseline.Canonical) != string(priorCanonical) {
+		t.Fatalf("baseline = %q, want prior %q", baseline.Canonical, priorCanonical)
+	}
+
+	_, prepareMalformedErr := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{
+		Name: "alpha", Payload: []byte("{"),
+	})
+	if !errors.Is(prepareMalformedErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatalf(
+			"PrepareFactoryLayout malformed error = %v, want ErrMalformedFactoryLayoutPayload",
+			prepareMalformedErr,
+		)
+	}
+	if errors.Is(prepareMalformedErr, factorydefinitions.ErrAtomicFactoryWriteFailed) {
+		t.Fatal("malformed failure must not also match ErrAtomicFactoryWriteFailed")
+	}
+
+	preparedAttempt, err := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{
+		Name: "alpha", Payload: attemptedCanonical,
+	})
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout attempted: %v", err)
+	}
+
+	_, replaceErr := svc.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{
+		RootDir: "/factories", Name: "alpha", Prepared: preparedAttempt.Prepared,
+	})
+	var writeFailure *factorydefinitions.AtomicFactoryWriteFailure
+	if !errors.As(replaceErr, &writeFailure) {
+		t.Fatalf("ReplaceNamedFactory error = %v, want AtomicFactoryWriteFailure", replaceErr)
+	}
+	if !writeFailure.PreviousPreserved {
+		t.Fatal("PreviousPreserved = false, want true")
+	}
+	if writeFailure.Name != "alpha" {
+		t.Fatalf("AtomicFactoryWriteFailure.Name = %q, want alpha", writeFailure.Name)
+	}
+	if !errors.Is(replaceErr, factorydefinitions.ErrAtomicFactoryWriteFailed) {
+		t.Fatalf("ReplaceNamedFactory error = %v, want ErrAtomicFactoryWriteFailed", replaceErr)
+	}
+	if errors.Is(replaceErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatal("atomic write failure must not also match ErrMalformedFactoryLayoutPayload")
+	}
+
+	afterFailure, err := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{
+		Path: created.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout after failed replace: %v", err)
+	}
+	if string(afterFailure.Canonical) != string(baseline.Canonical) {
+		t.Fatalf(
+			"after failed replace = %q, want unchanged prior baseline %q",
+			afterFailure.Canonical,
+			baseline.Canonical,
+		)
+	}
+	if string(afterFailure.Canonical) == string(attemptedCanonical) {
+		t.Fatal("failed replace must not leave attempted canonical bytes on disk")
+	}
+}
+
 // rootAuthoringAdapter proves the Definitions root authoring surface can succeed
 // only through the private authoring_layout subservice, not a second authority.
 type rootAuthoringAdapter struct {
