@@ -3,6 +3,7 @@ package factory_visualization_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,6 +20,151 @@ type fakeRootPeer struct {
 	observeView          factoryvisualization.ProjectedView
 	observeSnapshotOK    bool
 	observeReconstructOK bool
+
+	nextPresentationID int
+	presentations      map[factoryvisualization.PresentationSessionID]*fakePresentationSession
+}
+
+type fakePresentationSession struct {
+	mode         factoryvisualization.PresentationDeliveryMode
+	records      [][]byte
+	closed       bool
+	finalized    bool
+	progressSeen bool
+	capacity     int
+	queued       int
+}
+
+func (f *fakeRootPeer) presentation(
+	id factoryvisualization.PresentationSessionID,
+) (*fakePresentationSession, error) {
+	if f.presentations == nil {
+		return nil, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorInvalidInput,
+			Message: "presentation session is unknown",
+		}
+	}
+	session, ok := f.presentations[id]
+	if !ok {
+		return nil, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorInvalidInput,
+			Message: "presentation session is unknown",
+		}
+	}
+	return session, nil
+}
+
+func (f *fakeRootPeer) OpenPresentation(
+	_ context.Context,
+	req factoryvisualization.OpenPresentationRequest,
+) (factoryvisualization.OpenPresentationResult, error) {
+	if req.Mode == "" {
+		return factoryvisualization.OpenPresentationResult{}, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorInvalidInput,
+			Message: "open presentation: required request parameters are missing",
+		}
+	}
+	if req.Mode != factoryvisualization.PresentationDeliveryBestEffort &&
+		req.Mode != factoryvisualization.PresentationDeliveryLossless {
+		return factoryvisualization.OpenPresentationResult{}, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorInvalidInput,
+			Message: "open presentation: delivery mode is not supported",
+		}
+	}
+	if f.presentations == nil {
+		f.presentations = map[factoryvisualization.PresentationSessionID]*fakePresentationSession{}
+	}
+	f.nextPresentationID++
+	id := factoryvisualization.PresentationSessionID(
+		"peer-presentation-" + strconv.Itoa(f.nextPresentationID),
+	)
+	capacity := 2
+	if req.Mode == factoryvisualization.PresentationDeliveryLossless {
+		capacity = 0
+	}
+	f.presentations[id] = &fakePresentationSession{
+		mode:     req.Mode,
+		capacity: capacity,
+	}
+	return factoryvisualization.OpenPresentationResult{SessionID: id, Mode: req.Mode}, nil
+}
+
+func (f *fakeRootPeer) PresentProgress(
+	_ context.Context,
+	req factoryvisualization.PresentProgressRequest,
+) (factoryvisualization.PresentProgressResult, error) {
+	session, err := f.presentation(req.SessionID)
+	if err != nil {
+		return factoryvisualization.PresentProgressResult{}, err
+	}
+	if session.closed || session.finalized {
+		return factoryvisualization.PresentProgressResult{}, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorEnqueueAfterClose,
+			Message: "present progress: presentation output is closed",
+		}
+	}
+	accepted := 0
+	for _, record := range req.Records {
+		if session.mode == factoryvisualization.PresentationDeliveryBestEffort &&
+			session.capacity > 0 && session.queued >= session.capacity {
+			return factoryvisualization.PresentProgressResult{AcceptedCount: accepted}, &factoryvisualization.PresentationError{
+				Kind:    factoryvisualization.PresentationErrorBackpressureRejected,
+				Message: "present progress: best-effort backlog rejected record",
+			}
+		}
+		payload := append([]byte(nil), record.Payload...)
+		session.records = append(session.records, payload)
+		session.queued++
+		session.progressSeen = true
+		accepted++
+	}
+	return factoryvisualization.PresentProgressResult{AcceptedCount: accepted}, nil
+}
+
+func (f *fakeRootPeer) FinalizePresentation(
+	_ context.Context,
+	req factoryvisualization.FinalizePresentationRequest,
+) (factoryvisualization.FinalizePresentationResult, error) {
+	session, err := f.presentation(req.SessionID)
+	if err != nil {
+		return factoryvisualization.FinalizePresentationResult{}, err
+	}
+	if session.finalized {
+		return factoryvisualization.FinalizePresentationResult{
+			Finalized:    false,
+			ProgressSeen: session.progressSeen,
+		}, nil
+	}
+	if req.Terminal == nil {
+		session.finalized = true
+		session.closed = true
+		return factoryvisualization.FinalizePresentationResult{}, &factoryvisualization.PresentationError{
+			Kind:    factoryvisualization.PresentationErrorFinalizeWithoutWriter,
+			Message: "finalize presentation: terminal writer is required",
+		}
+	}
+	session.finalized = true
+	session.closed = true
+	session.records = append(session.records, append([]byte(nil), req.Terminal.Payload...))
+	return factoryvisualization.FinalizePresentationResult{
+		Finalized:    true,
+		ProgressSeen: session.progressSeen,
+	}, nil
+}
+
+func (f *fakeRootPeer) ClosePresentation(
+	_ context.Context,
+	req factoryvisualization.ClosePresentationRequest,
+) (factoryvisualization.ClosePresentationResult, error) {
+	session, err := f.presentation(req.SessionID)
+	if err != nil {
+		return factoryvisualization.ClosePresentationResult{}, err
+	}
+	session.closed = true
+	session.finalized = true
+	return factoryvisualization.ClosePresentationResult{
+		DroppedCount: 0,
+	}, nil
 }
 
 func (f *fakeRootPeer) Observe(
@@ -286,5 +432,106 @@ func TestRootLiveProjectionSuccessAndTypedFailures(t *testing.T) {
 	}
 	if peer.subscribed || peer.presented {
 		t.Fatal("Observe must not imply Activate subscription/presentation side effects on inert peer")
+	}
+}
+
+func TestRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	peer := &fakeRootPeer{state: factoryvisualization.LifecycleStateInert}
+	var root factoryvisualization.Root = peer
+
+	_, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{})
+	var presErr *factoryvisualization.PresentationError
+	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorInvalidInput {
+		t.Fatalf("OpenPresentation missing parameters: error = %v, want InvalidInput", err)
+	}
+
+	opened, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{
+		Mode: factoryvisualization.PresentationDeliveryLossless,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation lossless: error = %v", err)
+	}
+	if opened.SessionID == "" {
+		t.Fatal("OpenPresentation must return a session id")
+	}
+	if opened.Mode != factoryvisualization.PresentationDeliveryLossless {
+		t.Fatalf("OpenPresentation mode = %q, want lossless", opened.Mode)
+	}
+
+	progress, err := root.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records: []factoryvisualization.ProgressRecord{
+			{Payload: []byte("one")},
+			{Payload: []byte("two")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PresentProgress: error = %v", err)
+	}
+	if progress.AcceptedCount != 2 {
+		t.Fatalf("PresentProgress AcceptedCount = %d, want 2", progress.AcceptedCount)
+	}
+
+	finalized, err := root.FinalizePresentation(context.Background(), factoryvisualization.FinalizePresentationRequest{
+		SessionID: opened.SessionID,
+		Terminal:  &factoryvisualization.TerminalWrite{Payload: []byte("done")},
+	})
+	if err != nil {
+		t.Fatalf("FinalizePresentation: error = %v", err)
+	}
+	if !finalized.Finalized || !finalized.ProgressSeen {
+		t.Fatalf("FinalizePresentation result = %#v, want finalized with progress", finalized)
+	}
+	session := peer.presentations[opened.SessionID]
+	if len(session.records) != 3 {
+		t.Fatalf("drained records = %#v, want ordered progress then terminal", session.records)
+	}
+	if string(session.records[0]) != "one" || string(session.records[1]) != "two" || string(session.records[2]) != "done" {
+		t.Fatalf("record order = %#v, want one,two,done", session.records)
+	}
+
+	_, err = root.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("late")}},
+	})
+	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorEnqueueAfterClose {
+		t.Fatalf("PresentProgress after finalize: error = %v, want EnqueueAfterClose", err)
+	}
+
+	bestEffort, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{
+		Mode: factoryvisualization.PresentationDeliveryBestEffort,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation best-effort: error = %v", err)
+	}
+	if _, err := root.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{
+		SessionID: bestEffort.SessionID,
+		Records: []factoryvisualization.ProgressRecord{
+			{Payload: []byte("a")},
+			{Payload: []byte("b")},
+		},
+	}); err != nil {
+		t.Fatalf("PresentProgress fill capacity: error = %v", err)
+	}
+	_, err = root.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{
+		SessionID: bestEffort.SessionID,
+		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("c")}},
+	})
+	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorBackpressureRejected {
+		t.Fatalf("PresentProgress backpressure: error = %v, want BackpressureRejected", err)
+	}
+
+	_, err = root.FinalizePresentation(context.Background(), factoryvisualization.FinalizePresentationRequest{
+		SessionID: bestEffort.SessionID,
+		Terminal:  nil,
+	})
+	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorFinalizeWithoutWriter {
+		t.Fatalf("FinalizePresentation without terminal: error = %v, want FinalizeWithoutWriter", err)
+	}
+
+	if peer.subscribed {
+		t.Fatal("presentation/drain must not require Activate subscription ownership on the peer")
 	}
 }

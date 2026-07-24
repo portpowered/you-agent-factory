@@ -296,6 +296,133 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	}
 }
 
+func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	live := make(chan factorydefinitions.FactoryEvent)
+	service, err := New(
+		&sourceStub{
+			stream:   &factorydefinitions.FactoryEventStream{Events: live},
+			snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		},
+		projectionStub{},
+		fixedClock{now: time.Unix(1, 0)},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	var root Root = service
+
+	_, err = root.OpenPresentation(context.Background(), OpenPresentationRequest{})
+	var presErr *PresentationError
+	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorInvalidInput {
+		t.Fatalf("OpenPresentation missing parameters: error = %v, want InvalidInput", err)
+	}
+
+	opened, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
+		Mode: PresentationDeliveryLossless,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation: error = %v", err)
+	}
+
+	progress, err := root.PresentProgress(context.Background(), PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records: []ProgressRecord{
+			{Payload: []byte("alpha")},
+			{Payload: []byte("beta")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PresentProgress: error = %v", err)
+	}
+	if progress.AcceptedCount != 2 {
+		t.Fatalf("PresentProgress AcceptedCount = %d, want 2", progress.AcceptedCount)
+	}
+
+	finalized, err := root.FinalizePresentation(context.Background(), FinalizePresentationRequest{
+		SessionID: opened.SessionID,
+		Terminal:  &TerminalWrite{Payload: []byte("omega")},
+	})
+	if err != nil {
+		t.Fatalf("FinalizePresentation: error = %v", err)
+	}
+	if !finalized.Finalized || !finalized.ProgressSeen {
+		t.Fatalf("FinalizePresentation result = %#v", finalized)
+	}
+
+	session := service.presentations[opened.SessionID]
+	got := session.writer.String()
+	want := "alpha\nbeta\nomega\n"
+	if got != want {
+		t.Fatalf("drained presentation = %q, want %q", got, want)
+	}
+
+	_, err = root.PresentProgress(context.Background(), PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records:   []ProgressRecord{{Payload: []byte("late")}},
+	})
+	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorEnqueueAfterClose {
+		t.Fatalf("PresentProgress after finalize: error = %v, want EnqueueAfterClose", err)
+	}
+
+	bestEffort, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
+		Mode: PresentationDeliveryBestEffort,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation best-effort: error = %v", err)
+	}
+	_, err = root.FinalizePresentation(context.Background(), FinalizePresentationRequest{
+		SessionID: bestEffort.SessionID,
+	})
+	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorFinalizeWithoutWriter {
+		t.Fatalf("FinalizePresentation without terminal: error = %v, want FinalizeWithoutWriter", err)
+	}
+
+	// Backpressure: block the Visualization-owned writer so best-effort backlog fills.
+	blocked, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
+		Mode: PresentationDeliveryBestEffort,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation blocked best-effort: error = %v", err)
+	}
+	blockedSession := service.presentations[blocked.SessionID]
+	gate := make(chan struct{})
+	blockedSession.mu.Lock()
+	_ = blockedSession.output.CloseAndDrain()
+	blockedSession.output = newBestEffortOutput(writerFunc(func(p []byte) (int, error) {
+		<-gate
+		return len(p), nil
+	}))
+	blockedSession.closed = false
+	blockedSession.finalized = false
+	blockedSession.mu.Unlock()
+
+	for i := 0; i < defaultProgressQueueCapacity; i++ {
+		if _, err := root.PresentProgress(context.Background(), PresentProgressRequest{
+			SessionID: blocked.SessionID,
+			Records:   []ProgressRecord{{Payload: []byte("x")}},
+		}); err != nil {
+			close(gate)
+			t.Fatalf("fill backlog item %d: %v", i, err)
+		}
+	}
+	_, err = root.PresentProgress(context.Background(), PresentProgressRequest{
+		SessionID: blocked.SessionID,
+		Records:   []ProgressRecord{{Payload: []byte("overflow")}},
+	})
+	close(gate)
+	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorBackpressureRejected {
+		t.Fatalf("PresentProgress backpressure: error = %v, want BackpressureRejected", err)
+	}
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
 func event(id string, sequence int) factorydefinitions.FactoryEvent {
 	return factorydefinitions.FactoryEvent{
 		Id: id,

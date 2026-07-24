@@ -80,6 +80,9 @@ type Service struct {
 
 	events []factorydefinitions.FactoryEvent
 	cursor *factorydefinitions.FactoryEventReconnectCursor
+
+	presentationSeq int
+	presentations   map[PresentationSessionID]*rootPresentationSession
 }
 
 var (

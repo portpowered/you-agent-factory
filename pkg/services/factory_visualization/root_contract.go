@@ -1,9 +1,11 @@
 package factory_visualization
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -32,6 +34,19 @@ type Root interface {
 	// Observe returns one detached retained-then-live Factory view projection
 	// through Visualization-owned plain contracts.
 	Observe(context.Context, ObserveRequest) (ObserveResult, error)
+	// OpenPresentation opens one Visualization-owned presentation output using
+	// best-effort or lossless drain policy. Transports do not supply writers,
+	// queue capacity, or backpressure policy through this seam.
+	OpenPresentation(context.Context, OpenPresentationRequest) (OpenPresentationResult, error)
+	// PresentProgress enqueues ordered progress records onto an opened
+	// presentation session.
+	PresentProgress(context.Context, PresentProgressRequest) (PresentProgressResult, error)
+	// FinalizePresentation drains accepted progress then commits one terminal
+	// write owned by Visualization final-write ordering.
+	FinalizePresentation(context.Context, FinalizePresentationRequest) (FinalizePresentationResult, error)
+	// ClosePresentation closes and drains a presentation session without a
+	// terminal write.
+	ClosePresentation(context.Context, ClosePresentationRequest) (ClosePresentationResult, error)
 }
 
 // ActivateMode selects how visualization leaves the inert constructed state.
@@ -345,4 +360,345 @@ func validateObserveReconnect(reconnect *ObserveReconnectCursor) error {
 		}
 	}
 	return nil
+}
+
+// PresentationDeliveryMode selects Visualization-owned drain/backpressure policy.
+type PresentationDeliveryMode string
+
+const (
+	// PresentationDeliveryBestEffort may reject progress under backlog pressure.
+	PresentationDeliveryBestEffort PresentationDeliveryMode = "BEST_EFFORT"
+	// PresentationDeliveryLossless retains every accepted progress record until
+	// close/finalize drain completes.
+	PresentationDeliveryLossless PresentationDeliveryMode = "LOSSLESS"
+)
+
+// PresentationSessionID identifies one opened presentation/drain session.
+type PresentationSessionID string
+
+// PresentationErrorKind distinguishes typed Visualization presentation/drain outcomes.
+type PresentationErrorKind string
+
+const (
+	PresentationErrorInvalidInput          PresentationErrorKind = "INVALID_INPUT"
+	PresentationErrorEnqueueAfterClose     PresentationErrorKind = "ENQUEUE_AFTER_CLOSE"
+	PresentationErrorFinalizeWithoutWriter PresentationErrorKind = "FINALIZE_WITHOUT_WRITER"
+	PresentationErrorBackpressureRejected  PresentationErrorKind = "BACKPRESSURE_REJECTED"
+)
+
+// PresentationError is a typed Visualization presentation/drain failure peers can branch on.
+type PresentationError struct {
+	Kind    PresentationErrorKind
+	Message string
+	Cause   error
+}
+
+func (e *PresentationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	return string(e.Kind)
+}
+
+func (e *PresentationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// OpenPresentationRequest carries explicit presentation open parameters.
+type OpenPresentationRequest struct {
+	Mode PresentationDeliveryMode
+}
+
+// OpenPresentationResult is the published outcome of opening a presentation session.
+type OpenPresentationResult struct {
+	SessionID PresentationSessionID
+	Mode      PresentationDeliveryMode
+}
+
+// ProgressRecord is one Visualization-owned progress payload.
+type ProgressRecord struct {
+	Payload []byte
+}
+
+// PresentProgressRequest enqueues ordered progress onto an opened session.
+type PresentProgressRequest struct {
+	SessionID PresentationSessionID
+	Records   []ProgressRecord
+}
+
+// PresentProgressResult reports how many progress records were accepted.
+type PresentProgressResult struct {
+	AcceptedCount int
+}
+
+// TerminalWrite is the Visualization-owned terminal payload committed after drain.
+type TerminalWrite struct {
+	Payload []byte
+}
+
+// FinalizePresentationRequest finalizes one presentation session after drain.
+// A nil Terminal is the typed finalize-without-writer failure.
+type FinalizePresentationRequest struct {
+	SessionID PresentationSessionID
+	Terminal  *TerminalWrite
+}
+
+// FinalizePresentationResult is the published finalize outcome.
+type FinalizePresentationResult struct {
+	Finalized    bool
+	ProgressSeen bool
+}
+
+// ClosePresentationRequest closes and drains without a terminal write.
+type ClosePresentationRequest struct {
+	SessionID PresentationSessionID
+}
+
+// ClosePresentationResult reports close-and-drain outcomes peers need.
+type ClosePresentationResult struct {
+	DroppedCount int
+}
+
+type rootPresentationSession struct {
+	mode         PresentationDeliveryMode
+	output       Output
+	writer       *bytes.Buffer
+	mu           sync.Mutex
+	progressSeen bool
+	finalized    bool
+	closed       bool
+}
+
+// OpenPresentation implements Root by opening a Visualization-owned best-effort
+// or lossless output. Writer/codec transport types stay off the peer contract.
+func (s *Service) OpenPresentation(
+	ctx context.Context,
+	req OpenPresentationRequest,
+) (OpenPresentationResult, error) {
+	if s == nil {
+		return OpenPresentationResult{}, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "open Factory visualization presentation: service is required",
+		}
+	}
+	if ctx == nil {
+		return OpenPresentationResult{}, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "open Factory visualization presentation: context is required",
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return OpenPresentationResult{}, err
+	}
+	if req.Mode == "" {
+		return OpenPresentationResult{}, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "open Factory visualization presentation: required request parameters are missing",
+		}
+	}
+
+	writer := &bytes.Buffer{}
+	var output Output
+	switch req.Mode {
+	case PresentationDeliveryBestEffort:
+		output = newBestEffortOutput(writer)
+	case PresentationDeliveryLossless:
+		output = newLosslessOutput(writer)
+	default:
+		return OpenPresentationResult{}, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: fmt.Sprintf("open Factory visualization presentation: delivery mode %q is not supported", req.Mode),
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.presentations == nil {
+		s.presentations = map[PresentationSessionID]*rootPresentationSession{}
+	}
+	s.presentationSeq++
+	id := PresentationSessionID(fmt.Sprintf("presentation-%d", s.presentationSeq))
+	s.presentations[id] = &rootPresentationSession{
+		mode:   req.Mode,
+		output: output,
+		writer: writer,
+	}
+	return OpenPresentationResult{SessionID: id, Mode: req.Mode}, nil
+}
+
+// PresentProgress implements Root by enqueueing Visualization-owned progress
+// records and mapping closed/backpressure outcomes to typed errors.
+func (s *Service) PresentProgress(
+	ctx context.Context,
+	req PresentProgressRequest,
+) (PresentProgressResult, error) {
+	if err := requirePresentationContext(ctx); err != nil {
+		return PresentProgressResult{}, err
+	}
+	session, err := s.presentationSession(req.SessionID)
+	if err != nil {
+		return PresentProgressResult{}, err
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.closed || session.finalized {
+		return PresentProgressResult{}, &PresentationError{
+			Kind:    PresentationErrorEnqueueAfterClose,
+			Message: "present Factory visualization progress: presentation output is closed",
+		}
+	}
+
+	accepted := 0
+	for _, record := range req.Records {
+		if err := session.output.Enqueue(append([]byte(nil), record.Payload...)); err != nil {
+			if isPresentationClosedErr(err) {
+				return PresentProgressResult{AcceptedCount: accepted}, &PresentationError{
+					Kind:    PresentationErrorEnqueueAfterClose,
+					Message: "present Factory visualization progress: presentation output is closed",
+					Cause:   err,
+				}
+			}
+			if isPresentationBackpressureErr(err) {
+				return PresentProgressResult{AcceptedCount: accepted}, &PresentationError{
+					Kind:    PresentationErrorBackpressureRejected,
+					Message: "present Factory visualization progress: best-effort backlog rejected record",
+					Cause:   err,
+				}
+			}
+			return PresentProgressResult{AcceptedCount: accepted}, err
+		}
+		session.progressSeen = true
+		accepted++
+	}
+	return PresentProgressResult{AcceptedCount: accepted}, nil
+}
+
+// FinalizePresentation implements Root by draining accepted progress then
+// appending one Visualization-owned terminal payload.
+func (s *Service) FinalizePresentation(
+	ctx context.Context,
+	req FinalizePresentationRequest,
+) (FinalizePresentationResult, error) {
+	if err := requirePresentationContext(ctx); err != nil {
+		return FinalizePresentationResult{}, err
+	}
+	session, err := s.presentationSession(req.SessionID)
+	if err != nil {
+		return FinalizePresentationResult{}, err
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.finalized {
+		return FinalizePresentationResult{
+			Finalized:    false,
+			ProgressSeen: session.progressSeen,
+		}, nil
+	}
+	if req.Terminal == nil {
+		session.finalized = true
+		session.closed = true
+		_ = session.output.CloseAndDrain()
+		return FinalizePresentationResult{}, &PresentationError{
+			Kind:    PresentationErrorFinalizeWithoutWriter,
+			Message: "finalize Factory visualization presentation: terminal writer is required",
+		}
+	}
+
+	if err := session.output.CloseAndDrain(); err != nil {
+		session.finalized = true
+		session.closed = true
+		return FinalizePresentationResult{}, err
+	}
+	if _, err := session.writer.Write(appendLine(req.Terminal.Payload)); err != nil {
+		session.finalized = true
+		session.closed = true
+		return FinalizePresentationResult{}, err
+	}
+	session.finalized = true
+	session.closed = true
+	return FinalizePresentationResult{
+		Finalized:    true,
+		ProgressSeen: session.progressSeen,
+	}, nil
+}
+
+// ClosePresentation implements Root close-and-drain without a terminal write.
+func (s *Service) ClosePresentation(
+	ctx context.Context,
+	req ClosePresentationRequest,
+) (ClosePresentationResult, error) {
+	if err := requirePresentationContext(ctx); err != nil {
+		return ClosePresentationResult{}, err
+	}
+	session, err := s.presentationSession(req.SessionID)
+	if err != nil {
+		return ClosePresentationResult{}, err
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if !session.closed {
+		if err := session.output.CloseAndDrain(); err != nil {
+			session.closed = true
+			session.finalized = true
+			return ClosePresentationResult{}, err
+		}
+		session.closed = true
+		session.finalized = true
+	}
+	return ClosePresentationResult{DroppedCount: session.output.Dropped()}, nil
+}
+
+func (s *Service) presentationSession(id PresentationSessionID) (*rootPresentationSession, error) {
+	if s == nil {
+		return nil, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "Factory visualization presentation: service is required",
+		}
+	}
+	if id == "" {
+		return nil, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "Factory visualization presentation: session id is required",
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.presentations[id]
+	if !ok {
+		return nil, &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "Factory visualization presentation: session is unknown",
+		}
+	}
+	return session, nil
+}
+
+func requirePresentationContext(ctx context.Context) error {
+	if ctx == nil {
+		return &PresentationError{
+			Kind:    PresentationErrorInvalidInput,
+			Message: "Factory visualization presentation: context is required",
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func isPresentationClosedErr(err error) bool {
+	return errors.Is(err, errPresentationOutputClosed)
+}
+
+func isPresentationBackpressureErr(err error) bool {
+	return errors.Is(err, errPresentationBacklogFull)
 }
