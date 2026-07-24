@@ -15,7 +15,12 @@ type Service interface {
 	// service; Factory Sessions supplies only plain runtime-scope data.
 	// Invalid or missing binding inputs fail closed with ErrInvalidRuntimeBinding.
 	ForRuntime(RuntimeBinding) (Service, error)
+	// ListModels returns detached Models-owned catalog summaries (Status,
+	// LoadState, ManagedRuntime readiness) without exposing nested catalog
+	// assemblers. Unavailable catalog scope fails with ErrUnavailable.
 	ListModels(context.Context) (List, error)
+	// GetModel returns one detached Models-owned catalog Detail. Missing models
+	// fail with ErrNotFound; unavailable catalog scope fails with ErrUnavailable.
 	GetModel(context.Context, string) (Detail, error)
 	PullModel(context.Context, string) (PullResult, error)
 	InspectRuntime(context.Context, string) (Runtime, error)
