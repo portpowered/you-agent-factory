@@ -2,6 +2,8 @@ package factorydefinitions
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -24,6 +26,13 @@ type Service interface {
 	DeleteNamedFactory(context.Context, DeleteNamedFactoryRequest) (DeleteNamedFactoryResult, error)
 	GetCurrentFactoryPointer(context.Context, GetCurrentFactoryPointerRequest) (GetCurrentFactoryPointerResult, error)
 	SetCurrentFactoryPointer(context.Context, SetCurrentFactoryPointerRequest) (SetCurrentFactoryPointerResult, error)
+
+	// Authoring slice: parse/prepare, flatten, expand, create, and replace.
+	PrepareFactoryLayout(context.Context, PrepareFactoryLayoutRequest) (PrepareFactoryLayoutResult, error)
+	FlattenFactoryLayout(context.Context, FlattenFactoryLayoutRequest) (FlattenFactoryLayoutResult, error)
+	ExpandFactoryLayout(context.Context, ExpandFactoryLayoutRequest) (ExpandFactoryLayoutResult, error)
+	CreateNamedFactory(context.Context, CreateNamedFactoryRequest) (CreateNamedFactoryResult, error)
+	ReplaceNamedFactory(context.Context, ReplaceNamedFactoryRequest) (ReplaceNamedFactoryResult, error)
 }
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
@@ -93,6 +102,112 @@ type SetCurrentFactoryPointerRequest struct {
 // SetCurrentFactoryPointerResult confirms the written current-pointer identity.
 type SetCurrentFactoryPointerResult struct {
 	Name string
+}
+
+// ErrMalformedFactoryLayoutPayload reports that authored layout bytes could
+// not be prepared as one Factory aggregate.
+var ErrMalformedFactoryLayoutPayload = errors.New("malformed factory layout payload")
+
+// ErrAtomicFactoryWriteFailed reports that create/replace did not commit the
+// authored Factory aggregate.
+var ErrAtomicFactoryWriteFailed = errors.New("atomic factory write failed")
+
+// AtomicFactoryWriteFailure carries failed-write preservation facts without
+// exposing peer storage or restore-callback types.
+type AtomicFactoryWriteFailure struct {
+	Name              string
+	FactoryDir        string
+	PreviousPreserved bool
+	Cause             error
+}
+
+func (e *AtomicFactoryWriteFailure) Error() string {
+	if e == nil {
+		return ErrAtomicFactoryWriteFailed.Error()
+	}
+	if e.Cause != nil {
+		return fmt.Sprintf("%v: %v", ErrAtomicFactoryWriteFailed, e.Cause)
+	}
+	if e.PreviousPreserved {
+		return fmt.Sprintf(
+			"%v: previous layout preserved for %q",
+			ErrAtomicFactoryWriteFailed,
+			e.Name,
+		)
+	}
+	return ErrAtomicFactoryWriteFailed.Error()
+}
+
+func (e *AtomicFactoryWriteFailure) Unwrap() error {
+	if e != nil && e.Cause != nil {
+		return e.Cause
+	}
+	return ErrAtomicFactoryWriteFailed
+}
+
+func (e *AtomicFactoryWriteFailure) Is(target error) bool {
+	return target == ErrAtomicFactoryWriteFailed
+}
+
+// PrepareFactoryLayoutRequest carries one authored Factory payload for parse
+// and prepare. Callers do not supply filesystem effects or mapping codecs.
+type PrepareFactoryLayoutRequest struct {
+	Name    string
+	Payload []byte
+}
+
+// PrepareFactoryLayoutResult carries the Definitions-owned prepared aggregate.
+type PrepareFactoryLayoutResult struct {
+	Prepared PreparedFactoryLayoutPayload
+}
+
+// FlattenFactoryLayoutRequest selects one on-disk or logical Factory path to
+// render into canonical authored bytes.
+type FlattenFactoryLayoutRequest struct {
+	Path string
+}
+
+// FlattenFactoryLayoutResult carries detached canonical Factory bytes.
+type FlattenFactoryLayoutResult struct {
+	Canonical []byte
+}
+
+// ExpandFactoryLayoutRequest selects one flattened or split Factory path to
+// expand into the authored layout aggregate.
+type ExpandFactoryLayoutRequest struct {
+	Path string
+}
+
+// ExpandFactoryLayoutResult carries portable expand success facts.
+type ExpandFactoryLayoutResult struct {
+	FactoryDir string
+	Report     LayoutExpansionReport
+}
+
+// CreateNamedFactoryRequest creates one named Factory from a prepared aggregate.
+type CreateNamedFactoryRequest struct {
+	RootDir  string
+	Name     string
+	Prepared PreparedFactoryLayoutPayload
+}
+
+// CreateNamedFactoryResult confirms the created Factory identity.
+type CreateNamedFactoryResult struct {
+	Name       string
+	FactoryDir string
+}
+
+// ReplaceNamedFactoryRequest replaces one named Factory with a prepared aggregate.
+type ReplaceNamedFactoryRequest struct {
+	RootDir  string
+	Name     string
+	Prepared PreparedFactoryLayoutPayload
+}
+
+// ReplaceNamedFactoryResult confirms the replaced Factory identity.
+type ReplaceNamedFactoryResult struct {
+	Name       string
+	FactoryDir string
 }
 
 // SessionHost is the Factory Definitions-owned port for session-scoped

@@ -227,6 +227,54 @@ func (s *Service) SetCurrentFactoryPointer(
 	return factoryroot.SetCurrentFactoryPointerResult{Name: request.Name}, nil
 }
 
+// PrepareFactoryLayout satisfies the root authoring slice. Nested layout
+// wiring remains an IMP-DEF concern; this method keeps the root Service
+// assignable.
+func (s *Service) PrepareFactoryLayout(
+	context.Context,
+	factoryroot.PrepareFactoryLayoutRequest,
+) (factoryroot.PrepareFactoryLayoutResult, error) {
+	return factoryroot.PrepareFactoryLayoutResult{}, factoryroot.ErrMalformedFactoryLayoutPayload
+}
+
+// FlattenFactoryLayout satisfies the root authoring slice.
+func (s *Service) FlattenFactoryLayout(
+	context.Context,
+	factoryroot.FlattenFactoryLayoutRequest,
+) (factoryroot.FlattenFactoryLayoutResult, error) {
+	return factoryroot.FlattenFactoryLayoutResult{}, fmt.Errorf("factory layout collaborator is required")
+}
+
+// ExpandFactoryLayout satisfies the root authoring slice.
+func (s *Service) ExpandFactoryLayout(
+	context.Context,
+	factoryroot.ExpandFactoryLayoutRequest,
+) (factoryroot.ExpandFactoryLayoutResult, error) {
+	return factoryroot.ExpandFactoryLayoutResult{}, fmt.Errorf("factory layout collaborator is required")
+}
+
+// CreateNamedFactory satisfies the root authoring slice.
+func (s *Service) CreateNamedFactory(
+	context.Context,
+	factoryroot.CreateNamedFactoryRequest,
+) (factoryroot.CreateNamedFactoryResult, error) {
+	return factoryroot.CreateNamedFactoryResult{}, &factoryroot.AtomicFactoryWriteFailure{
+		PreviousPreserved: true,
+		Cause:             fmt.Errorf("factory layout collaborator is required"),
+	}
+}
+
+// ReplaceNamedFactory satisfies the root authoring slice.
+func (s *Service) ReplaceNamedFactory(
+	context.Context,
+	factoryroot.ReplaceNamedFactoryRequest,
+) (factoryroot.ReplaceNamedFactoryResult, error) {
+	return factoryroot.ReplaceNamedFactoryResult{}, &factoryroot.AtomicFactoryWriteFailure{
+		PreviousPreserved: true,
+		Cause:             fmt.Errorf("factory layout collaborator is required"),
+	}
+}
+
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
 func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
 	if s == nil {

@@ -647,9 +647,14 @@ keep catalog methods on the singular `Service` rather than elevating
 `NamedFactoryCatalog` as a peer-facing authority, and extend the same
 external fake-peer characterization test with representative success and
 distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
-vs `ErrNamedFactoryNotFound`). Avoid adding a new root Go file when the
-package is already over the file-count baseline; grow `service_contract.go`
-and `service_contract_test.go` instead, and ratchet
+vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+singular `Service` with prepare/flatten/expand/create/replace request
+shapes that omit filesystem effects and mapping codecs; publish
+`ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
+(`ErrAtomicFactoryWriteFailed`, `PreviousPreserved`) instead of peer-facing
+`FactorySplitLayoutReplaceResult` restore callbacks. Avoid adding a new
+root Go file when the package is already over the file-count baseline; grow
+`service_contract.go` and `service_contract_test.go` instead, and ratchet
 `backend-package-file-count.json` only for unavoidable prior growth.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root

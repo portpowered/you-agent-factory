@@ -13,7 +13,9 @@ import (
 // satisfy the singular root Service without importing Definitions
 // implementation subpackages.
 type fakeDefinitionsPeer struct {
-	entries []factorydefinitions.NamedFactoryListEntry
+	entries            []factorydefinitions.NamedFactoryListEntry
+	authoredCanonical  []byte
+	authoredFactoryDir string
 }
 
 func (fakeDefinitionsPeer) ActivateNamedFactory(context.Context, string) error {
@@ -131,6 +133,75 @@ func (fakeDefinitionsPeer) SetCurrentFactoryPointer(
 	return factorydefinitions.SetCurrentFactoryPointerResult{Name: request.Name}, nil
 }
 
+func (p fakeDefinitionsPeer) PrepareFactoryLayout(
+	_ context.Context,
+	request factorydefinitions.PrepareFactoryLayoutRequest,
+) (factorydefinitions.PrepareFactoryLayoutResult, error) {
+	if len(request.Payload) == 0 || string(request.Payload) == "{" {
+		return factorydefinitions.PrepareFactoryLayoutResult{}, factorydefinitions.ErrMalformedFactoryLayoutPayload
+	}
+	canonical := append([]byte(nil), request.Payload...)
+	if len(p.authoredCanonical) > 0 {
+		canonical = append([]byte(nil), p.authoredCanonical...)
+	}
+	return factorydefinitions.PrepareFactoryLayoutResult{
+		Prepared: factorydefinitions.PreparedFactoryLayoutPayload{Canonical: canonical},
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) FlattenFactoryLayout(
+	_ context.Context,
+	_ factorydefinitions.FlattenFactoryLayoutRequest,
+) (factorydefinitions.FlattenFactoryLayoutResult, error) {
+	return factorydefinitions.FlattenFactoryLayoutResult{
+		Canonical: append([]byte(nil), p.authoredCanonical...),
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) ExpandFactoryLayout(
+	_ context.Context,
+	_ factorydefinitions.ExpandFactoryLayoutRequest,
+) (factorydefinitions.ExpandFactoryLayoutResult, error) {
+	return factorydefinitions.ExpandFactoryLayoutResult{
+		FactoryDir: p.authoredFactoryDir,
+		Report:     factorydefinitions.LayoutExpansionReport{},
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) CreateNamedFactory(
+	_ context.Context,
+	request factorydefinitions.CreateNamedFactoryRequest,
+) (factorydefinitions.CreateNamedFactoryResult, error) {
+	if request.Name == "fail-write" {
+		return factorydefinitions.CreateNamedFactoryResult{}, &factorydefinitions.AtomicFactoryWriteFailure{
+			Name:              request.Name,
+			FactoryDir:        p.authoredFactoryDir,
+			PreviousPreserved: true,
+		}
+	}
+	return factorydefinitions.CreateNamedFactoryResult{
+		Name:       request.Name,
+		FactoryDir: p.authoredFactoryDir,
+	}, nil
+}
+
+func (p fakeDefinitionsPeer) ReplaceNamedFactory(
+	_ context.Context,
+	request factorydefinitions.ReplaceNamedFactoryRequest,
+) (factorydefinitions.ReplaceNamedFactoryResult, error) {
+	if request.Name == "fail-write" {
+		return factorydefinitions.ReplaceNamedFactoryResult{}, &factorydefinitions.AtomicFactoryWriteFailure{
+			Name:              request.Name,
+			FactoryDir:        p.authoredFactoryDir,
+			PreviousPreserved: true,
+		}
+	}
+	return factorydefinitions.ReplaceNamedFactoryResult{
+		Name:       request.Name,
+		FactoryDir: p.authoredFactoryDir,
+	}, nil
+}
+
 func TestRootService_FakePeerReadPath_TypedNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -225,5 +296,120 @@ func TestRootService_CatalogSlice_TypedInvalidNameAndMissing(t *testing.T) {
 	}
 	if errors.Is(missingErr, factorydefinitions.ErrInvalidNamedFactoryName) {
 		t.Fatal("missing named Factory must not also match ErrInvalidNamedFactoryName")
+	}
+}
+
+func TestRootService_AuthoringSlice_PrepareFlattenExpandRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"name":"alpha"}`)
+	var service factorydefinitions.Service = fakeDefinitionsPeer{
+		authoredCanonical:  payload,
+		authoredFactoryDir: "/factories/alpha",
+	}
+
+	prepared, err := service.PrepareFactoryLayout(
+		context.Background(),
+		factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: payload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactoryLayout: %v", err)
+	}
+	if string(prepared.Prepared.Canonical) != string(payload) {
+		t.Fatalf("PrepareFactoryLayout canonical = %q, want %q", prepared.Prepared.Canonical, payload)
+	}
+
+	flattened, err := service.FlattenFactoryLayout(
+		context.Background(),
+		factorydefinitions.FlattenFactoryLayoutRequest{Path: "/factories/alpha"},
+	)
+	if err != nil {
+		t.Fatalf("FlattenFactoryLayout: %v", err)
+	}
+	if string(flattened.Canonical) != string(payload) {
+		t.Fatalf("FlattenFactoryLayout canonical = %q, want %q", flattened.Canonical, payload)
+	}
+
+	expanded, err := service.ExpandFactoryLayout(
+		context.Background(),
+		factorydefinitions.ExpandFactoryLayoutRequest{Path: "/factories/alpha"},
+	)
+	if err != nil {
+		t.Fatalf("ExpandFactoryLayout: %v", err)
+	}
+	if expanded.FactoryDir != "/factories/alpha" {
+		t.Fatalf("ExpandFactoryLayout factoryDir = %q, want /factories/alpha", expanded.FactoryDir)
+	}
+
+	created, err := service.CreateNamedFactory(
+		context.Background(),
+		factorydefinitions.CreateNamedFactoryRequest{
+			RootDir:  "/factories",
+			Name:     "alpha",
+			Prepared: prepared.Prepared,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateNamedFactory: %v", err)
+	}
+	if created.Name != "alpha" || created.FactoryDir != "/factories/alpha" {
+		t.Fatalf("CreateNamedFactory result = %#v, want alpha identity facts", created)
+	}
+
+	replaced, err := service.ReplaceNamedFactory(
+		context.Background(),
+		factorydefinitions.ReplaceNamedFactoryRequest{
+			RootDir:  "/factories",
+			Name:     "alpha",
+			Prepared: prepared.Prepared,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ReplaceNamedFactory: %v", err)
+	}
+	if replaced.Name != "alpha" || replaced.FactoryDir != "/factories/alpha" {
+		t.Fatalf("ReplaceNamedFactory result = %#v, want alpha identity facts", replaced)
+	}
+}
+
+func TestRootService_AuthoringSlice_TypedMalformedAndAtomicWriteFailure(t *testing.T) {
+	t.Parallel()
+
+	var service factorydefinitions.Service = fakeDefinitionsPeer{
+		authoredFactoryDir: "/factories/alpha",
+	}
+
+	_, malformedErr := service.PrepareFactoryLayout(
+		context.Background(),
+		factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: []byte("{")},
+	)
+	if !errors.Is(malformedErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatalf(
+			"PrepareFactoryLayout malformed error = %v, want %v",
+			malformedErr,
+			factorydefinitions.ErrMalformedFactoryLayoutPayload,
+		)
+	}
+
+	_, createErr := service.CreateNamedFactory(
+		context.Background(),
+		factorydefinitions.CreateNamedFactoryRequest{RootDir: "/factories", Name: "fail-write"},
+	)
+	var writeFailure *factorydefinitions.AtomicFactoryWriteFailure
+	if !errors.As(createErr, &writeFailure) {
+		t.Fatalf("CreateNamedFactory error = %v, want AtomicFactoryWriteFailure", createErr)
+	}
+	if !writeFailure.PreviousPreserved {
+		t.Fatal("AtomicFactoryWriteFailure.PreviousPreserved = false, want true")
+	}
+	if !errors.Is(createErr, factorydefinitions.ErrAtomicFactoryWriteFailed) {
+		t.Fatalf(
+			"CreateNamedFactory error = %v, want %v",
+			createErr,
+			factorydefinitions.ErrAtomicFactoryWriteFailed,
+		)
+	}
+	if errors.Is(createErr, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatal("atomic write failure must not also match ErrMalformedFactoryLayoutPayload")
 	}
 }
