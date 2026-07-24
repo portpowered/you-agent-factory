@@ -22,6 +22,11 @@ type inspectionService struct {
 	files                 providersessions.FileSystem
 }
 
+// Compile-time proof that production inspectionService seals the singular
+// peer root (Details + Inspect + Project) without exposing construction ports
+// or private Codex/Cursor reader types through Service method signatures.
+var _ providersessions.Service = (*inspectionService)(nil)
+
 // New constructs Provider Sessions from explicit process edges and the
 // provider-owned default storage-root policy.
 func New(

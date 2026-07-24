@@ -424,3 +424,97 @@ func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
 		})
 	}
 }
+
+// TestRootService_Seal_PublishedSlicesOnSingularRoot proves stories 002-003
+// slices are both reachable through one named Service using only Provider
+// Sessions root contracts (no Codex/Cursor reader, filesystem/SQL/OS effect,
+// Providers catalog/execution, or Workers selection-policy imports).
+func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
+	modifiedAt := time.Date(2026, 7, 24, 5, 0, 0, 0, time.UTC)
+	assistantText := "sealed assistant reply"
+	inputTokens := 5
+	ref := providersessions.SessionRef{
+		Provider: providersessions.ProviderCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-seal-1",
+	}
+	fake := &rootServiceFake{
+		inspect: providersessions.InspectResult{
+			Session: ref,
+			Source: providersessions.SourceMetadata{
+				ModifiedAt:   &modifiedAt,
+				RelativePath: "2026/07/24/rollout-session-seal-1.jsonl",
+				SizeBytes:    21,
+			},
+		},
+		project: providersessions.ProjectResult{
+			Session: ref,
+			Detail: providersessions.Detail{
+				ProviderSession: providersessions.Ref{
+					Provider: ref.Provider,
+					Kind:     ref.Kind,
+					ID:       ref.ID,
+				},
+				Source: providersessions.SourceMetadata{
+					ModifiedAt:   &modifiedAt,
+					RelativePath: "2026/07/24/rollout-session-seal-1.jsonl",
+					SizeBytes:    21,
+				},
+				Parse: providersessions.ParseSummary{
+					EventCount: 1,
+					LineCount:  1,
+					TokenUsage: &providersessions.TokenUsage{InputTokens: &inputTokens},
+				},
+				Transcript: []providersessions.TranscriptEntry{{
+					Order: 0,
+					Text:  &assistantText,
+					Type:  providersessions.TranscriptAssistantMessage,
+				}},
+			},
+		},
+	}
+
+	var svc providersessions.Service = fake
+
+	inspected, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if inspected.Session != ref {
+		t.Fatalf("InspectResult.Session = %#v, want %#v", inspected.Session, ref)
+	}
+	if inspected.Source.RelativePath == "" || inspected.Source.ModifiedAt == nil {
+		t.Fatalf("InspectResult.Source = %#v", inspected.Source)
+	}
+
+	projected, err := svc.Project(providersessions.ProjectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+	if projected.Session != ref {
+		t.Fatalf("ProjectResult.Session = %#v, want %#v", projected.Session, ref)
+	}
+	if len(projected.Detail.Transcript) != 1 ||
+		projected.Detail.Transcript[0].Text == nil ||
+		*projected.Detail.Transcript[0].Text != assistantText {
+		t.Fatalf("ProjectResult.Detail.Transcript = %#v", projected.Detail.Transcript)
+	}
+	if projected.Detail.Parse.TokenUsage == nil ||
+		projected.Detail.Parse.TokenUsage.InputTokens == nil ||
+		*projected.Detail.Parse.TokenUsage.InputTokens != inputTokens {
+		t.Fatalf("ProjectResult.Detail.Parse.TokenUsage = %#v", projected.Detail.Parse.TokenUsage)
+	}
+
+	if fake.lastInspected != ref || fake.lastProjected != ref {
+		t.Fatalf("fake recorded Inspect=%#v Project=%#v, want both %#v", fake.lastInspected, fake.lastProjected, ref)
+	}
+
+	fake.inspectErr = providersessions.ErrSessionNotFound
+	fake.projectErr = providersessions.ErrUnsupportedProvider
+	if _, err := svc.Inspect(providersessions.InspectRequest{Session: ref}); !errors.Is(err, providersessions.ErrSessionNotFound) {
+		t.Fatalf("Inspect typed failure = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := svc.Project(providersessions.ProjectRequest{Session: ref}); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("Project typed failure = %v, want ErrUnsupportedProvider", err)
+	}
+}
