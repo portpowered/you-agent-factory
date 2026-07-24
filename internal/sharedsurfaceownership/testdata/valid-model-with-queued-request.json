@@ -1,0 +1,36 @@
+{
+  "formatVersion": "1.0.0",
+  "integrationMetadataOnly": true,
+  "authorizesPackageMoves": false,
+  "authorizesPublicContractChanges": false,
+  "authorizesTransportCutovers": false,
+  "concurrentWriteLeasesAllowed": false,
+  "queueSemantics": {
+    "ordering": "deterministic-stable",
+    "activationPolicy": "head-of-queue-only",
+    "ownerLocalOutsideExclusivePaths": "unblocked"
+  },
+  "surfaces": {
+    "openapi.authored.entrypoint": {
+      "surfaceId": "openapi.authored.entrypoint",
+      "protocolFamily": "openapi-http",
+      "exclusiveChangedPathSummary": "api/openapi-main.yaml and api/components/** authorship",
+      "serialIntegratorLaneId": "PSS-I02",
+      "activeHolder": null,
+      "ownerRequestQueue": [
+        {
+          "requestId": "req-http-definitions-001",
+          "queuePosition": 0,
+          "ownerPacketId": "HTTP-DEF-01"
+        },
+        {
+          "requestId": "req-http-sessions-001",
+          "queuePosition": 1,
+          "ownerPacketId": "HTTP-SES-01"
+        }
+      ],
+      "holdConditionRefs": []
+    }
+  },
+  "holds": {}
+}

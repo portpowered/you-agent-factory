@@ -25,6 +25,8 @@ The primary abstractions the backend works off of are:
 
 ## package-structured
 see ./packaged-structure.md for more details on how package structures is supposed to work.
+Shared OpenAPI/CLI/MCP composition ownership scheduling metadata lives under
+[`./packaged-service-structure/`](./packaged-service-structure/).
 
 ## System flow
 

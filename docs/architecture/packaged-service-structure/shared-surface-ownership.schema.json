@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/architecture/packaged-service-structure/shared-surface-ownership.schema.json",
+  "title": "PSS shared-surface ownership inventory",
+  "description": "Integration-metadata-only scheduling contract for shared OpenAPI/HTTP, CLI, and MCP composition surfaces. This document does not authorize package moves, public contract changes, or transport cutovers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "integrationMetadataOnly",
+    "authorizesPackageMoves",
+    "authorizesPublicContractChanges",
+    "authorizesTransportCutovers",
+    "concurrentWriteLeasesAllowed",
+    "queueSemantics",
+    "surfaces",
+    "holds"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "1.0.0"
+    },
+    "integrationMetadataOnly": {
+      "const": true,
+      "description": "Inventory is integration metadata only."
+    },
+    "authorizesPackageMoves": {
+      "const": false
+    },
+    "authorizesPublicContractChanges": {
+      "const": false
+    },
+    "authorizesTransportCutovers": {
+      "const": false
+    },
+    "concurrentWriteLeasesAllowed": {
+      "const": false,
+      "description": "Forbids concurrent write leases on the same shared surface."
+    },
+    "queueSemantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordering",
+        "activationPolicy",
+        "ownerLocalOutsideExclusivePaths"
+      ],
+      "properties": {
+        "ordering": {
+          "const": "deterministic-stable"
+        },
+        "activationPolicy": {
+          "const": "head-of-queue-only",
+          "description": "Only the head accepted owner request may become the active integrator."
+        },
+        "ownerLocalOutsideExclusivePaths": {
+          "const": "unblocked",
+          "description": "Owner-local adapter work outside exclusive shared paths remains unblocked."
+        }
+      }
+    },
+    "surfaces": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/surface"
+      }
+    },
+    "holds": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/hold"
+      }
+    }
+  },
+  "$defs": {
+    "protocolFamily": {
+      "type": "string",
+      "enum": ["openapi-http", "cli", "mcp"]
+    },
+    "serialIntegratorLaneId": {
+      "type": "string",
+      "enum": ["PSS-I02", "PSS-I03", "PSS-I04"]
+    },
+    "ownerRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "queuePosition", "ownerPacketId"],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "queuePosition": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ownerPacketId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "activeHolder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "ownerPacketId"],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerPacketId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surfaceId",
+        "protocolFamily",
+        "exclusiveChangedPathSummary",
+        "serialIntegratorLaneId",
+        "activeHolder",
+        "ownerRequestQueue",
+        "holdConditionRefs"
+      ],
+      "properties": {
+        "surfaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocolFamily": {
+          "$ref": "#/$defs/protocolFamily"
+        },
+        "exclusiveChangedPathSummary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serialIntegratorLaneId": {
+          "$ref": "#/$defs/serialIntegratorLaneId"
+        },
+        "activeHolder": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/activeHolder" }
+          ]
+        },
+        "ownerRequestQueue": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownerRequest"
+          }
+        },
+        "holdConditionRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "hold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "holdId",
+        "externalOwner",
+        "blockedLaneOrSurfaceClass",
+        "releaseCondition",
+        "bypassable",
+        "ownerLocalNonOverlappingAllowed"
+      ],
+      "properties": {
+        "holdId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "externalOwner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockedLaneOrSurfaceClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "releaseCondition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bypassable": {
+          "const": false
+        },
+        "ownerLocalNonOverlappingAllowed": {
+          "const": true
+        }
+      }
+    }
+  }
+}

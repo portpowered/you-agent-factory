@@ -1,0 +1,26 @@
+{
+  "formatVersion": "1.0.0",
+  "integrationMetadataOnly": true,
+  "authorizesPackageMoves": false,
+  "authorizesPublicContractChanges": false,
+  "authorizesTransportCutovers": false,
+  "concurrentWriteLeasesAllowed": false,
+  "queueSemantics": {
+    "ordering": "deterministic-stable",
+    "activationPolicy": "head-of-queue-only",
+    "ownerLocalOutsideExclusivePaths": "unblocked"
+  },
+  "surfaces": {
+    "mcp.server.composition": {
+      "surfaceId": "mcp.server.composition",
+      "protocolFamily": "mcp",
+      "exclusiveChangedPathSummary": "pkg/transports/mcp server composition",
+      "serialIntegratorLaneId": "PSS-I04",
+      "additionalSerialIntegratorLaneId": "PSS-I03",
+      "activeHolder": null,
+      "ownerRequestQueue": [],
+      "holdConditionRefs": []
+    }
+  },
+  "holds": {}
+}

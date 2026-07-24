@@ -1,0 +1,36 @@
+{
+  "formatVersion": "1.0.0",
+  "integrationMetadataOnly": true,
+  "authorizesPackageMoves": false,
+  "authorizesPublicContractChanges": false,
+  "authorizesTransportCutovers": false,
+  "concurrentWriteLeasesAllowed": false,
+  "queueSemantics": {
+    "ordering": "deterministic-stable",
+    "activationPolicy": "head-of-queue-only",
+    "ownerLocalOutsideExclusivePaths": "unblocked"
+  },
+  "surfaces": {
+    "cli.manifest.generation": {
+      "surfaceId": "cli.manifest.generation",
+      "protocolFamily": "cli",
+      "exclusiveChangedPathSummary": "shared Cobra/manifest generation authority",
+      "serialIntegratorLaneId": "PSS-I03",
+      "activeHolder": null,
+      "ownerRequestQueue": [
+        {
+          "requestId": "req-dup",
+          "queuePosition": 0,
+          "ownerPacketId": "CLI-A"
+        },
+        {
+          "requestId": "req-dup",
+          "queuePosition": 1,
+          "ownerPacketId": "CLI-B"
+        }
+      ],
+      "holdConditionRefs": []
+    }
+  },
+  "holds": {}
+}
