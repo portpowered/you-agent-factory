@@ -74,6 +74,70 @@ func (f rootSnapshotFacade) MaterializeFactorySnapshot(
 	return f.portability.MaterializeFactorySnapshot(ctx, request)
 }
 
+func TestSnapshotsPortability_CaptureValidSourcePreservesIdentity(t *testing.T) {
+	t.Parallel()
+
+	portability, err := snapshotsportabilitywire.NewService()
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	canonical := []byte(`{
+		"name": "source-name",
+		"futureField": {"enabled": true},
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+	request := factorydefinitions.CaptureFactorySnapshotRequest{
+		FactoryDir: "/factories/alpha",
+		Canonical:  canonical,
+		Name:       "alpha",
+	}
+
+	result, err := portability.CaptureFactorySnapshot(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot: %v", err)
+	}
+	if result.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	}
+
+	// Public Definitions boundary success shape stays CaptureFactorySnapshotResult
+	// with a detached FactorySnapshot — not peer storage/Recordings/Runtime types.
+	var bounded factorydefinitions.CaptureFactorySnapshotResult = result
+	if bounded.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshotResult.Snapshot is nil")
+	}
+
+	var object map[string]any
+	if decodeErr := result.Snapshot.Decode(&object); decodeErr != nil {
+		t.Fatalf("CaptureFactorySnapshot decode: %v", decodeErr)
+	}
+	if object["name"] != "alpha" {
+		t.Fatalf("captured name = %#v, want alpha", object["name"])
+	}
+	if object["factoryDirectory"] != "/factories/alpha" {
+		t.Fatalf("captured factoryDirectory = %#v, want /factories/alpha", object["factoryDirectory"])
+	}
+	future, ok := object["futureField"].(map[string]any)
+	if !ok || future["enabled"] != true {
+		t.Fatalf("captured futureField = %#v, want preserved unknown identity-adjacent field", object["futureField"])
+	}
+
+	// Detached capture must not share mutable backing with the request payload.
+	canonical[2] = 'X'
+	var afterMutation map[string]any
+	if decodeErr := result.Snapshot.Decode(&afterMutation); decodeErr != nil {
+		t.Fatalf("CaptureFactorySnapshot decode after mutation: %v", decodeErr)
+	}
+	if afterMutation["name"] != "alpha" {
+		t.Fatalf("captured snapshot mutated with request Canonical; name = %#v", afterMutation["name"])
+	}
+}
+
 func TestSnapshotsPortability_OwnsRootSnapshotSurfaceSuccess(t *testing.T) {
 	t.Parallel()
 
