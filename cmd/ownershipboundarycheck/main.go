@@ -172,6 +172,10 @@ func run(cfg config, stdout, stderr io.Writer) error {
 }
 
 func scan(repoRoot string) ([]finding, error) {
+	inventory, err := loadOwnerInventory(repoRoot)
+	if err != nil {
+		return nil, err
+	}
 	var findings []finding
 	for _, scanRoot := range []string{initializerRoot, platformRoot, mappingRoot} {
 		path := filepath.Join(repoRoot, filepath.FromSlash(scanRoot))
@@ -198,7 +202,7 @@ func scan(repoRoot string) ([]finding, error) {
 				return err
 			}
 			relative = filepath.ToSlash(relative)
-			fileFindings, err := scanFile(path, relative)
+			fileFindings, err := scanFile(path, relative, inventory)
 			if err != nil {
 				return err
 			}
@@ -214,7 +218,7 @@ func scan(repoRoot string) ([]finding, error) {
 	return findings, nil
 }
 
-func scanFile(path, relative string) ([]finding, error) {
+func scanFile(path, relative string, inventory ownerInventory) ([]finding, error) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
 	if err != nil {
@@ -227,7 +231,7 @@ func scanFile(path, relative string) ([]finding, error) {
 	var findings []finding
 	switch {
 	case within(relative, initializerRoot):
-		findings = append(findings, scanInitializerImports(fileSet, imports, relative)...)
+		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory)...)
 		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative)...)
 	case within(relative, platformRoot):
 		findings = append(findings, scanPlatformImports(fileSet, imports, relative)...)
@@ -263,14 +267,19 @@ func importInventory(file *ast.File) (map[string]string, []importedPackage) {
 	return aliases, imports
 }
 
-func scanInitializerImports(fileSet *token.FileSet, imports []importedPackage, relative string) []finding {
+func scanInitializerImports(
+	fileSet *token.FileSet,
+	imports []importedPackage,
+	relative string,
+	inventory ownerInventory,
+) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		rule := ""
 		switch {
 		case strings.HasPrefix(imported.Path, transportsImport):
 			rule = ruleInitializerTransport
-		case serviceImplementationImport(imported.Path):
+		case serviceImplementationImport(imported.Path, inventory):
 			rule = ruleInitializerServiceImplementation
 		}
 		if rule != "" {
@@ -292,12 +301,23 @@ func scanInitializerImports(fileSet *token.FileSet, imports []importedPackage, r
 	return findings
 }
 
-func serviceImplementationImport(importPath string) bool {
+func serviceImplementationImport(importPath string, inventory ownerInventory) bool {
 	if !strings.HasPrefix(importPath, servicesImport) {
 		return false
 	}
-	remainder := strings.TrimPrefix(importPath, servicesImport)
-	return strings.Contains(remainder, "/")
+	repositoryPath := "pkg/services/" + strings.TrimPrefix(importPath, servicesImport)
+	_, surface := inventory.classify(repositoryPath)
+	switch surface {
+	case surfaceNonRoot:
+		return true
+	case surfaceRoot:
+		return false
+	default:
+		// Fixtures without a committed service tree keep the path-shape rule so
+		// existing initializer implementation findings remain actionable.
+		remainder := strings.TrimPrefix(importPath, servicesImport)
+		return strings.Contains(remainder, "/")
+	}
 }
 
 func scanInitializerCalls(
