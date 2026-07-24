@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-// ErrMoveWorkRequestAlreadyApplied reports a duplicate operator move requestId.
+// ErrMoveWorkRequestAlreadyApplied is the typed state-access failure returned
+// when an operator move requestId was already applied. Peers branch with
+// errors.Is on MoveWorkForSession / MoveWorkAndRead.
 var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
 
 // InvocationReturnConfig selects the Work result returned by one Factory
@@ -434,6 +436,9 @@ type WorkStateChangeRecord struct {
 	RequestID, TriggerWorkID, Reason string
 }
 
+// OperatorMoveResult is the existing detached move success shape returned by
+// the root Service state-access slice (MoveWorkForSession). Peers consume Work
+// identity and from/to state facts without importing Factory Runtime types.
 type OperatorMoveResult struct {
 	WorkID, WorkTypeID     string
 	FromState, ToState     string

@@ -45,9 +45,23 @@ type Service interface {
 	// ErrWorkRequestRejected). Path-backed or protocol decoding is not part of
 	// this root domain seam; see FileSubmissionService for file adapters.
 	SubmitWorkRequestForSession(context.Context, string, WorkRequest) (WorkRequestSubmitResult, error)
+
+	// MoveWorkForSession is part of the published state-access slice. Peers apply
+	// an operator move with Work identity, target state name, and requestId, and
+	// receive the detached OperatorMoveResult success shape or a typed failure
+	// such as ErrMoveWorkRequestAlreadyApplied.
 	MoveWorkForSession(context.Context, string, string, string, string) (OperatorMoveResult, error)
+	// ListWork is part of the published state-access slice. Peers supply plain
+	// ListOptions and receive detached ListResult ReadModel projections with no
+	// token, place, marking, or topology fields.
 	ListWork(context.Context, string, ListOptions) (ListResult, error)
+	// GetWork is part of the published state-access slice. Peers look up one Work
+	// by id and receive a detached ReadModel, or ErrWorkNotFound when missing.
 	GetWork(context.Context, string, string) (ReadModel, error)
+	// MoveWorkAndRead is the combined state-access outcome peers already rely on:
+	// apply an operator move, then return the detached post-move ReadModel (or a
+	// typed state-access failure such as ErrWorkNotFound or
+	// ErrMoveWorkRequestAlreadyApplied).
 	MoveWorkAndRead(context.Context, string, string, string, string) (ReadModel, error)
 
 	// StageContent is part of the published content staging slice. Peers stage

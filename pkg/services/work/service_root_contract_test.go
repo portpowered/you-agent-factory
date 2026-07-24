@@ -343,6 +343,169 @@ func TestServiceRootContract_AdmissionTypedFailures(t *testing.T) {
 	}
 }
 
+func TestServiceRootContract_StateAccessSliceSuccess(t *testing.T) {
+	fake := &rootServiceFake{
+		listResult: work.ListResult{
+			Results: []work.ReadModel{{
+				CursorID:     "cursor-work-1",
+				Name:         "story-1",
+				WorkID:       "work-1",
+				WorkTypeName: "story",
+				State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+				TraceID:      "trace-1",
+			}},
+			MaxResults: 10,
+			NextToken:  "",
+		},
+		getResult: work.ReadModel{
+			CursorID:     "cursor-work-1",
+			Name:         "story-1",
+			WorkID:       "work-1",
+			WorkTypeName: "story",
+			State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+			TraceID:      "trace-1",
+		},
+		moveResult: work.OperatorMoveResult{
+			WorkID:     "work-1",
+			WorkTypeID: "story",
+			FromState:  "draft",
+			ToState:    "review",
+		},
+		movedRead: work.ReadModel{
+			CursorID:     "cursor-work-1",
+			Name:         "story-1",
+			WorkID:       "work-1",
+			WorkTypeName: "story",
+			State:        &work.State{Name: "done", Type: work.StateTypeTerminal},
+			TraceID:      "trace-1",
+		},
+	}
+	var service work.Service = fake
+	ctx := context.Background()
+
+	listed, err := service.ListWork(ctx, "session-state", work.ListOptions{
+		WorkTypeName: "story",
+		StateName:    "review",
+		MaxResults:   10,
+	})
+	if err != nil {
+		t.Fatalf("ListWork: %v", err)
+	}
+	if len(listed.Results) != 1 {
+		t.Fatalf("list result = %#v, want one detached ReadModel", listed)
+	}
+	assertDetachedReadModel(t, listed.Results[0], "work-1", "review", work.StateTypeProcessing)
+	if fake.lastSessionID != "session-state" || fake.lastListOpts.WorkTypeName != "story" {
+		t.Fatalf("list routed = (%q, %#v)", fake.lastSessionID, fake.lastListOpts)
+	}
+
+	got, err := service.GetWork(ctx, "session-state", "work-1")
+	if err != nil {
+		t.Fatalf("GetWork: %v", err)
+	}
+	assertDetachedReadModel(t, got, "work-1", "review", work.StateTypeProcessing)
+
+	moved, err := service.MoveWorkForSession(ctx, "session-state", "work-1", "review", "move-state-1")
+	if err != nil {
+		t.Fatalf("MoveWorkForSession: %v", err)
+	}
+	if moved.WorkID != "work-1" || moved.FromState != "draft" || moved.ToState != "review" {
+		t.Fatalf("move result = %#v, want detached work-1 draft->review", moved)
+	}
+	if fake.lastRequestID != "move-state-1" {
+		t.Fatalf("move requestID = %q, want move-state-1", fake.lastRequestID)
+	}
+
+	readAfterMove, err := service.MoveWorkAndRead(ctx, "session-state", "work-1", "done", "move-state-2")
+	if err != nil {
+		t.Fatalf("MoveWorkAndRead: %v", err)
+	}
+	assertDetachedReadModel(t, readAfterMove, "work-1", "done", work.StateTypeTerminal)
+	if fake.lastStateName != "done" || fake.lastRequestID != "move-state-2" {
+		t.Fatalf("move-and-read routed = (%q, %q)", fake.lastStateName, fake.lastRequestID)
+	}
+}
+
+func TestServiceRootContract_StateAccessTypedFailures(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		call func(work.Service) error
+		want error
+	}{
+		{
+			name: "missing work on get",
+			call: func(service work.Service) error {
+				_, err := service.GetWork(ctx, "session-1", "missing")
+				return err
+			},
+			want: work.ErrWorkNotFound,
+		},
+		{
+			name: "missing work on move-and-read",
+			call: func(service work.Service) error {
+				_, err := service.MoveWorkAndRead(ctx, "session-1", "missing", "done", "move-missing")
+				return err
+			},
+			want: work.ErrWorkNotFound,
+		},
+		{
+			name: "already-applied move",
+			call: func(service work.Service) error {
+				_, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "dup-move")
+				return err
+			},
+			want: work.ErrMoveWorkRequestAlreadyApplied,
+		},
+		{
+			name: "already-applied move-and-read",
+			call: func(service work.Service) error {
+				_, err := service.MoveWorkAndRead(ctx, "session-1", "work-1", "done", "dup-move")
+				return err
+			},
+			want: work.ErrMoveWorkRequestAlreadyApplied,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &rootServiceFake{
+				getErr:       work.ErrWorkNotFound,
+				movedReadErr: tc.want,
+				moveErr:      work.ErrMoveWorkRequestAlreadyApplied,
+			}
+			var service work.Service = fake
+			if err := tc.call(service); !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func assertDetachedReadModel(
+	t *testing.T,
+	model work.ReadModel,
+	wantWorkID string,
+	wantStateName string,
+	wantStateType string,
+) {
+	t.Helper()
+	if model.WorkID != wantWorkID {
+		t.Fatalf("ReadModel.WorkID = %q, want %q", model.WorkID, wantWorkID)
+	}
+	if model.Name == "" || model.WorkTypeName == "" {
+		t.Fatalf("ReadModel missing customer identity fields: %#v", model)
+	}
+	if model.State == nil || model.State.Name != wantStateName || model.State.Type != wantStateType {
+		t.Fatalf("ReadModel.State = %#v, want %s/%s", model.State, wantStateName, wantStateType)
+	}
+	// Peers consume customer-facing projection fields only; CursorID is the
+	// Work-owned list cursor, not a Petri token/place/marking/topology handle.
+	if model.CursorID == "" {
+		t.Fatalf("ReadModel.CursorID empty; want opaque Work list cursor")
+	}
+}
+
 func TestServiceRootContract_ContentStagingAndMaterializationSuccess(t *testing.T) {
 	fake := &rootServiceFake{
 		stageResult: work.StageContentResult{
