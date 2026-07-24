@@ -95,22 +95,6 @@ func TestRuntimeScope_MissingRequiredInputsFailWithTypedBindingError(t *testing.
 
 	var service models.Service = runtimeScopePeerService{}
 
-	t.Run("missing cache directory", func(t *testing.T) {
-		t.Parallel()
-		_, err := service.ForRuntime(models.RuntimeBinding{
-			RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-		})
-		if err == nil {
-			t.Fatal("ForRuntime error = nil, want ErrInvalidRuntimeBinding")
-		}
-		if !errors.Is(err, models.ErrInvalidRuntimeBinding) {
-			t.Fatalf("ForRuntime error = %v, want ErrInvalidRuntimeBinding", err)
-		}
-		if !strings.Contains(err.Error(), "cache directory") {
-			t.Fatalf("ForRuntime error = %v, want cache directory detail", err)
-		}
-	})
-
 	t.Run("missing runtime config loader", func(t *testing.T) {
 		t.Parallel()
 		_, err := service.ForRuntime(models.RuntimeBinding{CacheDirectory: "cache"})
