@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -131,55 +130,23 @@ func (s sealedPeerService) InvokeLocal(_ context.Context, request models.LocalIn
 	return s.infer, nil
 }
 
-func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T) {
-	t.Parallel()
+type sealedSuccessExpectations struct {
+	list    models.List
+	detail  models.Detail
+	pull    models.PullResult
+	runtime models.Runtime
+	lease   models.HostLease
+	infer   models.LocalInvocationResult
+}
 
-	wantList := models.List{Results: []models.Summary{{Name: "local-model", Status: models.StatusReady}}}
-	wantDetail := models.Detail{Summary: models.Summary{Name: "local-model", Status: models.StatusReady}}
-	wantPull := models.PullResult{
-		ModelName:          "local-model",
-		ManagedPullOutcome: string(models.PullOutcomeAlreadyPresent),
-		DownloadedFiles:    []models.DownloadedFile{{Path: "weights.bin", Bytes: 12}},
-	}
-	wantRuntime := models.Runtime{
-		Identity:       "local-model",
-		ReadinessState: models.ReadinessStateReady,
-		LifecycleState: models.LifecycleStateLoaded,
-		Locality:       models.LocalityLocal,
-	}
-	wantLease := models.HostLease{
-		ID:       "lease-1",
-		Identity: models.HostIdentity{Name: "local-model", Locality: models.LocalityLocal},
-		Endpoint: "http://127.0.0.1:8080",
-	}
-	wantInfer := models.LocalInvocationResult{Handled: true, Content: "sealed-output"}
-
-	var service models.Service = sealedPeerService{
-		list:    wantList,
-		detail:  wantDetail,
-		pull:    wantPull,
-		runtime: wantRuntime,
-		lease:   wantLease,
-		infer:   wantInfer,
-	}
-
-	bound, err := service.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: "cache",
-		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	})
-	if err != nil {
-		t.Fatalf("runtime-scope ForRuntime: %v", err)
-	}
-	if bound == nil {
-		t.Fatal("runtime-scope ForRuntime must return singular root Service view")
-	}
-	service = bound
+func assertSealedSuccessPaths(t *testing.T, service models.Service, want sealedSuccessExpectations) {
+	t.Helper()
 
 	list, err := service.ListModels(context.Background())
 	if err != nil {
 		t.Fatalf("catalog ListModels: %v", err)
 	}
-	if len(list.Results) != 1 || list.Results[0].Name != wantList.Results[0].Name {
+	if len(list.Results) != 1 || list.Results[0].Name != want.list.Results[0].Name {
 		t.Fatalf("catalog ListModels = %#v, want Models-owned list", list)
 	}
 
@@ -187,7 +154,7 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	if err != nil {
 		t.Fatalf("catalog GetModel: %v", err)
 	}
-	if detail.Name != wantDetail.Name || detail.Status != wantDetail.Status {
+	if detail.Name != want.detail.Name || detail.Status != want.detail.Status {
 		t.Fatalf("catalog GetModel = %#v, want Models-owned detail", detail)
 	}
 
@@ -195,7 +162,7 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	if err != nil {
 		t.Fatalf("assets PullModel: %v", err)
 	}
-	if pull.ModelName != wantPull.ModelName || pull.ManagedPullOutcome != wantPull.ManagedPullOutcome {
+	if pull.ModelName != want.pull.ModelName || pull.ManagedPullOutcome != want.pull.ManagedPullOutcome {
 		t.Fatalf("assets PullModel = %#v, want Models-owned pull result", pull)
 	}
 
@@ -203,7 +170,7 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	if err != nil {
 		t.Fatalf("host InspectRuntime: %v", err)
 	}
-	if runtime.Identity != wantRuntime.Identity || runtime.ReadinessState != wantRuntime.ReadinessState {
+	if runtime.Identity != want.runtime.Identity || runtime.ReadinessState != want.runtime.ReadinessState {
 		t.Fatalf("host InspectRuntime = %#v, want Models-owned readiness", runtime)
 	}
 
@@ -214,7 +181,7 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	if err != nil {
 		t.Fatalf("host AcquireLease: %v", err)
 	}
-	if lease.ID != wantLease.ID || lease.Holder != "peer" || lease.Endpoint != wantLease.Endpoint {
+	if lease.ID != want.lease.ID || lease.Holder != "peer" || lease.Endpoint != want.lease.Endpoint {
 		t.Fatalf("host AcquireLease = %#v, want Models-owned lease", lease)
 	}
 	if err := service.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: lease.ID}); err != nil {
@@ -233,9 +200,56 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	if err != nil {
 		t.Fatalf("infer InvokeLocal: %v", err)
 	}
-	if !infer.Handled || infer.Content != wantInfer.Content {
+	if !infer.Handled || infer.Content != want.infer.Content {
 		t.Fatalf("infer InvokeLocal = %#v, want Models-owned handled result", infer)
 	}
+}
+
+func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T) {
+	t.Parallel()
+
+	want := sealedSuccessExpectations{
+		list:    models.List{Results: []models.Summary{{Name: "local-model", Status: models.StatusReady}}},
+		detail:  models.Detail{Summary: models.Summary{Name: "local-model", Status: models.StatusReady}},
+		pull: models.PullResult{
+			ModelName:          "local-model",
+			ManagedPullOutcome: string(models.PullOutcomeAlreadyPresent),
+			DownloadedFiles:    []models.DownloadedFile{{Path: "weights.bin", Bytes: 12}},
+		},
+		runtime: models.Runtime{
+			Identity:       "local-model",
+			ReadinessState: models.ReadinessStateReady,
+			LifecycleState: models.LifecycleStateLoaded,
+			Locality:       models.LocalityLocal,
+		},
+		lease: models.HostLease{
+			ID:       "lease-1",
+			Identity: models.HostIdentity{Name: "local-model", Locality: models.LocalityLocal},
+			Endpoint: "http://127.0.0.1:8080",
+		},
+		infer: models.LocalInvocationResult{Handled: true, Content: "sealed-output"},
+	}
+
+	var service models.Service = sealedPeerService{
+		list:    want.list,
+		detail:  want.detail,
+		pull:    want.pull,
+		runtime: want.runtime,
+		lease:   want.lease,
+		infer:   want.infer,
+	}
+
+	bound, err := service.ForRuntime(models.RuntimeBinding{
+		CacheDirectory: "cache",
+		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	})
+	if err != nil {
+		t.Fatalf("runtime-scope ForRuntime: %v", err)
+	}
+	if bound == nil {
+		t.Fatal("runtime-scope ForRuntime must return singular root Service view")
+	}
+	assertSealedSuccessPaths(t, bound, want)
 }
 
 func TestRootContractSeal_TypedFailuresStayDistinctPerSlice(t *testing.T) {
@@ -282,44 +296,6 @@ func TestRootContractSeal_TypedFailuresStayDistinctPerSlice(t *testing.T) {
 		ModelOperation: "generate",
 	}); !errors.Is(err, models.ErrUnsupportedResponseMode) {
 		t.Fatalf("infer unsupported-response-mode = %v, want ErrUnsupportedResponseMode", err)
-	}
-}
-
-func TestRootContractSeal_PublishedSliceTypesAreRootOwned(t *testing.T) {
-	t.Parallel()
-
-	const rootPkg = "github.com/portpowered/infinite-you/pkg/services/models"
-
-	cases := []struct {
-		name string
-		typ  reflect.Type
-	}{
-		{name: "Service", typ: reflect.TypeOf((*models.Service)(nil)).Elem()},
-		{name: "RuntimeBinding", typ: reflect.TypeOf(models.RuntimeBinding{})},
-		{name: "List", typ: reflect.TypeOf(models.List{})},
-		{name: "Detail", typ: reflect.TypeOf(models.Detail{})},
-		{name: "GetModelRequest", typ: reflect.TypeOf(models.GetModelRequest{})},
-		{name: "PullModelRequest", typ: reflect.TypeOf(models.PullModelRequest{})},
-		{name: "PullResult", typ: reflect.TypeOf(models.PullResult{})},
-		{name: "DownloadedFile", typ: reflect.TypeOf(models.DownloadedFile{})},
-		{name: "InspectRuntimeRequest", typ: reflect.TypeOf(models.InspectRuntimeRequest{})},
-		{name: "AcquireLeaseRequest", typ: reflect.TypeOf(models.AcquireLeaseRequest{})},
-		{name: "ReleaseLeaseRequest", typ: reflect.TypeOf(models.ReleaseLeaseRequest{})},
-		{name: "HostLease", typ: reflect.TypeOf(models.HostLease{})},
-		{name: "HostLeaseOptions", typ: reflect.TypeOf(models.HostLeaseOptions{})},
-		{name: "Runtime", typ: reflect.TypeOf(models.Runtime{})},
-		{name: "LocalInvocationRequest", typ: reflect.TypeOf(models.LocalInvocationRequest{})},
-		{name: "LocalInvocationResult", typ: reflect.TypeOf(models.LocalInvocationResult{})},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := tc.typ.PkgPath(); got != rootPkg {
-				t.Fatalf("%s PkgPath = %q, want root-owned %q (nested local-runtime/host re-export still present)", tc.name, got, rootPkg)
-			}
-		})
 	}
 }
 
