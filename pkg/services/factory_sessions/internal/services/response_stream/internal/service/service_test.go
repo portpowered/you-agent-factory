@@ -59,6 +59,13 @@ func newStore(t *testing.T, service responsestreamservice.Service) *responseeven
 }
 
 func publishDraft(kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
+	payload := json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`)
+	switch kind {
+	case responseevents.KindReasoning:
+		payload = json.RawMessage(`{"summaryDelta":"thinking"}`)
+	case responseevents.KindTool:
+		payload = json.RawMessage(`{"toolCallId":"call-1","outputDelta":"partial"}`)
+	}
 	return responseevents.FactoryResponseEvent{
 		DispatchID: dispatchID,
 		RunID:      "run-1",
@@ -70,7 +77,7 @@ func publishDraft(kind responseevents.Kind, dispatchID string) responseevents.Fa
 			Representation: responseevents.RepresentationDelta,
 			Fidelity:       responseevents.FidelityLossless,
 		},
-		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
+		Payload: payload,
 	}
 }
 
@@ -175,6 +182,89 @@ func TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents(t 
 	}
 	if len(events) != 1 || events[0].Sequence != third.Sequence {
 		t.Fatalf("events = %#v, want only sequence %d", events, third.Sequence)
+	}
+}
+
+func TestService_SubscribeKindFilterReturnsOnlyMatchingRetainedAndLiveEvents(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+
+	message := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindReasoning, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindTool, "dispatch-1")
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		Kinds: []responseevents.Kind{responseevents.KindMessage},
+	})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+
+	retained, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next retained: %v", err)
+	}
+	if len(retained) != 1 || retained[0].Sequence != message.Sequence || retained[0].Kind != responseevents.KindMessage {
+		t.Fatalf("retained events = %#v, want only message sequence %d", retained, message.Sequence)
+	}
+
+	publishThroughService(t, service, store, responseevents.KindReasoning, "dispatch-1")
+	liveMessage := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	gotLive, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next live: %v", err)
+	}
+	if len(gotLive) != 1 || gotLive[0].Sequence != liveMessage.Sequence || gotLive[0].Kind != responseevents.KindMessage {
+		t.Fatalf("live events = %#v, want only message sequence %d", gotLive, liveMessage.Sequence)
+	}
+}
+
+func TestService_SubscribeKindFilterStillDeliversStreamGapEvents(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 1, MaxBytes: 1 << 20}); err != nil {
+		t.Fatalf("SetRetentionLimits: %v", err)
+	}
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	retained := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+
+	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		Kinds: []responseevents.Kind{responseevents.KindMessage},
+	})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 2 || events[0].Kind != responseevents.KindStreamGap || events[1].Sequence != retained.Sequence {
+		t.Fatalf("events = %#v, want gap followed by sequence %d", events, retained.Sequence)
+	}
+}
+
+func TestService_SubscribeRejectsInvalidCursorAndUnsupportedKindFilter(t *testing.T) {
+	t.Parallel()
+	service := newService(t)
+	store := newStore(t, service)
+
+	_, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		AfterSequence: -1,
+	})
+	if !errors.Is(err, responsestreamservice.ErrInvalidCursor) {
+		t.Fatalf("invalid cursor error = %v, want ErrInvalidCursor", err)
+	}
+
+	_, err = service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
+		Kinds: []responseevents.Kind{responseevents.Kind("not-a-supported-kind")},
+	})
+	if !errors.Is(err, responsestreamservice.ErrInvalidFilter) {
+		t.Fatalf("invalid filter error = %v, want ErrInvalidFilter", err)
 	}
 }
 
