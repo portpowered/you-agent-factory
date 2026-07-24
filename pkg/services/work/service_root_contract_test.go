@@ -211,3 +211,75 @@ func TestServiceRootContract_TypedFailuresRemainDistinguishable(t *testing.T) {
 		t.Fatalf("MoveWorkForSession error = %v, want ErrMoveWorkRequestAlreadyApplied", err)
 	}
 }
+
+func TestServiceRootContract_AdmissionSliceSuccess(t *testing.T) {
+	fake := &rootServiceFake{
+		submitResult: work.WorkRequestSubmitResult{
+			RequestID: "request-admit-1",
+			TraceID:   "trace-admit-1",
+			Accepted:  true,
+			Works: []work.WorkRequestSubmittedWork{{
+				Name:         "story-admit",
+				WorkTypeName: "story",
+				WorkID:       "work-admit-1",
+			}},
+		},
+	}
+	var service work.Service = fake
+	ctx := context.Background()
+
+	request := work.WorkRequest{
+		RequestID: "request-admit-1",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "story-admit",
+			WorkTypeID: "story",
+			State:      "draft",
+			Payload:    map[string]any{"title": "admit"},
+		}},
+	}
+	result, err := service.SubmitWorkRequestForSession(ctx, "session-admit", request)
+	if err != nil {
+		t.Fatalf("SubmitWorkRequestForSession: %v", err)
+	}
+	if !result.Accepted || result.RequestID != "request-admit-1" {
+		t.Fatalf("admission result = %#v, want accepted request-admit-1", result)
+	}
+	if len(result.Works) != 1 || result.Works[0].WorkID != "work-admit-1" {
+		t.Fatalf("admission works = %#v, want work-admit-1", result.Works)
+	}
+	if fake.lastSessionID != "session-admit" || fake.lastRequest.RequestID != "request-admit-1" {
+		t.Fatalf("admission routed = (%q, %q)", fake.lastSessionID, fake.lastRequest.RequestID)
+	}
+	if len(fake.lastRequest.Works) != 1 || fake.lastRequest.Works[0].Name != "story-admit" {
+		t.Fatalf("admission payload = %#v, want story-admit work", fake.lastRequest.Works)
+	}
+}
+
+func TestServiceRootContract_AdmissionTypedFailures(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid", err: work.ErrInvalidWorkRequest},
+		{name: "conflict", err: work.ErrWorkRequestConflict},
+		{name: "rejected", err: work.ErrWorkRequestRejected},
+	}
+	ctx := context.Background()
+	request := work.WorkRequest{
+		RequestID: "request-bad",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &rootServiceFake{submitErr: tc.err}
+			var service work.Service = fake
+
+			_, err := service.SubmitWorkRequestForSession(ctx, "session-1", request)
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("SubmitWorkRequestForSession error = %v, want %v", err, tc.err)
+			}
+		})
+	}
+}

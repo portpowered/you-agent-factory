@@ -38,6 +38,12 @@ type SubmittedFileReader func(string) ([]byte, error)
 // plain Work-owned request, result, value, and typed-error contracts.
 // Runtime state and event queries belong to Factory Runtime and Recordings.
 type Service interface {
+	// SubmitWorkRequestForSession is the published admission slice. Peers submit
+	// an already-decoded WorkRequest covering request identity and payload, and
+	// receive detached WorkRequestSubmitResult acceptance facts or a typed
+	// admission failure (ErrInvalidWorkRequest, ErrWorkRequestConflict, or
+	// ErrWorkRequestRejected). Path-backed or protocol decoding is not part of
+	// this root domain seam; see FileSubmissionService for file adapters.
 	SubmitWorkRequestForSession(context.Context, string, WorkRequest) (WorkRequestSubmitResult, error)
 	MoveWorkForSession(context.Context, string, string, string, string) (OperatorMoveResult, error)
 	ListWork(context.Context, string, ListOptions) (ListResult, error)

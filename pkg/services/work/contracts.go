@@ -163,7 +163,9 @@ type WorkRequestType string
 
 const WorkRequestTypeFactoryRequestBatch WorkRequestType = "FACTORY_REQUEST_BATCH"
 
-// WorkRequest is the domain representation of the generated WorkRequest schema.
+// WorkRequest is the plain Work-owned admission request contract. Peers pass an
+// already-decoded request (identity, type, works, and relations) through the
+// root Service admission slice; path or protocol decoding stays at adapters.
 type WorkRequest struct {
 	RequestID              string          `json:"requestId"`
 	CurrentChainingTraceID string          `json:"currentChainingTraceId,omitempty"`
@@ -232,7 +234,9 @@ type WorkRequestSubmittedWork struct {
 	WorkID       string
 }
 
-// WorkRequestSubmitResult describes accepted request metadata.
+// WorkRequestSubmitResult is the plain Work-owned admission result. Peers
+// consume detached acceptance facts (request/work identity and Accepted) without
+// importing Work implementation packages.
 type WorkRequestSubmitResult struct {
 	RequestID    string
 	TraceID      string
