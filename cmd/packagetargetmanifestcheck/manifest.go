@@ -144,6 +144,9 @@ func validateManifestSchema(manifest Manifest) error {
 	if err := validateEdgesExceptionCoverage(manifest); err != nil {
 		return err
 	}
+	if err := validateResidualCoverage(manifest); err != nil {
+		return err
+	}
 	return nil
 }
 

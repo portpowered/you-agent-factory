@@ -340,6 +340,126 @@
   ],
   "packages": [
     {
+      "packagePath": "pkg/initializer",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/application",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/lifecycle",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/process",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/initializer/runtimeapplication",
+      "disposition": "retain",
+      "destination": "initializer"
+    },
+    {
+      "packagePath": "pkg/platform/browser",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/clock",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/contentstaging",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/directoryreplace",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/filesystem",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/generatedartifacts",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/httpserver",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/inboxgitkeep",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/internal/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/logging",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/metrics",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/portablefiles",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/process",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/pty",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/random",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/replay",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/stdio",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/root",
+      "disposition": "retain",
+      "destination": "root"
+    },
+    {
       "packagePath": "pkg/services/automations",
       "disposition": "retain",
       "destination": "automations"
@@ -1398,6 +1518,316 @@
       "packagePath": "pkg/services/workers/worktree",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/transports/cli",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/baseline",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/batchload",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clicontract",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clidiag",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clihttp",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliinputs",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifest",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestcobra",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestgen",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliserver",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandidentity",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandregistry",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/config",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/configinit",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/dashboard",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/default",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/docs",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factory",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factoryload",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/mcp",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/observation",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/resolvedinput",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/run",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/runconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/sessionpath",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/submit",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/terminalpolicy",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/timedisplay",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/work",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/workflow",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/apitypes",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/application",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/client",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests/factorysessionsse",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/http/workstationprojection",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/composition",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/authored",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/diagnostics",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/openapitests",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryeventprojection",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysession",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysnapshot",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/globalconfig",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/optional",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/validationentry",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workcontent",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerdiagnostics",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerinference",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/discoverygen",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/server",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/stdio",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/wire",
+      "disposition": "retain",
+      "destination": "wire"
+    },
+    {
+      "packagePath": "pkg/wire/factorydefinitions",
+      "disposition": "retain",
+      "destination": "wire"
     }
   ]
 }

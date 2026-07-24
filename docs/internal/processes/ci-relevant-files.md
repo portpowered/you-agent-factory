@@ -160,9 +160,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   `-write-owner-packages`. Process Edges rows retain destination `edges` as the
   sole broad external-effect architecture exception; regenerate with
   `-write-edges-packages`, which also records FND-06 Edges-narrowing
-  `futureDebt` without performing that migration. Keep validators beside this
-  checker rather than inventing alternate destination trees; later FND stories
-  fill residual rows and coverage gates without reopening that vocabulary.
+  `futureDebt` without performing that migration. Approved non-service family
+  rows (`initializer`, `root`, `wire`, `platform`, `transports`) and any
+  remaining residual deletion-queue mappings regenerate with
+  `-write-residual-packages`; unknown residuals must not invent top-level
+  owners. Keep validators beside this checker rather than inventing alternate
+  destination trees; later FND stories fill coverage gates without reopening
+  that vocabulary.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`

@@ -78,21 +78,37 @@ func TestValidateManifestRequiresCompleteStableInventory(t *testing.T) {
 
 	missing := base
 	missing.Inventory = []string{"pkg/alpha"}
+	missing.Packages = mustResidualPackages(t, missing.Inventory)
 	if err := validateManifestAt(repoRoot, missing); err == nil || !strings.Contains(err.Error(), "inventory") {
 		t.Fatalf("incomplete inventory error = %v", err)
 	}
 
 	unsorted := base
 	unsorted.Inventory = []string{"pkg/beta", "pkg/alpha"}
+	unsorted.Packages = mustResidualPackages(t, unsorted.Inventory)
 	if err := validateManifestAt(repoRoot, unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
 		t.Fatalf("unsorted inventory error = %v", err)
 	}
 
 	complete := base
 	complete.Inventory = []string{"pkg/alpha", "pkg/beta"}
+	complete.Packages = mustResidualPackages(t, complete.Inventory)
 	if err := validateManifestAt(repoRoot, complete); err != nil {
 		t.Fatalf("complete inventory error = %v", err)
 	}
+}
+
+func mustResidualPackages(t *testing.T, inventory []string) []PackageMapping {
+	t.Helper()
+	rows := make([]PackageMapping, 0, len(inventory))
+	for _, packagePath := range inventory {
+		mapping, ok := mapResidualPackage(packagePath)
+		if !ok {
+			t.Fatalf("mapResidualPackage(%q) ok = false for inventory fixture", packagePath)
+		}
+		rows = append(rows, mapping)
+	}
+	return rows
 }
 
 func TestCommittedManifestInventoryMatchesLiveProductionPackages(t *testing.T) {

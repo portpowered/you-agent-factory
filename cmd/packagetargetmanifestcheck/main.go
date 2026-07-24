@@ -13,11 +13,12 @@ import (
 )
 
 type config struct {
-	root               string
-	manifestPath       string
-	writeInventory     bool
-	writeOwnerPackages bool
-	writeEdgesPackages bool
+	root                  string
+	manifestPath          string
+	writeInventory        bool
+	writeOwnerPackages    bool
+	writeEdgesPackages    bool
+	writeResidualPackages bool
 }
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	flag.BoolVar(&cfg.writeInventory, "write-inventory", false, "rewrite the committed inventory from the live production pkg tree")
 	flag.BoolVar(&cfg.writeOwnerPackages, "write-owner-packages", false, "rewrite committed product-owner package destination rows from the inventory")
 	flag.BoolVar(&cfg.writeEdgesPackages, "write-edges-packages", false, "rewrite Process Edges architecture-exception package rows and FND-06 future debt")
+	flag.BoolVar(&cfg.writeResidualPackages, "write-residual-packages", false, "rewrite approved non-service family and residual/deletion-queue package rows from the inventory")
 	flag.Parse()
 	if err := run(cfg, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -80,6 +82,17 @@ func run(cfg config, stdout, _ io.Writer) error {
 			return writeErr
 		}
 		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d edges exception package rows to %s\n", len(edgesRows), filepath.ToSlash(manifestFile))
+	}
+	if cfg.writeResidualPackages {
+		residualRows, buildErr := buildResidualPackages(manifest.Inventory)
+		if buildErr != nil {
+			return buildErr
+		}
+		manifest.Packages = mergeResidualPackageRows(manifest.Packages, residualRows)
+		if writeErr := writeManifest(manifestFile, manifest); writeErr != nil {
+			return writeErr
+		}
+		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d residual package rows to %s\n", len(residualRows), filepath.ToSlash(manifestFile))
 	}
 	if err := validateManifestAt(repoRoot, manifest); err != nil {
 		return fmt.Errorf("[agent-factory:package-target-manifest] %w", err)
