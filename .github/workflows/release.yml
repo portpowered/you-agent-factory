@@ -65,8 +65,8 @@ jobs:
           release_version="${release_tag#v}"
           printf 'release_version=%s\n' "$release_version" >> "$GITHUB_OUTPUT"
 
-  prepare-data-package-candidates:
-    name: Prepare Data Package Candidates
+  prepare-public-package-candidate:
+    name: Prepare Complete Public Package Candidate
     needs: resolve-release-tag
     runs-on: ubuntu-latest
     steps:
@@ -87,41 +87,35 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Prepare the API candidate from the release commit
+      - name: Set up Bun for the frontend package workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install frontend package dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Prepare the complete public package candidate from the release commit
         run: >-
-          node scripts/api-package-candidate.mjs
-          --output-directory .artifacts/api-release-candidate
-          --package-directory packages/api
+          node scripts/public-release-package-candidate.mjs
+          --output-directory .artifacts/public-release-candidate
           --run-id "${{ github.run_id }}"
           --source-commit "${{ github.event.workflow_run.head_sha }}"
+          --version "${{ needs.resolve-release-tag.outputs.release_version }}"
 
-      - name: Prepare the Packaged Factories candidate from the release commit
-        run: >-
-          node scripts/packaged-factories-package-candidate.mjs
-          --output-directory .artifacts/packaged-factories-release-candidate
-          --package-directory packages/packaged-factories
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.event.workflow_run.head_sha }}"
-
-      - name: Upload the API candidate and evidence
+      - name: Upload the complete public package candidate and evidence
         uses: actions/upload-artifact@v4
         with:
-          name: api-release-candidate-${{ github.run_id }}
-          path: .artifacts/api-release-candidate/
-          if-no-files-found: error
-
-      - name: Upload the Packaged Factories candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: packaged-factories-release-candidate-${{ github.run_id }}
-          path: .artifacts/packaged-factories-release-candidate/
+          name: public-release-candidate-${{ github.run_id }}
+          path: .artifacts/public-release-candidate/
           if-no-files-found: error
 
   publish-release:
     name: Publish GitHub Release
     needs:
       - resolve-release-tag
-      - prepare-data-package-candidates
+      - prepare-public-package-candidate
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -163,43 +157,31 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Download the preserved API candidate
+      - name: Download the preserved complete public package candidate
         uses: actions/download-artifact@v4
         with:
-          name: api-release-candidate-${{ github.run_id }}
-          path: .artifacts/api-release-candidate
-
-      - name: Download the preserved Packaged Factories candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: packaged-factories-release-candidate-${{ github.run_id }}
-          path: .artifacts/packaged-factories-release-candidate
+          name: public-release-candidate-${{ github.run_id }}
+          path: .artifacts/public-release-candidate
 
       - name: Reconcile, publish, and verify the exact API candidate
         run: >-
           node scripts/api-package-publish.mjs
-          --candidate-directory .artifacts/api-release-candidate
+          --candidate-directory .artifacts/public-release-candidate/api
           --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
           --workspace-directory .
 
       - name: Reconcile, publish, and verify the exact Packaged Factories candidate
         run: >-
           node scripts/packaged-factories-package-publish.mjs
-          --candidate-directory .artifacts/packaged-factories-release-candidate
+          --candidate-directory .artifacts/public-release-candidate/packaged-factories
           --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
           --workspace-directory .
-
-      - name: Prepare the canonical frontend package release candidates
-        run: >-
-          make ui-public-package-publish-prepare
-          PACKAGE_VERSION="${{ needs.resolve-release-tag.outputs.release_version }}"
-          PACKAGE_OUTPUT=".artifacts/public-release-candidate"
 
       - name: Publish and verify the canonical frontend package family
         working-directory: ui
         run: >-
           npm run publish:public-packages --
-          --candidate-directory ../.artifacts/public-release-candidate
+          --candidate-directory ../.artifacts/public-release-candidate/frontend
           --tag latest --provenance
 
       - name: Publish GitHub release assets from the tagged commit

@@ -50,6 +50,26 @@ export function deriveCandidateVersion({ baseVersion, runId, sourceCommit }) {
 	return `${validatedBaseVersion}-dev.${validatedRunId}.${validatedSourceCommit.slice(0, SHORT_SHA_LENGTH)}`;
 }
 
+export function assertReleaseVersion(version) {
+	const validatedVersion = requireString(version, "release version");
+	if (!STABLE_SEMVER_PATTERN.test(validatedVersion)) {
+		throw new Error(
+			"[package-release-candidate] release version must be a stable semantic version",
+		);
+	}
+	return validatedVersion;
+}
+
+export function assertSourceCommit(sourceCommit) {
+	const validatedSourceCommit = requireString(sourceCommit, "source commit");
+	if (!SOURCE_COMMIT_PATTERN.test(validatedSourceCommit)) {
+		throw new Error(
+			"[package-release-candidate] source commit must be a full lowercase Git object ID",
+		);
+	}
+	return validatedSourceCommit;
+}
+
 async function sha256(path) {
 	return `sha256:${createHash("sha256").update(await readFile(path)).digest("hex")}`;
 }
@@ -96,6 +116,7 @@ export async function prepareReleaseCandidate({
 	runId,
 	sourceCommit,
 	packageName,
+	version,
 	contractManifestPath = "generated/manifest.json",
 	distTag = DEVELOPMENT_DIST_TAG,
 	pack,
@@ -117,11 +138,15 @@ export async function prepareReleaseCandidate({
 			`[package-release-candidate] package name must be ${expectedPackageName}`,
 		);
 	}
-	const candidateVersion = deriveCandidateVersion({
-		baseVersion: manifest.version,
-		runId,
-		sourceCommit,
-	});
+	const validatedSourceCommit = assertSourceCommit(sourceCommit);
+	const candidateVersion =
+		version === undefined
+			? deriveCandidateVersion({
+				baseVersion: manifest.version,
+				runId,
+				sourceCommit: validatedSourceCommit,
+			})
+			: assertReleaseVersion(version);
 
 	await requireEmptyOutputDirectory(outputRoot);
 	const stagingRoot = await mkdtemp(
@@ -137,7 +162,7 @@ export async function prepareReleaseCandidate({
 		const stagedContractManifest = await stageProvenance(
 			stagedPackage,
 			contractManifestPath,
-			sourceCommit,
+			validatedSourceCommit,
 		);
 
 		const packed = await pack({
@@ -156,7 +181,7 @@ export async function prepareReleaseCandidate({
 		const evidence = {
 			packageName: packed.packageName,
 			candidateVersion,
-			sourceCommit,
+			sourceCommit: validatedSourceCommit,
 			contractDigest: await sha256(stagedContractManifest),
 			artifactDigest: await sha256(packed.tarballPath),
 			inventory: [...packed.files].sort((left, right) =>

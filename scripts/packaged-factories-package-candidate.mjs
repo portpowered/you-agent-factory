@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 
 import {
 	DEVELOPMENT_DIST_TAG,
+	assertReleaseVersion,
 	deriveCandidateVersion,
 	prepareReleaseCandidate,
 } from "./package-release-candidate.mjs";
@@ -15,13 +16,14 @@ import {
 export const PACKAGED_FACTORIES_PACKAGE_NAME =
 	"@you-agent-factory/packaged-factories";
 
-export { DEVELOPMENT_DIST_TAG, deriveCandidateVersion };
+export { DEVELOPMENT_DIST_TAG, assertReleaseVersion, deriveCandidateVersion };
 
 export async function prepareCandidate({
 	packageDirectory,
 	outputDirectory,
 	runId,
 	sourceCommit,
+	version,
 	verifyGeneratedCatalog = runCatalogDriftCheck,
 }) {
 	const repositoryRoot = resolve(packageDirectory, "..", "..");
@@ -32,6 +34,7 @@ export async function prepareCandidate({
 		runId,
 		sourceCommit,
 		packageName: PACKAGED_FACTORIES_PACKAGE_NAME,
+		version,
 		pack: packAndVerify,
 	});
 }
@@ -43,6 +46,7 @@ async function main() {
 			"package-directory": { type: "string" },
 			"run-id": { type: "string" },
 			"source-commit": { type: "string" },
+			version: { type: "string" },
 		},
 		strict: true,
 	});
@@ -51,6 +55,7 @@ async function main() {
 		outputDirectory: values["output-directory"],
 		runId: values["run-id"],
 		sourceCommit: values["source-commit"],
+		version: values.version,
 	});
 	process.stdout.write(`${JSON.stringify(result.evidence)}\n`);
 }

@@ -275,10 +275,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   registry-consumer install failures. Candidate identity/digest, immutable
   conflict, registry integrity, authentication, permission, and installed-data
   contract failures remain fail-fast and retain classified diagnostics.
-  The tagged Release workflow prepares API and Packaged Factories candidates
-  together from the successful release-candidate workflow's exact head commit,
-  uploads them under separate artifact names, and publishes only those
-  downloaded directories after rechecking their source commit. Local
+  `scripts/public-release-package-candidate.mjs` prepares the tagged-release
+  candidate set from the successful release-candidate workflow's exact head
+  commit: API, Packaged Factories, and the canonical frontend family share one
+  stable release version, preserve source manifests and frontend build outputs,
+  and are recorded exactly once in `release-candidate-evidence.json`. The
+  tagged Release workflow uploads that complete set as one artifact and
+  publishes only its downloaded package directories after rechecking their
+  source commit. Local
   maintainers can isolate generation, drift, script tests, exact packing,
   pull-request dry-run, and clean-consumer behavior through the focused
   `packaged-factory-*` Make targets documented in

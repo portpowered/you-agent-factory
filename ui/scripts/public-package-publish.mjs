@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -108,19 +115,52 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
   return stagedDirectory;
 }
 
+async function snapshotBuildOutputs(stagingRoot) {
+  const snapshots = [];
+  for (const packageSpec of PUBLIC_PACKAGES) {
+    const sourceDirectory = path.join(
+      uiRoot,
+      "packages",
+      packageSpec.directory,
+    );
+    const outputDirectory = path.join(sourceDirectory, "dist");
+    const backupDirectory = path.join(
+      stagingRoot,
+      ".build-output-backups",
+      packageSpec.directory,
+    );
+    try {
+      await stat(outputDirectory);
+      await cp(outputDirectory, backupDirectory, { recursive: true });
+      snapshots.push({ outputDirectory, backupDirectory });
+    } catch (error) {
+      if (error?.code === "ENOENT") snapshots.push({ outputDirectory });
+      else throw error;
+    }
+  }
+  return snapshots;
+}
+
+async function restoreBuildOutputs(snapshots) {
+  for (const { outputDirectory, backupDirectory } of snapshots) {
+    await rm(outputDirectory, { recursive: true, force: true });
+    if (backupDirectory)
+      await cp(backupDirectory, outputDirectory, { recursive: true });
+  }
+}
+
 export async function preparePublicPackageCandidates({
   version,
   outputDirectory,
 }) {
   assertPublishVersion(version);
   const resolvedOutput = path.resolve(outputDirectory);
-  const stagingRoot = await mkdtemp(
-    path.join(tmpdir(), "you-public-packages-"),
-  );
+  const stagingRoot = await mkdtemp(path.join(uiRoot, ".you-public-packages-"));
   await mkdir(resolvedOutput, { recursive: true });
   await run("bun", ["run", "link:public-package-dependencies"], {
     cwd: uiRoot,
   });
+  const buildOutputs = await snapshotBuildOutputs(stagingRoot);
   const candidates = [];
   try {
     for (const packageSpec of PUBLIC_PACKAGES) {
@@ -160,6 +200,7 @@ export async function preparePublicPackageCandidates({
     );
     return evidence;
   } finally {
+    await restoreBuildOutputs(buildOutputs);
     await rm(stagingRoot, { recursive: true, force: true });
   }
 }

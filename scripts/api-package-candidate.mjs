@@ -6,6 +6,7 @@ import { packAndVerify } from "./api-package-pack.mjs";
 import {
 	DEVELOPMENT_DIST_TAG,
 	SHORT_SHA_LENGTH,
+	assertReleaseVersion,
 	deriveCandidateVersion,
 	prepareReleaseCandidate,
 } from "./package-release-candidate.mjs";
@@ -14,6 +15,7 @@ export const API_PACKAGE_NAME = "@you-agent-factory/api";
 export {
 	DEVELOPMENT_DIST_TAG,
 	SHORT_SHA_LENGTH,
+	assertReleaseVersion,
 	deriveCandidateVersion,
 };
 
@@ -22,6 +24,7 @@ export async function prepareCandidate({
 	outputDirectory,
 	runId,
 	sourceCommit,
+	version,
 }) {
 	return prepareReleaseCandidate({
 		packageDirectory,
@@ -29,6 +32,7 @@ export async function prepareCandidate({
 		runId,
 		sourceCommit,
 		packageName: API_PACKAGE_NAME,
+		version,
 		pack: packAndVerify,
 	});
 }
@@ -40,6 +44,7 @@ async function main() {
 			"package-directory": { type: "string" },
 			"run-id": { type: "string" },
 			"source-commit": { type: "string" },
+			version: { type: "string" },
 		},
 		strict: true,
 	});
@@ -48,6 +53,7 @@ async function main() {
 		outputDirectory: values["output-directory"],
 		runId: values["run-id"],
 		sourceCommit: values["source-commit"],
+		version: values.version,
 	});
 	process.stdout.write(`${JSON.stringify(result.evidence)}\n`);
 }
