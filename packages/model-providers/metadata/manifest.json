@@ -2,7 +2,7 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.model-providers",
   "packageVersion": "0.0.0",
-  "sourceCommit": "172ccf497a5218fb0fe5c3224b59f325c68ef9b9",
+  "sourceCommit": "7cfe5f1b18ff8a303f972feceed45aec330c3516",
   "familyFormatVersions": {
     "model-providers": "1.0.0"
   },
