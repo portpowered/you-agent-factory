@@ -6,6 +6,27 @@ import (
 	"testing"
 )
 
+func TestRunAllowsProvidersExecutionLeafOwningProviderEffectContract(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
+
+import "context"
+
+// Deliberate fixture: the Providers Execution leaf owns the provider inference
+// effect port named by the normative backend standard.
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want Providers Execution leaf provider-effect ownership allowed; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunRejectsNonProvidersDurableProviderEffectOwner(t *testing.T) {
 	t.Parallel()
 
