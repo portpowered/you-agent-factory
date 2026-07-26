@@ -33,6 +33,7 @@ const (
 	edgesPackagePath = "pkg/services/edges"
 
 	providerEffectPortTypeName = "Provider"
+	providerEffectMethodName   = "Infer"
 
 	providerEffectSharedSourceOfTruthRemediation = "enumeration and one-attempt execution share one Providers-owned source of truth; absorb the Standardized Providers protocol, registry, open-config, and testkit model and do not invent a second Providers catalog, registry, conductor, or execution-contract family."
 )
@@ -182,7 +183,9 @@ func edgesProviderEffectRedefinition(
 	if typed.Name.Name == "Edges" {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if isProviderEffectPortDeclaration(typed) || aliasesProvidersLeafEffectContract(typed) {
+	if isProviderEffectPortDeclaration(typed) ||
+		declaresProviderEffectMethod(typed) ||
+		aliasesProvidersLeafEffectContract(typed) {
 		return providerEffectOwnershipFinding{
 			kind:        "edges-redefinition",
 			packagePath: packagePath,
@@ -191,6 +194,21 @@ func edgesProviderEffectRedefinition(
 		}, true
 	}
 	return providerEffectOwnershipFinding{}, false
+}
+
+func declaresProviderEffectMethod(typed *ast.TypeSpec) bool {
+	interfaceType, ok := typed.Type.(*ast.InterfaceType)
+	if !ok || interfaceType.Methods == nil {
+		return false
+	}
+	for _, method := range interfaceType.Methods.List {
+		for _, name := range method.Names {
+			if name.Name == providerEffectMethodName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec) bool {

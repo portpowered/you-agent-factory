@@ -98,7 +98,7 @@ type Edges struct {
 	}
 }
 
-func TestRunRejectsEdgesRedefiningOrAliasingProvidersLeafEffectContract(t *testing.T) {
+func TestRunRejectsEdgesAliasingProvidersLeafEffectContract(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -134,6 +134,48 @@ type Provider = leaf.Provider
 		"pkg/services/edges",
 		"aggregate the exact Providers leaf effect contract unchanged",
 		providersLeafEffectContractPackage,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestRunRejectsEdgesRedeclaringProviderEffectContractUnderAnotherName(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
+
+import "context"
+
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+	writeGoSourceFile(t, repoRoot, "pkg/services/edges/definition.go", `package edges
+
+import "context"
+
+// Deliberate fixture: a different local name must not hide that edges owns a
+// newly declared provider inference effect contract.
+type InferenceProvider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want edges provider-effect interface redeclaration rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited provider-effect contract redefinition",
+		"pkg/services/edges",
+		"InferenceProvider",
+		"aggregate the exact Providers leaf effect contract unchanged",
+		"canonical owner: " + providersLeafEffectContractPackage,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
