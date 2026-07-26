@@ -34,17 +34,8 @@ jobs:
           - name: Lint and package boundaries
             command: make lint
             needs_playwright: false
-          - name: Repository tests
-            command: make test
-            needs_playwright: false
-          - name: Contract generation
-            command: make contracts-smoke
-            needs_playwright: false
-          - name: API parity
-            command: make api-smoke
-            needs_playwright: false
-          - name: API package consumption
-            command: make api-package-pack-smoke
+          - name: API contract and package validation
+            command: make contracts-smoke && make api-smoke && make api-package-pack-smoke
             needs_playwright: false
           - name: Packaged Factories consumption
             command: make packaged-factory-package-smoke

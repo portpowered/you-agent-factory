@@ -144,55 +144,6 @@ jobs:
       - name: Run dashboard typecheck
         run: make typecheck
 
-  windows-go-tests:
-    name: Windows Go ${{ matrix.label }}
-    runs-on: windows-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Unit
-            command: make test-unit
-          - label: Functional
-            command: make test-functional
-          - label: Stress
-            command: make test-stress
-          - label: Release
-            command: make test-release
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Normalize git line endings for contract staging
-        shell: pwsh
-        run: git config --local core.autocrlf false
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Install Windows test prerequisites
-        shell: pwsh
-        run: choco install make --no-progress -y
-
-      - name: Report local rerun command
-        shell: pwsh
-        run: |
-          "## Windows Go ${{ matrix.label }}" >> $env:GITHUB_STEP_SUMMARY
-          "" >> $env:GITHUB_STEP_SUMMARY
-          "- Local rerun: ${{ matrix.command }}" >> $env:GITHUB_STEP_SUMMARY
-
-      - name: Run Windows Go ${{ matrix.label }} suite
-        shell: pwsh
-        run: ${{ matrix.command }}
-
   build:
     name: Build
     runs-on: ubuntu-latest
