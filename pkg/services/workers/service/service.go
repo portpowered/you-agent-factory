@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
@@ -61,7 +63,10 @@ type Service struct {
 	executableLocator                 platformprocess.ExecutableLocator
 	providerRegistry                  *providerregistry.Registry
 	invocationConductor               *providerconductor.Conductor
+	runtimeAssembly                   runtimeassembly.Service
 }
+
+var _ workers.RuntimeService = (*Service)(nil)
 
 type CurrentRuntimeResolver interface {
 	CurrentRuntime() *factorysessions.LiveRuntime
@@ -206,6 +211,21 @@ func firstDecisionEnvelopeService(
 		return nil
 	}
 	return services[0]
+}
+
+// BuildRuntime delegates the singular Workers root operation to its
+// parent-private Runtime Assembly capability.
+func (s *Service) BuildRuntime(
+	ctx context.Context,
+	request workers.RuntimeBuildRequest,
+) (workers.RuntimeBuildResult, error) {
+	if s == nil || s.runtimeAssembly == nil {
+		return workers.RuntimeBuildResult{}, fmt.Errorf(
+			"%w: Workers Runtime Assembly is required",
+			workers.ErrIncompleteRuntimeAssembly,
+		)
+	}
+	return s.runtimeAssembly.Build(ctx, request)
 }
 
 func (s *Service) modelInvocationExecutor(
