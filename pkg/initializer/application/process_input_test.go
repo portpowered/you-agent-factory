@@ -39,6 +39,25 @@ func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
 	}
 }
 
+func TestNormalizeIgnoresWindowsReservedEnvironmentEntries(t *testing.T) {
+	t.Parallel()
+
+	input, err := normalize(Input{
+		Args:             []string{"you"},
+		Env:              []string{"=::=::\\", "PRESENT=value"},
+		WorkingDirectory: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("normalize() error = %v", err)
+	}
+	if value, ok := input.lookupEnv("PRESENT"); !ok || value != "value" {
+		t.Fatalf("LookupEnv(PRESENT) = %q, %t; want value, true", value, ok)
+	}
+	if _, ok := input.lookupEnv(""); ok {
+		t.Fatal("LookupEnv reported a Windows reserved environment entry")
+	}
+}
+
 func TestHomeDirRejectsMissingEnvironment(t *testing.T) {
 	input, err := normalize(Input{Args: []string{"you"}, WorkingDirectory: t.TempDir()})
 	if err != nil {

@@ -459,6 +459,10 @@ func commandParentPath(path string) string {
 }
 
 func projectCommand(record climanifest.Command, arguments []climanifest.Argument) *cobra.Command {
+	args := positionalArgsFromManifest(record)
+	if len(arguments) == 0 {
+		args = cobra.NoArgs
+	}
 	return &cobra.Command{
 		Use:     projectedCommandUsage(record, arguments),
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
@@ -466,6 +470,7 @@ func projectCommand(record climanifest.Command, arguments []climanifest.Argument
 		Example: commandExamples(record),
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
+		Args:    args,
 	}
 }
 
@@ -483,6 +488,7 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 	}
 	handler := bindings.Handlers[record.Handler.ID]
 	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
+	resolvedCobraHandler := bindings.ResolvedCobraHandlers[record.Handler.ID]
 	cmd.RunE = func(command *cobra.Command, args []string) error {
 		if projectRootNoArgumentHelp(command, args, record) {
 			return nil
@@ -497,6 +503,17 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 			}
 			return cobraHandler(command, args, values, persistentInputs)
+		}
+		if resolvedCobraHandler != nil {
+			inputs, err := resolvedCommandInputs(command, record, values)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			persistentInputs, err := ResolvedPersistentInputs(command)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			return resolvedCobraHandler(command, inputs, persistentInputs)
 		}
 		return handler(command.Context(), values)
 	}
@@ -810,6 +827,10 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 	registered := flagSet.Lookup(record.Long)
 	registered.Hidden = record.Visibility == "hidden"
 	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}
+	registered.Annotations["infinite-you/normalization"] = []string{record.Normalization}
+	registered.Annotations["infinite-you/completion"] = []string{record.Completion}
+	registered.Annotations["infinite-you/enum"] = append([]string(nil), record.Enum...)
+	registered.Annotations["cobra_annotation_flag_aliases"] = append([]string(nil), record.Aliases...)
 	if record.Required {
 		registered.Annotations["infinite-you/required"] = []string{"true"}
 	}

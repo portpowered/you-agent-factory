@@ -27,11 +27,16 @@ func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	mover, ok := a.runtime.(factoryruntime.WorkMover)
-	if !ok {
-		return work.OperatorMoveResult{}, factoryruntime.ErrCapabilityUnavailable
+	result, err := a.runtime.ControlMoveWork(ctx, factoryruntime.MoveWorkRequest{
+		WorkID: workID, StateName: state, Source: factoryruntime.WorkMoveSource(source), RequestID: requestID,
+	})
+	if err != nil {
+		return work.OperatorMoveResult{}, err
 	}
-	return mover.MoveWork(ctx, workID, state, source, requestID)
+	return work.OperatorMoveResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, nil
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {

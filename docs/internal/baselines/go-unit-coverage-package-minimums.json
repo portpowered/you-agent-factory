@@ -781,6 +781,24 @@
       "minimum": 74.07
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/internal/service",
+      "minimum": 92.45
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/cli",
       "minimum": 78.26
     },
@@ -850,7 +868,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 8.16
+      "minimum": 75.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",

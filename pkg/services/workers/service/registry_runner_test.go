@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
@@ -243,6 +245,78 @@ func TestConductorInvocationRunnerPreservesNativeBuiltInPath(t *testing.T) {
 	}
 }
 
+func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	commandRunner := &geminiConductorCommandRunner{
+		result: workers.CommandResult{Stdout: []byte("gemini via conductor")},
+	}
+	providers := geminiConductorRegistry(t, commandRunner)
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:    work.WorkDispatch{DispatchID: "dispatch-gemini-conductor"},
+		RunnerID:    "gemini",
+		Model:       "gemini-2.5-flash",
+		UserMessage: "hello gemini",
+	})
+	if err != nil {
+		t.Fatalf("Execute(gemini) error = %v", err)
+	}
+	if result.Content != "gemini via conductor" {
+		t.Fatalf("Execute(gemini) content = %q, want gemini via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Gemini", native.calls)
+	}
+	if commandRunner.calls != 1 {
+		t.Fatalf("gemini command runner calls = %d, want 1", commandRunner.calls)
+	}
+	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
+		t.Fatal("UsesNativeRunner(codex) = false, want unmigrated built-ins retained")
+	}
+	if providers.UsesNativeRunner("gemini") {
+		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route")
+	}
+}
+
+func TestInvocationRequestFromRunnerPreservesExecutionContext(t *testing.T) {
+	t.Parallel()
+
+	want := workers.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-context-1",
+			WorkstationName: "gemini-workstation",
+			ProjectID:       "project-context",
+			InputTokens:     []any{"dispatch-token"},
+		},
+		WorkerType:         "gemini-worker",
+		WorkstationType:    "model-workstation",
+		RunnerID:           workers.RunnerIDGemini,
+		ProjectID:          "project-context",
+		InputTokens:        []any{"request-token"},
+		Model:              "gemini-2.5-flash",
+		ModelProvider:      "gemini",
+		SystemPrompt:       "system context",
+		UserMessage:        "user context",
+		OutputSchema:       `{"type":"object"}`,
+		EnvVars:            map[string]string{"GEMINI_CONTEXT": "configured"},
+		ProcessEnvironment: []string{"PATH=/fixture", "INHERITED=present"},
+		Worktree:           "worktrees/gemini-context",
+		WorkingDirectory:   "C:/fixture/gemini-context",
+	}
+
+	got := invocationRequestFromRunner(want).Execution()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Execution() = %#v, want %#v", got, want)
+	}
+}
+
 func TestConductorInvocationRunnerBypassedWhenProviderOverrideDisablesRegistryDecorators(t *testing.T) {
 	t.Parallel()
 
@@ -366,4 +440,40 @@ func externalConductorManifest(t *testing.T, identity, alias string) providerreg
 	}
 	manifest.MaximumResponseFidelityCapabilities = providerregistry.ResponseFidelityCapabilities{}
 	return manifest
+}
+
+func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *providerregistry.Registry {
+	t.Helper()
+	builtIns, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	replaced, err := providerregistry.ReplaceCatalogIntegration(
+		builtIns,
+		"gemini",
+		gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner}),
+	)
+	if err != nil {
+		t.Fatalf("ReplaceCatalogIntegration(gemini) error = %v", err)
+	}
+	providers, err := providerregistry.New(replaced...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	return providers
+}
+
+type geminiConductorCommandRunner struct {
+	calls   int
+	request workers.CommandRequest
+	result  workers.CommandResult
+}
+
+func (r *geminiConductorCommandRunner) Run(
+	_ context.Context,
+	request workers.CommandRequest,
+) (workers.CommandResult, error) {
+	r.calls++
+	r.request = request
+	return r.result, nil
 }

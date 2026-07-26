@@ -12,6 +12,10 @@ import (
 
 // ProcessDependencies are stable Models collaborators selected once by Wire.
 // Factory Sessions inject only their runtime data through RuntimeBinding.
+// These construction/effect ports are not the peer-facing source of truth for
+// the published runtime-scope, catalog, assets, host/lease, or infer slices;
+// peers consume those through the singular Service methods and plain
+// request/result/typed-error vocabulary instead.
 type ProcessDependencies struct {
 	Logger      *zap.Logger
 	Clock       func() time.Time
@@ -42,11 +46,19 @@ type HostProcessStartSpec struct {
 	Args, Env               []string
 	WorkDir, HealthEndpoint string
 }
+
+// HostManagedProcess is a Wire/construction process handle for host supervisors.
+// It is not a peer-facing host/lease contract; peers use Service.InspectRuntime,
+// AcquireLease, and ReleaseLease with HostLease values instead.
 type HostManagedProcess interface {
 	HealthEndpoint() string
 	Wait() error
 	Stop(context.Context) error
 }
+
+// HostProcessLauncher is a Wire/construction port that starts supervised host
+// processes. Peers must not treat it as the published host/lease root slice;
+// that slice stays on the singular Service methods and HostLease vocabulary.
 type HostProcessLauncher interface {
 	Start(context.Context, HostProcessStartSpec) (HostManagedProcess, error)
 }

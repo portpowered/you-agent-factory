@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -158,6 +159,20 @@ func (s *service) Close(ctx context.Context, sessionID string) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	session, err := s.dependencies.RequireSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if session != nil && session.Runtime != nil && session.Runtime.Factory != nil {
+		_, terminateErr := session.Runtime.Factory.ControlTerminate(ctx, factoryruntime.TerminateRequest{
+			Reason: "factory session closed",
+		})
+		if terminateErr != nil &&
+			!errors.Is(terminateErr, factoryruntime.ErrAlreadyStopped) &&
+			!errors.Is(terminateErr, factoryruntime.ErrNotRunning) {
+			return fmt.Errorf("terminate live factory session: %w", terminateErr)
+		}
 	}
 	return s.dependencies.StopSession(sessionID)
 }

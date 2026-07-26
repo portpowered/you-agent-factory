@@ -7,23 +7,12 @@ import (
 	"context"
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"go.uber.org/zap"
 )
-
-// FactoryConfig resolves the canonical Factory configuration for one
-// registered live session.
-func FactoryConfig(state *sessionruntime.Service, sessionID string) (*interfaces.FactoryConfig, error) {
-	runtimeConfig, err := runtimebinding.RuntimeConfigForSession(state, sessionID)
-	if err != nil || runtimeConfig == nil {
-		return nil, err
-	}
-	return runtimeConfig.FactoryConfig(), nil
-}
 
 // Observe derives one invocation wait observation from canonical runtime state
 // and event history.
@@ -38,19 +27,13 @@ func Observe(
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	legacyObservation, err := runtimebinding.LegacyObservationForService(activeFactory)
+	legacyObservation, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(activeFactory)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
 	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
-	}
-	eventSource, ok := activeFactory.(interface {
-		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
-	})
-	if !ok {
-		return sessioninvocation.SessionInvocationObservation{}, fmt.Errorf("legacy Factory Runtime event history is required")
 	}
 	events, err := eventSource.GetFactoryEvents(ctx)
 	if err != nil {
@@ -72,9 +55,6 @@ func Observe(
 
 // WriteLogRecord adapts a canonical safe invocation log record to zap.
 func WriteLogRecord(logger *zap.Logger, record sessioninvocation.SessionInvocationLogRecord) {
-	if logger == nil {
-		return
-	}
 	fields := make([]zap.Field, 0, len(record.Fields)+1)
 	for key, value := range record.Fields {
 		fields = append(fields, zap.Any(key, value))

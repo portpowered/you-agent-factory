@@ -56,18 +56,6 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 	return legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
-// WaitToComplete returns a channel that is closed when all tokens reach
-// terminal or failed places and no dispatches are in flight. Delegates to
-// the underlying factory's termination signal.
-func (fs *SessionRuntime) WaitToComplete() <-chan struct{} {
-	if runtime := fs.currentRuntimeService(); runtime != nil {
-		return runtime.ControlWaitToComplete(factory.WaitToCompleteRequest{}).Done
-	}
-	done := make(chan struct{})
-	close(done)
-	return done
-}
-
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
 func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
@@ -83,30 +71,6 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 		return nil, err
 	}
 	return legacyObservation.GetEngineStateSnapshot(ctx)
-}
-
-// Pause pauses the current runtime instance.
-func (fs *SessionRuntime) Pause(ctx context.Context) error {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return fmt.Errorf("factory runtime is not available")
-	}
-	if _, err := runtime.ControlPause(ctx, factory.PauseRequest{}); err != nil {
-		return fmt.Errorf("pause factory: %w", err)
-	}
-	return nil
-}
-
-// Resume resumes the current runtime instance and wakes buffered work.
-func (fs *SessionRuntime) Resume(ctx context.Context) error {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return fmt.Errorf("factory runtime is not available")
-	}
-	if _, err := runtime.ControlResume(ctx, factory.ResumeRequest{}); err != nil {
-		return fmt.Errorf("resume factory: %w", err)
-	}
-	return nil
 }
 
 // ControlPause routes root control to the current replaceable runtime.
@@ -208,21 +172,6 @@ func (fs *SessionRuntime) RestoreCheckpoint(ctx context.Context, req factory.Res
 		return factory.RestoreCheckpointResult{}, factory.ErrNotFound
 	}
 	return runtime.RestoreCheckpoint(ctx, req)
-}
-
-// GetFactoryEvents returns the canonical factory event history.
-func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return nil, fmt.Errorf("factory runtime is not available")
-	}
-	eventSource, ok := runtime.(interface {
-		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
-	})
-	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event history is required")
-	}
-	return eventSource.GetFactoryEvents(ctx)
 }
 
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {

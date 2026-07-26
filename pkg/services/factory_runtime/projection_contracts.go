@@ -88,6 +88,16 @@ type ObserveRequest struct {
 type ObservationProgress struct {
 	InFlightDispatchCount int
 	TickCount             int
+	TotalWorkCount        int
+	WorkCategories        ObservationWorkCategories
+}
+
+// ObservationWorkCategories counts customer Work by lifecycle category.
+type ObservationWorkCategories struct {
+	Failed     int
+	Initial    int
+	Processing int
+	Terminal   int
 }
 
 // ObservationDispatchSummary is an orchestration-neutral in-flight dispatch view.

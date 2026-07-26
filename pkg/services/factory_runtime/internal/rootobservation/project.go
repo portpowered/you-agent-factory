@@ -20,15 +20,23 @@ func Project(
 		return factory.Observation{}
 	}
 
+	status := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
 	full := factory.Observation{
 		Status: observationStatusFromRuntime(snap.RuntimeStatus),
 		Progress: factory.ObservationProgress{
 			InFlightDispatchCount: snap.InFlightCount,
 			TickCount:             snap.TickCount,
+			TotalWorkCount:        status.TotalTokens,
+			WorkCategories: factory.ObservationWorkCategories{
+				Failed:     status.Categories.Failed,
+				Initial:    status.Categories.Initial,
+				Processing: status.Categories.Processing,
+				Terminal:   status.Categories.Terminal,
+			},
 		},
 		InFlightDispatches: projectInFlightDispatches(snap.Dispatches),
 		Results:            projectResultViews(snap.DispatchHistory),
-		Resources:          projectResourceViews(snap),
+		Resources:          projectResourceViews(snap, status.Resources),
 		Health: factory.ObservationHealth{
 			FactoryState:           snap.FactoryState,
 			LifecycleControlStatus: snap.LifecycleControlStatus,
@@ -41,13 +49,13 @@ func Project(
 
 func projectResourceViews(
 	snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	resources []factory.FactoryResourceUsage,
 ) []factory.ObservationResourceView {
-	status := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
-	if len(status.Resources) == 0 {
+	if len(resources) == 0 {
 		return nil
 	}
-	out := make([]factory.ObservationResourceView, 0, len(status.Resources))
-	for _, resource := range status.Resources {
+	out := make([]factory.ObservationResourceView, 0, len(resources))
+	for _, resource := range resources {
 		name := resource.Name
 		if snap.Topology != nil {
 			if definition := snap.Topology.Resources[resource.Name]; definition != nil && definition.Name != "" {

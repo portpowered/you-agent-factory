@@ -133,6 +133,7 @@ func Validate(input Input) []Finding {
 	findings = append(findings, validateGeneratedCanonical(input.Canonical, approved, input.GeneratedCanonical)...)
 	findings = append(findings, validateGeneratedCompatibility(input.Compatibility, approved, input.GeneratedCompatibility)...)
 	findings = append(findings, validateRootGlobals(input.Canonical, input.ProductionInputs)...)
+	findings = append(findings, validateMigratedInputs(input.Canonical, input.ProductionInputs)...)
 	sortFindings(findings)
 	return findings
 }

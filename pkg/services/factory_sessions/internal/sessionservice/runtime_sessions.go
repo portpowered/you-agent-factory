@@ -61,21 +61,6 @@ func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, wor
 	return mover.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
-// MoveWork applies a synchronous operator relocation on the current service-owned runtime.
-func (fs *SessionRuntime) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	var result work.OperatorMoveResult
-	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
-		var moveErr error
-		mover, ok := runtime.Factory.(factory.WorkMover)
-		if !ok {
-			return fmt.Errorf("legacy Factory Runtime work move is required")
-		}
-		result, moveErr = mover.MoveWork(ctx, workID, stateName, source, requestID)
-		return moveErr
-	})
-	return result, err
-}
-
 func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")

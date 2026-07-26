@@ -6,16 +6,31 @@ import (
 	"fmt"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 const nativeRuntimePrerequisite = "provider-native-runtime"
 
+// BuiltInDependencies optionally supplies shared execution collaborators for
+// migrated catalog Integrations. Process composition injects the same
+// ProviderCommandRunner edge used by native executors so conductor-routed
+// built-ins and functional overrides share one command boundary.
+type BuiltInDependencies struct {
+	CommandRunner workerprocess.CommandRunner
+}
+
 // BuiltInRegistrations returns detached registrations for every selectable
-// bundled manifest. The compatibility integrations describe the accepted
-// built-ins without moving provider-native execution into the neutral
-// Integration conductor.
-func BuiltInRegistrations() ([]Registration, error) {
+// bundled manifest. Unmigrated built-ins keep the native-runtime compatibility
+// stub; migrated providers bind their package-owned Integration so the neutral
+// conductor can invoke them without a concrete-provider switch in shared
+// orchestration.
+func BuiltInRegistrations(deps ...BuiltInDependencies) ([]Registration, error) {
+	var commandRunner workerprocess.CommandRunner
+	if len(deps) > 0 {
+		commandRunner = deps[0].CommandRunner
+	}
 	var catalog catalogDocument
 	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
 		return nil, fmt.Errorf("parse embedded provider catalog for built-in registrations: %w", err)
@@ -25,13 +40,69 @@ func BuiltInRegistrations() ([]Registration, error) {
 		if !requiresBundledImplementation(manifestCandidate{manifest: manifest, bundled: true}) {
 			continue
 		}
-		integration := nativeRuntimeIntegration{
-			identity: inference.Identity(normalize(manifest.ID)),
-			maximum:  manifestCapabilities(manifest),
+		identity := inference.Identity(normalize(manifest.ID))
+		integration := migratedBuiltInIntegration(identity, commandRunner)
+		if integration == nil {
+			integration = nativeRuntimeIntegration{
+				identity: identity,
+				maximum:  manifestCapabilities(manifest),
+			}
 		}
-		registrations = append(registrations, CatalogRegistration(integration.identity, integration))
+		registrations = append(registrations, CatalogRegistration(identity, integration))
 	}
 	return registrations, nil
+}
+
+// ReplaceCatalogIntegration rebinds one catalog identity to a replacement
+// Integration while preserving every other registration. Migrated provider
+// tests use this to inject execution collaborators without inventing a second
+// registry.
+func ReplaceCatalogIntegration(
+	registrations []Registration,
+	identity inference.Identity,
+	integration inference.Integration,
+) ([]Registration, error) {
+	canonical := normalize(string(identity))
+	if canonical == "" {
+		return nil, fmt.Errorf("catalog identity is required")
+	}
+	if isNilIntegration(integration) {
+		return nil, fmt.Errorf("catalog integration is required")
+	}
+	if normalize(string(integration.Identity())) != canonical {
+		return nil, fmt.Errorf(
+			"integration identity %q differs from catalog identity %q",
+			integration.Identity(),
+			canonical,
+		)
+	}
+	replaced := make([]Registration, 0, len(registrations))
+	found := false
+	for _, registration := range registrations {
+		registrationIdentity := registrationIdentity(registration)
+		if registration.kind == catalogRegistration && registrationIdentity == canonical {
+			replaced = append(replaced, CatalogRegistration(identity, integration))
+			found = true
+			continue
+		}
+		replaced = append(replaced, registration)
+	}
+	if !found {
+		return nil, fmt.Errorf("catalog identity %q is not present in registrations", canonical)
+	}
+	return replaced, nil
+}
+
+func migratedBuiltInIntegration(identity inference.Identity, runner workerprocess.CommandRunner) inference.Integration {
+	switch normalize(string(identity)) {
+	case "gemini":
+		if runner == nil {
+			return gemini.NewIntegration()
+		}
+		return gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner})
+	default:
+		return nil
+	}
 }
 
 // nativeRuntimeIntegration preserves the accepted Integration shape while the
@@ -79,3 +150,7 @@ func (i nativeRuntimeIntegration) Invoke(
 	})
 	return writer.Close(ctx, inference.FailedCompletion(failure))
 }
+
+// UsesProviderNativeRuntime marks the compatibility stub so registry routing
+// keeps unmigrated bundled providers on the retained native runner path.
+func (nativeRuntimeIntegration) UsesProviderNativeRuntime() bool { return true }

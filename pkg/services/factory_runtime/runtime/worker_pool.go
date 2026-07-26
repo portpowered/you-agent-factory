@@ -96,94 +96,81 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 }
 
 func (f *factoryImpl) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-		if req.DispatchID == "" || req.CorrelationID == "" {
-			return factory.PlanDispatchResult{}, factory.ErrInvalidDispatchResultBoundary
-		}
-		return factory.PlanDispatchResult{}, factory.ErrCapabilityUnavailable
-	default:
-		return factory.PlanDispatchResult{}, factory.ErrNotRunning
-	}
+	return factory.PlanDispatchResult{}, f.unavailableRootCapability(
+		req.DispatchID == "" || req.CorrelationID == "",
+		factory.ErrInvalidDispatchResultBoundary,
+		false,
+	)
 }
 
 func (f *factoryImpl) AcceptDispatchResult(
 	_ context.Context,
 	req factory.AcceptDispatchResultRequest,
 ) (factory.AcceptDispatchResultResult, error) {
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-		if !validDispatchResultOutcome(req.ResultOutcome) {
-			return factory.AcceptDispatchResultResult{}, factory.ErrInvalidDispatchResultBoundary
-		}
-		if req.DispatchID == "" || req.CorrelationID == "" {
-			return factory.AcceptDispatchResultResult{}, factory.ErrUnknownDispatchCorrelation
-		}
-		return factory.AcceptDispatchResultResult{}, factory.ErrCapabilityUnavailable
-	default:
-		return factory.AcceptDispatchResultResult{}, factory.ErrNotRunning
+	var validationErr error
+	if req.ResultOutcome != "" &&
+		req.ResultOutcome != factory.DispatchResultOutcomeSuccess &&
+		req.ResultOutcome != factory.DispatchResultOutcomeFailure &&
+		req.ResultOutcome != factory.DispatchResultOutcomeCancelled {
+		validationErr = factory.ErrInvalidDispatchResultBoundary
+	} else if req.DispatchID == "" || req.CorrelationID == "" {
+		validationErr = factory.ErrUnknownDispatchCorrelation
 	}
+	return factory.AcceptDispatchResultResult{}, f.unavailableRootCapability(
+		validationErr != nil,
+		validationErr,
+		false,
+	)
 }
 
 func (f *factoryImpl) CaptureCheckpoint(
 	_ context.Context,
 	_ factory.CaptureCheckpointRequest,
 ) (factory.CaptureCheckpointResult, error) {
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-		return factory.CaptureCheckpointResult{}, factory.ErrCapabilityUnavailable
-	default:
-		return factory.CaptureCheckpointResult{}, factory.ErrNotRunning
-	}
+	return factory.CaptureCheckpointResult{}, f.unavailableRootCapability(false, nil, false)
 }
 
 func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
-		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-		if req.CheckpointID == "" {
-			return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-		}
-		return factory.LoadCheckpointResult{}, factory.ErrCapabilityUnavailable
-	default:
-		return factory.LoadCheckpointResult{}, factory.ErrNotRunning
-	}
+	return factory.LoadCheckpointResult{}, f.unavailableRootCapability(
+		req.CheckpointID == "",
+		factory.ErrCheckpointNotFound,
+		true,
+	)
 }
 
 func (f *factoryImpl) RestoreCheckpoint(
 	_ context.Context,
 	req factory.RestoreCheckpointRequest,
 ) (factory.RestoreCheckpointResult, error) {
+	var validationErr error
+	switch {
+	case req.Checkpoint.CheckpointID == "":
+		validationErr = factory.ErrCheckpointNotFound
+	case req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0:
+		validationErr = factory.ErrCorruptCheckpoint
+	case req.Checkpoint.SchemaVersion != 1:
+		validationErr = factory.ErrIncompatibleCheckpoint
+	}
+	return factory.RestoreCheckpointResult{}, f.unavailableRootCapability(validationErr != nil, validationErr, false)
+}
+
+func (f *factoryImpl) unavailableRootCapability(invalid bool, invalidErr error, allowStopped bool) error {
 	f.mu.RLock()
 	state := f.state
 	f.mu.RUnlock()
 	switch state {
 	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-		if req.Checkpoint.CheckpointID == "" {
-			return factory.RestoreCheckpointResult{}, factory.ErrCheckpointNotFound
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		if !allowStopped {
+			return factory.ErrNotRunning
 		}
-		if req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0 {
-			return factory.RestoreCheckpointResult{}, factory.ErrCorruptCheckpoint
-		}
-		if req.Checkpoint.SchemaVersion != 1 {
-			return factory.RestoreCheckpointResult{}, factory.ErrIncompatibleCheckpoint
-		}
-		return factory.RestoreCheckpointResult{}, factory.ErrCapabilityUnavailable
 	default:
-		return factory.RestoreCheckpointResult{}, factory.ErrNotRunning
+		return factory.ErrNotRunning
 	}
+	if invalid {
+		return invalidErr
+	}
+	return factory.ErrCapabilityUnavailable
 }
 
 func validObservationScope(scope factory.ObservationScope) bool {
@@ -191,15 +178,6 @@ func validObservationScope(scope factory.ObservationScope) bool {
 	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
 		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
 		factory.ObservationScopeHealth:
-		return true
-	default:
-		return false
-	}
-}
-
-func validDispatchResultOutcome(outcome factory.DispatchResultOutcome) bool {
-	switch outcome {
-	case "", factory.DispatchResultOutcomeSuccess, factory.DispatchResultOutcomeFailure, factory.DispatchResultOutcomeCancelled:
 		return true
 	default:
 		return false

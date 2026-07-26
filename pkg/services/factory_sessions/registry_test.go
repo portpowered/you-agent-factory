@@ -774,7 +774,9 @@ func (fake *peerRootServiceFake) InterruptDurableFactorySessionDispatch(context.
 
 // peerExecutionStub satisfies the durable ExecutionService methods embedded in
 // the singular root Service so a peer can compile against one aggregate authority.
-type peerExecutionStub struct{}
+type peerExecutionStub struct {
+	Service
+}
 
 func (peerExecutionStub) StartAsync(context.Context, StartRequest) (AsyncStartResult, error) {
 	return AsyncStartResult{}, ErrDurableSessionNotFound

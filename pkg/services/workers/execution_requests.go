@@ -149,6 +149,10 @@ type ProviderInferenceRequest struct {
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	OpenCodeAgent                string                          `json:"open_code_agent,omitempty"`
+	// SkipPermissions is the invocation-effective worker policy. Construction
+	// resolves persisted configuration and invocation overrides before the
+	// request reaches either the native runner or neutral conductor.
+	SkipPermissions bool `json:"skip_permissions,omitempty"`
 }
 
 type RunnerExecutionRequest = ProviderInferenceRequest

@@ -14,6 +14,8 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type submissionSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+
 func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
@@ -24,7 +26,7 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 	hook := &testSubmissionHook{
 		name:     "file-preseed",
 		priority: 10,
-		onTick: func(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+		onTick: func(_ context.Context, input interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
 			if input.Snapshot.TickCount != 1 {
 				t.Fatalf("hook snapshot tick = %d, want 1", input.Snapshot.TickCount)
 			}
@@ -163,7 +165,7 @@ func TestRun_KeepsTickingWhileSubmissionHookRequestsKeepAlive(t *testing.T) {
 	hook := &testSubmissionHook{
 		name:     "replay-keepalive",
 		priority: 1,
-		onTick: func(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+		onTick: func(_ context.Context, input interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
 			seenTicks = append(seenTicks, input.Snapshot.TickCount)
 			return interfaces.SubmissionHookResult{KeepAlive: input.Snapshot.TickCount < 3}, nil
 		},

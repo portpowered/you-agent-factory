@@ -189,11 +189,11 @@ func argumentName(useNames []useArgName, position int, variadic bool) string {
 }
 
 func argumentCompletionKind(cmd *cobra.Command) string {
-	if cmd.ValidArgsFunction != nil {
-		return completionKindDynamic
-	}
 	if len(normalizedValidArgs(cmd)) > 0 {
 		return completionKindStatic
+	}
+	if cmd.ValidArgsFunction != nil {
+		return completionKindDynamic
 	}
 	return completionKindNone
 }
