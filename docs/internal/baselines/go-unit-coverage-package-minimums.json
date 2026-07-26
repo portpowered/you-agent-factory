@@ -1123,6 +1123,10 @@
       "minimum": 87.86
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection",
+      "minimum": 84.93
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/config",
       "minimum": 75.55
     },

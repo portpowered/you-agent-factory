@@ -296,6 +296,7 @@
     "pkg/transports/cli/cliserver",
     "pkg/transports/cli/commandidentity",
     "pkg/transports/cli/commandregistry",
+    "pkg/transports/cli/completionprojection",
     "pkg/transports/cli/config",
     "pkg/transports/cli/configinit",
     "pkg/transports/cli/dashboard",
@@ -1629,6 +1630,11 @@
     },
     {
       "packagePath": "pkg/transports/cli/commandregistry",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/completionprojection",
       "disposition": "retain",
       "destination": "transports"
     },
