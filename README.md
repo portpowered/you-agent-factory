@@ -26,8 +26,8 @@ For example:
 
 ### Prerequisites
 
-- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the starter factory): `npm i -g @openai/codex`
-- A project directory where you want the local `factory/` scaffold to live
+- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the packaged Factories): `npm i -g @openai/codex`
+- Credentials for the model provider you plan to use
 
 ### Install the `you` CLI
 
@@ -47,13 +47,17 @@ For custom install locations or pinned versions, see the [install script](./scri
 
 ## Quick start
 
-The default path uses the Codex-backed starter scaffold:
+Normal startup materializes packaged/default Factories under
+`~/.you-agent-factory/factories` and uses the current Factory. It does not
+create a project-local `./factory` scaffold:
 
-1. `cd your-project-directory`
-2. Run `you` — bootstraps `./factory`, starts the runtime, and prints the dashboard URL (usually `http://localhost:7437/dashboard/ui`)
-3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion
+1. Run `you init --provider codex` to configure the default model provider.
+2. Run `you` to initialize the packaged Factories, start the current Factory, and print the dashboard URL (usually `http://localhost:7437/dashboard/ui`).
+3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion.
 
-For factory authoring, CLI topics, and advanced setup, see [Authoring factories](./docs/reference/authoring-factories.md) and [`you docs`](./docs/reference/README.md).
+To author a Factory, follow [Authoring factories](./docs/reference/authoring-factories.md)
+and persist it with `you factory create <name> --from ./factory.json`. For CLI
+topics and advanced setup, see [`you docs`](./docs/reference/README.md).
 
 ### Configure a model provider
 
