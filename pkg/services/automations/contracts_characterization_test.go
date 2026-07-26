@@ -16,6 +16,9 @@ type fakeRootService struct {
 	conflictOnReconcile bool
 	sources             map[string]automations.SourceObservation
 	instances           map[string]fakeInstance
+	admittedRequests    map[string]automations.GeneratedWorkRequest
+	workRequestOutcomes []automations.GeneratedWorkRequestOutcome
+	emissionCount       int
 }
 
 type fakeInstance struct {
@@ -48,13 +51,18 @@ func (f *fakeRootService) Ready(context.Context, automations.ReadyRequest) (auto
 	return automations.ReadyResult{Ready: true}, nil
 }
 
-func (f *fakeRootService) Reconcile(_ context.Context, req automations.ReconcileRequest) (automations.ReconcileResult, error) {
+func (f *fakeRootService) Reconcile(ctx context.Context, req automations.ReconcileRequest) (automations.ReconcileResult, error) {
 	if f == nil || !f.ready {
 		return automations.ReconcileResult{}, &automations.Error{
 			Op:   "Reconcile",
 			Code: automations.ErrorCodeNotReady,
 			Err:  automations.ErrNotReady,
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return cancelledReconcileResult(req), fakeError(
+			"Reconcile", automations.ErrorCodeCancelled, err,
+		)
 	}
 	if len(req.Desired) == 0 {
 		return automations.ReconcileResult{}, &automations.Error{
@@ -87,7 +95,10 @@ func (f *fakeRootService) Reconcile(_ context.Context, req automations.Reconcile
 		observed, exists := observedBySource[spec.AutomationID+"\x00"+spec.SourceID]
 		outcomes = append(outcomes, fakeConvergenceOutcome(spec, observed, exists))
 	}
-	return automations.ReconcileResult{Outcomes: outcomes}, nil
+	return automations.ReconcileResult{
+		Outcomes:              outcomes,
+		GeneratedWorkRequests: cloneWorkRequestOutcomes(f.workRequestOutcomes),
+	}, nil
 }
 
 func validDesiredSpecs(specs []automations.DesiredSpec) bool {
@@ -145,13 +156,21 @@ func desiredMatchesObserved(
 }
 
 func (f *fakeRootService) StartSource(
-	_ context.Context,
+	ctx context.Context,
 	req automations.StartSourceRequest,
 ) (automations.StartSourceResult, error) {
 	if f == nil || !f.ready {
 		return automations.StartSourceResult{}, fakeError(
 			"StartSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
 		)
+	}
+	if err := ctx.Err(); err != nil {
+		return automations.StartSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				automations.DesiredLifecycleRunning,
+				cancelledObservation(req.Identity, nil),
+			),
+		}, fakeError("StartSource", automations.ErrorCodeCancelled, err)
 	}
 	if !validSourceIdentity(req.Identity) || req.Kind == "" || !validResume(req) {
 		return automations.StartSourceResult{}, fakeError(
@@ -195,13 +214,21 @@ func (f *fakeRootService) StartSource(
 }
 
 func (f *fakeRootService) StopSource(
-	_ context.Context,
+	ctx context.Context,
 	req automations.StopSourceRequest,
 ) (automations.StopSourceResult, error) {
 	if f == nil || !f.ready {
 		return automations.StopSourceResult{}, fakeError(
 			"StopSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
 		)
+	}
+	if err := ctx.Err(); err != nil {
+		return automations.StopSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				automations.DesiredLifecycleStopped,
+				cancelledObservation(req.Identity, f.sourceObservation(req.Identity)),
+			),
+		}, fakeError("StopSource", automations.ErrorCodeCancelled, err)
 	}
 	if !validSourceIdentity(req.Identity) {
 		return automations.StopSourceResult{}, fakeError(
@@ -239,13 +266,21 @@ func (f *fakeRootService) StopSource(
 }
 
 func (f *fakeRootService) WaitSource(
-	_ context.Context,
+	ctx context.Context,
 	req automations.WaitSourceRequest,
 ) (automations.WaitSourceResult, error) {
 	if f == nil || !f.ready {
 		return automations.WaitSourceResult{}, fakeError(
 			"WaitSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
 		)
+	}
+	if err := ctx.Err(); err != nil {
+		return automations.WaitSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				req.Desired,
+				cancelledObservation(req.Identity, f.sourceObservation(req.Identity)),
+			),
+		}, fakeError("WaitSource", automations.ErrorCodeCancelled, err)
 	}
 	if !validSourceIdentity(req.Identity) || !validDesiredState(req.Desired) {
 		return automations.WaitSourceResult{}, fakeError(
@@ -337,6 +372,61 @@ func lifecycleOutcome(
 		Convergence: convergence,
 		Idempotent:  idempotent,
 	}
+}
+
+func cancelledReconcileResult(req automations.ReconcileRequest) automations.ReconcileResult {
+	outcomes := make([]automations.ConvergenceOutcome, 0, len(req.Desired))
+	for _, desired := range req.Desired {
+		outcomes = append(outcomes, automations.ConvergenceOutcome{
+			AutomationID: desired.AutomationID,
+			SourceID:     desired.SourceID,
+			InstanceID:   "instance:" + desired.AutomationID + ":" + desired.SourceID,
+			Desired:      desired.State,
+			Observed:     automations.ObservedLifecycleCancelled,
+			Convergence:  automations.ConvergenceStatusCancelled,
+		})
+	}
+	return automations.ReconcileResult{Outcomes: outcomes}
+}
+
+func (f *fakeRootService) sourceObservation(
+	identity automations.SourceIdentity,
+) *automations.SourceObservation {
+	if f == nil || f.sources == nil {
+		return nil
+	}
+	observation, ok := f.sources[sourceKey(identity)]
+	if !ok {
+		return nil
+	}
+	return &observation
+}
+
+func cancelledObservation(
+	identity automations.SourceIdentity,
+	current *automations.SourceObservation,
+) automations.SourceObservation {
+	observation := automations.SourceObservation{
+		Identity:   identity,
+		InstanceID: "instance:" + identity.AutomationID + ":" + identity.SourceID,
+	}
+	if current != nil {
+		observation = *current
+	}
+	observation.State = automations.ObservedLifecycleCancelled
+	return observation
+}
+
+func cancelledLifecycleOutcome(
+	desired automations.DesiredLifecycleState,
+	observation automations.SourceObservation,
+) automations.LifecycleOutcome {
+	return lifecycleOutcome(
+		desired,
+		observation,
+		automations.ConvergenceStatusCancelled,
+		false,
+	)
 }
 
 func fakeError(op string, code automations.ErrorCode, sentinel error) *automations.Error {

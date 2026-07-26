@@ -107,7 +107,8 @@ type ObservedInstance struct {
 
 // ReconcileResult is the detached set of convergence outcomes peers consume.
 type ReconcileResult struct {
-	Outcomes []ConvergenceOutcome
+	Outcomes              []ConvergenceOutcome
+	GeneratedWorkRequests []GeneratedWorkRequestOutcome
 }
 
 // ConvergenceOutcome reports how one automation identity converged.
@@ -152,6 +153,7 @@ const (
 	ConvergenceStatusConverged   ConvergenceStatus = "converged"
 	ConvergenceStatusProgressing ConvergenceStatus = "progressing"
 	ConvergenceStatusFailed      ConvergenceStatus = "failed"
+	ConvergenceStatusCancelled   ConvergenceStatus = "cancelled"
 )
 
 // ConvergenceAction reports the logical reconciliation action.
@@ -270,14 +272,62 @@ type GetCursorResult struct {
 	Checkpoint   string
 }
 
+// GeneratedWorkRequestIdentity identifies one logical Work Request emitted by
+// an Automation source without exposing the Work service's request type.
+type GeneratedWorkRequestIdentity struct {
+	AutomationID string
+	SourceID     string
+	RequestID    string
+}
+
+// GeneratedWorkRequest is detached Automation-owned request data. Payload is
+// copied at the service boundary; PayloadReference can identify payload data
+// held by a caller without publishing a storage contract.
+type GeneratedWorkRequest struct {
+	Identity         GeneratedWorkRequestIdentity
+	Payload          []byte
+	PayloadReference string
+}
+
+// WorkRequestAdmissionStatus classifies the downstream disposition of one
+// generated Work Request.
+type WorkRequestAdmissionStatus string
+
+const (
+	WorkRequestAdmissionAccepted  WorkRequestAdmissionStatus = "accepted"
+	WorkRequestAdmissionRejected  WorkRequestAdmissionStatus = "rejected"
+	WorkRequestAdmissionDuplicate WorkRequestAdmissionStatus = "duplicate"
+)
+
+// WorkRequestRejectionReason is a typed reason callers can branch on without
+// parsing a downstream error message.
+type WorkRequestRejectionReason string
+
+const (
+	WorkRequestRejectedInvalidPayload WorkRequestRejectionReason = "invalid_payload"
+	WorkRequestRejectedPolicy         WorkRequestRejectionReason = "policy"
+	WorkRequestRejectedUnavailable    WorkRequestRejectionReason = "unavailable"
+)
+
+// GeneratedWorkRequestOutcome is the detached admission fact for one generated
+// request. OriginalRequestID is populated for duplicate admission so callers
+// can identify the first logical emission.
+type GeneratedWorkRequestOutcome struct {
+	Request           GeneratedWorkRequest
+	Status            WorkRequestAdmissionStatus
+	RejectionReason   WorkRequestRejectionReason
+	OriginalRequestID string
+}
+
 // ErrorCode classifies typed Automations root failures peers can branch on.
 type ErrorCode string
 
 const (
-	ErrorCodeNotReady ErrorCode = "not_ready"
-	ErrorCodeInvalid  ErrorCode = "invalid"
-	ErrorCodeNotFound ErrorCode = "not_found"
-	ErrorCodeConflict ErrorCode = "conflict"
+	ErrorCodeNotReady  ErrorCode = "not_ready"
+	ErrorCodeInvalid   ErrorCode = "invalid"
+	ErrorCodeNotFound  ErrorCode = "not_found"
+	ErrorCodeConflict  ErrorCode = "conflict"
+	ErrorCodeCancelled ErrorCode = "cancelled"
 )
 
 var (
