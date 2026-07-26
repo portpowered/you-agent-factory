@@ -164,66 +164,78 @@ const (
 	ConvergenceActionRemoved   ConvergenceAction = "removed"
 )
 
-// Instance status vocabulary shared by reconcile, source lifecycle, and status
-// slices.
-const (
-	InstanceStatusReady   = "ready"
-	InstanceStatusRunning = "running"
-	InstanceStatusStopped = "stopped"
-)
-
-// SourceHandle is an opaque lifecycle/source identity peers hold without knowing
-// cron, poller, watcher, or hosted-poller implementation types.
-type SourceHandle struct {
-	ID string
+// SourceIdentity is the stable Automation-owned identity shared by every source
+// kind and lifecycle command.
+type SourceIdentity struct {
+	AutomationID string
+	SourceID     string
 }
 
-// StartSourceRequest asks Automations to start one trigger source by opaque id
-// and kind. Kind remains a plain string so peers never import cron/poller/watcher
-// concrete types.
+// Cursor is an opaque durable source position. Peers may persist and return the
+// value but must not interpret its contents.
+type Cursor string
+
+// SourceObservation is a detached source fact suitable for status inspection
+// and restart recovery.
+type SourceObservation struct {
+	Identity   SourceIdentity
+	InstanceID string
+	State      ObservedLifecycleState
+	Cursor     Cursor
+}
+
+// LifecycleOutcome reports a command's desired state and latest observation.
+// Idempotent is true when the source already matched the requested state.
+type LifecycleOutcome struct {
+	Desired     DesiredLifecycleState
+	Observation SourceObservation
+	Convergence ConvergenceStatus
+	Idempotent  bool
+}
+
+// StartSourceRequest asks Automations to reconcile one source to running.
+// Resume, when present, supplies the last committed cursor and observed facts
+// from a previous process without exposing private persistence.
 type StartSourceRequest struct {
-	SourceID string
+	Identity SourceIdentity
 	Kind     string
+	Resume   *SourceObservation
 }
 
-// StartSourceResult returns the opaque handle and initial lifecycle status.
+// StartSourceResult reports the running reconciliation observation.
 type StartSourceResult struct {
-	Handle SourceHandle
-	Status string
+	Outcome LifecycleOutcome
 }
 
-// StopSourceRequest asks Automations to stop a previously started source.
+// StopSourceRequest asks Automations to reconcile one source to stopped.
 type StopSourceRequest struct {
-	Handle SourceHandle
+	Identity SourceIdentity
 }
 
-// StopSourceResult reports the stopped lifecycle observation.
+// StopSourceResult reports the stopped reconciliation observation.
 type StopSourceResult struct {
-	Handle SourceHandle
-	Status string
+	Outcome LifecycleOutcome
 }
 
-// WaitSourceRequest waits/joins a source until it reaches a terminal lifecycle
-// outcome.
+// WaitSourceRequest waits for a source to reach one desired lifecycle state.
 type WaitSourceRequest struct {
-	Handle SourceHandle
+	Identity SourceIdentity
+	Desired  DesiredLifecycleState
 }
 
-// WaitSourceResult reports the terminal lifecycle observation.
+// WaitSourceResult reports the latest lifecycle observation.
 type WaitSourceResult struct {
-	Handle SourceHandle
-	Status string
+	Outcome LifecycleOutcome
 }
 
 // SourceStatusRequest observes the current lifecycle status of one source.
 type SourceStatusRequest struct {
-	Handle SourceHandle
+	Identity SourceIdentity
 }
 
 // SourceStatusResult is the detached lifecycle status peers consume.
 type SourceStatusResult struct {
-	Handle SourceHandle
-	Status string
+	Observation SourceObservation
 }
 
 // GetStatusRequest queries the detached status of one automation instance by
@@ -238,7 +250,7 @@ type GetStatusRequest struct {
 type GetStatusResult struct {
 	AutomationID string
 	InstanceID   string
-	Status       string
+	Status       ObservedLifecycleState
 }
 
 // GetCursorRequest reads cursor/checkpoint recovery facts for one instance.
@@ -246,7 +258,7 @@ type GetStatusResult struct {
 // supply to detect stale cursors.
 type GetCursorRequest struct {
 	InstanceID     string
-	ExpectedCursor string
+	ExpectedCursor Cursor
 }
 
 // GetCursorResult is the detached cursor and checkpoint observation peers use
@@ -254,7 +266,7 @@ type GetCursorRequest struct {
 type GetCursorResult struct {
 	AutomationID string
 	InstanceID   string
-	Cursor       string
+	Cursor       Cursor
 	Checkpoint   string
 }
 

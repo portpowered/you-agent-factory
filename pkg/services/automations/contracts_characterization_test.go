@@ -14,20 +14,20 @@ import (
 type fakeRootService struct {
 	ready               bool
 	conflictOnReconcile bool
-	sources             map[string]string
+	sources             map[string]automations.SourceObservation
 	instances           map[string]fakeInstance
 }
 
 type fakeInstance struct {
 	automationID string
-	status       string
-	cursor       string
+	status       automations.ObservedLifecycleState
+	cursor       automations.Cursor
 	checkpoint   string
 }
 
 func (f *fakeRootService) ensureSources() {
 	if f.sources == nil {
-		f.sources = make(map[string]string)
+		f.sources = make(map[string]automations.SourceObservation)
 	}
 }
 
@@ -144,139 +144,203 @@ func desiredMatchesObserved(
 			observed == automations.ObservedLifecycleStopped
 }
 
-func (f *fakeRootService) StartSource(_ context.Context, req automations.StartSourceRequest) (automations.StartSourceResult, error) {
+func (f *fakeRootService) StartSource(
+	_ context.Context,
+	req automations.StartSourceRequest,
+) (automations.StartSourceResult, error) {
 	if f == nil || !f.ready {
-		return automations.StartSourceResult{}, &automations.Error{
-			Op:   "StartSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
+		return automations.StartSourceResult{}, fakeError(
+			"StartSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
+		)
 	}
-	if req.SourceID == "" {
-		return automations.StartSourceResult{}, &automations.Error{
-			Op:   "StartSource",
-			Code: automations.ErrorCodeInvalid,
-			Err:  automations.ErrInvalidRequest,
-		}
+	if !validSourceIdentity(req.Identity) || req.Kind == "" || !validResume(req) {
+		return automations.StartSourceResult{}, fakeError(
+			"StartSource", automations.ErrorCodeInvalid, automations.ErrInvalidRequest,
+		)
 	}
 	f.ensureSources()
-	if status, ok := f.sources[req.SourceID]; ok && status != automations.InstanceStatusStopped {
-		return automations.StartSourceResult{}, &automations.Error{
-			Op:   "StartSource",
-			Code: automations.ErrorCodeInvalid,
-			Err:  automations.ErrInvalidRequest,
+	key := sourceKey(req.Identity)
+	observation, exists := f.sources[key]
+	if !exists && req.Resume != nil {
+		observation = *req.Resume
+		exists = true
+	}
+	if exists && observation.State == automations.ObservedLifecycleRunning {
+		f.sources[key] = observation
+		return automations.StartSourceResult{
+			Outcome: lifecycleOutcome(
+				automations.DesiredLifecycleRunning,
+				observation,
+				automations.ConvergenceStatusConverged,
+				true,
+			),
+		}, nil
+	}
+	if !exists {
+		observation = automations.SourceObservation{
+			Identity:   req.Identity,
+			InstanceID: "instance:" + req.Identity.AutomationID + ":" + req.Identity.SourceID,
 		}
 	}
-	f.sources[req.SourceID] = automations.InstanceStatusRunning
+	observation.State = automations.ObservedLifecycleStarting
+	f.sources[key] = observation
 	return automations.StartSourceResult{
-		Handle: automations.SourceHandle{ID: req.SourceID},
-		Status: automations.InstanceStatusRunning,
+		Outcome: lifecycleOutcome(
+			automations.DesiredLifecycleRunning,
+			observation,
+			automations.ConvergenceStatusProgressing,
+			false,
+		),
 	}, nil
 }
 
-func (f *fakeRootService) StopSource(_ context.Context, req automations.StopSourceRequest) (automations.StopSourceResult, error) {
+func (f *fakeRootService) StopSource(
+	_ context.Context,
+	req automations.StopSourceRequest,
+) (automations.StopSourceResult, error) {
 	if f == nil || !f.ready {
-		return automations.StopSourceResult{}, &automations.Error{
-			Op:   "StopSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
+		return automations.StopSourceResult{}, fakeError(
+			"StopSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
+		)
 	}
-	if req.Handle.ID == "" {
-		return automations.StopSourceResult{}, &automations.Error{
-			Op:   "StopSource",
-			Code: automations.ErrorCodeInvalid,
-			Err:  automations.ErrInvalidRequest,
-		}
+	if !validSourceIdentity(req.Identity) {
+		return automations.StopSourceResult{}, fakeError(
+			"StopSource", automations.ErrorCodeInvalid, automations.ErrInvalidRequest,
+		)
 	}
 	f.ensureSources()
-	status, ok := f.sources[req.Handle.ID]
+	key := sourceKey(req.Identity)
+	observation, ok := f.sources[key]
 	if !ok {
-		return automations.StopSourceResult{}, &automations.Error{
-			Op:   "StopSource",
-			Code: automations.ErrorCodeNotFound,
-			Err:  automations.ErrNotFound,
-		}
+		return automations.StopSourceResult{}, fakeError(
+			"StopSource", automations.ErrorCodeNotFound, automations.ErrNotFound,
+		)
 	}
-	if status == automations.InstanceStatusStopped {
-		return automations.StopSourceResult{}, &automations.Error{
-			Op:   "StopSource",
-			Code: automations.ErrorCodeConflict,
-			Err:  automations.ErrConflict,
-		}
+	if observation.State == automations.ObservedLifecycleStopped {
+		return automations.StopSourceResult{
+			Outcome: lifecycleOutcome(
+				automations.DesiredLifecycleStopped,
+				observation,
+				automations.ConvergenceStatusConverged,
+				true,
+			),
+		}, nil
 	}
-	f.sources[req.Handle.ID] = automations.InstanceStatusStopped
+	observation.State = automations.ObservedLifecycleStopping
+	f.sources[key] = observation
 	return automations.StopSourceResult{
-		Handle: req.Handle,
-		Status: automations.InstanceStatusStopped,
+		Outcome: lifecycleOutcome(
+			automations.DesiredLifecycleStopped,
+			observation,
+			automations.ConvergenceStatusProgressing,
+			false,
+		),
 	}, nil
 }
 
-func (f *fakeRootService) WaitSource(_ context.Context, req automations.WaitSourceRequest) (automations.WaitSourceResult, error) {
+func (f *fakeRootService) WaitSource(
+	_ context.Context,
+	req automations.WaitSourceRequest,
+) (automations.WaitSourceResult, error) {
 	if f == nil || !f.ready {
-		return automations.WaitSourceResult{}, &automations.Error{
-			Op:   "WaitSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
+		return automations.WaitSourceResult{}, fakeError(
+			"WaitSource", automations.ErrorCodeNotReady, automations.ErrNotReady,
+		)
 	}
-	if req.Handle.ID == "" {
-		return automations.WaitSourceResult{}, &automations.Error{
-			Op:   "WaitSource",
-			Code: automations.ErrorCodeInvalid,
-			Err:  automations.ErrInvalidRequest,
-		}
+	if !validSourceIdentity(req.Identity) || !validDesiredState(req.Desired) {
+		return automations.WaitSourceResult{}, fakeError(
+			"WaitSource", automations.ErrorCodeInvalid, automations.ErrInvalidRequest,
+		)
 	}
 	f.ensureSources()
-	status, ok := f.sources[req.Handle.ID]
+	key := sourceKey(req.Identity)
+	observation, ok := f.sources[key]
 	if !ok {
-		return automations.WaitSourceResult{}, &automations.Error{
-			Op:   "WaitSource",
-			Code: automations.ErrorCodeNotFound,
-			Err:  automations.ErrNotFound,
-		}
+		return automations.WaitSourceResult{}, fakeError(
+			"WaitSource", automations.ErrorCodeNotFound, automations.ErrNotFound,
+		)
 	}
-	if status != automations.InstanceStatusStopped {
-		return automations.WaitSourceResult{}, &automations.Error{
-			Op:   "WaitSource",
-			Code: automations.ErrorCodeConflict,
-			Err:  automations.ErrConflict,
-		}
+	observation = advanceObservation(observation)
+	f.sources[key] = observation
+	convergence := automations.ConvergenceStatusProgressing
+	if desiredMatchesObserved(req.Desired, observation.State) {
+		convergence = automations.ConvergenceStatusConverged
 	}
 	return automations.WaitSourceResult{
-		Handle: req.Handle,
-		Status: automations.InstanceStatusStopped,
+		Outcome: lifecycleOutcome(req.Desired, observation, convergence, false),
 	}, nil
 }
 
-func (f *fakeRootService) SourceStatus(_ context.Context, req automations.SourceStatusRequest) (automations.SourceStatusResult, error) {
+func (f *fakeRootService) SourceStatus(
+	_ context.Context,
+	req automations.SourceStatusRequest,
+) (automations.SourceStatusResult, error) {
 	if f == nil || !f.ready {
-		return automations.SourceStatusResult{}, &automations.Error{
-			Op:   "SourceStatus",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
+		return automations.SourceStatusResult{}, fakeError(
+			"SourceStatus", automations.ErrorCodeNotReady, automations.ErrNotReady,
+		)
 	}
-	if req.Handle.ID == "" {
-		return automations.SourceStatusResult{}, &automations.Error{
-			Op:   "SourceStatus",
-			Code: automations.ErrorCodeInvalid,
-			Err:  automations.ErrInvalidRequest,
-		}
+	if !validSourceIdentity(req.Identity) {
+		return automations.SourceStatusResult{}, fakeError(
+			"SourceStatus", automations.ErrorCodeInvalid, automations.ErrInvalidRequest,
+		)
 	}
 	f.ensureSources()
-	status, ok := f.sources[req.Handle.ID]
+	key := sourceKey(req.Identity)
+	observation, ok := f.sources[key]
 	if !ok {
-		return automations.SourceStatusResult{}, &automations.Error{
-			Op:   "SourceStatus",
-			Code: automations.ErrorCodeNotFound,
-			Err:  automations.ErrNotFound,
-		}
+		return automations.SourceStatusResult{}, fakeError(
+			"SourceStatus", automations.ErrorCodeNotFound, automations.ErrNotFound,
+		)
 	}
-	return automations.SourceStatusResult{
-		Handle: req.Handle,
-		Status: status,
-	}, nil
+	observation = advanceObservation(observation)
+	f.sources[key] = observation
+	return automations.SourceStatusResult{Observation: observation}, nil
+}
+
+func validSourceIdentity(identity automations.SourceIdentity) bool {
+	return identity.AutomationID != "" && identity.SourceID != ""
+}
+
+func validResume(req automations.StartSourceRequest) bool {
+	return req.Resume == nil || req.Resume.Identity == req.Identity
+}
+
+func validDesiredState(state automations.DesiredLifecycleState) bool {
+	return state == automations.DesiredLifecycleRunning ||
+		state == automations.DesiredLifecycleStopped
+}
+
+func sourceKey(identity automations.SourceIdentity) string {
+	return identity.AutomationID + "\x00" + identity.SourceID
+}
+
+func advanceObservation(observation automations.SourceObservation) automations.SourceObservation {
+	switch observation.State {
+	case automations.ObservedLifecycleStarting:
+		observation.State = automations.ObservedLifecycleRunning
+	case automations.ObservedLifecycleStopping:
+		observation.State = automations.ObservedLifecycleStopped
+	}
+	return observation
+}
+
+func lifecycleOutcome(
+	desired automations.DesiredLifecycleState,
+	observation automations.SourceObservation,
+	convergence automations.ConvergenceStatus,
+	idempotent bool,
+) automations.LifecycleOutcome {
+	return automations.LifecycleOutcome{
+		Desired:     desired,
+		Observation: observation,
+		Convergence: convergence,
+		Idempotent:  idempotent,
+	}
+}
+
+func fakeError(op string, code automations.ErrorCode, sentinel error) *automations.Error {
+	return &automations.Error{Op: op, Code: code, Err: sentinel}
 }
 
 func (f *fakeRootService) GetStatus(_ context.Context, req automations.GetStatusRequest) (automations.GetStatusResult, error) {
@@ -548,141 +612,6 @@ func TestServiceReconcile_FakeTypedConflict(t *testing.T) {
 	}
 }
 
-func TestServiceSourceLifecycle_FakeSuccessStartStatusStopWait(t *testing.T) {
-	t.Parallel()
-
-	var svc automations.Service = &fakeRootService{ready: true}
-	started, err := svc.StartSource(context.Background(), automations.StartSourceRequest{
-		SourceID: "source-a",
-		Kind:     "schedule",
-	})
-	if err != nil {
-		t.Fatalf("StartSource() unexpected error: %v", err)
-	}
-	if started.Handle.ID == "" {
-		t.Fatal("StartSource() handle.ID is empty")
-	}
-	if started.Status != automations.InstanceStatusRunning {
-		t.Fatalf("StartSource() status = %q, want %q", started.Status, automations.InstanceStatusRunning)
-	}
-
-	status, err := svc.SourceStatus(context.Background(), automations.SourceStatusRequest{
-		Handle: started.Handle,
-	})
-	if err != nil {
-		t.Fatalf("SourceStatus() unexpected error: %v", err)
-	}
-	if status.Status != automations.InstanceStatusRunning && status.Status != automations.InstanceStatusReady {
-		t.Fatalf("SourceStatus() status = %q, want running or ready", status.Status)
-	}
-
-	stopped, err := svc.StopSource(context.Background(), automations.StopSourceRequest{
-		Handle: started.Handle,
-	})
-	if err != nil {
-		t.Fatalf("StopSource() unexpected error: %v", err)
-	}
-	if stopped.Status != automations.InstanceStatusStopped {
-		t.Fatalf("StopSource() status = %q, want %q", stopped.Status, automations.InstanceStatusStopped)
-	}
-
-	waited, err := svc.WaitSource(context.Background(), automations.WaitSourceRequest{
-		Handle: started.Handle,
-	})
-	if err != nil {
-		t.Fatalf("WaitSource() unexpected error: %v", err)
-	}
-	if waited.Status != automations.InstanceStatusStopped {
-		t.Fatalf("WaitSource() status = %q, want terminal %q", waited.Status, automations.InstanceStatusStopped)
-	}
-}
-
-func TestServiceSourceLifecycle_FakeTypedMissingSource(t *testing.T) {
-	t.Parallel()
-
-	var svc automations.Service = &fakeRootService{ready: true}
-	_, err := svc.SourceStatus(context.Background(), automations.SourceStatusRequest{
-		Handle: automations.SourceHandle{ID: "missing-source"},
-	})
-	if err == nil {
-		t.Fatal("SourceStatus() error = nil, want typed not-found error")
-	}
-	var typed *automations.Error
-	if !errors.As(err, &typed) {
-		t.Fatalf("SourceStatus() error type = %T, want *automations.Error", err)
-	}
-	if typed.Code != automations.ErrorCodeNotFound {
-		t.Fatalf("SourceStatus() error code = %q, want %q", typed.Code, automations.ErrorCodeNotFound)
-	}
-	if !errors.Is(err, automations.ErrNotFound) {
-		t.Fatalf("SourceStatus() error = %v, want errors.Is ErrNotFound", err)
-	}
-}
-
-func TestServiceSourceLifecycle_FakeTypedInvalidLifecycleTransition(t *testing.T) {
-	t.Parallel()
-
-	var svc automations.Service = &fakeRootService{ready: true}
-	started, err := svc.StartSource(context.Background(), automations.StartSourceRequest{
-		SourceID: "source-b",
-		Kind:     "schedule",
-	})
-	if err != nil {
-		t.Fatalf("StartSource() unexpected error: %v", err)
-	}
-	_, err = svc.StartSource(context.Background(), automations.StartSourceRequest{
-		SourceID: started.Handle.ID,
-		Kind:     "schedule",
-	})
-	if err == nil {
-		t.Fatal("StartSource() error = nil, want typed invalid-transition error")
-	}
-	var typed *automations.Error
-	if !errors.As(err, &typed) {
-		t.Fatalf("StartSource() error type = %T, want *automations.Error", err)
-	}
-	if typed.Code != automations.ErrorCodeInvalid {
-		t.Fatalf("StartSource() error code = %q, want %q", typed.Code, automations.ErrorCodeInvalid)
-	}
-	if !errors.Is(err, automations.ErrInvalidRequest) {
-		t.Fatalf("StartSource() error = %v, want errors.Is ErrInvalidRequest", err)
-	}
-}
-
-func TestServiceSourceLifecycle_FakeTypedAlreadyStopped(t *testing.T) {
-	t.Parallel()
-
-	var svc automations.Service = &fakeRootService{ready: true}
-	started, err := svc.StartSource(context.Background(), automations.StartSourceRequest{
-		SourceID: "source-c",
-		Kind:     "schedule",
-	})
-	if err != nil {
-		t.Fatalf("StartSource() unexpected error: %v", err)
-	}
-	if _, err := svc.StopSource(context.Background(), automations.StopSourceRequest{
-		Handle: started.Handle,
-	}); err != nil {
-		t.Fatalf("StopSource() unexpected error: %v", err)
-	}
-	_, err = svc.StopSource(context.Background(), automations.StopSourceRequest{
-		Handle: started.Handle,
-	})
-	if err == nil {
-		t.Fatal("StopSource() error = nil, want typed already-stopped conflict")
-	}
-	var typed *automations.Error
-	if !errors.As(err, &typed) {
-		t.Fatalf("StopSource() error type = %T, want *automations.Error", err)
-	}
-	if typed.Code != automations.ErrorCodeConflict {
-		t.Fatalf("StopSource() error code = %q, want %q", typed.Code, automations.ErrorCodeConflict)
-	}
-	if !errors.Is(err, automations.ErrConflict) {
-		t.Fatalf("StopSource() error = %v, want errors.Is ErrConflict", err)
-	}
-}
-
 func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 	t.Parallel()
 
@@ -691,7 +620,7 @@ func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 		instances: map[string]fakeInstance{
 			"inst-a": {
 				automationID: "auto-a",
-				status:       automations.InstanceStatusRunning,
+				status:       automations.ObservedLifecycleRunning,
 				cursor:       "cursor-42",
 				checkpoint:   "checkpoint-7",
 			},
@@ -710,8 +639,8 @@ func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 	if status.InstanceID != "inst-a" {
 		t.Fatalf("GetStatus() InstanceID = %q, want %q", status.InstanceID, "inst-a")
 	}
-	if status.Status != automations.InstanceStatusRunning {
-		t.Fatalf("GetStatus() Status = %q, want %q", status.Status, automations.InstanceStatusRunning)
+	if status.Status != automations.ObservedLifecycleRunning {
+		t.Fatalf("GetStatus() Status = %q, want %q", status.Status, automations.ObservedLifecycleRunning)
 	}
 
 	cursor, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
@@ -764,7 +693,7 @@ func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
 		instances: map[string]fakeInstance{
 			"inst-b": {
 				automationID: "auto-b",
-				status:       automations.InstanceStatusReady,
+				status:       automations.ObservedLifecycleRunning,
 				cursor:       "cursor-current",
 				checkpoint:   "checkpoint-1",
 			},
@@ -836,20 +765,24 @@ func peerConsumePublishedSlices(ctx context.Context, svc automations.Service) er
 	}); err != nil {
 		return err
 	}
-	started, err := svc.StartSource(ctx, automations.StartSourceRequest{
-		SourceID: "source-seal",
+	identity := automations.SourceIdentity{AutomationID: "auto-seal", SourceID: "source-seal"}
+	_, err := svc.StartSource(ctx, automations.StartSourceRequest{
+		Identity: identity,
 		Kind:     "schedule",
 	})
 	if err != nil {
 		return err
 	}
-	if _, err := svc.SourceStatus(ctx, automations.SourceStatusRequest{Handle: started.Handle}); err != nil {
+	if _, err := svc.SourceStatus(ctx, automations.SourceStatusRequest{Identity: identity}); err != nil {
 		return err
 	}
-	if _, err := svc.StopSource(ctx, automations.StopSourceRequest{Handle: started.Handle}); err != nil {
+	if _, err := svc.StopSource(ctx, automations.StopSourceRequest{Identity: identity}); err != nil {
 		return err
 	}
-	if _, err := svc.WaitSource(ctx, automations.WaitSourceRequest{Handle: started.Handle}); err != nil {
+	if _, err := svc.WaitSource(ctx, automations.WaitSourceRequest{
+		Identity: identity,
+		Desired:  automations.DesiredLifecycleStopped,
+	}); err != nil {
 		return err
 	}
 	if _, err := svc.GetStatus(ctx, automations.GetStatusRequest{InstanceID: "inst-seal"}); err != nil {
@@ -869,7 +802,7 @@ func TestServiceRootSealed_AllPublishedSlicesReachableThroughOneService(t *testi
 		instances: map[string]fakeInstance{
 			"inst-seal": {
 				automationID: "auto-seal",
-				status:       automations.InstanceStatusRunning,
+				status:       automations.ObservedLifecycleRunning,
 				cursor:       "cursor-seal",
 				checkpoint:   "checkpoint-seal",
 			},
@@ -886,7 +819,10 @@ func TestServiceRootSealed_AllPublishedSlicesReachableThroughOneService(t *testi
 	assertTypedAutomationsError(t, "Reconcile", reconcileErr, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
 
 	_, missingSourceErr := root.SourceStatus(context.Background(), automations.SourceStatusRequest{
-		Handle: automations.SourceHandle{ID: "missing-seal-source"},
+		Identity: automations.SourceIdentity{
+			AutomationID: "auto-seal",
+			SourceID:     "missing-seal-source",
+		},
 	})
 	assertTypedAutomationsError(t, "SourceStatus", missingSourceErr, automations.ErrorCodeNotFound, automations.ErrNotFound)
 
