@@ -132,6 +132,20 @@ func (*runtimeScopePeerService) InvokeLocal(context.Context, models.LocalInvocat
 	return models.LocalInvocationResult{Handled: false}, nil
 }
 
+func (*runtimeScopePeerService) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (*runtimeScopePeerService) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 func TestRuntimeScope_OpenRegistersDetachedConfigAndReturnsOpaqueRef(t *testing.T) {
 	t.Parallel()
 
@@ -230,6 +244,8 @@ func TestRuntimeScope_ReferenceCarriesAcrossScopeBoundRequests(t *testing.T) {
 		(models.AcquireLeaseRequest{Scope: scope}).Scope,
 		(models.ReleaseLeaseRequest{Scope: scope}).Scope,
 		(models.LocalInvocationRequest{Scope: scope}).Scope,
+		(models.InvokeModelRequest{Scope: scope}).Scope,
+		(models.CancelInvocationRequest{Scope: scope}).Scope,
 	}
 	for i, got := range requestScopes {
 		if got != scope {
@@ -252,6 +268,20 @@ func (unsupportedRuntimeScopePeer) CloseRuntimeScope(
 	models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
 	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (unsupportedRuntimeScopePeer) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (unsupportedRuntimeScopePeer) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
 }
 
 func (s catalogPeerService) GetModel(_ context.Context, name string) (models.Detail, error) {

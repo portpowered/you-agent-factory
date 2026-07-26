@@ -28,6 +28,26 @@ const (
 // can branch on typed infer failures through the root contract.
 var ErrUnsupportedResponseMode = errors.New("model invocation response mode is not supported")
 
+var (
+	// ErrInferenceCancelled reports that model inference was cancelled through
+	// its context or the explicit cancellation operation.
+	ErrInferenceCancelled = errors.New("model inference cancelled")
+	// ErrInferenceTimeout reports that inference exceeded its Models-owned
+	// execution deadline.
+	ErrInferenceTimeout = errors.New("model inference timed out")
+	// ErrInferenceFailed reports a normalized provider/runtime inference
+	// failure that is not one of the more specific readiness or lease failures.
+	ErrInferenceFailed = errors.New("model inference failed")
+	// ErrInferenceArtifactInvalid reports an empty or malformed opaque output
+	// artifact reference.
+	ErrInferenceArtifactInvalid = errors.New("model inference artifact is invalid")
+	// ErrInvocationNotFound reports an unknown invocation capability.
+	ErrInvocationNotFound = errors.New("model invocation not found")
+	// ErrUnsupportedModelOperation reports that the scoped model does not
+	// support the requested operation.
+	ErrUnsupportedModelOperation = errors.New("model operation is not supported")
+)
+
 // ResponseMode selects the representation returned by direct invocation.
 type ResponseMode string
 
@@ -59,6 +79,197 @@ type Result struct {
 	Bindings          []ResolvedModelOperationBinding
 	StreamFile        string
 	StreamContentType string
+}
+
+// ModelInvocationRef is an opaque Models-owned invocation capability.
+type ModelInvocationRef struct {
+	value string
+}
+
+// Parse restores an invocation reference received from a trusted boundary.
+func (ModelInvocationRef) Parse(value string) (ModelInvocationRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ModelInvocationRef{}, ErrInvocationNotFound
+	}
+	return ModelInvocationRef{value: value}, nil
+}
+
+// String serializes the opaque invocation reference.
+func (ref ModelInvocationRef) String() string {
+	return ref.value
+}
+
+// IsZero reports whether no invocation reference was supplied.
+func (ref ModelInvocationRef) IsZero() bool {
+	return strings.TrimSpace(ref.value) == ""
+}
+
+// InferenceArtifactRef is an opaque reference to a Models-owned output
+// artifact. It does not reveal a cache or filesystem location.
+type InferenceArtifactRef struct {
+	value string
+}
+
+// Parse restores an artifact reference received from a trusted boundary.
+func (InferenceArtifactRef) Parse(value string) (InferenceArtifactRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return InferenceArtifactRef{}, ErrInferenceArtifactInvalid
+	}
+	return InferenceArtifactRef{value: value}, nil
+}
+
+// String serializes the opaque artifact reference.
+func (ref InferenceArtifactRef) String() string {
+	return ref.value
+}
+
+// IsZero reports whether no artifact reference was supplied.
+func (ref InferenceArtifactRef) IsZero() bool {
+	return strings.TrimSpace(ref.value) == ""
+}
+
+// InferenceInput is detached Models-owned invocation input.
+type InferenceInput struct {
+	ContentType string
+	Content     string
+}
+
+// InferenceContent is detached Models-owned invocation output.
+type InferenceContent struct {
+	ContentType string
+	Content     string
+}
+
+// InferenceArtifact contains peer-required output metadata without paths,
+// readers, storage records, or runtime artifact handles.
+type InferenceArtifact struct {
+	Artifact   InferenceArtifactRef
+	Name       string
+	MediaType  string
+	SizeBytes  int64
+	Properties map[string]string
+}
+
+// Clone returns detached artifact metadata safe for a peer to retain.
+func (artifact InferenceArtifact) Clone() InferenceArtifact {
+	artifact.Properties = cloneStringMap(artifact.Properties)
+	return artifact
+}
+
+// ModelInvocationStatus is the observable lifecycle of an invocation.
+type ModelInvocationStatus string
+
+const (
+	ModelInvocationStatusAccepted  ModelInvocationStatus = "ACCEPTED"
+	ModelInvocationStatusCompleted ModelInvocationStatus = "COMPLETED"
+	ModelInvocationStatusFailed    ModelInvocationStatus = "FAILED"
+	ModelInvocationStatusCancelled ModelInvocationStatus = "CANCELLED"
+)
+
+// InvocationLeaseDisposition reports what happened to capacity after an
+// invocation outcome.
+type InvocationLeaseDisposition string
+
+const (
+	InvocationLeaseRetained InvocationLeaseDisposition = "RETAINED"
+	InvocationLeaseReleased InvocationLeaseDisposition = "RELEASED"
+	InvocationLeaseExpired  InvocationLeaseDisposition = "EXPIRED"
+)
+
+// InvokeModelRequest asks Models to run one operation under an issued lease.
+type InvokeModelRequest struct {
+	Scope        RuntimeScopeRef
+	Lease        ModelLeaseRef
+	Holder       string
+	ModelName    string
+	Operation    string
+	ResponseMode ResponseMode
+	Input        InferenceInput
+}
+
+// Validate checks the peer-controlled invocation identity and capacity input.
+func (request InvokeModelRequest) Validate() error {
+	if request.Scope.IsZero() {
+		return ErrRuntimeScopeInvalid
+	}
+	if request.Lease.IsZero() {
+		return ErrHostLeaseNotFound
+	}
+	if strings.TrimSpace(request.Holder) == "" {
+		return ErrHostInvalidHolder
+	}
+	if strings.TrimSpace(request.ModelName) == "" {
+		return ErrNotFound
+	}
+	if strings.TrimSpace(request.Operation) == "" {
+		return ErrUnsupportedModelOperation
+	}
+	return nil
+}
+
+// InvokeModelResult contains detached inference and lease-lifecycle facts.
+type InvokeModelResult struct {
+	Invocation       ModelInvocationRef
+	Scope            RuntimeScopeRef
+	Lease            ModelLeaseRef
+	ModelName        string
+	Operation        string
+	Status           ModelInvocationStatus
+	Content          []InferenceContent
+	Artifacts        []InferenceArtifact
+	LeaseDisposition InvocationLeaseDisposition
+	// CancellationOutcome is populated when context cancellation ends an
+	// accepted invocation, matching explicit CancelInvocation vocabulary.
+	CancellationOutcome InvocationCancellationOutcome
+}
+
+// Clone returns a detached invocation result safe for a peer to retain.
+func (result InvokeModelResult) Clone() InvokeModelResult {
+	result.Content = append([]InferenceContent(nil), result.Content...)
+	artifacts := result.Artifacts
+	result.Artifacts = make([]InferenceArtifact, len(artifacts))
+	for i := range artifacts {
+		result.Artifacts[i] = artifacts[i].Clone()
+	}
+	return result
+}
+
+// CancelInvocationRequest identifies one invocation within its issuing scope.
+type CancelInvocationRequest struct {
+	Scope      RuntimeScopeRef
+	Invocation ModelInvocationRef
+}
+
+// Validate checks the cancellation capability input.
+func (request CancelInvocationRequest) Validate() error {
+	if request.Scope.IsZero() {
+		return ErrRuntimeScopeInvalid
+	}
+	if request.Invocation.IsZero() {
+		return ErrInvocationNotFound
+	}
+	return nil
+}
+
+// InvocationCancellationOutcome distinguishes first, repeated, and late
+// cancellation without parsing implementation-specific strings.
+type InvocationCancellationOutcome string
+
+const (
+	InvocationCancellationRequested        InvocationCancellationOutcome = "CANCELLED"
+	InvocationCancellationAlreadyCancelled InvocationCancellationOutcome = "ALREADY_CANCELLED"
+	InvocationCancellationAlreadyCompleted InvocationCancellationOutcome = "ALREADY_COMPLETED"
+)
+
+// CancelInvocationResult reports the observable cancellation and capacity
+// outcome for an issued invocation.
+type CancelInvocationResult struct {
+	Invocation       ModelInvocationRef
+	Status           ModelInvocationStatus
+	Outcome          InvocationCancellationOutcome
+	LeaseDisposition InvocationLeaseDisposition
 }
 
 // ResolvedModelOperationBinding is the provider-neutral binding projection

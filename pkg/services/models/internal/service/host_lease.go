@@ -52,6 +52,22 @@ func (s *Service) ReleaseModelLease(
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
+// Scoped inference is contract-only until the Models implementation packet
+// owns runtime-scope registration and invocation cancellation state.
+func (s *Service) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 // AcquireLease acquires Models-owned local capacity through the singular root
 // Service host/lease surface.
 func (s *Service) AcquireLease(ctx context.Context, request models.AcquireLeaseRequest) (models.HostLease, error) {

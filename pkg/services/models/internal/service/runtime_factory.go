@@ -255,6 +255,20 @@ func (o *Root) ReleaseModelLease(
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
+func (o *Root) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }

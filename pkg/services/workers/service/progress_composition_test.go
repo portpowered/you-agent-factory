@@ -231,6 +231,20 @@ func (testRuntimeScopeUnsupported) RemoveModelAssets(
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
+func (testRuntimeScopeUnsupported) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 func (s testModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return s, nil
 }

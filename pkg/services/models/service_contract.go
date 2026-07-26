@@ -61,6 +61,16 @@ type Service interface {
 	// ReleaseModelLease safely releases an issued lease and returns its
 	// observable released/already-released outcome.
 	ReleaseModelLease(context.Context, ReleaseModelLeaseRequest) (ReleaseModelLeaseResult, error)
+	// InvokeModelWithLease runs one scoped model operation under an issued Models lease.
+	// Results contain only detached Models-owned content, artifact metadata,
+	// invocation identity, and lease-disposition facts. Runtime handles,
+	// endpoints, processes, and filesystem paths remain private.
+	InvokeModelWithLease(context.Context, InvokeModelRequest) (InvokeModelResult, error)
+	// CancelInvocation requests cancellation of one scoped invocation. First,
+	// repeated, and late cancellation return typed outcomes; context
+	// cancellation and explicit cancellation converge on the same cancelled
+	// invocation status and released-capacity facts.
+	CancelInvocation(context.Context, CancelInvocationRequest) (CancelInvocationResult, error)
 	// ForRuntime binds this already-constructed service to one Factory Session's
 	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
 	// Construction and process-launcher ports remain owned by the injected

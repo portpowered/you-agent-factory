@@ -512,6 +512,20 @@ func (workerModelService) ReleaseModelLease(
 	return modelinference.ReleaseModelLeaseResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (workerModelService) InvokeModelWithLease(
+	context.Context,
+	modelinference.InvokeModelRequest,
+) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) CancelInvocation(
+	context.Context,
+	modelinference.CancelInvocationRequest,
+) (modelinference.CancelInvocationResult, error) {
+	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }
