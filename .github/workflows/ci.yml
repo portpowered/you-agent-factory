@@ -108,8 +108,8 @@ jobs:
       - run: make ui-deps
       - run: make typecheck ui-lint
 
-  ui-coverage:
-    name: Frontend Coverage (${{ matrix.shard }}/4)
+  ui-coverage-shard:
+    name: Frontend Coverage Shard (${{ matrix.shard }}/10)
     needs: classify
     if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -126,7 +126,7 @@ jobs:
       - run: make ui-deps
       - name: Run coverage shard
         env:
-          UI_COVERAGE_SHARD: ${{ matrix.shard }}/4
+          UI_COVERAGE_SHARD: ${{ matrix.shard }}/10
           UI_COVERAGE_MAIN_MAX_WORKERS: "2"
         run: make ui-test-coverage
       - uses: actions/upload-artifact@v4
@@ -139,7 +139,7 @@ jobs:
 
   ui-coverage-merge:
     name: Frontend Coverage
-    needs: [classify, ui-coverage]
+    needs: [classify, ui-coverage-shard]
     if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -158,7 +158,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for shard in 1 2 3 4; do
+          for shard in 1 2 3 4 5 6 7 8 9 10; do
             test -f "ui/.vitest-reports/main-shard-${shard}.json"
           done
       - run: make test-ui-coverage-merge
@@ -178,7 +178,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps ui-install-playwright test-ui-browser-integration
+      - run: make ui-deps ui-install-playwright ui-integration-test
 
   backend:
     name: Backend
@@ -262,7 +262,59 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
       - run: make model-provider-package-verify
+
+  api-candidate:
+    name: Build API Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/api-package-development-command.mjs --action dry-run
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/api-development-candidate/package
+          --package-directory packages/api
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
+
+  packaged-factories-candidate:
+    name: Build Packaged Factories Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_packaged_factories_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/packaged-factories-package-pr-dry-run.mjs
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/packaged-factories-development-candidate/package
+          --package-directory packages/packaged-factories
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
 
   local-inference:
     name: Local Inference
@@ -272,7 +324,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, local-inference]
+    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -299,7 +351,7 @@ jobs:
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} inference=${{ needs.local-inference.result }}
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
         shell: bash
         run: |
           set -euo pipefail

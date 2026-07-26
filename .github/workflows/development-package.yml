@@ -1,204 +1,44 @@
 name: Development Package
 
 on:
-  pull_request:
-    paths:
-      - api/**
-      - contracts/**
-      - packages/**
-      - scripts/api-package-*
-      - scripts/packaged-factories-*
-      - scripts/model-provider-*
-      - .github/workflows/**
-      - Makefile
-      - go.mod
-      - go.sum
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: development-package-${{ github.event.pull_request.number || github.ref }}
+  group: development-package-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   BUN_VERSION: 1.3.12
   NODE_VERSION: 24
   NPM_VERSION: 11.15.0
-  GO_VERSION: 1.25.0
 
 jobs:
-  classify:
-    name: Classify Development Package Verification
-    runs-on: ubuntu-latest
-    outputs:
-      run_api_package: ${{ steps.classify.outputs.run_api_package || 'true' }}
-      run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
-      run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - id: classify
-        if: github.event_name == 'pull_request'
-        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
-
-  api-package:
-    name: Validate API Contract And Package
-    needs: classify
-    if: always() && needs.classify.outputs.run_api_package == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - name: Check out the candidate commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - run: make ui-deps
-
-      - name: Run validation lane
-        run: make contracts-smoke api-smoke api-package-verify
-
-  packaged-factories-package:
-    name: Validate Packaged Factories Package
-    needs: classify
-    if: always() && needs.classify.outputs.run_packaged_factories_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: make packaged-factory-package-verify
-
-  model-providers-package:
-    name: Validate Model Providers Package
-    needs: classify
-    if: always() && needs.classify.outputs.run_model_providers_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - run: make model-provider-package-verify
-
-  api-candidate:
-    name: Build API Candidate (No Publish)
-    needs: classify
-    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: >-
-          node scripts/api-package-development-command.mjs --action dry-run
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/api-development-candidate/package
-          --package-directory packages/api
-          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
-          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.event.pull_request.head.sha }}"
-          --workspace-directory "${{ github.workspace }}"
-
-  packaged-factories-candidate:
-    name: Build Packaged Factories Candidate (No Publish)
-    needs: classify
-    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_packaged_factories_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: >-
-          node scripts/packaged-factories-package-pr-dry-run.mjs
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/packaged-factories-development-candidate/package
-          --package-directory packages/packaged-factories
-          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
-          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.event.pull_request.head.sha }}"
-          --workspace-directory "${{ github.workspace }}"
-
   prepare-main-candidate:
     name: Prepare Protected Main Candidate
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      github.repository == 'portpowered/you-agent-factory'
+    if: github.repository == 'portpowered/you-agent-factory'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
     steps:
-      - name: Check out the protected main commit
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Prepare the frontend-only development package candidates
-        run: >-
+      - run: make ui-deps
+      - run: >-
           make ui-public-package-publish-prepare
           PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.sha }}"
           PACKAGE_OUTPUT=".artifacts/public-development-candidate"
-
-      - name: Upload the frontend package candidates and evidence
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: public-development-main-candidate-${{ github.run_id }}
           path: .artifacts/public-development-candidate/
@@ -207,15 +47,8 @@ jobs:
 
   publish-main-candidate:
     name: Publish and Verify Protected Main Candidate
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      github.repository == 'portpowered/you-agent-factory'
-    needs:
-      - api-package
-      - packaged-factories-package
-      - model-providers-package
-      - prepare-main-candidate
+    if: github.repository == 'portpowered/you-agent-factory'
+    needs: prepare-main-candidate
     environment: development-publishing
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -223,28 +56,19 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Check out the verified protected main helper
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-
-      - name: Set up trusted-publishing-compatible Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Pin trusted-publishing-compatible npm
-        run: npm install --global npm@${{ env.NPM_VERSION }}
-
-      - name: Download the frontend-only development package candidates
-        uses: actions/download-artifact@v4
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+      - uses: actions/download-artifact@v4
         with:
           name: public-development-main-candidate-${{ github.run_id }}
           path: .artifacts/public-development-candidate
-
-      - name: Publish and verify the frontend-only development package family
-        working-directory: ui
+      - working-directory: ui
         run: >-
           npm run publish:public-packages --
           --candidate-directory ../.artifacts/public-development-candidate
