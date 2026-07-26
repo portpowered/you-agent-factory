@@ -16,6 +16,9 @@ func TestUnimplementedService_CatalogTypedOutcomes(t *testing.T) {
 	ctx := context.Background()
 	var unimplemented factorydefinitions.UnimplementedService
 
+	if _, err := unimplemented.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{}); err == nil {
+		t.Fatal("ListEffectiveFactories: expected collaborator-required error")
+	}
 	if _, err := unimplemented.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{}); err == nil {
 		t.Fatal("ListNamedFactories: expected collaborator-required error")
 	}
