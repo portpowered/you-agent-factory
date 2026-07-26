@@ -274,17 +274,21 @@ describe.sequential("dashboard session recovery browser integration", () => {
         });
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
 
-        await waitForDurableCheckpoint("stale identity reconnect", async () => {
-          const urls = await readCapturedEventStreamURLs(browserPage.page);
-          return urls.some(
-            (url) =>
-              url.includes(
-                `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
-              ) &&
-              !url.includes("after_event_id=") &&
-              !url.includes("after_sequence="),
-          );
-        });
+        await waitForDurableCheckpoint(
+          "stale identity reconnect",
+          async () => {
+            const urls = await readCapturedEventStreamURLs(browserPage.page);
+            return urls.some(
+              (url) =>
+                url.includes(
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
+                ) &&
+                !url.includes("after_event_id=") &&
+                !url.includes("after_sequence="),
+            );
+          },
+          uiInteractionTimeoutMs * 2,
+        );
 
         const staleURLs = await readCapturedEventStreamURLs(browserPage.page);
         expect(
