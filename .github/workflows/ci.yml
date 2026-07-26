@@ -106,7 +106,62 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-deps
-      - run: make typecheck ui-lint test-ui-coverage
+      - run: make typecheck ui-lint
+
+  ui-coverage:
+    name: Frontend Coverage (${{ matrix.shard }}/4)
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
+      - name: Run coverage shard
+        env:
+          UI_COVERAGE_SHARD: ${{ matrix.shard }}/4
+          UI_COVERAGE_MAIN_MAX_WORKERS: "2"
+        run: make ui-test-coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-shard-${{ matrix.shard }}
+          include-hidden-files: true
+          path: ui/.vitest-reports/main-shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  ui-coverage-merge:
+    name: Frontend Coverage
+    needs: [classify, ui-coverage]
+    if: always() && needs.classify.outputs.run_frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ui-coverage-shard-*
+          path: ui/.vitest-reports
+          merge-multiple: true
+      - name: Verify coverage shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          for shard in 1 2 3 4; do
+            test -f "ui/.vitest-reports/main-shard-${shard}.json"
+          done
+      - run: make test-ui-coverage-merge
 
   frontend-browser:
     name: Frontend Browser
@@ -137,7 +192,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - run: go build ./cmd/factory
+      - run: make build
       - run: make test-unit-coverage functional-test-viz
 
   ui-backend-integration:
@@ -165,6 +220,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -200,6 +257,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -213,7 +272,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-browser, backend, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, local-inference]
+    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -240,7 +299,7 @@ jobs:
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} inference=${{ needs.local-inference.result }}
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} inference=${{ needs.local-inference.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -254,6 +313,7 @@ jobs:
             "Docs Reference|$RUN_DOCS|${{ needs.docs-reference.result }}|$DOCS_REASON" \
             "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
             "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
+            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage-merge.result }}|$FRONTEND_REASON" \
             "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
             "Backend|$RUN_BACKEND|${{ needs.backend.result }}|$BACKEND_REASON" \
             "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \

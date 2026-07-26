@@ -440,7 +440,7 @@ long-tests:
 	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
-	$(GO) test ./pkg/services/models/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/models/internal/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 pr-inference-approval:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
