@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -29,6 +30,49 @@ async function singleTarballName(directory) {
 	return tarballs[0];
 }
 
+function digest(contents, algorithm, encoding = "hex") {
+	return createHash(algorithm).update(contents).digest(encoding);
+}
+
+async function assertTarballDigests({
+	name,
+	tarballPath,
+	artifactDigest,
+	integrity,
+	shasum,
+}) {
+	let contents;
+	try {
+		contents = await readFile(tarballPath);
+	} catch (error) {
+		throw new Error(
+			`[public-release-package-publish] represented tarball is not readable for ${name}`,
+			{ cause: error },
+		);
+	}
+	if (
+		artifactDigest !== undefined &&
+		artifactDigest !== `sha256:${digest(contents, "sha256")}`
+	) {
+		throw new Error(
+			`[public-release-package-publish] candidate digest mismatch for ${name}`,
+		);
+	}
+	if (shasum !== undefined && shasum !== digest(contents, "sha1")) {
+		throw new Error(
+			`[public-release-package-publish] candidate shasum mismatch for ${name}`,
+		);
+	}
+	if (
+		integrity !== undefined &&
+		integrity !== `sha512-${digest(contents, "sha512", "base64")}`
+	) {
+		throw new Error(
+			`[public-release-package-publish] candidate integrity mismatch for ${name}`,
+		);
+	}
+}
+
 function assertTopLevelRecord(evidence, name, version, tarball) {
 	const record = evidence.packages.find((candidate) => candidate.name === name);
 	if (record?.version !== version || record.tarball !== tarball) {
@@ -53,7 +97,11 @@ async function assertSinglePackageEvidence({
 		child.packageName !== expectedName ||
 		child.candidateVersion !== evidence.version ||
 		child.sourceCommit !== evidence.sourceCommit ||
-		child.distTag !== "latest"
+		child.distTag !== "latest" ||
+		!/^sha256:[0-9a-f]{64}$/.test(child.contractDigest ?? "") ||
+		!/^sha256:[0-9a-f]{64}$/.test(child.artifactDigest ?? "") ||
+		!Array.isArray(child.inventory) ||
+		child.inventory.some((path) => typeof path !== "string")
 	) {
 		throw new Error(
 			`[public-release-package-publish] child evidence does not match ${expectedName}`,
@@ -65,6 +113,11 @@ async function assertSinglePackageEvidence({
 		child.candidateVersion,
 		`${directory}/${tarballName}`,
 	);
+	await assertTarballDigests({
+		name: expectedName,
+		tarballPath: join(candidateDirectory, tarballName),
+		artifactDigest: child.artifactDigest,
+	});
 }
 
 async function assertFrontendEvidence(root, evidence) {
@@ -78,9 +131,14 @@ async function assertFrontendEvidence(root, evidence) {
 		);
 	}
 	for (const candidate of child.packages) {
-		if (basename(candidate.filename) !== candidate.filename) {
+		if (
+			typeof candidate.filename !== "string" ||
+			basename(candidate.filename) !== candidate.filename ||
+			!/^[0-9a-f]{40}$/.test(candidate.shasum ?? "") ||
+			!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(candidate.integrity ?? "")
+		) {
 			throw new Error(
-				`[public-release-package-publish] invalid frontend tarball filename for ${candidate.name}`,
+				`[public-release-package-publish] invalid frontend tarball evidence for ${candidate.name}`,
 			);
 		}
 		assertTopLevelRecord(
@@ -89,6 +147,12 @@ async function assertFrontendEvidence(root, evidence) {
 			candidate.version,
 			`frontend/${candidate.filename}`,
 		);
+		await assertTarballDigests({
+			name: candidate.name,
+			tarballPath: join(root, "frontend", candidate.filename),
+			integrity: candidate.integrity,
+			shasum: candidate.shasum,
+		});
 	}
 }
 
@@ -140,11 +204,13 @@ export async function publishTaggedReleaseCandidate(
 	});
 	const api = await publishApi({
 		candidateDirectory: join(root, "api"),
+		expectedDistTag: "latest",
 		expectedSourceCommit,
 		workspaceDirectory,
 	});
 	const packagedFactories = await publishPackagedFactories({
 		candidateDirectory: join(root, "packaged-factories"),
+		expectedDistTag: "latest",
 		expectedSourceCommit,
 		workspaceDirectory,
 	});

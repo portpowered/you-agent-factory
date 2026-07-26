@@ -26,7 +26,7 @@ export function reconcileCandidate(input) {
 	return reconcilePackageCandidate({
 		...input,
 		expectedPackageName: API_PACKAGE_NAME,
-		expectedDistTag: DEVELOPMENT_DIST_TAG,
+		expectedDistTag: input.expectedDistTag ?? DEVELOPMENT_DIST_TAG,
 	});
 }
 

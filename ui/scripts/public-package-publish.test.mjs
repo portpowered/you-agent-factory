@@ -1,3 +1,6 @@
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -6,8 +9,8 @@ import {
 import {
   assertFrontendCandidateEvidence,
   assertPublishVersion,
-  npmPackArguments,
   PUBLIC_PACKAGES,
+  packCandidate,
   patchPublicPackageManifest,
 } from "./public-package-publish.mjs";
 
@@ -66,10 +69,40 @@ describe("public package publishing", () => {
     expect(manifest.version).toBe("0.0.0");
   });
 
-  test("candidate packing disables lifecycle scripts", () => {
-    expect(npmPackArguments("/staged/package", "/candidate")).toContain(
-      "--ignore-scripts",
+  test("candidate packing suppresses lifecycle script side effects", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "you-package-lifecycle-fixture-"),
     );
+    const stagedDirectory = path.join(root, "package");
+    const outputDirectory = path.join(root, "candidate");
+    const sentinel = path.join(root, "lifecycle-ran");
+    try {
+      await Promise.all([mkdir(stagedDirectory), mkdir(outputDirectory)]);
+      await Promise.all([
+        writeFile(
+          path.join(stagedDirectory, "package.json"),
+          `${JSON.stringify({
+            name: "@you-agent-factory/lifecycle-fixture",
+            version: "1.0.0",
+            scripts: { prepack: "node create-sentinel.mjs" },
+          })}\n`,
+        ),
+        writeFile(
+          path.join(stagedDirectory, "create-sentinel.mjs"),
+          `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(sentinel)}, "ran");\n`,
+        ),
+      ]);
+      const { stdout } = await packCandidate({
+        stagedDirectory,
+        outputDirectory,
+      });
+      expect(JSON.parse(stdout)[0].name).toBe(
+        "@you-agent-factory/lifecycle-fixture",
+      );
+      await expect(access(sentinel)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("accepts only a complete frontend-only development candidate", () => {

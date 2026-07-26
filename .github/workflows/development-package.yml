@@ -49,6 +49,9 @@ jobs:
           - name: Packaged Factories consumption
             command: make packaged-factory-package-smoke
             needs_playwright: false
+          - name: Complete public package release
+            command: make public-release-package-smoke
+            needs_playwright: false
           - name: Public frontend package release
             command: make ui-public-package-release
             needs_playwright: true

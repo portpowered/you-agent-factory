@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   cp,
   mkdir,
@@ -67,7 +68,7 @@ export function assertFrontendCandidateEvidence(evidence) {
   return evidence;
 }
 
-export const npmPackArguments = (stagedDirectory, outputDirectory) => [
+const npmPackArguments = (stagedDirectory, outputDirectory) => [
   "pack",
   stagedDirectory,
   "--json",
@@ -110,10 +111,27 @@ function run(command, args, options = {}) {
 
 function runNpm(args, options = {}) {
   if (process.platform !== "win32") return run("npm", args, options);
-  if (!process.env.npm_execpath) {
-    throw new Error("npm_execpath is required to run npm safely on Windows");
+  const configuredNpmCli = process.env.npm_execpath;
+  const npmCli =
+    configuredNpmCli &&
+    /(?:^|[\\/])npm(?:-cli)?\.[cm]?js$/i.test(configuredNpmCli) &&
+    existsSync(configuredNpmCli)
+      ? configuredNpmCli
+      : path.join(
+          path.dirname(process.execPath),
+          "node_modules/npm/bin/npm-cli.js",
+        );
+  if (!existsSync(npmCli)) {
+    throw new Error("npm CLI could not be resolved safely on Windows");
   }
-  return run(process.execPath, [process.env.npm_execpath, ...args], options);
+  return run(process.execPath, [npmCli, ...args], options);
+}
+
+export function packCandidate({ stagedDirectory, outputDirectory }) {
+  return runNpm(npmPackArguments(stagedDirectory, outputDirectory), {
+    cwd: uiRoot,
+    capture: true,
+  });
 }
 
 async function stagePackage({ packageSpec, version, stagingRoot }) {
@@ -190,10 +208,10 @@ export async function preparePublicPackageCandidates({
         version,
         stagingRoot,
       });
-      const { stdout } = await runNpm(
-        npmPackArguments(stagedDirectory, resolvedOutput),
-        { cwd: uiRoot, capture: true },
-      );
+      const { stdout } = await packCandidate({
+        stagedDirectory,
+        outputDirectory: resolvedOutput,
+      });
       const [report] = JSON.parse(stdout);
       if (report?.name !== packageSpec.name || report?.version !== version) {
         throw new Error(

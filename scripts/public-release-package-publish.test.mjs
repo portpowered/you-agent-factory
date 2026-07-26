@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,6 +27,14 @@ async function writeJson(path, value) {
 	await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function digests(contents) {
+	return {
+		artifactDigest: `sha256:${createHash("sha256").update(contents).digest("hex")}`,
+		integrity: `sha512-${createHash("sha512").update(contents).digest("base64")}`,
+		shasum: createHash("sha1").update(contents).digest("hex"),
+	};
+}
+
 async function candidateFixture(t) {
 	const root = await mkdtemp(join(tmpdir(), "you-tagged-publisher-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
@@ -29,27 +45,37 @@ async function candidateFixture(t) {
 	);
 	const apiTarball = "you-agent-factory-api-1.2.3.tgz";
 	const factoriesTarball = "you-agent-factory-packaged-factories-1.2.3.tgz";
+	const apiContents = "api";
+	const factoriesContents = "factories";
 	await Promise.all([
-		writeFile(join(root, "api", apiTarball), "api"),
-		writeFile(join(root, "packaged-factories", factoriesTarball), "factories"),
+		writeFile(join(root, "api", apiTarball), apiContents),
+		writeFile(
+			join(root, "packaged-factories", factoriesTarball),
+			factoriesContents,
+		),
 		writeJson(join(root, "api", "candidate-evidence.json"), {
 			packageName: "@you-agent-factory/api",
 			candidateVersion: version,
 			sourceCommit,
 			distTag: "latest",
+			contractDigest: digests("api-contract").artifactDigest,
+			artifactDigest: digests(apiContents).artifactDigest,
+			inventory: ["package.json"],
 		}),
 		writeJson(join(root, "packaged-factories", "candidate-evidence.json"), {
 			packageName: "@you-agent-factory/packaged-factories",
 			candidateVersion: version,
 			sourceCommit,
 			distTag: "latest",
+			contractDigest: digests("factories-contract").artifactDigest,
+			artifactDigest: digests(factoriesContents).artifactDigest,
+			inventory: ["package.json"],
 		}),
 	]);
-	const frontendPackages = FRONTEND_PUBLIC_PACKAGE_NAMES.map((name, index) => ({
-		name,
-		version,
-		filename: `frontend-${index}.tgz`,
-	}));
+	const frontendPackages = FRONTEND_PUBLIC_PACKAGE_NAMES.map((name, index) => {
+		const filename = `frontend-${index}.tgz`;
+		return { name, version, filename, ...digests(filename) };
+	});
 	await Promise.all(
 		frontendPackages.map(({ filename }) =>
 			writeFile(join(root, "frontend", filename), filename),
@@ -120,6 +146,8 @@ test("validates the complete reviewed set before publishing each represented chi
 		["api", "packaged-factories", "frontend"],
 	);
 	assert.equal(calls[0][1].expectedSourceCommit, sourceCommit);
+	assert.equal(calls[0][1].expectedDistTag, "latest");
+	assert.equal(calls[1][1].expectedDistTag, "latest");
 	assert.equal(calls[2][1].tag, "latest");
 	assert.equal(calls[2][1].provenance, true);
 });
@@ -181,6 +209,73 @@ for (const testCase of [
 				recordingPublishers(calls),
 			),
 			testCase.expected,
+		);
+		assert.deepEqual(calls, []);
+	});
+}
+
+for (const field of ["shasum", "integrity"]) {
+	test(`mismatched frontend ${field} prevents every publication side effect`, async (t) => {
+		const { root } = await candidateFixture(t);
+		const evidencePath = join(
+			root,
+			"frontend",
+			"public-package-candidates.json",
+		);
+		const child = JSON.parse(await readFile(evidencePath, "utf8"));
+		child.packages[0][field] =
+			field === "shasum" ? "0".repeat(40) : `sha512-${"A".repeat(88)}`;
+		await writeJson(evidencePath, child);
+		const calls = [];
+
+		await assert.rejects(
+			publishTaggedReleaseCandidate(
+				{
+					candidateDirectory: root,
+					expectedSourceCommit: sourceCommit,
+					workspaceDirectory: "workspace",
+				},
+				recordingPublishers(calls),
+			),
+			new RegExp(`candidate ${field} mismatch`),
+		);
+		assert.deepEqual(calls, []);
+	});
+}
+
+for (const testCase of [
+	{ child: "api", action: "corrupt", tarball: "you-agent-factory-api-1.2.3.tgz" },
+	{ child: "api", action: "remove", tarball: "you-agent-factory-api-1.2.3.tgz" },
+	{
+		child: "packaged-factories",
+		action: "corrupt",
+		tarball: "you-agent-factory-packaged-factories-1.2.3.tgz",
+	},
+	{
+		child: "packaged-factories",
+		action: "remove",
+		tarball: "you-agent-factory-packaged-factories-1.2.3.tgz",
+	},
+	{ child: "frontend", action: "corrupt", tarball: "frontend-0.tgz" },
+	{ child: "frontend", action: "remove", tarball: "frontend-0.tgz" },
+]) {
+	test(`${testCase.action === "remove" ? "missing" : "corrupt"} ${testCase.child} tarball prevents every publication side effect`, async (t) => {
+		const { root } = await candidateFixture(t);
+		const tarballPath = join(root, testCase.child, testCase.tarball);
+		if (testCase.action === "remove") await unlink(tarballPath);
+		else await writeFile(tarballPath, "tampered");
+		const calls = [];
+
+		await assert.rejects(
+			publishTaggedReleaseCandidate(
+				{
+					candidateDirectory: root,
+					expectedSourceCommit: sourceCommit,
+					workspaceDirectory: "workspace",
+				},
+				recordingPublishers(calls),
+			),
+			/candidate (?:digest|shasum|integrity) mismatch|represented tarball is not readable|exactly one tarball/,
 		);
 		assert.deepEqual(calls, []);
 	});

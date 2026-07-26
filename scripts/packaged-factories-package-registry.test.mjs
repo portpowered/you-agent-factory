@@ -69,6 +69,28 @@ test("Packaged Factories reconciliation distinguishes absent and identical versi
 	assert.equal(existing.outcome, RECONCILIATION_OUTCOMES.VERIFIED_EXISTING);
 });
 
+test("Packaged Factories reconciliation accepts a stable latest candidate", async (t) => {
+	const candidate = await candidateFixture(t);
+	candidate.evidence.candidateVersion = "1.2.3";
+	candidate.evidence.distTag = "latest";
+	const result = await reconcileCandidate({
+		...candidate,
+		expectedDistTag: "latest",
+		registryClient: {
+			async lookupVersion() {
+				return { status: "absent" };
+			},
+			async downloadTarball() {
+				assert.fail("absent versions are not downloaded");
+			},
+		},
+	});
+
+	assert.equal(result.outcome, RECONCILIATION_OUTCOMES.PUBLISH_REQUIRED);
+	assert.equal(result.candidateVersion, "1.2.3");
+	assert.equal(result.distTag, "latest");
+});
+
 test("Packaged Factories reconciliation rejects another package identity before registry IO", async (t) => {
 	const candidate = await candidateFixture(t);
 	candidate.evidence.packageName = "@you-agent-factory/api";

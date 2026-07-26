@@ -30,6 +30,12 @@
   under `latest`. Publication uses npm trusted publishing and verifies every
   exact version after upload.
 
+- `make public-release-package-smoke` is the required complete-set release
+  behavior gate. It exercises scope validation, real seven-package candidate
+  preparation, and protected publication preflight from the repository root on
+  every Development Package workflow run. Keep the command portable when it
+  invokes npm outside an npm script, including on Windows.
+
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable
   with `make verify-build`, `make verify-lint`, and `make verify-api`. Keep
@@ -278,8 +284,9 @@ Wave 0 functional-tests-expansion planning authority lives under
   tagged Release workflow uploads that complete set as one artifact. Its
   `scripts/public-release-package-publish.mjs` boundary rejects unknown scopes,
   duplicates, missing or extra packages, source-commit drift, and child
-  evidence or tarball paths that do not match the reviewed top-level evidence
-  before publishing any package. The frontend publisher accepts only the
+  evidence or tarball paths that do not match the reviewed top-level evidence,
+  and preflights every represented tarball against all recorded artifact
+  digests before publishing any package. The frontend publisher accepts only the
   `frontend-only` development scope, while the protected tagged publisher
   requires the complete `tagged-release` scope. Local
   maintainers can isolate generation, drift, script tests, exact packing,
