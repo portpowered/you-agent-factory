@@ -412,12 +412,12 @@ func (record *dispatchRecord) commit(
 	record.mu.Lock()
 	defer record.mu.Unlock()
 	if record.terminal {
-		return record.result, record.err
+		return cloneDispatchResult(record.result), record.err
 	}
 	record.terminal = true
-	record.result = result
+	record.result = cloneDispatchResult(result)
 	record.err = err
-	return result, err
+	return cloneDispatchResult(record.result), err
 }
 
 func (record *dispatchRecord) commitCancellation(
@@ -425,14 +425,14 @@ func (record *dispatchRecord) commitCancellation(
 ) (workers.WorkstationDispatchResult, error) {
 	record.mu.Lock()
 	if record.terminal {
-		result, err := record.result, record.err
+		result, err := cloneDispatchResult(record.result), record.err
 		record.mu.Unlock()
 		return result, err
 	}
 	result, err, cancel := record.commitCancellationLocked(cause)
 	record.mu.Unlock()
 	cancel()
-	return result, err
+	return cloneDispatchResult(result), err
 }
 
 func (record *dispatchRecord) commitCancellationLocked(
