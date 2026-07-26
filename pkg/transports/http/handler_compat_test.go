@@ -4,6 +4,9 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
+	"strings"
+	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
@@ -64,4 +67,27 @@ func (s *Server) getEvents(
 	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
 ) {
 	s.Adapter.StreamFactoryEvents(w, r, includeSessionHandshake, subscribe)
+}
+
+func TestServerConstructionBoundary_RetiredAggregateSurfaceCannotReturn(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatalf("read server source: %v", err)
+	}
+	text := string(source)
+	for _, retired := range []string{
+		"NewServerFromSurface",
+		"type Binding struct",
+		"type StableDependencies struct",
+		"func NewHandler(",
+		"func NewStrictRoleServer(",
+		"optionalDurableExecutionSessionLister",
+		"legacyDurableExecutionSessionLister",
+	} {
+		if strings.Contains(text, retired) {
+			t.Fatalf("server source contains retired aggregate construction surface %q", retired)
+		}
+	}
 }
