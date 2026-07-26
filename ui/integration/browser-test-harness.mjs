@@ -679,6 +679,25 @@ function spawnRepoProcess(command, args, options = {}) {
   return child;
 }
 
+function resolveGoCacheEnvironment() {
+  const names = ["GOCACHE", "GOMODCACHE", "GOPATH"];
+  const result = spawnSync("go", ["env", "-json", ...names], {
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to resolve Go cache paths for real backend browser harness: ${result.stderr.trim()}`,
+    );
+  }
+  const values = JSON.parse(result.stdout);
+  return Object.fromEntries(
+    names
+      .filter((name) => typeof values[name] === "string" && values[name] !== "")
+      .map((name) => [name, values[name]]),
+  );
+}
+
 async function runRuntime(
   args,
   extraEnv = {},
@@ -1386,6 +1405,7 @@ export async function startRealBackendBrowserHarness({
     );
   }
 
+  const goCacheEnvironment = resolveGoCacheEnvironment();
   const customerHome = await mkdtemp(
     path.join(tmpdir(), "you-browser-backend-"),
   );
@@ -1412,6 +1432,7 @@ export async function startRealBackendBrowserHarness({
       {
         extraEnv: {
           CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+          ...goCacheEnvironment,
           HOME: customerHome,
           USERPROFILE: customerHome,
         },
