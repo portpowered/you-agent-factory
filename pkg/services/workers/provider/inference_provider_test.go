@@ -722,26 +722,6 @@ type nonCodexInferencePayloadTestCase struct {
 func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 	return []nonCodexInferencePayloadTestCase{
 		{
-			name: "Kiro",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				SystemPrompt:  "You are a careful reviewer.",
-				SessionID:     "kiro-session-123",
-				UserMessage:   "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_KIRO_ENV": "enabled",
-				},
-			},
-			wantArgs: []string{
-				"chat",
-				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
-			},
-			wantEnv: "AGENT_FACTORY_KIRO_ENV=enabled",
-		},
-		{
 			name: "Cursor",
 			req: workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCursor),

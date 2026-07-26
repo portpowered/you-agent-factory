@@ -270,89 +270,6 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	assertStringSlicesEqual(t, want, args)
 }
 
-func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name            string
-		req             workerexecution.ProviderInferenceRequest
-		skipPermissions bool
-		want            []string
-	}{
-		{
-			name: "BasicPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "summarize the workspace",
-			},
-			want: []string{"chat", "--no-interactive", "summarize the workspace"},
-		},
-		{
-			name: "ComposedContextAndUserPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				SystemPrompt:  "You are a careful reviewer.",
-				UserMessage:   "run the tests",
-			},
-			want: []string{
-				"chat",
-				"--no-interactive",
-				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
-			},
-		},
-		{
-			name: "EmptyPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-			},
-			want: []string{"chat", "--no-interactive"},
-		},
-		{
-			name: "TrustedTools",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "run the tests",
-			},
-			skipPermissions: true,
-			want:            []string{"chat", "--no-interactive", "--trust-all-tools", "run the tests"},
-		},
-		{
-			name: "ResumeSession",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "continue the review",
-				SessionID:     "kiro-session-123",
-			},
-			want: []string{"chat", "--no-interactive", "--resume-id", "kiro-session-123", "continue the review"},
-		},
-	}
-
-	behavior := providerBehaviorFor(string(modelprovider.ProviderKiro), logging.NoopLogger{})
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs returned error: %v", err)
-			}
-			assertStringSlicesEqual(t, tc.want, args)
-		})
-	}
-}
-
-func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
-	t.Parallel()
-	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderKiro),
-		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
-			workerexecution.RunnerOptionalCapabilityStructuredOutput,
-		},
-	}, false, nil)
-	if err == nil || err.Error() != "structured output is not supported by the kiro runner in v1" {
-		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
-	}
-}
-
 func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -433,7 +350,7 @@ func TestCursorProviderBehavior_BuildArgs_WindowsLongPromptUsesArgumentFile(t *t
 		t.Fatalf("prompt argument = %q, want @file reference", promptArg)
 	}
 	promptPath := strings.TrimPrefix(promptArg, "@")
-	wantPrompt := buildKiroPrompt(req)
+	wantPrompt := buildCombinedPrompt(req)
 	if gotPrompt := temporaryFiles.file.content.String(); gotPrompt != wantPrompt {
 		t.Fatalf("prompt file content differs: got %d bytes, want %d", len(gotPrompt), len(wantPrompt))
 	}
@@ -749,19 +666,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 			wantEnv: "AGENT_FACTORY_PROVIDER=claude",
 		},
 		{
-			name: "Kiro",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "review this",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_PROVIDER": "kiro",
-				},
-				InputTokens: InputTokens(token),
-			},
-			args:    []string{"chat", "--no-interactive", "review this"},
-			wantEnv: "AGENT_FACTORY_PROVIDER=kiro",
-		},
-		{
 			name: "Cursor",
 			req: workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCursor),
@@ -788,62 +692,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 			args:    []string{"run", "review this"},
 			wantEnv: "AGENT_FACTORY_PROVIDER=opencode",
 		},
-	}
-}
-
-func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t *testing.T) {
-	t.Parallel()
-	fixtureNames := []string{
-		"kiro_structured_authentication_error",
-		"kiro_structured_invalid_request_stdout",
-		"kiro_text_authentication_stdout",
-		"kiro_structured_throttle_precedes_text",
-		"kiro_text_capacity_error",
-		"kiro_text_timeout_malformed_structured",
-		"kiro_structured_service_unavailable",
-	}
-
-	for _, name := range fixtureNames {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			provider := NewScriptWrapProviderWithDependencies(false, nil, &recordingProviderExec{result: entry.CommandResult()}, nil, nil, nil, "", nil, nil)
-			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "private prompt that must stay out of normalized failures",
-			})
-			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType: entry.ExpectedType, wantFamily: entry.ExpectedFamily,
-				wantMessage:   knownKiroFailure(entry.ExpectedType).Message,
-				rejectTexts:   append(entry.RejectMessageContains, "private prompt"),
-				wantRetryable: entry.Retryable, wantTerminal: !entry.Retryable,
-				wantThrottlePause: entry.TriggersThrottlePause,
-			})
-		})
-	}
-}
-
-func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t *testing.T) {
-	t.Parallel()
-	testCases := map[string]string{
-		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
-		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
-		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
-	}
-
-	for name, wantMessage := range testCases {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			provider := NewScriptWrapProviderWithDependencies(false, nil, &recordingProviderExec{result: entry.CommandResult()}, nil, nil, nil, "", nil, nil)
-			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "private prompt that must stay out of normalized failures",
-			})
-			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType: workerexecution.WorkFailureTypeUnknown, wantFamily: workerexecution.WorkFailureFamilyTerminal,
-				wantMessage: wantMessage, rejectTexts: append(entry.RejectMessageContains, "private prompt"),
-				wantTerminal: true,
-			})
-		})
 	}
 }
 
@@ -959,21 +807,6 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 			unsafeArgCheck: func(args []string) bool {
 				return strings.Contains(strings.Join(args, " "), "--dangerously-bypass-approvals-and-sandbox")
-			},
-		},
-		{
-			provider:     modelprovider.ProviderKiro,
-			unsafeMarker: "--trust-all-tools",
-			unsafeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "run the tests",
-			},
-			safeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				UserMessage:   "run the tests",
-			},
-			unsafeArgCheck: func(args []string) bool {
-				return strings.Contains(strings.Join(args, " "), "--trust-all-tools")
 			},
 		},
 		{
@@ -1114,10 +947,13 @@ func TestAggregateSurfacesOmitMigratedGeminiBranches(t *testing.T) {
 	})
 }
 
-func TestAggregateSurfacesRetainNonGeminiProviders(t *testing.T) {
+// Migrated Kiro must no longer own aggregate command/failure/timeout branches.
+// Production selection stays on registry + conductor; these assertions prove
+// the legacy Kiro-named ownership is gone.
+func TestAggregateSurfacesOmitMigratedKiroBranches(t *testing.T) {
 	t.Parallel()
 
-	t.Run("kiro_command_construction", func(t *testing.T) {
+	t.Run("command_construction", func(t *testing.T) {
 		t.Parallel()
 		behavior := providerBehaviorFor(string(modelprovider.ProviderKiro), logging.NoopLogger{})
 		args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
@@ -1127,31 +963,27 @@ func TestAggregateSurfacesRetainNonGeminiProviders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildArgs error = %v", err)
 		}
-		wantPrefix := []string{"chat", "--no-interactive", "summarize the workspace"}
-		if strings.Join(args, "\x00") != strings.Join(wantPrefix, "\x00") {
-			t.Fatalf("kiro args = %#v, want %#v", args, wantPrefix)
+		if len(args) > 0 && args[0] == "chat" {
+			t.Fatalf("aggregate still owns Kiro argv: %#v", args)
 		}
 	})
 
-	t.Run("kiro_exit_failure", func(t *testing.T) {
+	t.Run("exit_failure", func(t *testing.T) {
 		t.Parallel()
 		parsed := parseProviderExitFailure(string(modelprovider.ProviderKiro), CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("ERROR: Unauthorized"),
 		})
-		if parsed.failure.Reason != workerexecution.WorkFailureTypeAuthFailure {
-			t.Fatalf("kiro failure reason = %q, want auth failure", parsed.failure.Reason)
+		if parsed.failure.Message == "Kiro authentication failed. Sign in again and retry." {
+			t.Fatal("aggregate still owns Kiro exit-failure parsing")
 		}
 	})
 
-	t.Run("kiro_timeout_failure", func(t *testing.T) {
+	t.Run("timeout_failure", func(t *testing.T) {
 		t.Parallel()
 		parsed := parseProviderTimeoutFailure(string(modelprovider.ProviderKiro), CommandResult{})
-		if parsed.Reason != workerexecution.WorkFailureTypeTimeout {
-			t.Fatalf("kiro timeout reason = %q, want timeout", parsed.Reason)
-		}
-		if parsed.Message == "" {
-			t.Fatal("kiro timeout message is empty")
+		if parsed.Message == "Kiro request timed out." {
+			t.Fatal("aggregate still owns Kiro timeout parsing")
 		}
 	})
 }

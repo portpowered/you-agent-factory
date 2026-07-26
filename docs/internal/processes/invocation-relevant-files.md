@@ -215,7 +215,8 @@ primary-result behavior.
   resolve onto their canonical conductor identity. Bundled built-ins remain on
   the provider-native Infer/command path until their package-owned Integration
   replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
-  stub on the native path and routes migrated Integrations (currently Gemini)
+  stub on the native path and routes migrated Integrations (currently Gemini
+  and Kiro)
   through the conductor without a concrete-provider switch in shared
   orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
   remain intact and bypass the registry/conductor decorators. Concurrent cancel,
@@ -1024,7 +1025,7 @@ response-stream output.
   only that provider's corresponding aggregate command/decode/failure/timeout/
   session branches (and relocate aggregate-owned tests into the provider
   package); leave the aggregate shell, ProviderOverride, and other providers
-  intact. Move Gemini-native failure and timeout parsing into the same package
+  intact. Move provider-native failure and timeout parsing into the same package
   (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
   the conductor path consumes provider-owned normalized facts; aggregate exit
   and timeout bridges may only thin-delegate until legacy deletion. Treat all

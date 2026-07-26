@@ -15,7 +15,6 @@ import (
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
-	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 )
 
 const (
@@ -58,23 +57,6 @@ func codexTextFailureMessage(reason workerexecution.WorkFailureType) string {
 	default:
 		return ""
 	}
-}
-
-func knownKiroFailure(reason workerexecution.WorkFailureType) ProviderFailureResult {
-	message := ""
-	switch reason {
-	case workerexecution.WorkFailureTypeAuthFailure:
-		message = "Kiro authentication failed. Sign in again and retry."
-	case workerexecution.WorkFailureTypePermanentBadRequest:
-		message = "Kiro rejected the request as invalid."
-	case workerexecution.WorkFailureTypeThrottled:
-		message = "Kiro is temporarily unavailable due to usage or capacity limits."
-	case workerexecution.WorkFailureTypeTimeout:
-		message = kiropkg.TimeoutFailureMessage
-	case workerexecution.WorkFailureTypeInternalServerError:
-		message = "Kiro encountered a temporary service error."
-	}
-	return ProviderFailureResult{Reason: reason, Message: message}
 }
 
 func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
@@ -948,11 +930,6 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 		{
 			provider: string(modelprovider.ProviderClaude),
 			result:   CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"sign in"}}`)},
-			want:     workerexecution.WorkFailureTypeAuthFailure,
-		},
-		{
-			provider: string(modelprovider.ProviderKiro),
-			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: Unauthorized")},
 			want:     workerexecution.WorkFailureTypeAuthFailure,
 		},
 		{

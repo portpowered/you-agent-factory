@@ -26,7 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -662,11 +661,6 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 			failure:       ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message},
 			internalCause: codexexitfailure.ExitInternalCause(result.ExitCode),
 		}
-	case string(modelprovider.ProviderKiro):
-		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(modelprovider.ProviderOpenCode):
 		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -775,8 +769,6 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 		if codexError, ok := extractCodexErrorLine(result); ok {
 			message = codexError
 		}
-	case string(modelprovider.ProviderKiro):
-		message = kiropkg.TimeoutFailureMessage
 	}
 	return ProviderFailureResult{
 		Reason:  workerexecution.WorkFailureTypeTimeout,
