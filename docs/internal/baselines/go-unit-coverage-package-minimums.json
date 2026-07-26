@@ -1151,6 +1151,10 @@
       "minimum": 88.46
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/initsetup",
+      "minimum": 81.08
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
       "minimum": 91.66
     },
