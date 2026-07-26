@@ -38,9 +38,8 @@ type HostedPollers interface {
 	) error
 }
 
-// Service is the singular Automations root contract. It retains the existing
-// runtime-sidecar operation for source compatibility and adds reconciliation,
-// source lifecycle, and cursor/status slices using plain root-owned contracts.
+// Service supervises runtime-scoped cron, watcher, listener, and poller
+// automations.
 type Service interface {
 	StartSchedulerSidecarsForRuntime(
 		context.Context,
@@ -50,22 +49,96 @@ type Service interface {
 		factorydefinitions.RuntimeConfigLookup,
 		WorkRequestSubmitter,
 	) error
-	Ready(context.Context, ReadyRequest) (ReadyResult, error)
-	Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
-	StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
-	StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
-	WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
-	SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
-	GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
-	GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
 }
 
-// ReadyRequest is the plain probe input for Automations root readiness.
-type ReadyRequest struct{}
+// Root is the additive, implementation-neutral Automations boundary for
+// reconciliation, source lifecycle, and cursor/status operations. Operations
+// is intentionally an anonymous structural contract: existing implementations
+// of the legacy Service interface remain source-compatible, while peers can
+// provide this boundary using only Automations root types.
+//
+// Constructing a Root performs no work. Callers set Operations once when
+// composing a peer and invoke explicit methods on Root.
+type Root struct {
+	Operations interface {
+		Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
+		StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
+		StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
+		WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
+		SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
+		GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
+		GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
+	}
+}
 
-// ReadyResult is the detached readiness observation returned by Service.Ready.
-type ReadyResult struct {
-	Ready bool
+func (r Root) Reconcile(
+	ctx context.Context,
+	request ReconcileRequest,
+) (ReconcileResult, error) {
+	if r.Operations == nil {
+		return ReconcileResult{}, unavailableRootError("Reconcile")
+	}
+	return r.Operations.Reconcile(ctx, request)
+}
+
+func (r Root) StartSource(
+	ctx context.Context,
+	request StartSourceRequest,
+) (StartSourceResult, error) {
+	if r.Operations == nil {
+		return StartSourceResult{}, unavailableRootError("StartSource")
+	}
+	return r.Operations.StartSource(ctx, request)
+}
+
+func (r Root) StopSource(
+	ctx context.Context,
+	request StopSourceRequest,
+) (StopSourceResult, error) {
+	if r.Operations == nil {
+		return StopSourceResult{}, unavailableRootError("StopSource")
+	}
+	return r.Operations.StopSource(ctx, request)
+}
+
+func (r Root) WaitSource(
+	ctx context.Context,
+	request WaitSourceRequest,
+) (WaitSourceResult, error) {
+	if r.Operations == nil {
+		return WaitSourceResult{}, unavailableRootError("WaitSource")
+	}
+	return r.Operations.WaitSource(ctx, request)
+}
+
+func (r Root) SourceStatus(
+	ctx context.Context,
+	request SourceStatusRequest,
+) (SourceStatusResult, error) {
+	if r.Operations == nil {
+		return SourceStatusResult{}, unavailableRootError("SourceStatus")
+	}
+	return r.Operations.SourceStatus(ctx, request)
+}
+
+func (r Root) GetStatus(
+	ctx context.Context,
+	request GetStatusRequest,
+) (GetStatusResult, error) {
+	if r.Operations == nil {
+		return GetStatusResult{}, unavailableRootError("GetStatus")
+	}
+	return r.Operations.GetStatus(ctx, request)
+}
+
+func (r Root) GetCursor(
+	ctx context.Context,
+	request GetCursorRequest,
+) (GetCursorResult, error) {
+	if r.Operations == nil {
+		return GetCursorResult{}, unavailableRootError("GetCursor")
+	}
+	return r.Operations.GetCursor(ctx, request)
 }
 
 // ReconcileRequest carries desired automation specs and observed instance facts
@@ -359,6 +432,14 @@ func (e *Error) Is(target error) bool {
 		return false
 	}
 	return errors.Is(e.Err, target)
+}
+
+func unavailableRootError(op string) *Error {
+	return &Error{
+		Op:   op,
+		Code: ErrorCodeNotReady,
+		Err:  ErrNotReady,
+	}
 }
 
 var (

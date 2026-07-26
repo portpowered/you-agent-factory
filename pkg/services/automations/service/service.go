@@ -21,7 +21,6 @@ type Clock interface {
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
-	automations.ReadyUnimplementedService
 	loggerValue       *zap.Logger
 	clock             Clock
 	commandRunnerEdge workers.CommandRunner

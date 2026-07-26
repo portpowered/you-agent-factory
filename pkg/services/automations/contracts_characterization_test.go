@@ -12,7 +12,6 @@ import (
 // Automations root contracts. It proves the singular root seam is implementable
 // without Automations implementation packages or cron/poller/watcher types.
 type fakeRootService struct {
-	automations.UnimplementedService
 	ready               bool
 	conflictOnReconcile bool
 	sources             map[string]automations.SourceObservation
@@ -41,15 +40,8 @@ func (f *fakeRootService) ensureInstances() {
 	}
 }
 
-func (f *fakeRootService) Ready(context.Context, automations.ReadyRequest) (automations.ReadyResult, error) {
-	if f == nil || !f.ready {
-		return automations.ReadyResult{}, &automations.Error{
-			Op:   "Ready",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.ReadyResult{Ready: true}, nil
+func rootFor(operations *fakeRootService) automations.Root {
+	return automations.Root{Operations: operations}
 }
 
 func (f *fakeRootService) Reconcile(ctx context.Context, req automations.ReconcileRequest) (automations.ReconcileResult, error) {
@@ -504,43 +496,30 @@ func (f *fakeRootService) GetCursor(_ context.Context, req automations.GetCursor
 	}, nil
 }
 
-func TestServiceRootSeam_FakeImplementsPlainContracts(t *testing.T) {
+func TestServiceRootSeam_ZeroRootReturnsTypedNotReady(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
-	result, err := svc.Ready(context.Background(), automations.ReadyRequest{})
-	if err != nil {
-		t.Fatalf("Ready() unexpected error: %v", err)
-	}
-	if !result.Ready {
-		t.Fatalf("Ready() result.Ready = false, want true")
-	}
-}
-
-func TestServiceRootSeam_FakeTypedNotReady(t *testing.T) {
-	t.Parallel()
-
-	var svc automations.Service = &fakeRootService{ready: false}
-	_, err := svc.Ready(context.Background(), automations.ReadyRequest{})
+	var root automations.Root
+	_, err := root.Reconcile(context.Background(), automations.ReconcileRequest{})
 	if err == nil {
-		t.Fatal("Ready() error = nil, want typed not-ready error")
+		t.Fatal("Reconcile() error = nil, want typed not-ready error")
 	}
 	var typed *automations.Error
 	if !errors.As(err, &typed) {
-		t.Fatalf("Ready() error type = %T, want *automations.Error", err)
+		t.Fatalf("Reconcile() error type = %T, want *automations.Error", err)
 	}
 	if typed.Code != automations.ErrorCodeNotReady {
 		t.Fatalf("Ready() error code = %q, want %q", typed.Code, automations.ErrorCodeNotReady)
 	}
 	if !errors.Is(err, automations.ErrNotReady) {
-		t.Fatalf("Ready() error = %v, want errors.Is ErrNotReady", err)
+		t.Fatalf("Reconcile() error = %v, want errors.Is ErrNotReady", err)
 	}
 }
 
 func TestServiceReconcile_FakeSuccessDetachedOutcomes(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	result, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
 			{
@@ -592,7 +571,7 @@ func TestServiceReconcile_FakeSuccessDetachedOutcomes(t *testing.T) {
 func TestServiceReconcile_FakeTypedConvergenceAndIdempotentIdentity(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	req := automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
 			{
@@ -650,7 +629,7 @@ func TestServiceReconcile_FakeTypedConvergenceAndIdempotentIdentity(t *testing.T
 func TestServiceReconcile_FakeTypedInvalidDesiredSpecs(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	_, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{{
 			AutomationID: "",
@@ -677,7 +656,7 @@ func TestServiceReconcile_FakeTypedInvalidDesiredSpecs(t *testing.T) {
 func TestServiceReconcile_FakeTypedConflict(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true, conflictOnReconcile: true}
+	svc := rootFor(&fakeRootService{ready: true, conflictOnReconcile: true})
 	_, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
 			{
@@ -706,7 +685,7 @@ func TestServiceReconcile_FakeTypedConflict(t *testing.T) {
 func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{
+	svc := rootFor(&fakeRootService{
 		ready: true,
 		instances: map[string]fakeInstance{
 			"inst-a": {
@@ -716,7 +695,7 @@ func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 				checkpoint:   "checkpoint-7",
 			},
 		},
-	}
+	})
 
 	status, err := svc.GetStatus(context.Background(), automations.GetStatusRequest{
 		InstanceID: "inst-a",
@@ -757,7 +736,7 @@ func TestServiceCursorStatus_FakeSuccessDetachedValues(t *testing.T) {
 func TestServiceCursorStatus_FakeTypedMissingInstance(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	_, err := svc.GetStatus(context.Background(), automations.GetStatusRequest{
 		InstanceID: "missing-instance",
 	})
@@ -779,7 +758,7 @@ func TestServiceCursorStatus_FakeTypedMissingInstance(t *testing.T) {
 func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{
+	svc := rootFor(&fakeRootService{
 		ready: true,
 		instances: map[string]fakeInstance{
 			"inst-b": {
@@ -789,7 +768,7 @@ func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
 				checkpoint:   "checkpoint-1",
 			},
 		},
-	}
+	})
 
 	_, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
 		InstanceID:     "",
@@ -829,13 +808,10 @@ func TestServiceCursorStatus_FakeTypedInvalidStaleCursor(t *testing.T) {
 }
 
 // peerConsumePublishedSlices is a peer-shaped consumer of the sealed Automations
-// root. It depends only on automations.Service plain contracts (this file's
+// root. It depends only on automations.Root plain contracts (this file's
 // imports are stdlib + pkg/services/automations) and never needs Automations
 // implementation packages or cron/poller/watcher types.
-func peerConsumePublishedSlices(ctx context.Context, svc automations.Service) error {
-	if _, err := svc.Ready(ctx, automations.ReadyRequest{}); err != nil {
-		return err
-	}
+func peerConsumePublishedSlices(ctx context.Context, svc automations.Root) error {
 	if _, err := svc.Reconcile(ctx, automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
 			{
@@ -899,7 +875,7 @@ func TestServiceRootSealed_AllPublishedSlicesReachableThroughOneService(t *testi
 			},
 		},
 	}
-	var root automations.Service = svc
+	root := rootFor(svc)
 
 	if err := peerConsumePublishedSlices(context.Background(), root); err != nil {
 		t.Fatalf("peerConsumePublishedSlices() unexpected error: %v", err)

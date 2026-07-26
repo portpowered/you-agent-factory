@@ -2,36 +2,55 @@ package automations_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+var errLegacySidecarsCalled = errors.New("legacy sidecars called")
+
+type legacyAutomationService struct{}
+
+func (legacyAutomationService) StartSchedulerSidecarsForRuntime(
+	context.Context,
+	*sync.WaitGroup,
+	string,
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.RuntimeConfigLookup,
+	automations.WorkRequestSubmitter,
+) error {
+	return errLegacySidecarsCalled
+}
+
+func TestLegacyServiceImplementation_RemainsSourceCompatible(t *testing.T) {
+	t.Parallel()
+
+	var service automations.Service = legacyAutomationService{}
+	err := service.StartSchedulerSidecarsForRuntime(
+		context.Background(), nil, "", nil, nil, nil,
+	)
+	if !errors.Is(err, errLegacySidecarsCalled) {
+		t.Fatalf("StartSchedulerSidecarsForRuntime() error = %v, want legacy implementation result", err)
+	}
+}
 
 func TestServiceConformance_FakeConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeRootService{ready: true}
-	var service automations.Service = fake
+	service := rootFor(fake)
+	if service.Operations == nil {
+		t.Fatal("constructed Root has no operations")
+	}
 
 	if fake.sources != nil || fake.instances != nil || fake.admittedRequests != nil {
 		t.Fatal("constructing fake Service initialized source, cursor, or admission state")
 	}
 	if len(fake.workRequestOutcomes) != 0 || fake.emissionCount != 0 {
-		t.Fatal("constructing fake Service emitted a generated Work Request")
-	}
-
-	ready, err := service.Ready(context.Background(), automations.ReadyRequest{})
-	if err != nil {
-		t.Fatalf("Ready() unexpected error: %v", err)
-	}
-	if !ready.Ready {
-		t.Fatal("Ready() = false, want true")
-	}
-	if fake.sources != nil || fake.instances != nil || fake.admittedRequests != nil {
-		t.Fatal("readiness observation started a source or wrote cursor/admission state")
-	}
-	if len(fake.workRequestOutcomes) != 0 || fake.emissionCount != 0 {
-		t.Fatal("readiness observation emitted a generated Work Request")
+		t.Fatal("constructing Root emitted a generated Work Request")
 	}
 }
 
@@ -89,7 +108,7 @@ func exerciseRestartInput(
 ) automations.LifecycleOutcome {
 	t.Helper()
 
-	var service automations.Service = fake
+	service := rootFor(fake)
 	reconciled, err := service.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{desired},
 		Observed: []automations.ObservedInstance{{

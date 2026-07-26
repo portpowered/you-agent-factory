@@ -102,7 +102,7 @@ func TestServiceSourceLifecycle_FakeRestartResumesCommittedCursor(t *testing.T) 
 func TestServiceSourceLifecycle_FakeTypedInvalidRecoveryAndMissingSource(t *testing.T) {
 	t.Parallel()
 
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	identity := automations.SourceIdentity{AutomationID: "auto-b", SourceID: "source-b"}
 	_, err := svc.StartSource(context.Background(), automations.StartSourceRequest{
 		Identity: identity,
@@ -152,9 +152,9 @@ func startFakeSource(
 	identity automations.SourceIdentity,
 	kind string,
 	resume *automations.SourceObservation,
-) automations.Service {
+) automations.Root {
 	t.Helper()
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	started, err := svc.StartSource(context.Background(), automations.StartSourceRequest{
 		Identity: identity,
 		Kind:     kind,

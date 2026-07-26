@@ -13,7 +13,7 @@ func TestServiceCancellation_FakeReconcileReturnsTypedCancelledObservation(t *te
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	var svc automations.Service = &fakeRootService{ready: true}
+	svc := rootFor(&fakeRootService{ready: true})
 	result, err := svc.Reconcile(ctx, automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{{
 			AutomationID: "auto-cancel",
@@ -117,7 +117,7 @@ func TestGeneratedWorkRequestOutcomes_FakeAcceptedRejectedAndDuplicate(t *testin
 		t.Fatalf("logical emission count = %d, want 1", fake.emissionCount)
 	}
 
-	var svc automations.Service = fake
+	svc := rootFor(fake)
 	reconciled, err := svc.Reconcile(context.Background(), generatedWorkReconcileRequest())
 	if err != nil {
 		t.Fatalf("Reconcile() unexpected error: %v", err)
@@ -157,7 +157,7 @@ func TestGeneratedWorkRequestOutcome_FakeReturnsDetachedPayload(t *testing.T) {
 	fake.admitGeneratedWorkRequest(request, "")
 	payload[0] = '!'
 
-	var svc automations.Service = fake
+	svc := rootFor(fake)
 	result, err := svc.Reconcile(context.Background(), generatedWorkReconcileRequest())
 	if err != nil {
 		t.Fatalf("Reconcile() unexpected error: %v", err)
