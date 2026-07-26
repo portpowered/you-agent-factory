@@ -237,8 +237,8 @@ func newLanePlans() map[string]lanePlan {
 		laneBackend:                  {Name: laneBackend, Command: "make build test-backend-verification"},
 		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-durable-session-real-backend-integration-test"},
 		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-smoke"},
-		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factories-package-verify"},
-		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-providers-package-verify"},
+		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
+		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},
 		laneLocalInference:           {Name: laneLocalInference, Command: "make verify-pr-inference"},
 	}
 }
