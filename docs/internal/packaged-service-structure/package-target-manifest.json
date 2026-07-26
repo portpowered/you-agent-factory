@@ -75,6 +75,9 @@
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal/namedfactories",
+    "pkg/services/factory_definitions/internal/services/catalog",
+    "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+    "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/testcomposition",
     "pkg/services/factory_definitions/invocationinterpolation",
     "pkg/services/factory_definitions/invocationoutput",
@@ -531,6 +534,21 @@
       "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
       "disposition": "retain",
       "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",

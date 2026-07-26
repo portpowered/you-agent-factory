@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useMemo, useState } from "react";
 
-import type { WorkChartData, WorkChartRow } from "../lib/work-chart-data";
+import type { WorkChartData, WorkChartRow } from "../../lib/work-chart-data";
 
 export interface WorkChartZoomRange {
   endTick: number;

@@ -17,16 +17,16 @@ import {
   YAxis,
 } from "recharts";
 import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
-import { cn } from "../../../lib/cn";
-import { dashboardChartAxisLabelClassName } from "../lib/chart-contract";
-import type { WorkChartModel } from "../lib/trends";
+import { cn } from "../../../../lib/cn";
+import { dashboardChartAxisLabelClassName } from "../../lib/chart-contract";
+import type { WorkChartModel } from "../../lib/trends";
 import {
   buildWorkChartData,
   type WorkChartBuiltSeries,
   type WorkChartData,
   type WorkChartSeriesDefinition,
-} from "../lib/work-chart-data";
-import { getWorkOutcomeMessages } from "../messages/work-outcome";
+} from "../../lib/work-chart-data";
+import { getWorkOutcomeMessages } from "../../messages/work-outcome";
 import {
   useReadyWorkChartInteractions,
   type WorkChartZoomRange,
@@ -34,7 +34,7 @@ import {
 import { workChartPresentationClasses } from "./work-chart-presentation";
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
-export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
+export type { WorkChartSeriesDefinition } from "../../lib/work-chart-data";
 
 const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };

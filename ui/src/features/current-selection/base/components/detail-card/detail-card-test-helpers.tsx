@@ -84,7 +84,6 @@ export {
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
   buildDetailCardWorkStateFactoryDocument,
-  buildDetailCardWorkstationNodeSelection,
   clickWorkstationSave,
   createDetailCardDeferredFactoryDocumentSave,
   currentSelectionHeaderActionSection,

@@ -11,6 +11,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -27,9 +28,28 @@ const (
 // activation policy. UnimplementedService keeps the CTR-DEF root slice methods
 // assignable until nested IMP-DEF collaborators are wired.
 type Service struct {
-	factoryroot.UnimplementedService
+	nonCatalogDefaults
+	catalog.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+}
+
+type nonCatalogDefaults interface {
+	ListEffectiveFactories(context.Context, factoryroot.ListEffectiveFactoriesRequest) (factoryroot.ListEffectiveFactoriesResult, error)
+	PrepareFactoryLayout(context.Context, factoryroot.PrepareFactoryLayoutRequest) (factoryroot.PrepareFactoryLayoutResult, error)
+	FlattenFactoryLayout(context.Context, factoryroot.FlattenFactoryLayoutRequest) (factoryroot.FlattenFactoryLayoutResult, error)
+	ExpandFactoryLayout(context.Context, factoryroot.ExpandFactoryLayoutRequest) (factoryroot.ExpandFactoryLayoutResult, error)
+	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
+	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
+	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
+	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
+	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
+	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
+	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
+	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
+	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
+	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
+	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
@@ -38,7 +58,24 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
 	}
-	return &Service{host: host, versionFileSystem: versionFileSystem}
+	return &Service{
+		nonCatalogDefaults: factoryroot.UnimplementedService{},
+		Service:            factoryroot.UnimplementedService{},
+		host:               host,
+		versionFileSystem:  versionFileSystem,
+	}
+}
+
+// NewWithCatalog constructs the Definitions root collaborator with private
+// catalog ownership for the CTR-DEF catalog slice.
+func NewWithCatalog(
+	host Host,
+	catalogService catalog.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := New(host, versionFileSystems...)
+	service.Service = catalogService
+	return service
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

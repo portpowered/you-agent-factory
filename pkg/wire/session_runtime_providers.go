@@ -308,6 +308,7 @@ func provideFactoryDefinitionsFactory(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
+	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -345,6 +346,7 @@ func provideFactoryDefinitionsFactory(
 			wirefactorydefinitions.FactorySnapshotCapturer(),
 			persistence.ReplaceFactoryLayout,
 			namedPaths,
+			namedFactoryCatalogFileSystem,
 		)
 		if definitions == nil {
 			return nil

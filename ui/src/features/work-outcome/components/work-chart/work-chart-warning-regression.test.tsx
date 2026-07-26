@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
-import type { WorkChartModel } from "../lib/trends";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { getDashboardWorkChartSeriesStyle } from "../../lib/chart-contract";
+import type { WorkChartModel } from "../../lib/trends";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const restoreBrowserShims = installDashboardBrowserTestShims();

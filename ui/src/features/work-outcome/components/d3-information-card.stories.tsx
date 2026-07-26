@@ -16,7 +16,7 @@ import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
 import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChartCard } from "./d3-information-card";
-import type { WorkChartState } from "./work-chart";
+import type { WorkChartState } from "./work-chart/work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
 
 const populatedTrend: WorkChartModel = {

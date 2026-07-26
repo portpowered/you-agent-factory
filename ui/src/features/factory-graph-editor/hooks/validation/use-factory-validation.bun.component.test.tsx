@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { FactoryValidationResult } from "../../../../api/factory-validation";
+import type {
+  FactoryValidationResult,
+  validateFactoryDefinition,
+} from "../../../../api/factory-validation";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../lib/draft/factory-graph-draft-apply";
 import { createEmptyFactoryGraphDraft } from "../../lib/draft/factory-graph-draft-types";
@@ -13,74 +16,46 @@ import {
   removeFactoryGraphNode,
 } from "../../lib/operations/factory-graph-operations";
 import { useFactoryValidation } from "./use-factory-validation";
+import { validationFixtures } from "./use-factory-validation.test.helpers";
 
-const validationFixtures = vi.hoisted(() => {
-  const repeaterWithoutRejectRoute: FactoryValidationResult = {
-    targets: [
-      {
-        code: "factory.workstation.missingRejectionRoute",
-        message: "Workstation repeater must define a reject route.",
-        severity: "error",
-        subject: {
-          id: "repeater",
-          location: "ON_REJECTION",
-          type: "WORKSTATION",
-        },
-      },
-    ],
-  };
-  const validFactory: FactoryValidationResult = {
-    targets: [],
-  };
-  const reviewRemoved: FactoryValidationResult = {
-    targets: [
-      {
-        code: "factory.route.danglingPlaceReference",
-        message: "Workstation draft references a missing place.",
-        severity: "error",
-        subject: {
-          id: "draft",
-          location: "OUTPUTS",
-          type: "WORKSTATION",
-        },
-      },
-    ],
-  };
-  const disconnectedFailureRoute: FactoryValidationResult = {
-    targets: [
-      {
-        code: "factory.workstation.missingFailureRoute",
-        message: "Workstation draft must define a failure route.",
-        severity: "error",
-        subject: {
-          id: "draft",
-          location: "ON_FAILURE",
-          type: "WORKSTATION",
-        },
-      },
-    ],
-  };
+type ValidationImplementation = (
+  ...args: Parameters<typeof validateFactoryDefinition>
+) => ReturnType<typeof validateFactoryDefinition>;
 
-  return {
-    disconnectedFailureRoute,
-    repeaterWithoutRejectRoute,
-    reviewRemoved,
-    validFactory,
-  };
+function createValidationHarness() {
+  const implementations: ValidationImplementation[] = [];
+  const validate = mock(
+    (...args: Parameters<typeof validateFactoryDefinition>) => {
+      const implementation = implementations.shift();
+      if (!implementation) {
+        throw new Error("expected an enqueued factory validation response");
+      }
+      return implementation(...args);
+    },
+  );
+
+  return { implementations, validate };
+}
+
+let validationHarness = createValidationHarness();
+let validateDefinition = validationHarness.validate;
+
+beforeEach(() => {
+  validationHarness = createValidationHarness();
+  validateDefinition = validationHarness.validate;
 });
 
-vi.mock("../../../../api/factory-validation", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../../../api/factory-validation")
-  >("../../../../api/factory-validation");
+function enqueueValidationResults(...results: FactoryValidationResult[]) {
+  validationHarness.implementations.push(
+    ...results.map((result) => async () => result),
+  );
+}
 
-  return {
-    ...actual,
-    validateFactoryDefinition: vi.fn(),
-  };
-});
-
-import { validateFactoryDefinition } from "../../../../api/factory-validation";
+function enqueueValidationImplementations(
+  ...implementations: ValidationImplementation[]
+) {
+  validationHarness.implementations.push(...implementations);
+}
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -115,7 +90,10 @@ function renderValidationHook(
 ) {
   return renderHook(
     ({ definition }) =>
-      useFactoryValidation(definition, true, { debounceMs: 0 }),
+      useFactoryValidation(definition, true, {
+        debounceMs: 0,
+        validateDefinition,
+      }),
     {
       initialProps: {
         definition: initialDefinition,
@@ -128,12 +106,9 @@ function renderValidationHook(
 describe("useFactoryValidation debounce", () => {
   const debounceMs = 50;
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("waits for debounce before validating rapid draft changes", async () => {
-    vi.mocked(validateFactoryDefinition).mockResolvedValue(
+    enqueueValidationResults(
+      validationFixtures.validFactory,
       validationFixtures.validFactory,
     );
 
@@ -157,7 +132,10 @@ describe("useFactoryValidation debounce", () => {
 
     const { rerender } = renderHook(
       ({ definition }) =>
-        useFactoryValidation(definition, true, { debounceMs }),
+        useFactoryValidation(definition, true, {
+          debounceMs,
+          validateDefinition,
+        }),
       {
         initialProps: {
           definition: emptyDraftDefinition,
@@ -167,23 +145,25 @@ describe("useFactoryValidation debounce", () => {
     );
 
     await waitFor(() => {
-      expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+      expect(validateDefinition).toHaveBeenCalledTimes(1);
     });
-    vi.mocked(validateFactoryDefinition).mockClear();
+    const initialValidationCallCount = validateDefinition.mock.calls.length;
 
     rerender({
       definition: repeaterDraftDefinition,
     });
 
-    expect(validateFactoryDefinition).not.toHaveBeenCalled();
+    expect(validateDefinition).toHaveBeenCalledTimes(initialValidationCallCount);
 
     await waitFor(
       () => {
-        expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+        expect(validateDefinition).toHaveBeenCalledTimes(
+          initialValidationCallCount + 1,
+        );
       },
       { timeout: debounceMs * 4 },
     );
-    expect(validateFactoryDefinition).toHaveBeenCalledWith(
+    expect(validateDefinition).toHaveBeenCalledWith(
       repeaterDraftDefinition,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -191,21 +171,18 @@ describe("useFactoryValidation debounce", () => {
 });
 
 describe("useFactoryValidation abort", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("aborts in-flight validation when a newer draft definition is requested", async () => {
     const firstDeferred = createDeferred<FactoryValidationResult>();
     const capturedSignals: AbortSignal[] = [];
-    vi.mocked(validateFactoryDefinition)
-      .mockImplementationOnce((_definition, options) => {
+    enqueueValidationImplementations(
+      (_definition, options) => {
         if (options?.signal) {
           capturedSignals.push(options.signal);
         }
         return firstDeferred.promise;
-      })
-      .mockResolvedValueOnce(validationFixtures.validFactory);
+      },
+      async () => validationFixtures.validFactory,
+    );
 
     const queryClient = createQueryClient();
     const repeaterDraft = createEmptyFactoryGraphDraft();
@@ -226,7 +203,7 @@ describe("useFactoryValidation abort", () => {
     );
 
     await waitFor(() => {
-      expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+      expect(validateDefinition).toHaveBeenCalledTimes(1);
     });
 
     rerender({
@@ -237,7 +214,7 @@ describe("useFactoryValidation abort", () => {
     });
 
     await waitFor(() => {
-      expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
+      expect(validateDefinition).toHaveBeenCalledTimes(2);
     });
 
     expect(capturedSignals[0]?.aborted).toBe(true);
@@ -245,16 +222,13 @@ describe("useFactoryValidation abort", () => {
 });
 
 describe("useFactoryValidation stale response handling", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("ignores stale validation responses after a newer draft definition is requested", async () => {
     const firstDeferred = createDeferred<FactoryValidationResult>();
     const secondDeferred = createDeferred<FactoryValidationResult>();
-    vi.mocked(validateFactoryDefinition)
-      .mockImplementationOnce(() => firstDeferred.promise)
-      .mockImplementationOnce(() => secondDeferred.promise);
+    enqueueValidationImplementations(
+      () => firstDeferred.promise,
+      () => secondDeferred.promise,
+    );
 
     const queryClient = createQueryClient();
     const repeaterDraft = createEmptyFactoryGraphDraft();
@@ -297,14 +271,11 @@ describe("useFactoryValidation stale response handling", () => {
 });
 
 describe("useFactoryValidation draft mutation refresh on add and remove", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("refreshes targets after an add operation changes the draft-applied factory", async () => {
-    vi.mocked(validateFactoryDefinition)
-      .mockResolvedValueOnce(validationFixtures.validFactory)
-      .mockResolvedValueOnce(validationFixtures.repeaterWithoutRejectRoute);
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.repeaterWithoutRejectRoute,
+    );
 
     const queryClient = createQueryClient();
     const repeaterDraft = createEmptyFactoryGraphDraft();
@@ -342,9 +313,10 @@ describe("useFactoryValidation draft mutation refresh on add and remove", () => 
   });
 
   it("refreshes targets after a remove operation changes the draft-applied factory", async () => {
-    vi.mocked(validateFactoryDefinition)
-      .mockResolvedValueOnce(validationFixtures.validFactory)
-      .mockResolvedValueOnce(validationFixtures.reviewRemoved);
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.reviewRemoved,
+    );
 
     const queryClient = createQueryClient();
     const removeDraft = removeFactoryGraphNode({
@@ -383,14 +355,11 @@ describe("useFactoryValidation draft mutation refresh on add and remove", () => 
 });
 
 describe("useFactoryValidation draft mutation refresh on connect and disconnect", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("refreshes targets after a connect operation changes the draft-applied factory", async () => {
-    vi.mocked(validateFactoryDefinition)
-      .mockResolvedValueOnce(validationFixtures.disconnectedFailureRoute)
-      .mockResolvedValueOnce(validationFixtures.validFactory);
+    enqueueValidationResults(
+      validationFixtures.disconnectedFailureRoute,
+      validationFixtures.validFactory,
+    );
 
     const queryClient = createQueryClient();
     const disconnectedDraft = createEmptyFactoryGraphDraft();
@@ -430,9 +399,10 @@ describe("useFactoryValidation draft mutation refresh on connect and disconnect"
   });
 
   it("refreshes targets after a disconnect operation changes the draft-applied factory", async () => {
-    vi.mocked(validateFactoryDefinition)
-      .mockResolvedValueOnce(validationFixtures.validFactory)
-      .mockResolvedValueOnce(validationFixtures.disconnectedFailureRoute);
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.disconnectedFailureRoute,
+    );
 
     const queryClient = createQueryClient();
     const connectedDraft = connectFactoryGraphNodes({

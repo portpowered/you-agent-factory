@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { WorkChartState } from "../components/work-chart";
+import type { WorkChartState } from "../components/work-chart/work-chart";
 import {
   isSupportedMaterializedWorkOutcomeState,
   selectMaterializedWorkOutcomeSamples,

@@ -14,7 +14,7 @@ const blockedWarningFragments = [
 ];
 const warningCleanupLanes = [
   {
-    file: "src/features/work-outcome/components/work-chart-warning-regression.test.tsx",
+    file: "src/features/work-outcome/components/work-chart/work-chart-warning-regression.test.tsx",
     timeoutMs: 45_000,
   },
   {

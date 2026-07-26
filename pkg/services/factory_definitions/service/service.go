@@ -9,6 +9,8 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
 // New constructs the public Factory Definitions service.
@@ -25,11 +27,11 @@ func New(
 	preparePortableFactoryConfig factorydefinitions.PortableFactoryConfigPreparer,
 	captureFactorySnapshot factorydefinitions.FactorySnapshotCapturer,
 	replaceFactoryLayout factorydefinitions.FactoryLayoutReplacer,
-	namedPaths interface {
-		ResolveExistingDir(string, string) (string, error)
-	},
+	namedPaths factoryroot.NamedPathResolver,
+	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
 ) factoryroot.Service {
-	if sessionHost == nil || clock == nil || versionFileSystem == nil {
+	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
+		namedPaths == nil || namedFactoryCatalogFileSystem == nil {
 		return nil
 	}
 	host, err := factorydefinition.NewHost(
@@ -66,7 +68,13 @@ func New(
 	if err != nil {
 		return nil
 	}
-	definitions := factorydefinition.New(host, versionFileSystem)
+	// The exact ports were rejected above, which exhausts the catalog
+	// constructor's failure cases.
+	catalogService, _ := catalogwire.NewService(catalog.Dependencies{
+		Paths:      namedPaths,
+		FileSystem: namedFactoryCatalogFileSystem,
+	})
+	definitions := factorydefinition.NewWithCatalog(host, catalogService, versionFileSystem)
 	sessionHost.AttachFactoryDefinitions(definitions)
 	return definitions
 }

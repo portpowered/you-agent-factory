@@ -5,7 +5,7 @@ import {
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
 } from "@you-agent-factory/components/recipes";
-import { cn } from "../../../lib/cn";
+import { cn } from "../../../../lib/cn";
 
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =

@@ -2,7 +2,6 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import type { Mock } from "vitest";
 
 import type { CurrentFactoryDocument } from "../../../../../api/current-factory-definition";
-import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { createDeferredPromise } from "../../../../../testing/app-shell-export-test-utils";
 import {
   type MockFactoryDocumentSaveReturn,
@@ -352,19 +351,6 @@ export function buildDetailCardWorkStateFactoryDocument(
     ],
     ...overrides,
   };
-}
-
-export function buildDetailCardWorkstationNodeSelection(
-  nodeId = semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id
-    .review.node_id,
-) {
-  const selectedNode =
-    semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
-
-  return buildDetailCardCurrentSelection({
-    selectedNode,
-    selection: { kind: "node", nodeId },
-  });
 }
 
 export function expandDetailCardResourceConfiguration(
