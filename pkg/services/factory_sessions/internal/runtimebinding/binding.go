@@ -379,10 +379,12 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 			return generation
 		}
 		if runtime := instance.RuntimeService(); runtime != nil {
-			snapshot, err := runtime.GetEngineStateSnapshot(context.Background())
-			if err == nil && snapshot != nil {
-				if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
-					return generation
+			if observation, observationErr := LegacyObservationForService(runtime); observationErr == nil {
+				snapshot, err := observation.GetEngineStateSnapshot(context.Background())
+				if err == nil && snapshot != nil {
+					if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
+						return generation
+					}
 				}
 			}
 		}
@@ -632,6 +634,16 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 		return nil, err
 	}
 	return bundle.RuntimeService(), nil
+}
+
+// LegacyObservationForService isolates migration-era Petri snapshot access
+// from the singular Factory Runtime Service contract.
+func LegacyObservationForService(runtime factory.Service) (factory.APIFactory, error) {
+	observation, ok := runtime.(factory.APIFactory)
+	if !ok || observation == nil {
+		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
+	}
+	return observation, nil
 }
 
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {

@@ -38,7 +38,11 @@ func Observe(
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(activeFactory)
+	if err != nil {
+		return sessioninvocation.SessionInvocationObservation{}, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}

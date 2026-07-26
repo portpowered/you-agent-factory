@@ -5,6 +5,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,7 +27,11 @@ func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, 
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {
-	snapshot, err := a.runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(a.runtime)
+	if err != nil {
+		return work.ReadSnapshot{}, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}

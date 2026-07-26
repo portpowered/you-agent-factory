@@ -273,7 +273,11 @@ func (s *Service) GetEngineStateSnapshotForSession(ctx context.Context, sessionI
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := runtime.Factory.GetEngineStateSnapshot(ctx)
+	legacyObservation, ok := runtime.Factory.(factory.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}

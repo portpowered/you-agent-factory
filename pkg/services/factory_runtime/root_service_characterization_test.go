@@ -42,9 +42,6 @@ func (s *peerRootService) SubscribeFactoryEvents(
 ) (*factorydefinitions.FactoryEventStream, error) {
 	return nil, nil
 }
-func (s *peerRootService) GetEngineStateSnapshot(context.Context) (*factoryruntime.LegacyEngineObservation, error) {
-	return nil, nil
-}
 func (s *peerRootService) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{}, nil
 }
@@ -78,6 +75,9 @@ func TestRootService_FakePeerPauseReturnsTypedNotRunning(t *testing.T) {
 
 	var runtime factoryruntime.Service = &peerRootService{pauseErr: factoryruntime.ErrNotRunning}
 
+	if _, exposesLegacySnapshot := runtime.(factoryruntime.APIFactory); exposesLegacySnapshot {
+		t.Fatal("root Service peer unexpectedly exposes legacy engine observation")
+	}
 	err := runtime.Pause(context.Background())
 	if !errors.Is(err, factoryruntime.ErrNotRunning) {
 		t.Fatalf("Pause error = %v, want typed ErrNotRunning", err)

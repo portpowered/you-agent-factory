@@ -97,7 +97,11 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return session.Runtime.Factory.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(session.Runtime.Factory)
+	if err != nil {
+		return nil, err
+	}
+	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
 func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID string) error {

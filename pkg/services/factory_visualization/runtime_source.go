@@ -51,8 +51,12 @@ func (s *currentRuntimeSource) GetEngineStateSnapshot(
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
+		legacyObservation, ok := runtime.Factory.(factoryruntime.APIFactory)
+		if !ok {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
 		var snapshotErr error
-		snapshot, snapshotErr = runtime.Factory.GetEngineStateSnapshot(ctx)
+		snapshot, snapshotErr = legacyObservation.GetEngineStateSnapshot(ctx)
 		return snapshotErr
 	})
 	return snapshot, err

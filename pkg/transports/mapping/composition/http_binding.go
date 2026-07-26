@@ -56,11 +56,15 @@ func (binder *HTTPBinder) Bind(
 		binder == nil || binder.content == nil {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: opened Factory Session roles are required")
 	}
+	legacyObservation, ok := runtime.(factoryruntime.APIFactory)
+	if !ok {
+		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: legacy Factory Runtime observation is required")
+	}
 	durable := NewDurableAPI(execution, sessions)
 	mappedWork := workAPI{work: workService, sessions: sessions}
 	return HTTPBinding{
-		Runtime:            NewRuntimeAPI(runtime, definitions),
-		FactoryStatus:      newFactoryStatusAPI(runtime, sessions, binder.statusProjector),
+		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
+		FactoryStatus:      newFactoryStatusAPI(legacyObservation, sessions, binder.statusProjector),
 		Sessions:           NewLiveSessionAPI(sessions),
 		Work:               mappedWork,
 		WorkRead:           mappedWork,

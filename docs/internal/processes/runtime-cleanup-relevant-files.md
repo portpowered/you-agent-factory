@@ -826,6 +826,11 @@ Plain observation request/result/value vocabulary lives in
 `ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
 legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
 JavaScript runtime-record types as the peer source of truth for this slice.
+`GetEngineStateSnapshot` remains only on the migration-era `APIFactory`
+interface; never embed `APIFactory` into the singular root `Service`. Adapters
+that still need legacy snapshots must request or explicitly assert
+`APIFactory`, while root-slice peer fakes implement `Service` without a legacy
+snapshot method.
 Concrete sanitized projection from legacy engine snapshots lives under
 `factory_runtime/internal/rootobservation` so raw `EngineStateSnapshot` types
 stay off the public Runtime package surface enforced by `make pkg-boundary`.
@@ -837,7 +842,7 @@ Adding that new production package (any non-test `.go` under a new
 `docs/internal/baselines/ownership-inventory.json` (sorted by `packagePath`)
 so `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
 green.
-External peer fakes that must still stub `GetEngineStateSnapshot` should return
+Migration adapter fakes that explicitly implement `APIFactory` should return
 `LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
 prohibited Petri public-surface symbols in non-internal packages.
 

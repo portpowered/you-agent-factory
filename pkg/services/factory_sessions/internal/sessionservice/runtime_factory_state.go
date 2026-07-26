@@ -70,7 +70,11 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	return runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(runtime)
+	if err != nil {
+		return nil, err
+	}
+	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
 // Pause pauses the current runtime instance.

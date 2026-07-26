@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -21,6 +22,11 @@ type validationRole struct {
 }
 
 type runtimeRole struct{ factoryruntime.Service }
+
+func (*runtimeRole) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+	return nil, nil
+}
+
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
 type invocationRole struct {

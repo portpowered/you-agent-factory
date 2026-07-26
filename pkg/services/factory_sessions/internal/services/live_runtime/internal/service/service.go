@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 )
 
@@ -78,7 +79,11 @@ func (s *service) Snapshot(ctx context.Context, sessionID string) (*factoryrunti
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(runtime)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}
@@ -100,7 +105,11 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 		s.dependencies.ObserveControl(sessionID, operation, control, "", "", err)
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(activeFactory)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("get engine state snapshot: %w", err)
 	}

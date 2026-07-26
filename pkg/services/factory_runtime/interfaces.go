@@ -15,10 +15,9 @@ import (
 // consumers without requiring them to import Runtime implementation packages.
 type StateSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 
-// LegacyEngineObservation is an alias for StateSnapshot used by peer fakes that
-// must implement GetEngineStateSnapshot without naming prohibited Petri public-
-// surface vocabulary (StateSnapshot / EngineStateSnapshot) in external packages.
-// New peer observation should use Observe instead.
+// LegacyEngineObservation retains the migration-only API and Factory Sessions
+// signature without making that snapshot a member of Service. New peers use
+// Observe and do not need this alias.
 type LegacyEngineObservation = StateSnapshot
 
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
@@ -35,7 +34,9 @@ type WorkMover interface {
 	MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error)
 }
 
-// APIFactory is the factory boundary required by the HTTP API server.
+// APIFactory is the migration-only factory boundary required by legacy HTTP
+// API and Factory Sessions adapters. New cross-service peers use Service,
+// which does not expose GetEngineStateSnapshot.
 type APIFactory interface {
 	// SubmitWorkRequest injects a canonical work request batch idempotently.
 	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
@@ -46,8 +47,7 @@ type APIFactory interface {
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 
 	// GetEngineStateSnapshot returns the aggregate observability snapshot for
-	// service-facing consumers. Legacy Petri-shaped aliases remain available for
-	// migration; peers consuming published root observation slices use Observe.
+	// migration-era consumers.
 	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
 }
 
@@ -59,7 +59,13 @@ type APIFactory interface {
 // engine and therefore does not expose the engine run loop.
 type Service interface {
 	WorkMover
-	APIFactory
+
+	// SubmitWorkRequest injects a canonical work request batch idempotently.
+	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
+
+	// SubscribeFactoryEvents returns canonical factory event history followed
+	// by live events without exposing the legacy engine snapshot.
+	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 
 	// Pause pauses the factory loop. No transitions fire until resumed.
 	// Returns ErrNotRunning when the instance is not running.
@@ -130,6 +136,7 @@ type Service interface {
 // authority for published root-contract slices.
 type Factory interface {
 	Service
+	APIFactory
 	// Run starts the factory loop. Blocks until ctx is cancelled or all
 	// work reaches terminal states.
 	Run(ctx context.Context) error
