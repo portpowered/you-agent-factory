@@ -218,7 +218,8 @@ func initializeCustomerHome(t testing.TB, env []string, workingDirectory string)
 }
 
 func environmentHome(env []string) string {
-	for _, item := range env {
+	for index := len(env) - 1; index >= 0; index-- {
+		item := env[index]
 		if strings.HasPrefix(item, "HOME=") {
 			return strings.TrimPrefix(item, "HOME=")
 		}

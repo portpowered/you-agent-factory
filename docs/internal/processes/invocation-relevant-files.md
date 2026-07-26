@@ -590,6 +590,11 @@ response-stream output.
   `tests/functional/product/init_setup/init_setup_test.go`; installer behavior
   lives in `tests/release/install_script_test.go` and
   `scripts/release/smoke-install.{sh,ps1}`.
+- Root-built functional fixtures that execute initializer-owned commands must
+  use an invocation-local HOME/USERPROFILE and explicit Factory test data.
+  Environment overrides follow last-value-wins process semantics. Do not
+  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through
   `pkg/factory/packages/packageassets`. Their `sourceRef` must use the

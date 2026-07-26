@@ -7,6 +7,7 @@ import (
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.
@@ -35,7 +36,7 @@ func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 
 func runtimeSmokeProjectRoot(t *testing.T) string {
 	t.Helper()
-	projectRoot := t.TempDir()
+	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-runtime-smoke")
 	t.Cleanup(func() {
 		// Remove the full project root before t.TempDir teardown so runtime-backed
 		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.

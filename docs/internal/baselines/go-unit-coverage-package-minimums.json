@@ -1127,10 +1127,6 @@
       "minimum": 75.55
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/configinit",
-      "minimum": 89.06
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
       "minimum": 87.17
     },
