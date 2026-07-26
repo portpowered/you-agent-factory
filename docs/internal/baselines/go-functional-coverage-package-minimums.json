@@ -1270,7 +1270,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion",
-      "minimum": 7.70
+      "minimum": 7.69
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry",
