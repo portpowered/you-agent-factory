@@ -66,13 +66,14 @@ type ResolvedInputsBinding func(resolvedinput.Inputs) error
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.
 type GenericBindings struct {
-	Completions           CompletionRegistry
-	Handlers              HandlerRegistry
-	CobraHandlers         CobraHandlerRegistry
-	ResolvedCobraHandlers ResolvedCobraHandlerRegistry
-	Inputs                InputBindingRegistry
-	SourceValues          SourceCandidateProvider
-	RootInputs            ResolvedInputsBinding
+	Completions             CompletionRegistry
+	Handlers                HandlerRegistry
+	CobraHandlers           CobraHandlerRegistry
+	ResolvedCobraHandlers   ResolvedCobraHandlerRegistry
+	Inputs                  InputBindingRegistry
+	SourceValues            SourceCandidateProvider
+	RootInputs              ResolvedInputsBinding
+	GuardUnknownSubcommands bool
 }
 
 // SessionFamilyBindings supplies the legacy typed option structs updated by

@@ -3,490 +3,403 @@ package commandregistry
 import (
 	"fmt"
 	"io"
-	"sort"
 
 	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
-// RunnableFactoryConfigInitCommandIDs returns contracted runnable command IDs for
-// the factory/config/init family in stable sorted order.
-func RunnableFactoryConfigInitCommandIDs(manifest climanifest.Manifest) ([]string, error) {
-	ids := make([]string, 0, len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
-	for _, commandID := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
-		if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID(commandID); err != nil {
-			return nil, err
-		}
-		record, err := manifest.CommandByID(commandID)
-		if err != nil {
-			return nil, err
-		}
-		if record.Runnable {
-			ids = append(ids, commandID)
-		}
-	}
-	sort.Strings(ids)
-	return ids, nil
+const (
+	factoryQueryPortInputID          = "you.factory.query.flag.port"
+	factoryListDirInputID            = "you.factory.list.flag.dir"
+	factoryCreateNameInputID         = "you.factory.create.arg.0"
+	factoryCreateDirInputID          = "you.factory.create.flag.dir"
+	factoryCreateFromInputID         = "you.factory.create.flag.from"
+	factoryCreateSetCurrentInputID   = "you.factory.create.flag.set-current"
+	factoryUpdateNameInputID         = "you.factory.update.arg.0"
+	factoryUpdateDirInputID          = "you.factory.update.flag.dir"
+	factoryUpdateFromInputID         = "you.factory.update.flag.from"
+	factoryDeleteNameInputID         = "you.factory.delete.arg.0"
+	factoryDeleteDirInputID          = "you.factory.delete.flag.dir"
+	factoryReplacePortInputID        = "you.factory.replace-current.flag.port"
+	factoryReplaceSessionInputID     = "you.factory.replace-current.flag.session"
+	factoryValidatePathInputID       = "you.factory.config.validate.arg.0"
+	factoryFlattenPathInputID        = "you.factory.config.flatten.arg.0"
+	factoryExpandPathInputID         = "you.factory.config.expand.arg.0"
+	initDirInputID                   = "you.init.flag.dir"
+	initTypeInputID                  = "you.init.flag.type"
+	initExecutorInputID              = "you.init.flag.executor"
+	factoryConfigInitServerInputID   = "you.flag.server"
+	factoryConfigInitJSONInputID     = "you.flag.json"
+	factoryConfigInitVerboseInputID  = "you.flag.verbose"
+	factoryConfigInitDebugInputID    = "you.flag.debug"
+	deprecatedFactoryPortFlagMessage = "--port is no longer supported; use --server instead (for example, --server http://localhost:7437)"
+)
+
+// FactoryConfigInitHandler is the transport-owned stable-ID handler surface for
+// the complete factory/config/init command family.
+type FactoryConfigInitHandler interface {
+	FactoryQuery(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryList(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryCreate(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryUpdate(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryDelete(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryReplaceCurrent(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryConfigValidate(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryConfigFlatten(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	FactoryConfigExpand(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	ConfigInit(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	Init(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 }
 
-// VerifyFactoryConfigInitRunnableCoverage fails when any contracted runnable
-// factory/config/init command ID lacks a registered handwritten handler.
-func (r *Registry) VerifyFactoryConfigInitRunnableCoverage(manifest climanifest.Manifest) error {
-	runnableIDs, err := RunnableFactoryConfigInitCommandIDs(manifest)
+// FactoryConfigInitServices carries the injected effects used by the family
+// adapter. Public spellings and Cobra storage deliberately stay out of it.
+type FactoryConfigInitServices struct {
+	QueryFactory          func(factorycli.QueryConfig) error
+	ListFactories         func(factorycli.ListConfig) error
+	CreateFactoryFromFile func(factorycli.CreateFromFileConfig) error
+	UpdateFactoryFromFile func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory         func(factorycli.DeleteConfig) error
+	ReplaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error
+	ValidateFactory       func(factorycli.ValidateConfig) error
+	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
+	InitSystemConfig      func(configinitcmd.InitConfig) error
+	InitFactory           func(initcmd.ScaffoldConfig) error
+	HomeDir               func() (string, error)
+	DiagnosticsWriter     func(*cobra.Command) io.Writer
+}
+
+// FactoryConfigInitCommandHandler translates resolved manifest inputs into the
+// existing transport request types at the CLI boundary.
+type FactoryConfigInitCommandHandler struct {
+	services FactoryConfigInitServices
+}
+
+func NewFactoryConfigInitCommandHandler(services FactoryConfigInitServices) *FactoryConfigInitCommandHandler {
+	return &FactoryConfigInitCommandHandler{services: services}
+}
+
+type factoryConfigInitGlobals struct {
+	server  string
+	json    bool
+	verbose bool
+	debug   bool
+}
+
+func readFactoryConfigInitGlobals(inputs resolvedinput.Inputs) (factoryConfigInitGlobals, error) {
+	server, err := inputs.String(factoryConfigInitServerInputID)
 	if err != nil {
-		return err
+		return factoryConfigInitGlobals{}, err
 	}
-	var missing []string
-	for _, commandID := range runnableIDs {
-		if _, lookupErr := r.Lookup(commandID); lookupErr != nil {
-			missing = append(missing, commandID)
-		}
+	jsonOutput, err := inputs.Bool(factoryConfigInitJSONInputID)
+	if err != nil {
+		return factoryConfigInitGlobals{}, err
 	}
-	if len(missing) > 0 {
-		return fmt.Errorf(
-			"factory/config/init runnable command handlers missing for: %v",
-			missing,
-		)
+	verbose, err := inputs.Bool(factoryConfigInitVerboseInputID)
+	if err != nil {
+		return factoryConfigInitGlobals{}, err
+	}
+	debug, err := inputs.Bool(factoryConfigInitDebugInputID)
+	if err != nil {
+		return factoryConfigInitGlobals{}, err
+	}
+	return factoryConfigInitGlobals{server: server, json: jsonOutput, verbose: verbose, debug: debug}, nil
+}
+
+func (h *FactoryConfigInitCommandHandler) diagnostics(cmd *cobra.Command) io.Writer {
+	if h == nil || h.services.DiagnosticsWriter == nil {
+		return nil
+	}
+	return h.services.DiagnosticsWriter(cmd)
+}
+
+func rejectResolvedDeprecatedPort(inputs resolvedinput.Inputs, inputID string) error {
+	state, ok := inputs.State(inputID)
+	if ok && state.Changed {
+		return fmt.Errorf("%s", deprecatedFactoryPortFlagMessage)
 	}
 	return nil
 }
 
-// FactoryConfigInitHandlers carries handwritten RunE handlers for contracted runnable
-// factory/config/init command IDs.
-type FactoryConfigInitHandlers struct {
-	FactoryQueryRunE          RunE
-	FactoryListRunE           RunE
-	FactoryCreateRunE         RunE
-	FactoryUpdateRunE         RunE
-	FactoryDeleteRunE         RunE
-	FactoryReplaceCurrentRunE RunE
-	FactoryConfigValidateRunE RunE
-	FactoryConfigFlattenRunE  RunE
-	FactoryConfigExpandRunE   RunE
-	ConfigInitRunE            RunE
-	InitRunE                  RunE
-}
-
-// NewFactoryConfigInitRegistry registers handwritten handlers for the
-// factory/config/init family and verifies contracted runnable command coverage.
-func NewFactoryConfigInitRegistry(handlers FactoryConfigInitHandlers) (*Registry, error) {
-	bindings := []struct {
-		commandID string
-		handler   RunE
-	}{
-		{commandID: "you.factory.query", handler: handlers.FactoryQueryRunE},
-		{commandID: "you.factory.list", handler: handlers.FactoryListRunE},
-		{commandID: "you.factory.create", handler: handlers.FactoryCreateRunE},
-		{commandID: "you.factory.update", handler: handlers.FactoryUpdateRunE},
-		{commandID: "you.factory.delete", handler: handlers.FactoryDeleteRunE},
-		{commandID: "you.factory.replace-current", handler: handlers.FactoryReplaceCurrentRunE},
-		{commandID: "you.factory.config.validate", handler: handlers.FactoryConfigValidateRunE},
-		{commandID: "you.factory.config.flatten", handler: handlers.FactoryConfigFlattenRunE},
-		{commandID: "you.factory.config.expand", handler: handlers.FactoryConfigExpandRunE},
-		{commandID: "you.config.init", handler: handlers.ConfigInitRunE},
-		{commandID: "you.init", handler: handlers.InitRunE},
+func (h *FactoryConfigInitCommandHandler) FactoryQuery(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.QueryFactory == nil {
+		return fmt.Errorf("factory query service is required")
 	}
-
-	for _, binding := range bindings {
-		if binding.handler == nil {
-			return nil, fmt.Errorf(
-				"build factory/config/init handler registry: %s handler is required",
-				binding.commandID,
-			)
-		}
+	if err := rejectResolvedDeprecatedPort(inputs, factoryQueryPortInputID); err != nil {
+		return err
 	}
-
-	registry := NewRegistry()
-	for _, binding := range bindings {
-		if err := registry.Register(binding.commandID, binding.handler); err != nil {
-			return nil, fmt.Errorf("build factory/config/init handler registry: %w", err)
-		}
-	}
-
-	manifest, err := generated.FactoryConfigInitFamilyManifest()
+	globals, err := readFactoryConfigInitGlobals(inherited)
 	if err != nil {
-		return nil, fmt.Errorf("build factory/config/init handler registry: %w", err)
+		return fmt.Errorf("resolve factory query inputs: %w", err)
 	}
-	if err := registry.VerifyFactoryConfigInitRunnableCoverage(manifest); err != nil {
-		return nil, fmt.Errorf("build factory/config/init handler registry: %w", err)
+	return h.services.QueryFactory(factorycli.QueryConfig{
+		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
+		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
+		Verbose: globals.verbose, Debug: globals.debug,
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryList(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.ListFactories == nil {
+		return fmt.Errorf("factory list service is required")
 	}
-	return registry, nil
-}
-
-// FactoryQueryBinding supplies handwritten factory query execution dependencies.
-type FactoryQueryBinding struct {
-	Server            *string
-	JSON              *bool
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Query             func(factorycli.QueryConfig) error
-}
-
-// FactoryQueryRunE returns the handwritten factory query RunE used by production wiring.
-func FactoryQueryRunE(binding FactoryQueryBinding) RunE {
-	return func(cmd *cobra.Command, _ []string) error {
-		if binding.Query == nil {
-			return fmt.Errorf("factory query service is required")
-		}
-		cfg := factorycli.QueryConfig{}
-		cfg.Context = cmd.Context()
-		if binding.Server != nil {
-			cfg.Server = *binding.Server
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.Query(cfg)
+	dir, err := inputs.String(factoryListDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory list inputs: %w", err)
 	}
-}
-
-// FactoryListBinding supplies handwritten factory list execution dependencies.
-type FactoryListBinding struct {
-	Dir  *string
-	JSON *bool
-	List func(factorycli.ListConfig) error
-}
-
-// FactoryListRunE returns the handwritten factory list RunE used by production wiring.
-func FactoryListRunE(binding FactoryListBinding) RunE {
-	return func(cmd *cobra.Command, _ []string) error {
-		if binding.List == nil {
-			return fmt.Errorf("factory list service is required")
-		}
-		cfg := factorycli.ListConfig{}
-		if binding.Dir != nil {
-			cfg.Dir = *binding.Dir
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		return binding.List(cfg)
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory list inputs: %w", err)
 	}
+	return h.services.ListFactories(factorycli.ListConfig{
+		Dir: dir, JSON: globals.json, Output: cmd.OutOrStdout(),
+	})
 }
 
-// FactoryCreateBinding supplies handwritten factory create execution dependencies.
-type FactoryCreateBinding struct {
-	Dir        *string
-	From       *string
-	SetCurrent *bool
-	JSON       *bool
-	Create     func(factorycli.CreateFromFileConfig) error
-}
-
-// FactoryCreateRunE returns the handwritten factory create RunE used by production wiring.
-func FactoryCreateRunE(binding FactoryCreateBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Create == nil {
-			return fmt.Errorf("factory create service is required")
-		}
-		cfg := factorycli.CreateFromFileConfig{}
-		cfg.Context = cmd.Context()
-		if len(args) == 1 {
-			cfg.Name = args[0]
-		}
-		if binding.Dir != nil {
-			cfg.Dir = *binding.Dir
-		}
-		if binding.From != nil {
-			cfg.From = *binding.From
-		}
-		if binding.SetCurrent != nil {
-			cfg.SetCurrent = *binding.SetCurrent
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		return binding.Create(cfg)
+func (h *FactoryConfigInitCommandHandler) FactoryCreate(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.CreateFactoryFromFile == nil {
+		return fmt.Errorf("factory create service is required")
 	}
-}
-
-// FactoryUpdateBinding supplies handwritten factory update execution dependencies.
-type FactoryUpdateBinding struct {
-	Dir    *string
-	From   *string
-	JSON   *bool
-	Update func(factorycli.UpdateFromFileConfig) error
-}
-
-// FactoryUpdateRunE returns the handwritten factory update RunE used by production wiring.
-func FactoryUpdateRunE(binding FactoryUpdateBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Update == nil {
-			return fmt.Errorf("factory update service is required")
-		}
-		cfg := factorycli.UpdateFromFileConfig{}
-		cfg.Context = cmd.Context()
-		if len(args) == 1 {
-			cfg.Name = args[0]
-		}
-		if binding.Dir != nil {
-			cfg.Dir = *binding.Dir
-		}
-		if binding.From != nil {
-			cfg.From = *binding.From
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		return binding.Update(cfg)
+	name, err := inputs.String(factoryCreateNameInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
-}
-
-// FactoryDeleteBinding supplies handwritten factory delete execution dependencies.
-type FactoryDeleteBinding struct {
-	Dir    *string
-	JSON   *bool
-	Delete func(factorycli.DeleteConfig) error
-}
-
-// FactoryDeleteRunE returns the handwritten factory delete RunE used by production wiring.
-func FactoryDeleteRunE(binding FactoryDeleteBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Delete == nil {
-			return fmt.Errorf("factory delete service is required")
-		}
-		cfg := factorycli.DeleteConfig{}
-		if len(args) == 1 {
-			cfg.Name = args[0]
-		}
-		if binding.Dir != nil {
-			cfg.Dir = *binding.Dir
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		return binding.Delete(cfg)
+	dir, err := inputs.String(factoryCreateDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
-}
-
-// FactoryReplaceCurrentBinding supplies handwritten replace-current execution dependencies.
-type FactoryReplaceCurrentBinding struct {
-	Server            *string
-	SessionID         *string
-	JSON              *bool
-	Verbose           func() bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	ReplaceCurrent    func(factorycli.ReplaceCurrentConfig) error
-}
-
-// FactoryReplaceCurrentRunE returns the handwritten replace-current RunE used by production wiring.
-func FactoryReplaceCurrentRunE(binding FactoryReplaceCurrentBinding) RunE {
-	return func(cmd *cobra.Command, _ []string) error {
-		if binding.ReplaceCurrent == nil {
-			return fmt.Errorf("factory replace-current service is required")
-		}
-		cfg := factorycli.ReplaceCurrentConfig{}
-		cfg.Context = cmd.Context()
-		if binding.Server != nil {
-			cfg.Server = *binding.Server
-		}
-		if binding.SessionID != nil {
-			cfg.SessionID = *binding.SessionID
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		return binding.ReplaceCurrent(cfg)
+	from, err := inputs.String(factoryCreateFromInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
-}
-
-// FactoryConfigValidateBinding supplies handwritten factory config validate dependencies.
-type FactoryConfigValidateBinding struct {
-	JSON     *bool
-	Validate func(factorycli.ValidateConfig) error
-}
-
-// FactoryConfigValidateRunE returns the handwritten factory config validate RunE.
-func FactoryConfigValidateRunE(binding FactoryConfigValidateBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Validate == nil {
-			return fmt.Errorf("factory validate service is required")
-		}
-		cfg := factorycli.ValidateConfig{}
-		cfg.Context = cmd.Context()
-		if len(args) == 1 {
-			cfg.Path = args[0]
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		return binding.Validate(cfg)
+	setCurrent, err := inputs.Bool(factoryCreateSetCurrentInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
-}
-
-// FactoryConfigFlattenBinding supplies handwritten factory config flatten dependencies.
-type FactoryConfigFlattenBinding struct {
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Flatten           func(configcli.FactoryConfigFlattenConfig) error
-}
-
-// FactoryConfigFlattenRunE returns the handwritten factory config flatten RunE.
-func FactoryConfigFlattenRunE(binding FactoryConfigFlattenBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Flatten == nil {
-			return fmt.Errorf("factory flatten service is required")
-		}
-		cfg := configcli.FactoryConfigFlattenConfig{}
-		if len(args) == 1 {
-			cfg.Path = args[0]
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.Flatten(cfg)
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
+	return h.services.CreateFactoryFromFile(factorycli.CreateFromFileConfig{
+		Context: cmd.Context(), Name: name, Dir: dir, From: from,
+		SetCurrent: setCurrent, JSON: globals.json, Output: cmd.OutOrStdout(),
+	})
 }
 
-// FactoryConfigExpandBinding supplies handwritten factory config expand dependencies.
-type FactoryConfigExpandBinding struct {
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Expand            func(configcli.FactoryConfigExpandConfig) error
-}
-
-// FactoryConfigExpandRunE returns the handwritten factory config expand RunE.
-func FactoryConfigExpandRunE(binding FactoryConfigExpandBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Expand == nil {
-			return fmt.Errorf("factory expand service is required")
-		}
-		cfg := configcli.FactoryConfigExpandConfig{}
-		if len(args) == 1 {
-			cfg.Path = args[0]
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.Expand(cfg)
+func (h *FactoryConfigInitCommandHandler) FactoryUpdate(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.UpdateFactoryFromFile == nil {
+		return fmt.Errorf("factory update service is required")
 	}
-}
-
-// ConfigInitBinding supplies handwritten you config init execution dependencies.
-type ConfigInitBinding struct {
-	HomeDir           func() (string, error)
-	JSON              func() bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Verbose           func() bool
-	Init              func(configinitcmd.InitConfig) error
-}
-
-// ConfigInitRunE returns the handwritten you config init RunE used by production wiring.
-func ConfigInitRunE(binding ConfigInitBinding) RunE {
-	init := binding.Init
-	return func(cmd *cobra.Command, _ []string) error {
-		if init == nil {
-			return fmt.Errorf("system initialization service is required")
-		}
-		if binding.HomeDir == nil {
-			return fmt.Errorf("config init home directory resolver is required")
-		}
-		cfg := configinitcmd.InitConfig{Context: cmd.Context()}
-		homeDir, err := binding.HomeDir()
-		if err != nil {
-			return fmt.Errorf("resolve config init home directory: %w", err)
-		}
-		cfg.HomeDir = homeDir
-		if binding.JSON != nil {
-			cfg.JSON = binding.JSON()
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		return init(cfg)
+	name, err := inputs.String(factoryUpdateNameInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory update inputs: %w", err)
 	}
-}
-
-// InitBinding supplies handwritten you init execution dependencies.
-type InitBinding struct {
-	Dir               *string
-	Type              *string
-	Executor          *string
-	JSON              *bool
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	Init              func(initcmd.ScaffoldConfig) error
-}
-
-// InitRunE returns the handwritten you init RunE used by production wiring.
-func InitRunE(binding InitBinding) RunE {
-	return func(cmd *cobra.Command, _ []string) error {
-		if binding.Init == nil {
-			return fmt.Errorf("init service is required")
-		}
-		cfg := initcmd.ScaffoldConfig{}
-		if binding.Dir != nil {
-			cfg.Dir = *binding.Dir
-		}
-		if binding.Type != nil {
-			cfg.Type = *binding.Type
-		}
-		if binding.Executor != nil {
-			cfg.Executor = *binding.Executor
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.Init(cfg)
+	dir, err := inputs.String(factoryUpdateDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory update inputs: %w", err)
 	}
+	from, err := inputs.String(factoryUpdateFromInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory update inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory update inputs: %w", err)
+	}
+	return h.services.UpdateFactoryFromFile(factorycli.UpdateFromFileConfig{
+		Context: cmd.Context(), Name: name, Dir: dir, From: from,
+		JSON: globals.json, Output: cmd.OutOrStdout(),
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryDelete(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.DeleteFactory == nil {
+		return fmt.Errorf("factory delete service is required")
+	}
+	name, err := inputs.String(factoryDeleteNameInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory delete inputs: %w", err)
+	}
+	dir, err := inputs.String(factoryDeleteDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory delete inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory delete inputs: %w", err)
+	}
+	return h.services.DeleteFactory(factorycli.DeleteConfig{
+		Name: name, Dir: dir, JSON: globals.json, Output: cmd.OutOrStdout(),
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryReplaceCurrent(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.ReplaceFactoryCurrent == nil {
+		return fmt.Errorf("factory replace-current service is required")
+	}
+	if err := rejectResolvedDeprecatedPort(inputs, factoryReplacePortInputID); err != nil {
+		return err
+	}
+	sessionID, err := inputs.String(factoryReplaceSessionInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory replace-current inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory replace-current inputs: %w", err)
+	}
+	return h.services.ReplaceFactoryCurrent(factorycli.ReplaceCurrentConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		JSON: globals.json, Output: cmd.OutOrStdout(),
+		Diagnostics: h.diagnostics(cmd), Verbose: globals.verbose,
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryConfigValidate(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.ValidateFactory == nil {
+		return fmt.Errorf("factory validate service is required")
+	}
+	path, err := inputs.String(factoryValidatePathInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory validate inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory validate inputs: %w", err)
+	}
+	return h.services.ValidateFactory(factorycli.ValidateConfig{
+		Context: cmd.Context(), Path: path, JSON: globals.json, Output: cmd.OutOrStdout(),
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryConfigFlatten(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.FlattenFactoryConfig == nil {
+		return fmt.Errorf("factory flatten service is required")
+	}
+	path, err := inputs.String(factoryFlattenPathInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory flatten inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory flatten inputs: %w", err)
+	}
+	return h.services.FlattenFactoryConfig(configcli.FactoryConfigFlattenConfig{
+		Path: path, Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
+		Verbose: globals.verbose, Debug: globals.debug,
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) FactoryConfigExpand(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.ExpandFactoryConfig == nil {
+		return fmt.Errorf("factory expand service is required")
+	}
+	path, err := inputs.String(factoryExpandPathInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory expand inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve factory expand inputs: %w", err)
+	}
+	return h.services.ExpandFactoryConfig(configcli.FactoryConfigExpandConfig{
+		Path: path, Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
+		Verbose: globals.verbose, Debug: globals.debug,
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) ConfigInit(
+	cmd *cobra.Command,
+	_ resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.InitSystemConfig == nil {
+		return fmt.Errorf("system initialization service is required")
+	}
+	if h.services.HomeDir == nil {
+		return fmt.Errorf("config init home directory resolver is required")
+	}
+	homeDir, err := h.services.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve config init home directory: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve config init inputs: %w", err)
+	}
+	return h.services.InitSystemConfig(configinitcmd.InitConfig{
+		Context: cmd.Context(), HomeDir: homeDir, JSON: globals.json,
+		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd), Verbose: globals.verbose,
+	})
+}
+
+func (h *FactoryConfigInitCommandHandler) Init(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.InitFactory == nil {
+		return fmt.Errorf("init service is required")
+	}
+	dir, err := inputs.String(initDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	scaffoldType, err := inputs.String(initTypeInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	executor, err := inputs.String(initExecutorInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	return h.services.InitFactory(initcmd.ScaffoldConfig{
+		Dir: dir, Type: scaffoldType, Executor: executor, JSON: globals.json,
+		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
+		Verbose: globals.verbose, Debug: globals.debug,
+	})
 }

@@ -616,6 +616,13 @@ response-stream output.
   registry. This preserves inherited root resolution after production root
   composition without forcing later behavioral slices into the current change;
   remove each legacy entry as its leaf gains a resolved handler.
+  The fully migrated factory/config/init family follows the same detached-tree
+  pattern in `factory_config_init_constructor.go`, with every local input
+  consumed through `ResolvedCobraHandlers` and no mutable flag-binding table.
+  Families whose established parent commands reject arbitrary trailing tokens
+  should opt into `GenericBindings.GuardUnknownSubcommands`; keep that
+  compatibility behavior in the generic projector instead of reintroducing
+  family-owned flag parsing or public-name dispatch.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.

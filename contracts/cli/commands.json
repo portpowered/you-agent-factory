@@ -579,26 +579,6 @@
     },
     "you.config.init": {
       "aliases": [],
-      "arguments": {
-        "you.config.init.arg.0": {
-          "channels": [
-            "cli"
-          ],
-          "completion": "none",
-          "doubleDash": "terminates-flags",
-          "enum": [],
-          "id": "you.config.init.arg.0",
-          "kind": "positional",
-          "maxCardinality": -1,
-          "minCardinality": 0,
-          "name": "arg0",
-          "pattern": "",
-          "position": 0,
-          "required": false,
-          "valueType": "string",
-          "variadic": true
-        }
-      },
       "channels": {
         "input": [
           "cli",
@@ -1230,22 +1210,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.config.expand.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.config.expand.arg.0",
+          "handlerBindingId": "you.factory.config.expand.binding.factory-path",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "factory.json",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -1452,6 +1441,12 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.config.expand.binding.factory-path": {
+          "id": "you.factory.config.expand.binding.factory-path",
+          "inputId": "you.factory.config.expand.arg.0"
+        }
+      },
       "handler": {
         "id": "you.factory.config.expand.handler"
       },
@@ -1504,22 +1499,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.config.flatten.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.config.flatten.arg.0",
+          "handlerBindingId": "you.factory.config.flatten.binding.factory-path",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "factory-path",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -1726,6 +1730,12 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.config.flatten.binding.factory-path": {
+          "id": "you.factory.config.flatten.binding.factory-path",
+          "inputId": "you.factory.config.flatten.arg.0"
+        }
+      },
       "handler": {
         "id": "you.factory.config.flatten.handler"
       },
@@ -1778,22 +1788,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.config.validate.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.config.validate.arg.0",
+          "handlerBindingId": "you.factory.config.validate.binding.factory-path",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "factory-path",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -2002,6 +2021,12 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.config.validate.binding.factory-path": {
+          "id": "you.factory.config.validate.binding.factory-path",
+          "inputId": "you.factory.config.validate.arg.0"
+        }
+      },
       "handler": {
         "id": "you.factory.config.validate.handler",
         "operationId": "validateFactory"
@@ -2060,22 +2085,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.create.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.create.arg.0",
+          "handlerBindingId": "you.factory.create.binding.name",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "name",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -2212,12 +2246,18 @@
           "visibility": "visible"
         },
         "you.factory.create.flag.dir": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "factory",
+          "defaultValue": {
+            "string": "factory"
+          },
+          "handlerBindingId": "you.factory.create.binding.dir",
           "id": "you.factory.create.flag.dir",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.create.flag.dir",
@@ -2225,22 +2265,27 @@
             "state": "active"
           },
           "long": "dir",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "factory root directory containing named factories",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.create.flag.from": {
+          "acceptedSources": [
+            "cli"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "",
+          "handlerBindingId": "you.factory.create.binding.from",
           "id": "you.factory.create.flag.from",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.create.flag.from",
@@ -2248,12 +2293,15 @@
             "state": "active"
           },
           "long": "from",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 1,
           "normalization": "",
           "repeatable": false,
           "required": true,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "path to an existing factory.json payload (required)",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -2306,12 +2354,18 @@
           "visibility": "visible"
         },
         "you.factory.create.flag.set-current": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "false",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.factory.create.binding.set-current",
           "id": "you.factory.create.flag.set-current",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.create.flag.set-current",
@@ -2319,12 +2373,18 @@
             "state": "active"
           },
           "long": "set-current",
-          "noOptionDefault": "true",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "update .current-factory to the created name",
           "valueType": "bool",
           "visibility": "visible"
         },
@@ -2351,6 +2411,24 @@
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
+        }
+      },
+      "handlerBindings": {
+        "you.factory.create.binding.dir": {
+          "id": "you.factory.create.binding.dir",
+          "inputId": "you.factory.create.flag.dir"
+        },
+        "you.factory.create.binding.from": {
+          "id": "you.factory.create.binding.from",
+          "inputId": "you.factory.create.flag.from"
+        },
+        "you.factory.create.binding.name": {
+          "id": "you.factory.create.binding.name",
+          "inputId": "you.factory.create.arg.0"
+        },
+        "you.factory.create.binding.set-current": {
+          "id": "you.factory.create.binding.set-current",
+          "inputId": "you.factory.create.flag.set-current"
         }
       },
       "handler": {
@@ -2410,22 +2488,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.delete.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.delete.arg.0",
+          "handlerBindingId": "you.factory.delete.binding.name",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "name",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -2561,12 +2648,18 @@
           "visibility": "visible"
         },
         "you.factory.delete.flag.dir": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "factory",
+          "defaultValue": {
+            "string": "factory"
+          },
+          "handlerBindingId": "you.factory.delete.binding.dir",
           "id": "you.factory.delete.flag.dir",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.delete.flag.dir",
@@ -2574,12 +2667,15 @@
             "state": "active"
           },
           "long": "dir",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "factory root directory containing named factories",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -2656,6 +2752,16 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.delete.binding.dir": {
+          "id": "you.factory.delete.binding.dir",
+          "inputId": "you.factory.delete.flag.dir"
+        },
+        "you.factory.delete.binding.name": {
+          "id": "you.factory.delete.binding.name",
+          "inputId": "you.factory.delete.arg.0"
+        }
+      },
       "handler": {
         "id": "you.factory.delete.handler"
       },
@@ -2711,26 +2817,6 @@
     },
     "you.factory.list": {
       "aliases": [],
-      "arguments": {
-        "you.factory.list.arg.0": {
-          "channels": [
-            "cli"
-          ],
-          "completion": "none",
-          "doubleDash": "terminates-flags",
-          "enum": [],
-          "id": "you.factory.list.arg.0",
-          "kind": "positional",
-          "maxCardinality": -1,
-          "minCardinality": 0,
-          "name": "arg0",
-          "pattern": "",
-          "position": 0,
-          "required": false,
-          "valueType": "string",
-          "variadic": true
-        }
-      },
       "channels": {
         "input": [
           "cli",
@@ -2865,12 +2951,18 @@
           "visibility": "visible"
         },
         "you.factory.list.flag.dir": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "factory",
+          "defaultValue": {
+            "string": "factory"
+          },
+          "handlerBindingId": "you.factory.list.binding.dir",
           "id": "you.factory.list.flag.dir",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.list.flag.dir",
@@ -2878,12 +2970,15 @@
             "state": "active"
           },
           "long": "dir",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "factory root directory containing named factories",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -2960,6 +3055,12 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.list.binding.dir": {
+          "id": "you.factory.list.binding.dir",
+          "inputId": "you.factory.list.flag.dir"
+        }
+      },
       "handler": {
         "id": "you.factory.list.handler"
       },
@@ -3015,26 +3116,6 @@
     },
     "you.factory.query": {
       "aliases": [],
-      "arguments": {
-        "you.factory.query.arg.0": {
-          "channels": [
-            "cli"
-          ],
-          "completion": "none",
-          "doubleDash": "terminates-flags",
-          "enum": [],
-          "id": "you.factory.query.arg.0",
-          "kind": "positional",
-          "maxCardinality": -1,
-          "minCardinality": 0,
-          "name": "arg0",
-          "pattern": "",
-          "position": 0,
-          "required": false,
-          "valueType": "string",
-          "variadic": true
-        }
-      },
       "channels": {
         "input": [
           "cli",
@@ -3193,12 +3274,18 @@
           "visibility": "visible"
         },
         "you.factory.query.flag.port": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "0",
+          "defaultValue": {
+            "int": 0
+          },
+          "handlerBindingId": "you.factory.query.binding.port",
           "id": "you.factory.query.flag.port",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.query.flag.port",
@@ -3206,12 +3293,15 @@
             "state": "active"
           },
           "long": "port",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated compatibility port override",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -3262,6 +3352,12 @@
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
+        }
+      },
+      "handlerBindings": {
+        "you.factory.query.binding.port": {
+          "id": "you.factory.query.binding.port",
+          "inputId": "you.factory.query.flag.port"
         }
       },
       "handler": {
@@ -3477,12 +3573,18 @@
           "visibility": "visible"
         },
         "you.factory.replace-current.flag.port": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "0",
+          "defaultValue": {
+            "int": 0
+          },
+          "handlerBindingId": "you.factory.replace-current.binding.port",
           "id": "you.factory.replace-current.flag.port",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.replace-current.flag.port",
@@ -3490,12 +3592,15 @@
             "state": "active"
           },
           "long": "port",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated compatibility port override",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -3524,12 +3629,18 @@
           "visibility": "visible"
         },
         "you.factory.replace-current.flag.session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.factory.replace-current.binding.session",
           "id": "you.factory.replace-current.flag.session",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.replace-current.flag.session",
@@ -3537,12 +3648,15 @@
             "state": "active"
           },
           "long": "session",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "target one live factory session; omit to use the default compatibility session",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -3569,6 +3683,16 @@
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
+        }
+      },
+      "handlerBindings": {
+        "you.factory.replace-current.binding.port": {
+          "id": "you.factory.replace-current.binding.port",
+          "inputId": "you.factory.replace-current.flag.port"
+        },
+        "you.factory.replace-current.binding.session": {
+          "id": "you.factory.replace-current.binding.session",
+          "inputId": "you.factory.replace-current.flag.session"
         }
       },
       "handler": {
@@ -3629,22 +3753,31 @@
       "aliases": [],
       "arguments": {
         "you.factory.update.arg.0": {
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
           "completion": "none",
           "doubleDash": "terminates-flags",
           "enum": [],
           "id": "you.factory.update.arg.0",
+          "handlerBindingId": "you.factory.update.binding.name",
           "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
           "maxCardinality": 1,
           "minCardinality": 1,
           "name": "name",
           "pattern": "",
           "position": 0,
           "required": true,
+          "scope": "local",
           "valueType": "string",
-          "variadic": false
+          "variadic": false,
+          "visibility": "visible"
         }
       },
       "channels": {
@@ -3780,12 +3913,18 @@
           "visibility": "visible"
         },
         "you.factory.update.flag.dir": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "factory",
+          "defaultValue": {
+            "string": "factory"
+          },
+          "handlerBindingId": "you.factory.update.binding.dir",
           "id": "you.factory.update.flag.dir",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.update.flag.dir",
@@ -3793,22 +3932,27 @@
             "state": "active"
           },
           "long": "dir",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "factory root directory containing named factories",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.update.flag.from": {
+          "acceptedSources": [
+            "cli"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "",
+          "handlerBindingId": "you.factory.update.binding.from",
           "id": "you.factory.update.flag.from",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.factory.update.flag.from",
@@ -3816,12 +3960,15 @@
             "state": "active"
           },
           "long": "from",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 1,
           "normalization": "",
           "repeatable": false,
           "required": true,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "path to an existing factory.json payload (required)",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -3898,6 +4045,20 @@
           "visibility": "visible"
         }
       },
+      "handlerBindings": {
+        "you.factory.update.binding.dir": {
+          "id": "you.factory.update.binding.dir",
+          "inputId": "you.factory.update.flag.dir"
+        },
+        "you.factory.update.binding.from": {
+          "id": "you.factory.update.binding.from",
+          "inputId": "you.factory.update.flag.from"
+        },
+        "you.factory.update.binding.name": {
+          "id": "you.factory.update.binding.name",
+          "inputId": "you.factory.update.arg.0"
+        }
+      },
       "handler": {
         "id": "you.factory.update.handler"
       },
@@ -3953,26 +4114,6 @@
     },
     "you.init": {
       "aliases": [],
-      "arguments": {
-        "you.init.arg.0": {
-          "channels": [
-            "cli"
-          ],
-          "completion": "none",
-          "doubleDash": "terminates-flags",
-          "enum": [],
-          "id": "you.init.arg.0",
-          "kind": "positional",
-          "maxCardinality": -1,
-          "minCardinality": 0,
-          "name": "arg0",
-          "pattern": "",
-          "position": 0,
-          "required": false,
-          "valueType": "string",
-          "variadic": true
-        }
-      },
       "channels": {
         "input": [
           "cli",
@@ -4179,12 +4320,18 @@
           "visibility": "visible"
         },
         "you.init.flag.dir": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
           "completion": "none",
-          "default": "factory",
+          "defaultValue": {
+            "string": "factory"
+          },
+          "handlerBindingId": "you.init.binding.dir",
           "id": "you.init.flag.dir",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.init.flag.dir",
@@ -4192,22 +4339,35 @@
             "state": "active"
           },
           "long": "dir",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "base directory to create",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.init.flag.type": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "default",
+          "completion": "static",
+          "defaultValue": {
+            "string": "default"
+          },
+          "enum": [
+            "default",
+            "ralph"
+          ],
+          "handlerBindingId": "you.init.binding.type",
           "id": "you.init.flag.type",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.init.flag.type",
@@ -4215,22 +4375,35 @@
             "state": "active"
           },
           "long": "type",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "scaffold type to generate (supported: default, ralph)",
           "valueType": "string",
           "visibility": "visible"
         },
         "you.init.flag.executor": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "codex",
+          "completion": "static",
+          "defaultValue": {
+            "string": "codex"
+          },
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "handlerBindingId": "you.init.binding.executor",
           "id": "you.init.flag.executor",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.init.flag.executor",
@@ -4238,14 +4411,31 @@
             "state": "active"
           },
           "long": "executor",
-          "noOptionDefault": "",
+          "maxCardinality": 1,
+          "minCardinality": 0,
           "normalization": "",
           "repeatable": false,
           "required": false,
+          "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
+          "usage": "starter scaffold to generate (codex, claude)",
           "valueType": "string",
           "visibility": "visible"
+        }
+      },
+      "handlerBindings": {
+        "you.init.binding.dir": {
+          "id": "you.init.binding.dir",
+          "inputId": "you.init.flag.dir"
+        },
+        "you.init.binding.executor": {
+          "id": "you.init.binding.executor",
+          "inputId": "you.init.flag.executor"
+        },
+        "you.init.binding.type": {
+          "id": "you.init.binding.type",
+          "inputId": "you.init.flag.type"
         }
       },
       "handler": {
