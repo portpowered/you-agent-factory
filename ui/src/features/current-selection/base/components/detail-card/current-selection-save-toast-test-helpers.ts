@@ -1,5 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
+
+// This helper is shared by Bun and Vitest component files. Both runners install
+// expect globally; keep the dependency type-only so importing the helper does
+// not initialize the other runner at runtime.
+declare const expect: typeof import("vitest").expect;
+
 import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
 import {
   GLOBAL_TOAST_DURATION_MS,
@@ -169,9 +175,9 @@ export async function expectNoGraphDraftConflictWarningToast() {
         mock: { calls: Array<[unknown, ...unknown[]]> };
       }
     ).mock.calls.filter(
-        (call) =>
-          call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
-      );
+      (call) =>
+        call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
+    );
     expect(conflictCalls).toHaveLength(0);
   });
   await settleCurrentSelectionEffects();
