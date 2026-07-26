@@ -93,8 +93,7 @@ func reconnectReplay(
 
 	scoped := make([]factorydefinitions.FactoryEvent, 0, len(replay))
 	for _, event := range replay {
-		if event.Context.SessionID == nil ||
-			strings.TrimSpace(*event.Context.SessionID) == sessionID {
+		if eventBelongsToSession(event, sessionID) {
 			scoped = append(scoped, event)
 		}
 	}

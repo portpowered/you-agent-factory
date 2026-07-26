@@ -47,7 +47,13 @@ func TestReconnectReplaySessionSequenceIsScopedAndConverges(t *testing.T) {
 	other.Context.SessionID = &otherSessionID
 	otherSequence := 4
 	other.Context.SessionSequence = &otherSequence
-	history = append(history[:4], append([]factorydefinitions.FactoryEvent{other}, history[4:]...)...)
+	sessionless := history[3].Clone()
+	sessionless.Id = "sessionless-dispatch"
+	sessionless.Context.SessionID = nil
+	history = append(
+		history[:4],
+		append([]factorydefinitions.FactoryEvent{sessionless, other}, history[4:]...)...,
+	)
 
 	sessionSequence := 3
 	scope := factorydefinitions.FactoryEventReconnectScope{SessionID: "factory-session-1"}
