@@ -38,11 +38,11 @@ const (
 	providerEffectSharedSourceOfTruthRemediation = "enumeration and one-attempt execution share one Providers-owned source of truth; absorb the Standardized Providers protocol, registry, open-config, and testkit model and do not invent a second Providers catalog, registry, conductor, or execution-contract family."
 )
 
-var competingProviderAbstractionPathMarkers = []string{
-	"/providercatalog",
-	"/providerregistry",
-	"/providerconductor",
-	"/providerexecution",
+var competingProviderAbstractionPackageNames = []string{
+	"catalog",
+	"registry",
+	"conductor",
+	"execution",
 }
 
 var competingProviderAbstractionTypeNames = map[string]struct{}{
@@ -266,10 +266,17 @@ func isAbsorbedWorkersProviderSurface(packagePath string) bool {
 }
 
 func isCompetingProviderAbstractionPackage(packagePath string) bool {
-	normalized := "/" + strings.Trim(packagePath, "/")
-	for _, marker := range competingProviderAbstractionPathMarkers {
-		if strings.Contains(normalized, marker+"/") || strings.HasSuffix(normalized, marker) {
-			return true
+	components := strings.Split(strings.Trim(packagePath, "/"), "/")
+	for index, component := range components {
+		for _, abstraction := range competingProviderAbstractionPackageNames {
+			if component == "provider"+abstraction {
+				return true
+			}
+			if (component == "provider" || component == "providers") &&
+				index+1 < len(components) &&
+				components[index+1] == abstraction {
+				return true
+			}
 		}
 	}
 	return false

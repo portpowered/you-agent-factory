@@ -235,6 +235,39 @@ type Catalog interface {
 	}
 }
 
+func TestRunRejectsCompetingNestedProviderCatalogAbstraction(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/factory_runtime/provider/catalog/catalog.go", `package catalog
+
+import "context"
+
+// Deliberate fixture: nesting the second catalog below a provider directory
+// must not bypass the shared Providers-owned source-of-truth rule.
+type Catalog interface {
+	List(context.Context) ([]string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want nested competing provider catalog abstraction rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited competing provider catalog or execution abstraction",
+		"pkg/services/factory_runtime/provider/catalog",
+		"enumeration and one-attempt execution share one Providers-owned source of truth",
+		"Standardized Providers",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunRejectsCompetingProviderConductorAbstraction(t *testing.T) {
 	t.Parallel()
 
