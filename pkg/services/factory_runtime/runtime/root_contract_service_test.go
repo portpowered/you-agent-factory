@@ -51,6 +51,10 @@ func TestFactoryImpl_Terminate_MapsLifecycleStates(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
 
+	if done := impl.ControlWaitToComplete(factory.WaitToCompleteRequest{}).Done; done == nil {
+		t.Fatal("ControlWaitToComplete Done channel is nil")
+	}
+
 	impl.state = interfaces.FactoryStateRunning
 	got, err := impl.ControlTerminate(ctx, factory.TerminateRequest{Reason: "stop"})
 	requireNoRootErr(t, err, "Terminate(running)")
