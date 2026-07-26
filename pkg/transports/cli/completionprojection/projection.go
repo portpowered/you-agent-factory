@@ -4,6 +4,7 @@ package completionprojection
 
 import (
 	"context"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -13,7 +14,13 @@ const (
 	TargetFlags  = "flags"
 	TargetValues = "values"
 
-	CandidateKindFlag = "flag"
+	CandidateKindFlag  = "flag"
+	CandidateKindValue = "value"
+
+	DirectiveKindFilesystemDelegation = "filesystem-delegation"
+
+	documentedBooleanTrue  = "true"
+	documentedBooleanFalse = "false"
 )
 
 // Context identifies the kind of completion requested by a future shell
@@ -53,10 +60,17 @@ func Project(
 	schema climanifest.EffectiveInputSchema,
 	completionContext Context,
 ) (Projection, error) {
-	if completionContext.Target != TargetFlags {
+	switch completionContext.Target {
+	case TargetFlags:
+		return projectFlags(schema), nil
+	case TargetValues:
+		return projectValues(schema, completionContext.ParameterBindingID), nil
+	default:
 		return Projection{}, nil
 	}
+}
 
+func projectFlags(schema climanifest.EffectiveInputSchema) Projection {
 	var candidates []Candidate
 	for _, parameter := range schema.FactoryParameters {
 		if !hasNamedBinding(parameter.Bindings) {
@@ -64,7 +78,35 @@ func Project(
 		}
 		candidates = append(candidates, flagCandidates(parameter)...)
 	}
-	return Projection{Candidates: candidates}, nil
+	return Projection{Candidates: candidates}
+}
+
+func projectValues(schema climanifest.EffectiveInputSchema, bindingID string) Projection {
+	for _, parameter := range schema.FactoryParameters {
+		if parameter.BindingID != bindingID {
+			continue
+		}
+		return parameterValues(parameter)
+	}
+	return Projection{}
+}
+
+func parameterValues(parameter climanifest.EffectiveFactoryParameter) Projection {
+	values := parameter.Choices
+	if len(values) == 0 && parameter.TypeHint == work.InvocationParameterTypeHintBooleanString {
+		values = []string{documentedBooleanTrue, documentedBooleanFalse}
+	}
+
+	projection := Projection{
+		Candidates: valueCandidates(parameter, values),
+	}
+	if parameter.TypeHint == work.InvocationParameterTypeHintFilePath {
+		projection.Directives = []Directive{{
+			Kind:               DirectiveKindFilesystemDelegation,
+			ParameterBindingID: parameter.BindingID,
+		}}
+	}
+	return projection
 }
 
 func hasNamedBinding(bindings []work.InvocationParameterBindingConfig) bool {
@@ -93,4 +135,43 @@ func flagCandidates(parameter climanifest.EffectiveFactoryParameter) []Candidate
 		})
 	}
 	return candidates
+}
+
+func valueCandidates(parameter climanifest.EffectiveFactoryParameter, values []string) []Candidate {
+	if len(values) == 0 {
+		return nil
+	}
+	description := valueDescription(parameter)
+	candidates := make([]Candidate, 0, len(values))
+	for _, value := range values {
+		candidates = append(candidates, Candidate{
+			Kind:               CandidateKindValue,
+			ParameterBindingID: parameter.BindingID,
+			Value:              value,
+			Description:        description,
+		})
+	}
+	return candidates
+}
+
+func valueDescription(parameter climanifest.EffectiveFactoryParameter) string {
+	description := strings.TrimSpace(parameter.Description)
+	if parameter.Sensitive {
+		return description
+	}
+
+	defaultDescription := ""
+	switch {
+	case parameter.DefaultValue != nil:
+		defaultDescription = "Default: " + *parameter.DefaultValue + "."
+	case len(parameter.DefaultValues) > 0:
+		defaultDescription = "Defaults: " + strings.Join(parameter.DefaultValues, ", ") + "."
+	}
+	if description == "" {
+		return defaultDescription
+	}
+	if defaultDescription == "" {
+		return description
+	}
+	return description + " " + defaultDescription
 }

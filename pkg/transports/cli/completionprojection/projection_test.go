@@ -116,6 +116,109 @@ func TestProjectFlagsHasSelectionParityAndIsRepeatable(t *testing.T) {
 	}
 }
 
+func TestProjectValuesPreservesDeclaredChoiceOrder(t *testing.T) {
+	schema := effectiveSchema(climanifest.EffectiveFactoryParameter{
+		BindingID:   "format",
+		Description: "output format",
+		Choices:     []string{"json", "text", "markdown"},
+	})
+
+	got := projectValues(t, schema, "format")
+	want := completionprojection.Projection{Candidates: []completionprojection.Candidate{
+		valueCandidate("format", "json", "output format"),
+		valueCandidate("format", "text", "output format"),
+		valueCandidate("format", "markdown", "output format"),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Project() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProjectValuesUsesDocumentedBooleanForms(t *testing.T) {
+	schema := effectiveSchema(climanifest.EffectiveFactoryParameter{
+		BindingID:   "confirm",
+		Description: "confirm execution",
+		TypeHint:    work.InvocationParameterTypeHintBooleanString,
+	})
+
+	got := projectValues(t, schema, "confirm")
+	want := completionprojection.Projection{Candidates: []completionprojection.Candidate{
+		valueCandidate("confirm", "true", "confirm execution"),
+		valueCandidate("confirm", "false", "confirm execution"),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Project() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProjectValuesRequestsFilesystemDelegationForFileInput(t *testing.T) {
+	schema := effectiveSchema(climanifest.EffectiveFactoryParameter{
+		BindingID:   "config",
+		Description: "configuration file",
+		TypeHint:    work.InvocationParameterTypeHintFilePath,
+	})
+
+	got := projectValues(t, schema, "config")
+	want := completionprojection.Projection{Directives: []completionprojection.Directive{{
+		Kind:               completionprojection.DirectiveKindFilesystemDelegation,
+		ParameterBindingID: "config",
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Project() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProjectValuesInventsNoFreeTextCandidates(t *testing.T) {
+	defaultValue := "write a release note"
+	schema := effectiveSchema(climanifest.EffectiveFactoryParameter{
+		BindingID:     "prompt",
+		Description:   "request text",
+		TypeHint:      work.InvocationParameterTypeHintString,
+		DefaultValue:  &defaultValue,
+		DefaultValues: nil,
+	})
+
+	got := projectValues(t, schema, "prompt")
+	if !reflect.DeepEqual(got, completionprojection.Projection{}) {
+		t.Fatalf("Project() = %#v, want empty projection", got)
+	}
+}
+
+func TestProjectValuesAddsDefaultsOnlyToDescriptionMetadata(t *testing.T) {
+	defaultValue := "json"
+	schema := effectiveSchema(
+		climanifest.EffectiveFactoryParameter{
+			BindingID:    "format",
+			Description:  "output format",
+			Choices:      []string{"text", "json"},
+			DefaultValue: &defaultValue,
+		},
+		climanifest.EffectiveFactoryParameter{
+			BindingID:     "labels",
+			Choices:       []string{"bug", "feature"},
+			DefaultValues: []string{"bug", "feature"},
+		},
+	)
+
+	scalar := projectValues(t, schema, "format")
+	wantScalar := completionprojection.Projection{Candidates: []completionprojection.Candidate{
+		valueCandidate("format", "text", "output format Default: json."),
+		valueCandidate("format", "json", "output format Default: json."),
+	}}
+	if !reflect.DeepEqual(scalar, wantScalar) {
+		t.Fatalf("scalar Project() = %#v, want %#v", scalar, wantScalar)
+	}
+
+	repeated := projectValues(t, schema, "labels")
+	wantRepeated := completionprojection.Projection{Candidates: []completionprojection.Candidate{
+		valueCandidate("labels", "bug", "Defaults: bug, feature."),
+		valueCandidate("labels", "feature", "Defaults: bug, feature."),
+	}}
+	if !reflect.DeepEqual(repeated, wantRepeated) {
+		t.Fatalf("repeated Project() = %#v, want %#v", repeated, wantRepeated)
+	}
+}
+
 func effectiveSchema(parameters ...climanifest.EffectiveFactoryParameter) climanifest.EffectiveInputSchema {
 	return climanifest.EffectiveInputSchema{
 		CommandID:         "you.run",
@@ -144,6 +247,35 @@ func flagCandidate(bindingID, value, description string) completionprojection.Ca
 		Value:              value,
 		Description:        description,
 	}
+}
+
+func valueCandidate(bindingID, value, description string) completionprojection.Candidate {
+	return completionprojection.Candidate{
+		Kind:               completionprojection.CandidateKindValue,
+		ParameterBindingID: bindingID,
+		Value:              value,
+		Description:        description,
+	}
+}
+
+func projectValues(
+	t *testing.T,
+	schema climanifest.EffectiveInputSchema,
+	bindingID string,
+) completionprojection.Projection {
+	t.Helper()
+	got, err := completionprojection.Project(
+		context.Background(),
+		schema,
+		completionprojection.Context{
+			Target:             completionprojection.TargetValues,
+			ParameterBindingID: bindingID,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Project() error = %v", err)
+	}
+	return got
 }
 
 func cloneSchema(schema climanifest.EffectiveInputSchema) climanifest.EffectiveInputSchema {
