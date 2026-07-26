@@ -111,6 +111,73 @@ func TestConstructionAndOpenOnlySnapshotTheAcceptedBinding(t *testing.T) {
 	}
 }
 
+func TestCloseInvalidatesOnlyTheSelectedScope(t *testing.T) {
+	t.Parallel()
+
+	service := runtimescopeswire.NewService()
+	firstRef := openBinding(t, service, "first")
+	secondRef := openBinding(t, service, "second")
+
+	if err := service.Close(firstRef); err != nil {
+		t.Fatalf("Close first scope: %v", err)
+	}
+	if _, err := service.Resolve(firstRef); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
+		t.Fatalf("Resolve closed scope error = %v, want ErrScopeUnknown", err)
+	}
+	if err := service.Close(firstRef); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
+		t.Fatalf("Close closed scope error = %v, want ErrScopeUnknown", err)
+	}
+
+	resolved, err := service.Resolve(secondRef)
+	if err != nil {
+		t.Fatalf("Resolve second scope: %v", err)
+	}
+	if got := resolved.RuntimeConfig().FactoryDirectory; got != "second" {
+		t.Fatalf("second scope FactoryDirectory = %q, want second", got)
+	}
+}
+
+func TestCloseRejectsMalformedAndUnknownReferencesWithoutChangingLiveScopes(t *testing.T) {
+	t.Parallel()
+
+	service := runtimescopeswire.NewService()
+	liveRef := openBinding(t, service, "live")
+
+	for _, ref := range []runtimescopes.Reference{
+		"",
+		"malformed",
+		"00000000000000000000000000000000.00000000000000000000000000000000",
+	} {
+		if _, err := service.Resolve(ref); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
+			t.Errorf("Resolve(%q) error = %v, want ErrScopeUnknown", ref, err)
+		}
+		if err := service.Close(ref); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
+			t.Errorf("Close(%q) error = %v, want ErrScopeUnknown", ref, err)
+		}
+	}
+
+	resolved, err := service.Resolve(liveRef)
+	if err != nil {
+		t.Fatalf("Resolve live scope: %v", err)
+	}
+	if got := resolved.RuntimeConfig().FactoryDirectory; got != "live" {
+		t.Fatalf("live scope FactoryDirectory = %q, want live", got)
+	}
+}
+
+func openBinding(t *testing.T, service runtimescopes.Service, factoryDirectory string) runtimescopes.Reference {
+	t.Helper()
+	ref, err := service.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{FactoryDirectory: factoryDirectory}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open %q scope: %v", factoryDirectory, err)
+	}
+	return ref
+}
+
 func assertOriginalBinding(t *testing.T, binding models.RuntimeBinding) {
 	t.Helper()
 	if binding.CacheDirectory != "cache" {

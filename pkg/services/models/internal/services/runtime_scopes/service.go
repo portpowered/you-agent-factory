@@ -15,9 +15,10 @@ var ErrScopeUnknown = errors.New("models runtime scope is unknown")
 // Reference is an opaque identifier issued by a Runtime Scopes service.
 type Reference string
 
-// Service opens and resolves detached Models runtime bindings without
+// Service opens, resolves, and closes detached Models runtime bindings without
 // constructing or activating Models runtime collaborators.
 type Service interface {
 	Open(models.RuntimeBinding) (Reference, error)
 	Resolve(Reference) (models.RuntimeBinding, error)
+	Close(Reference) error
 }

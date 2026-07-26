@@ -66,6 +66,20 @@ func (s *service) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, e
 	return detachedBinding(binding.CacheDirectory, binding.RuntimeConfig()), nil
 }
 
+func (s *service) Close(ref runtimescopes.Reference) error {
+	if s == nil {
+		return fmt.Errorf("%w: service is required", runtimescopes.ErrScopeUnknown)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.liveBindings[ref]; !ok {
+		return fmt.Errorf("%w: reference does not identify a live scope", runtimescopes.ErrScopeUnknown)
+	}
+	delete(s.liveBindings, ref)
+	return nil
+}
+
 func detachedBinding(cacheDirectory string, config *models.RuntimeConfig) models.RuntimeBinding {
 	snapshot := cloneRuntimeConfig(config)
 	return models.RuntimeBinding{
