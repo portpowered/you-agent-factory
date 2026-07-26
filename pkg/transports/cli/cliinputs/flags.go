@@ -13,6 +13,10 @@ const (
 	completionKindFilename = "filename"
 
 	flagBindingNone = ""
+
+	flagNormalizationAnnotation = "infinite-you/normalization"
+	flagCompletionAnnotation    = "infinite-you/completion"
+	flagEnumAnnotation          = "infinite-you/enum"
 )
 
 func collectFlagRecords(root *cobra.Command) []FlagRecord {
@@ -92,6 +96,7 @@ func newFlagRecord(cmd *cobra.Command, join CommandJoin, flag *pflag.Flag) FlagR
 		ChangedDefault:    flag.Changed,
 		NoOptionDefault:   flag.NoOptDefVal,
 		Repeatable:        flagRepeatable(flag),
+		Enum:              flagAnnotationValues(flag, flagEnumAnnotation),
 		Normalization:     flagNormalization(cmd, flag),
 		CompletionKind:    flagCompletionKind(cmd, flag),
 		Binding:           flagBinding(flag),
@@ -138,6 +143,9 @@ func flagRepeatable(flag *pflag.Flag) bool {
 }
 
 func flagNormalization(cmd *cobra.Command, flag *pflag.Flag) string {
+	if values := flagAnnotationValues(flag, flagNormalizationAnnotation); len(values) > 0 {
+		return values[0]
+	}
 	if cmd.GlobalNormalizationFunc() != nil {
 		return "global"
 	}
@@ -145,6 +153,9 @@ func flagNormalization(cmd *cobra.Command, flag *pflag.Flag) string {
 }
 
 func flagCompletionKind(cmd *cobra.Command, flag *pflag.Flag) string {
+	if values := flagAnnotationValues(flag, flagCompletionAnnotation); len(values) > 0 {
+		return values[0]
+	}
 	if _, ok := cmd.GetFlagCompletionFunc(flag.Name); ok {
 		return completionKindDynamic
 	}
@@ -154,6 +165,17 @@ func flagCompletionKind(cmd *cobra.Command, flag *pflag.Flag) string {
 		}
 	}
 	return completionKindNone
+}
+
+func flagAnnotationValues(flag *pflag.Flag, key string) []string {
+	if flag.Annotations == nil {
+		return nil
+	}
+	values := flag.Annotations[key]
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]string(nil), values...)
 }
 
 func flagBinding(flag *pflag.Flag) string {

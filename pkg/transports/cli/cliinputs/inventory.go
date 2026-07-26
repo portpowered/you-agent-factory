@@ -69,6 +69,7 @@ type FlagRecord struct {
 	ChangedDefault    bool     `json:"changedDefault"`
 	NoOptionDefault   string   `json:"noOptionDefault"`
 	Repeatable        bool     `json:"repeatable"`
+	Enum              []string `json:"enum,omitempty"`
 	Normalization     string   `json:"normalization"`
 	CompletionKind    string   `json:"completionKind"`
 	Binding           string   `json:"binding"`

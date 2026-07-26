@@ -19,6 +19,7 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -38,8 +39,6 @@ func (fake commandServiceFake) Pull(cfg PullConfig) error       { return fake.pu
 
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
-	jsonOutput := true
-	debug := true
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
 
@@ -56,10 +55,6 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 			}
 			return nil
 		}},
-		&server,
-		&jsonOutput,
-		func() bool { return true },
-		&debug,
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -72,22 +67,42 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	)
 
 	cmd := &cobra.Command{Use: "invoke"}
-	cmd.Flags().String("operation", "TTS", "")
-	cmd.Flags().String("text", "", "")
-	cmd.Flags().String("output", "", "")
-	_ = cmd.Flags().Set("text", "hello")
-	_ = cmd.Flags().Set("output", "speech.wav")
 	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/factory"))
 	cmd.SetOut(io.Discard)
-	if err := handler.Invoke(cmd, []string{"OMNIVOICE_Q4_K_M"}); err != nil {
+	invokeInputs, inherited := resolvedInvokeHandlerInputs(t, server)
+	if err := handler.Invoke(cmd, invokeInputs, inherited); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 }
 
+func resolvedInvokeHandlerInputs(
+	t *testing.T,
+	server string,
+) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	t.Helper()
+	local, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
+			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+		},
+		[]resolvedinput.Candidate{
+			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
+			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
+			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
+			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, inherited := resolvedModelsHandlerInputs(t, server)
+	return local, inherited
+}
+
 func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 	server := "http://127.0.0.1:7437"
-	jsonOutput := true
-	debug := true
 	called := map[string]bool{}
 	handler := NewCommandHandler(
 		commandServiceFake{
@@ -107,31 +122,30 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 			},
 			pull: func(cfg PullConfig) error {
 				called["pull"] = true
-				if cfg.ModelName != "model-b" || cfg.Server != server {
+				if cfg.ModelName != "model-b" || cfg.Server != server || cfg.Context.Err() != context.Canceled {
 					t.Fatalf("PullConfig = %#v", cfg)
 				}
 				return nil
 			},
 		},
-		&server,
-		&jsonOutput,
-		func() bool { return true },
-		&debug,
 		func(*cobra.Command) io.Writer { return io.Discard },
 		nil,
 		nil,
 		nil,
 	)
 	cmd := &cobra.Command{Use: "models"}
-	cmd.SetContext(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
 	cmd.SetOut(io.Discard)
-	if err := handler.List(cmd, nil); err != nil {
+	inspectInputs, pullInputs, inherited := resolvedModelsHandlerInputs(t, server)
+	if err := handler.List(cmd, resolvedinput.Inputs{}, inherited); err != nil {
 		t.Fatal(err)
 	}
-	if err := handler.Inspect(cmd, []string{"model-a"}); err != nil {
+	if err := handler.Inspect(cmd, inspectInputs, inherited); err != nil {
 		t.Fatal(err)
 	}
-	if err := handler.Pull(cmd, []string{"model-b"}); err != nil {
+	if err := handler.Pull(cmd, pullInputs, inherited); err != nil {
 		t.Fatal(err)
 	}
 	for _, operation := range []string{"list", "inspect", "pull"} {
@@ -139,6 +153,57 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 			t.Fatalf("%s service operation was not called", operation)
 		}
 	}
+}
+
+func resolvedModelsHandlerInputs(
+	t *testing.T,
+	server string,
+) (resolvedinput.Inputs, resolvedinput.Inputs, resolvedinput.Inputs) {
+	t.Helper()
+	inherited, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			{ID: serverInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: jsonInputID, Kind: resolvedinput.ValueKindBool, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: verboseInputID, Kind: resolvedinput.ValueKindBool, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: debugInputID, Kind: resolvedinput.ValueKindBool, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+		},
+		[]resolvedinput.Candidate{
+			{InputID: serverInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue(server)},
+			{InputID: jsonInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.BoolValue(true)},
+			{InputID: verboseInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.BoolValue(true)},
+			{InputID: debugInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.BoolValue(true)},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspectInputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsInspectNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsInspectNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-a"),
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pullInputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsPullNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsPullNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-b"),
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inspectInputs, pullInputs, inherited
 }
 
 func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
