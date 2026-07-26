@@ -13,8 +13,7 @@ import (
 )
 
 // Adapter owns Kiro command construction for the registry-backed conductor
-// path. Response decoding and failure normalization are added by the remaining
-// Kiro migration slices.
+// path. Failure normalization is added by the remaining Kiro migration slice.
 type Adapter struct{}
 
 // NewAdapter constructs the stateless Kiro adapter.

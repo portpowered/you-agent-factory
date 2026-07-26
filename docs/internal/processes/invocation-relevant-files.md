@@ -55,6 +55,12 @@ primary-result behavior.
   environment and working-directory delivery through `root.BuildProcess` with
   an injected command-runner edge; do not expose configured secrets in events
   or assertion output.
+- Final-only provider integrations should keep native final stdout as response
+  content and derive resumable Provider Session metadata only from explicit
+  structured fields that satisfy the provider's identifier contract. If a
+  successful resumed invocation emits no replacement identifier, preserve the
+  validated requested Provider Session; never recover identifiers from
+  free-form assistant text.
 
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
