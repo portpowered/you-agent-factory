@@ -4,7 +4,11 @@ BIN_DIR     := bin
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
+ifeq ($(OS),Windows_NT)
+BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
+else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
+endif
 BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
 BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
