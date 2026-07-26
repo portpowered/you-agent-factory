@@ -350,7 +350,9 @@ jobs:
 
   long-local-inference:
     name: Long Local Inference
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     uses: ./.github/workflows/long-local-inference.yml
 
   release-surface-smoke:

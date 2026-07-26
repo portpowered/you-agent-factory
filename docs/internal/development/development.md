@@ -379,7 +379,7 @@ Treat the opt-in long and specialty commands as a separate maintainer tier rathe
 
 - `make verify-pr-inference` is the required merge-blocking PR inference approval lane. It runs only the named OMNIVOICE regression and is separate from `make verify-pr`.
 - `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.
-- `make long-tests-managed-runtime` is the narrow specialty rerun for the managed-runtime lane in `pkg/models/local`. It protects the subprocess adapter and managed local model behavior without requiring the full end-to-end API flow.
+- `make long-tests-managed-runtime` is the narrow specialty rerun for the managed-runtime lane in `pkg/services/models/internal/local`. It protects the subprocess adapter and managed local model behavior without requiring the full end-to-end API flow.
 - `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It delegates to `make pr-inference-approval` so the PR regression and specialty functional lane share one test invocation without changing the broader `make long-tests` meaning.
 - `make long-tests` is the explicit aggregate over those two opt-in specialty lanes. It prints the owned specialty lane before each nested step and reports the direct `make long-tests-...` rerun command on failure.
 
