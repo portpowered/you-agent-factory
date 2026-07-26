@@ -139,6 +139,84 @@ type Edges struct {
 	}
 }
 
+func TestRunRejectsEdgesTypeNameRedefiningProvidersLeafEffectContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name             string
+		localDeclaration string
+	}{
+		{
+			name:             "alias",
+			localDeclaration: "type Edges = leaf.Provider",
+		},
+		{
+			name:             "defined type",
+			localDeclaration: "type Edges leaf.Provider",
+		},
+		{
+			name: "embedded canonical interface",
+			localDeclaration: `type Edges interface {
+	leaf.Provider
+}`,
+		},
+		{
+			name: "declared provider effect method",
+			localDeclaration: `type Edges interface {
+	Infer(context.Context, string) (string, error)
+}`,
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
+
+import "context"
+
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+			writeGoSourceFile(
+				t,
+				repoRoot,
+				"pkg/services/edges/definition.go",
+				"package edges\n\n"+
+					"import (\n"+
+					"\t\"context\"\n"+
+					"\tleaf \"github.com/portpowered/infinite-you/"+providersLeafEffectContractPackage+"\"\n"+
+					")\n\n"+
+					"var _ context.Context\n"+
+					"var _ leaf.Provider\n\n"+
+					testCase.localDeclaration+"\n",
+			)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want Edges provider-effect contract redefinition rejected")
+			}
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited provider-effect contract redefinition",
+				"pkg/services/edges",
+				"Edges",
+				"aggregate the exact Providers leaf effect contract unchanged",
+				"canonical owner: " + providersLeafEffectContractPackage,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestRunRejectsEdgesAliasingProvidersLeafEffectContract(t *testing.T) {
 	t.Parallel()
 

@@ -96,8 +96,11 @@ primary-result behavior.
   signature rather than a local type name, resolves the standard-library
   `context.Context` parameter through normal, renamed, and dot imports, and
   resolves leaf aliases through the declaring file's imports, so unrelated
-  `Provider` interfaces and aliases remain valid. Prove ownership behavior with
-  deliberate `run()` fixtures rather than package-local source inventories.
+  `Provider` interfaces and aliases remain valid. Do not exempt declarations
+  solely because they reuse the production aggregator type name: the AST shape
+  distinguishes an allowed `Edges` struct field from an `Edges` alias, defined
+  type, or interface that redeclares the leaf contract. Prove ownership behavior
+  with deliberate `run()` fixtures rather than package-local source inventories.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal

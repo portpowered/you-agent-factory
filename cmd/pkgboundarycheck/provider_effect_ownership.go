@@ -207,9 +207,6 @@ func edgesProviderEffectRedefinition(
 	if typed.Name == nil {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if typed.Name.Name == "Edges" {
-		return providerEffectOwnershipFinding{}, false
-	}
 	if isProviderEffectPortDeclaration(typed, imports) {
 		return providerEffectOwnershipFinding{
 			kind:        "edges-redefinition",
