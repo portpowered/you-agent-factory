@@ -2418,6 +2418,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3667,6 +3685,14 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/commandenv",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/conductor",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",
