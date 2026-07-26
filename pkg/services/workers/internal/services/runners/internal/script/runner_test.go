@@ -233,6 +233,193 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 	}
 }
 
+func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResponse(t *testing.T) {
+	processFailure := errors.New("exec: executable file not found")
+	tests := []struct {
+		name            string
+		result          workers.CommandResult
+		commandErr      error
+		wantMessage     string
+		wantOutcome     workers.ScriptExecutionOutcome
+		wantFailureType *workers.ScriptFailureType
+		wantExitCode    *int
+	}{
+		{
+			name: "non-zero exit",
+			result: workers.CommandResult{
+				Stdout:   []byte("partial stdout\n"),
+				Stderr:   []byte("command rejected input\n"),
+				ExitCode: 17,
+			},
+			wantMessage:  "command rejected input",
+			wantOutcome:  workers.ScriptExecutionOutcomeFailedExitCode,
+			wantExitCode: intPointer(17),
+		},
+		{
+			name: "process start failure",
+			result: workers.CommandResult{
+				Stdout: []byte("partial stdout"),
+				Stderr: []byte("partial stderr"),
+			},
+			commandErr:      processFailure,
+			wantMessage:     "script command execution failed",
+			wantOutcome:     workers.ScriptExecutionOutcomeProcessError,
+			wantFailureType: scriptFailureTypePointer(workers.ScriptFailureTypeProcessError),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runCommandFailureCase(t, test.result, test.commandErr, test.wantMessage,
+				test.wantOutcome, test.wantFailureType, test.wantExitCode, processFailure)
+		})
+	}
+}
+
+func runCommandFailureCase(
+	t *testing.T,
+	commandResult workers.CommandResult,
+	commandErr error,
+	wantMessage string,
+	wantOutcome workers.ScriptExecutionOutcome,
+	wantFailureType *workers.ScriptFailureType,
+	wantExitCode *int,
+	processFailure error,
+) {
+	t.Helper()
+	observations := &observationLog{}
+	commandEdge := &streamingCommandEdge{
+		observations: observations,
+		chunks: []outputChunk{
+			{stream: platformprocess.OutputStreamStdout, payload: "partial stdout"},
+			{stream: platformprocess.OutputStreamStderr, payload: "partial stderr"},
+		},
+		result: commandResult,
+		err:    commandErr,
+	}
+	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.UTC)
+	scriptRunner, err := New(Config{Command: "missing-tool"}, Dependencies{
+		CommandRunner: commandEdge,
+		FactoryDocs:   emptyDocs,
+		Now:           (&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
+		Publish: func(fragment workers.ProgressFragment) {
+			observations.Append(fragment.Type + ":" + fragment.Payload)
+		},
+		Record: func(event workers.ScriptEvent) {
+			if event.Request != nil {
+				observations.Append("request")
+			}
+			if event.Response != nil {
+				observations.Append("terminal")
+				observations.SetTerminal(*event.Response)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, executeErr := scriptRunner.Execute(t.Context(), validRequest())
+	var failure *workers.ProviderError
+	if !errors.As(executeErr, &failure) ||
+		failure.Type != workers.WorkFailureTypeInternalServerError ||
+		failure.Message != wantMessage {
+		t.Fatalf("Execute() error = %#v, want normalized failure message %q", executeErr, wantMessage)
+	}
+	if commandErr != nil && !errors.Is(executeErr, processFailure) {
+		t.Fatalf("Execute() error = %v, want process cause", executeErr)
+	}
+	assertFailureDiagnostics(t, result.Diagnostics, commandResult, 2*time.Second)
+	assertFailureDiagnostics(t, failure.Diagnostics, commandResult, 2*time.Second)
+	assertFailureObservation(t, observations, commandResult, wantOutcome, wantFailureType, wantExitCode)
+
+	result.Diagnostics.Command.Stdout = "mutated"
+	if failure.Diagnostics.Command.Stdout != string(commandResult.Stdout) {
+		t.Fatalf("failure diagnostics changed through returned result mutation: %#v", failure.Diagnostics.Command)
+	}
+}
+
+func assertFailureObservation(
+	t *testing.T,
+	observations *observationLog,
+	result workers.CommandResult,
+	wantOutcome workers.ScriptExecutionOutcome,
+	wantFailureType *workers.ScriptFailureType,
+	wantExitCode *int,
+) {
+	t.Helper()
+	wantOrder := []string{
+		"request",
+		"command",
+		"stdout:partial stdout",
+		"stderr:partial stderr",
+		"terminal",
+	}
+	if got := observations.Values(); !reflect.DeepEqual(got, wantOrder) {
+		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
+	}
+	terminal := observations.Terminal()
+	if terminal.Outcome != wantOutcome ||
+		terminal.DurationMillis != 2000 ||
+		!reflect.DeepEqual(terminal.ExitCode, wantExitCode) ||
+		!reflect.DeepEqual(terminal.FailureType, wantFailureType) ||
+		terminal.Stdout != string(result.Stdout) ||
+		terminal.Stderr != string(result.Stderr) {
+		t.Fatalf("terminal response = %#v", terminal)
+	}
+}
+
+func TestRunnerValidationFailureDoesNotRecordOrStartCommand(t *testing.T) {
+	observations := &observationLog{}
+	commandEdge := &streamingCommandEdge{observations: observations}
+	scriptRunner, err := New(
+		Config{Command: "echo", Args: []string{"{{"}},
+		Dependencies{
+			CommandRunner: commandEdge,
+			FactoryDocs:   emptyDocs,
+			Now:           func() time.Time { return time.Unix(0, 0) },
+			Publish:       func(workers.ProgressFragment) { observations.Append("progress") },
+			Record:        func(workers.ScriptEvent) { observations.Append("event") },
+		},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, executeErr := scriptRunner.Execute(t.Context(), validRequest())
+	assertFailureType(t, executeErr, workers.WorkFailureTypePermanentBadRequest)
+	if got := observations.Values(); len(got) != 0 {
+		t.Fatalf("observations = %#v, want none for validation rejection", got)
+	}
+}
+
+func assertFailureDiagnostics(
+	t *testing.T,
+	diagnostics *workers.WorkDiagnostics,
+	commandResult workers.CommandResult,
+	wantDuration time.Duration,
+) {
+	t.Helper()
+	if diagnostics == nil || diagnostics.Command == nil {
+		t.Fatalf("diagnostics = %#v, want command diagnostics", diagnostics)
+	}
+	command := diagnostics.Command
+	if command.Command != "missing-tool" ||
+		command.Stdout != string(commandResult.Stdout) ||
+		command.Stderr != string(commandResult.Stderr) ||
+		command.ExitCode != commandResult.ExitCode ||
+		command.Duration != wantDuration {
+		t.Fatalf("command diagnostics = %#v", command)
+	}
+}
+
+func intPointer(value int) *int {
+	return &value
+}
+
+func scriptFailureTypePointer(value workers.ScriptFailureType) *workers.ScriptFailureType {
+	return &value
+}
+
 func assertSuccessfulDiagnostics(
 	t *testing.T,
 	result workers.RunnerExecutionResult,
@@ -602,6 +789,7 @@ type streamingCommandEdge struct {
 	request      workers.CommandRequest
 	chunks       []outputChunk
 	result       workers.CommandResult
+	err          error
 }
 
 func (edge *streamingCommandEdge) Run(
@@ -631,7 +819,7 @@ func (edge *streamingCommandEdge) RunStreaming(
 		Stdout:   append([]byte(nil), edge.result.Stdout...),
 		Stderr:   append([]byte(nil), edge.result.Stderr...),
 		ExitCode: edge.result.ExitCode,
-	}, nil
+	}, edge.err
 }
 
 func (edge *streamingCommandEdge) Request() workers.CommandRequest {

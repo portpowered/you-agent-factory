@@ -128,22 +128,76 @@ func (r *runner) Execute(
 	)
 	finished := r.now()
 	duration := finished.Sub(started)
+	diagnostics := commandDiagnostics(commandRequest, result, duration)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return workers.RunnerExecutionResult{}, ctxErr
 		}
-		return workers.RunnerExecutionResult{}, workers.NewProviderError(
-			workers.WorkFailureTypeInternalServerError,
+		r.record(scriptFailureEvent(
+			commandRequest,
+			requestID,
+			result,
+			duration,
+			workers.ScriptExecutionOutcomeProcessError,
+			finished,
+		))
+		return failureResult(result, diagnostics), executionFailure(
 			"script command execution failed",
 			err,
+			diagnostics,
 		)
 	}
-	diagnostics := commandDiagnostics(commandRequest, result, duration)
+	if result.ExitCode != 0 {
+		r.record(scriptFailureEvent(
+			commandRequest,
+			requestID,
+			result,
+			duration,
+			workers.ScriptExecutionOutcomeFailedExitCode,
+			finished,
+		))
+		return failureResult(result, diagnostics), executionFailure(
+			nonZeroExitMessage(result),
+			nil,
+			diagnostics,
+		)
+	}
 	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished))
 	return workers.RunnerExecutionResult{
 		Content:     strings.TrimSpace(string(result.Stdout)),
 		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
 	}, nil
+}
+
+func failureResult(
+	result workers.CommandResult,
+	diagnostics *workers.WorkDiagnostics,
+) workers.RunnerExecutionResult {
+	return workers.RunnerExecutionResult{
+		Content:     strings.TrimSpace(string(result.Stdout)),
+		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
+	}
+}
+
+func executionFailure(
+	message string,
+	cause error,
+	diagnostics *workers.WorkDiagnostics,
+) error {
+	failure := workers.NewProviderError(
+		workers.WorkFailureTypeInternalServerError,
+		message,
+		cause,
+	)
+	failure.Diagnostics = workers.CloneWorkDiagnostics(diagnostics)
+	return failure
+}
+
+func nonZeroExitMessage(result workers.CommandResult) string {
+	if message := strings.TrimSpace(string(result.Stderr)); message != "" {
+		return message
+	}
+	return fmt.Sprintf("script command exited with status %d", result.ExitCode)
 }
 
 func (r *runner) resolveCommandRequest(

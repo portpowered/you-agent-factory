@@ -109,6 +109,39 @@ func scriptSuccessEvent(
 	})
 }
 
+func scriptFailureEvent(
+	request workers.CommandRequest,
+	requestID string,
+	result workers.CommandResult,
+	duration time.Duration,
+	outcome workers.ScriptExecutionOutcome,
+	eventTime time.Time,
+) workers.ScriptEvent {
+	failureType := workers.ScriptFailureTypeProcessError
+	var exitCode *int
+	if outcome == workers.ScriptExecutionOutcomeFailedExitCode {
+		failureType = ""
+		value := result.ExitCode
+		exitCode = &value
+	}
+	var failureTypePointer *workers.ScriptFailureType
+	if failureType != "" {
+		failureTypePointer = &failureType
+	}
+	return scriptEvent(request, eventTime, nil, &workers.ScriptResponseEventPayload{
+		Attempt:         scriptAttempt,
+		DispatchID:      request.DispatchID,
+		DurationMillis:  duration.Milliseconds(),
+		ExitCode:        exitCode,
+		FailureType:     failureTypePointer,
+		Outcome:         outcome,
+		ScriptRequestID: requestID,
+		Stderr:          string(result.Stderr),
+		Stdout:          string(result.Stdout),
+		TransitionID:    request.TransitionID,
+	})
+}
+
 func scriptEvent(
 	request workers.CommandRequest,
 	eventTime time.Time,

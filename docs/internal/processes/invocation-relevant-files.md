@@ -1738,3 +1738,9 @@ response-stream output.
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;
   component tests that inject a pathname do not verify production routing.
+- A Runner that starts an injected command must retain partial stdout/stderr in
+  detached result and failure diagnostics, then emit exactly one terminal event
+  after all progress fragments. Normal non-zero exits keep their exact exit code
+  and use the failed-exit outcome; process-start failures omit an exit code and
+  use the process-error outcome. Validation failures occur before request-event
+  recording or command invocation.
