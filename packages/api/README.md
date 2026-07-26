@@ -8,7 +8,7 @@ are not JavaScript module APIs.
 
 | Export | Raw artifact |
 | --- | --- |
-| `@you-agent-factory/api/manifest` | Contract publication manifest JSON with export metadata and artifact hashes |
+| `@you-agent-factory/api/manifest` | Commit-independent development metadata and artifact hashes; publication candidates add source provenance |
 | `@you-agent-factory/api/openapi` | Bundled OpenAPI YAML |
 | `@you-agent-factory/api/cli` | CLI command inventory JSON |
 | `@you-agent-factory/api/mcp` | MCP tool inventory JSON |

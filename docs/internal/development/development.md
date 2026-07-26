@@ -98,7 +98,7 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
 | Unit then integration | `cd ui && bun run test` | Bun unit lane, then Vitest integration |
 | Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
-| Storybook browser stories | `cd ui && bun run storybook:test-runner:ci` or `make ui-test-storybook` | Vitest Storybook project (`vitest.storybook.config.ts`) |
+| Storybook browser integration | `make ui-storybook-integration-test` | Storybook static build plus focused responsive browser checks |
 
 Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` for dashboard unit work so batching, exclusions, preload, and worker policy stay aligned with CI. Targeted unit proof may still use `cd ui && bun test <paths>` when a story explicitly needs one file or subtree. Storybook browser, Storybook script verifiers, and the coverage standalone dashboard-shell script phase remain Vitest-only; idea and cleanup writeups should cite `bun run test:unit`, `make ui-test`, `make test-ui-coverage`, or the Storybook Vitest commands above instead of legacy `vitest run` unit invocations.
 
@@ -110,15 +110,15 @@ The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automati
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow schedules only the ownership-selected lanes. Frontend coverage and
-browser integration are separate jobs, as are backend verification, focused
+The workflow schedules only the ownership-selected lanes. Frontend coverage,
+mocked browser integration, and Storybook integration are separate jobs, as are backend verification, focused
 real-backend browser verification, API package verification, the two other
 package-family checks, documentation checks, and local inference. `make
 verify-pr` remains the intentionally broad local aggregate, while a CI lane
 uses the direct command shown in the ownership table below.
 
-Use `make test-ui-coverage` and `make test-ui-browser-integration` to reproduce
-the frontend jobs. Use `make test-backend-verification` and `make
+Use `make test-ui-coverage`, `make test-ui-browser-integration`, and `make
+test-ui-storybook-integration` to reproduce the frontend jobs. Use `make test-backend-verification` and `make
 ui-durable-session-real-backend-integration-test` for backend-owned changes.
 The browser jobs install Chromium in their own setup.
 
@@ -215,7 +215,9 @@ ownership table above; it does not use the historical coverage-shard matrix.
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
 | --- | --- | --- | --- |
 | `Frontend` | dashboard typecheck, lint, and covered unit verification | `make typecheck ui-lint test-ui-coverage` | Keeps frontend-only behavior separate from browser and backend ownership. |
-| `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. See [UI browser integration stability](ui-browser-integration-stability.md) for sequential suite rules, port/download isolation, and durable wait helpers. |
+| `Frontend Browser` | explicit mocked/static browser inventory with test-scoped API and browser isolation | `make ui-integration-test` | Keeps mocked real-browser workflows independent from Storybook and the Go-backed UI lane. |
+| `Frontend Storybook` | Storybook static build and focused responsive browser checks | `make ui-storybook-integration-test` | Runs in parallel with the mocked browser and UI backend lanes instead of extending their critical path. |
+| `UI Backend Integration` | durable-session browser scenarios against the real Go browser API harness | `make ui-durable-session-real-backend-integration-test` | Owns Go setup and real-backend behavior outside the mocked browser lane. |
 | `Backend Verification` | `make test-unit-coverage` and `make functional-test-viz` run sequentially in the Backend job. | `make test-backend-verification` | Keeps the direct local aggregate aligned with the selected Backend lane. |
 | `Backend Unit Coverage` | `cmd/gocoveragecheck` executes tests from `./cmd/factory` and maintained backend `./pkg/...` packages while measuring backend-owned code. | `make test-unit-coverage` | Keeps package-level coverage and per-package gates independent from system-level functional coverage. |
 | `Backend Functional Coverage` | `make functional-test-viz`: `functional-boundary-check`, then one `cmd/gocoveragecheck` functional coverage run (profile + JSON), then the Markdown catalog generator. | `make functional-test-viz` | Shows the internal-system coverage contributed by functional flows without unit, stress, or release tests affecting the profile, and uploads the inventory-plus-coverage artifact set. Boundary regressions cannot pass this lane on coverage alone. Coverage-only local reruns remain `make test-functional-coverage`. |

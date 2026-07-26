@@ -1,19 +1,17 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   fillModelWorkerAddOperationDraft,
   modelProviderOptionLabel,
-  openBrowserPage,
   selectLabeledComboboxOption,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const editableGraphFactoryDefinition = {
   metadata: {
@@ -266,21 +264,10 @@ async function addWorker(
   });
 }
 
-describe.sequential("factory graph editor selection panel delete browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("factory graph editor selection panel delete browser integration", () => {
   it(
     "shows current selection without panel topology delete for all five entity types",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
@@ -323,7 +310,7 @@ describe.sequential("factory graph editor selection panel delete browser integra
 
   it(
     "stages topology removal via graph selection batch delete and keeps worker configuration editable",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,

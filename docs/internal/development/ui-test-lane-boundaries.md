@@ -55,8 +55,8 @@ Avoid browser-only coverage for:
 | --- | --- | --- |
 | `writeFactoryExportPng` / `readFactoryImportPng` payload shape | Unit tests under `ui/src/features/export` and `ui/src/features/import` | Not required when unit coverage exists |
 | Import preview dialog shows embedded factory name | jsdom `App.import.test.tsx` (mocked PNG read) | One real roundtrip: export PNG from dashboard, drop file, preview image visible |
-| `REPLACE_CURRENT` preserves session factory name | jsdom activation-body assertions | `factory-name-preservation.integration.test.mjs` captures PUT body from real export/import |
-| `UPSERT_NAMED_AND_ACTIVATE` target naming | jsdom mode-selection test | `factory-name-preservation.integration.test.mjs` create-new-named scenario |
+| `REPLACE_CURRENT` preserves session factory name | `App.import.test.tsx` plus import-activation API tests | Not repeated when the activation body is directly asserted |
+| `UPSERT_NAMED_AND_ACTIVATE` target naming | `App.import.test.tsx`, import-activation API, and import activation hook tests | Not repeated when mode and target naming are directly asserted |
 | Non-default session tab scoping | Not app-shell default | `factory-import-second-session.integration.test.mjs` |
 | Full export dialog field validation and status copy | jsdom `App.import.test.tsx` or component tests | **Not** repeated in browser — browser stops at download + activation payload |
 
@@ -66,7 +66,7 @@ Avoid browser-only coverage for:
 | --- | --- | --- |
 | Draft graph mutations, edge handles, validation targets | `react-flow-current-activity-card*.test.ts*`, `graph-editor-harness*.test.ts` | Not required for pure graph math |
 | Edit mode toggling and local panel state | jsdom graph-editor card tests | Only when behavior depends on real layout measurement or Chromium hit targets |
-| Save topology `PUT` with canonical session name | jsdom save-hook tests where mocked | `factory-name-preservation.integration.test.mjs` save scenario |
+| Save topology `PUT` with canonical session name | `useFactoryDocumentSave.test.tsx` | Browser graph-save coverage verifies the network payload shape without repeating name preservation |
 | Node placement after add/delete in real viewport | Partial jsdom coverage | `factory-graph-editor-node-placement.integration.test.mjs`, `factory-graph-editor-selection-no-panel-delete.integration.test.mjs` |
 | Session switch retaining graph selection | Cross-session shell behavior | `factory-graph-editor-session-switch.integration.test.mjs` |
 | Export after graph edit + PNG roundtrip | jsdom activation bodies | `factory-graph-editor.integration.test.mjs` |

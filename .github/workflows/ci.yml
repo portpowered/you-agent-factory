@@ -171,14 +171,23 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-deps ui-install-playwright ui-integration-test
+
+  frontend-storybook:
+    name: Frontend Storybook
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps ui-install-playwright ui-storybook-integration-test
 
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
@@ -275,8 +284,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -342,7 +349,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
+    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -369,7 +376,7 @@ jobs:
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} frontend_storybook=${{ needs.frontend-storybook.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -385,6 +392,7 @@ jobs:
             "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
             "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage-merge.result }}|$FRONTEND_REASON" \
             "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
+            "Frontend Storybook|$RUN_FRONTEND|${{ needs.frontend-storybook.result }}|$FRONTEND_REASON" \
             "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
             "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
             "API Contract And Package|$RUN_API|${{ needs.api-package.result }}|$API_REASON" \

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import {
   buildReplayCoverageReport,
   formatReplayCoverageReportMarkdown,
@@ -8,15 +8,13 @@ import {
 } from "../src/testing/replay-fixture-catalog";
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   loadReplayLines,
-  openBrowserPage,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const replayCurrentFactoryDefinition = {
   name: "Browser Replay Factory",
@@ -206,7 +204,11 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
   }
 }
 
-async function assertReplayScenarioRenders(preview, replayFixture) {
+async function assertReplayScenarioRenders(
+  preview,
+  replayFixture,
+  { expect, openBrowserPage },
+) {
   const { browserIntegration, fileName, id } = replayFixture;
   const {
     finalTick,
@@ -302,27 +304,15 @@ async function assertReplayScenarioRenders(preview, replayFixture) {
   }
 }
 
-describe.sequential("captured event stream replay", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
-  afterEach(async () => {
-    // replay servers are created per-test and stopped in the scenario helper
-  });
-
+describe.concurrent("captured event stream replay", () => {
   for (const replayFixture of replayFixtures) {
     it(
       `renders '${replayFixture.id}' without uncaught browser exceptions`,
-      async () => {
-        await assertReplayScenarioRenders(preview, replayFixture);
+      async ({ expect, openBrowserPage, preview }) => {
+        await assertReplayScenarioRenders(preview, replayFixture, {
+          expect,
+          openBrowserPage,
+        });
       },
       browserScenarioTimeoutMs,
     );
@@ -330,7 +320,7 @@ describe.sequential("captured event stream replay", () => {
 
   it(
     "opens the default event stream path for browser replay coverage",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const replayServer = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: replayCurrentFactoryDefinition,
