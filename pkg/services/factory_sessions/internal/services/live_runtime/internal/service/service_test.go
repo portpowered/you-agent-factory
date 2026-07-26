@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -119,6 +120,34 @@ func TestServiceCoordinatesLifecycleAndPreservesTypedRejection(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsRootOnlyRuntimeForLegacySnapshotPaths(t *testing.T) {
+	t.Parallel()
+
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) {
+		return &rootOnlyRuntime{}, nil
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	_, snapshotErr := service.Snapshot(context.Background(), "session-1")
+	if snapshotErr == nil || !strings.Contains(snapshotErr.Error(), "legacy Factory Runtime observation is unavailable") {
+		t.Fatalf("Snapshot error = %v, want unavailable legacy observation", snapshotErr)
+	}
+
+	_, controlErr := service.ApplyControl(
+		context.Background(),
+		"session-1",
+		factorysessions.LifecycleControlPause,
+		factorysessions.ControlRequest{},
+	)
+	if controlErr == nil || !strings.Contains(controlErr.Error(), "legacy Factory Runtime observation is unavailable") {
+		t.Fatalf("ApplyControl error = %v, want unavailable legacy observation", controlErr)
+	}
+}
+
 func testDependencies() liveruntime.Dependencies {
 	return liveruntime.Dependencies{
 		OpenForTarget:  func(context.Context, factorysessions.Target) (string, error) { return "session", nil },
@@ -134,6 +163,8 @@ func testDependencies() liveruntime.Dependencies {
 		},
 	}
 }
+
+type rootOnlyRuntime struct{ factoryruntime.Service }
 
 type testFactoryRuntime struct {
 	state      string
