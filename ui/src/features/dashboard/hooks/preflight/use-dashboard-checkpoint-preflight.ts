@@ -1,13 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import type { DashboardStreamState } from "../../../../api/dashboard/types";
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
 import {
   clearTimelineCheckpointsForSession,
-  deletePersistedTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
-} from "../../../timeline/public/checkpoint-persistence";
-import type { FactoryTimelineCheckpoint } from "../../../timeline/public/store";
+} from "../../../timeline/state/timelineCheckpointPersistence";
+import { deletePersistedTimelineCheckpoint } from "../../../timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
+import type { FactoryTimelineCheckpoint } from "../../../timeline/state/timeline/storeState";
 import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
@@ -39,6 +40,39 @@ export interface UseDashboardCheckpointPreflightResult {
   persistedCheckpoint: FactoryTimelineCheckpoint | null;
   resolvedSessionID: string | null;
   streamIdentity: TimelineCheckpointStreamIdentity | null;
+}
+
+export interface DashboardCheckpointPreflightEffects {
+  clearCheckpointsForSession: typeof clearTimelineCheckpointsForSession;
+  deleteCheckpoint: typeof deletePersistedTimelineCheckpoint;
+  recoverSessionState: typeof recoverDashboardSessionScopedState;
+  resolvePreflight: typeof resolveDashboardCheckpointPreflight;
+}
+
+const defaultEffects: DashboardCheckpointPreflightEffects = {
+  clearCheckpointsForSession: clearTimelineCheckpointsForSession,
+  deleteCheckpoint: deletePersistedTimelineCheckpoint,
+  recoverSessionState: recoverDashboardSessionScopedState,
+  resolvePreflight: resolveDashboardCheckpointPreflight,
+};
+
+export interface DashboardCheckpointPreflightOptions {
+  checkpointHydrationKey: string | null;
+  checkpointsDisabled: boolean;
+  rawSessionID: string | null;
+  refreshToken: number;
+  restoreCheckpoint: (
+    streamIdentity: TimelineCheckpointStreamIdentity,
+    checkpoint: FactoryTimelineCheckpoint,
+  ) => void;
+}
+
+interface DashboardCheckpointPreflightCoreOptions
+  extends DashboardCheckpointPreflightOptions {
+  effects?: DashboardCheckpointPreflightEffects;
+  queryClient: QueryClient;
+  remapSelectedSessionID: (sessionID: string) => void;
+  setStreamState: (streamState: DashboardStreamState) => void;
 }
 
 function resetDashboardCheckpointPreflightState(
@@ -120,27 +154,33 @@ function recordIdentityOutcome(
   }
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook deliberately owns the single guarded apply boundary for all preflight mutations.
-export function useDashboardCheckpointPreflight({
-  checkpointHydrationKey,
-  checkpointsDisabled,
-  rawSessionID,
-  restoreCheckpoint,
-}: {
-  checkpointHydrationKey: string | null;
-  checkpointsDisabled: boolean;
-  rawSessionID: string | null;
-  refreshToken: number;
-  restoreCheckpoint: (
-    streamIdentity: TimelineCheckpointStreamIdentity,
-    checkpoint: FactoryTimelineCheckpoint,
-  ) => void;
-}): UseDashboardCheckpointPreflightResult {
+export function useDashboardCheckpointPreflight(
+  options: DashboardCheckpointPreflightOptions,
+): UseDashboardCheckpointPreflightResult {
   const queryClient = useQueryClient();
   const remapSelectedSessionID = useRemapDashboardSelectedSession();
   const setStreamState = useDashboardStreamStore(
     (state) => state.setStreamState,
   );
+  return useDashboardCheckpointPreflightCore({
+    ...options,
+    queryClient,
+    remapSelectedSessionID,
+    setStreamState,
+  });
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the core owns the single guarded apply boundary for all preflight mutations.
+export function useDashboardCheckpointPreflightCore({
+  checkpointHydrationKey,
+  checkpointsDisabled,
+  effects = defaultEffects,
+  queryClient,
+  rawSessionID,
+  remapSelectedSessionID,
+  restoreCheckpoint,
+  setStreamState,
+}: DashboardCheckpointPreflightCoreOptions): UseDashboardCheckpointPreflightResult {
   const [checkpointHydratedKey, setCheckpointHydratedKey] = useState<
     string | null
   >(null);
@@ -203,7 +243,7 @@ export function useDashboardCheckpointPreflight({
 
     void (async () => {
       try {
-        const resolution = await resolveDashboardCheckpointPreflight({
+        const resolution = await effects.resolvePreflight({
           indexedDB: window.indexedDB,
           requestedSessionId: rawSessionID,
           signal: abortController.signal,
@@ -230,20 +270,20 @@ export function useDashboardCheckpointPreflight({
 
       if (resolution.clearRequestedSessionCheckpoint) {
         if (resolution.checkpointToDelete) {
-          await deletePersistedTimelineCheckpoint(
+          await effects.deleteCheckpoint(
             window.indexedDB,
             resolution.checkpointToDelete,
             { signal },
           );
         } else {
-          await clearTimelineCheckpointsForSession(
+          await effects.clearCheckpointsForSession(
             window.indexedDB,
             resolution.requestedSessionId,
             { signal },
           );
         }
         if (!remainsActive(resolution.requestedSessionId)) return;
-        recoverDashboardSessionScopedState(
+        effects.recoverSessionState(
           queryClient,
           resolution.requestedSessionId,
           () => {},
@@ -315,6 +355,7 @@ export function useDashboardCheckpointPreflight({
   }, [
     checkpointHydrationKey,
     checkpointsDisabled,
+    effects,
     queryClient,
     rawSessionID,
     remapSelectedSessionID,
