@@ -195,6 +195,7 @@ func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 
 type replacementFactory struct {
 	factory.Factory
+	factory.Service
 }
 
 func (replacementFactory) Run(ctx context.Context) error {

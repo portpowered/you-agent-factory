@@ -728,6 +728,10 @@ func (fake *peerRootServiceFake) ProbeDurableFactorySessionEvents(context.Contex
 	return ErrDurableSessionNotFound
 }
 
+func (fake *peerRootServiceFake) GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.LegacyEngineObservation, error) {
+	return nil, ErrSessionNotFound
+}
+
 func (fake *peerRootServiceFake) PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
 	return LifecycleControlResult{}, ErrSessionNotFound
 }

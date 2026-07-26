@@ -203,12 +203,6 @@ pkg/services/recordings/replay/event_artifact.go: unreachable func: runStartedFa
 pkg/services/recordings/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
 pkg/services/work/materialize/materialize.go: unreachable func: Options.maxRedirects
 pkg/services/work/materialize/materialize.go: unreachable func: Options.timeout
-pkg/services/work/service/service.go: unreachable func: New
-pkg/services/work/service/service.go: unreachable func: Service.GetEngineStateSnapshotForSession
-pkg/services/work/service/service.go: unreachable func: Service.MoveWorkForSession
-pkg/services/work/service/service.go: unreachable func: Service.SubmitWorkRequestForSession
-pkg/services/work/service/service.go: unreachable func: Service.SubscribeFactoryEventsForSession
-pkg/services/work/service/service.go: unreachable func: Service.runtime
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture

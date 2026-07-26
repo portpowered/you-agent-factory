@@ -367,6 +367,10 @@
       "minimum": 36.92
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation",
+      "minimum": 78.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
       "minimum": 42.85
     },

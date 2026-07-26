@@ -10,12 +10,102 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
+func assertManualWorkMoveRootRuntimeAndScopedStatusStayAligned(t *testing.T) {
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "manual-root-work-move",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "unused-worker"}},
+	})
+	server := startFunctionalServer(t, dir, true)
+
+	submitted := server.SubmitRuntimeWork(t, work.SubmitRequest{
+		Name: "manual move", WorkTypeID: "task", Payload: []byte(`{"title":"move me"}`),
+	})
+	if len(submitted) != 1 || submitted[0].WorkID == "" {
+		t.Fatalf("submitted Work = %#v, want one public Work ID", submitted)
+	}
+
+	const moveRequestID = "manual-root-work-move-request"
+	moved := postGeneratedMoveWorkWithRequestID(
+		t,
+		server.URL(),
+		submitted[0].WorkID,
+		"complete",
+		moveRequestID,
+	)
+	if got := generatedWorkStateName(moved.State); got != "complete" {
+		t.Fatalf("moved Work state = %q, want complete", got)
+	}
+	assertGeneratedMoveWorkConflict(
+		t,
+		server.URL(),
+		submitted[0].WorkID,
+		"complete",
+		moveRequestID,
+	)
+
+	current := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	scoped := getGeneratedJSON[factoryapi.StatusResponse](
+		t,
+		server.URL()+"/factory-sessions/~default/status",
+	)
+	if current.TotalTokens != 1 || current.Categories.Terminal != 1 {
+		t.Fatalf("current root status = %#v, want one terminal Work", current)
+	}
+	if scoped.TotalTokens != current.TotalTokens || scoped.Categories != current.Categories {
+		t.Fatalf("scoped status = %#v, want current root status %#v", scoped, current)
+	}
+
+	opened := postJSON[factoryapi.OpenFactorySessionResponse](
+		t,
+		server.URL()+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{FolderPath: dir},
+		"open a second root-contract Factory Session",
+	)
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("opened Factory Session = %#v, want a public session ID", opened)
+	}
+	_ = getGeneratedJSON[factoryapi.StatusResponse](
+		t,
+		server.URL()+"/factory-sessions/"+opened.Session.Id+"/status",
+	)
+	closeFactorySession(t, server.URL(), opened.Session.Id)
+	closeFactorySession(t, server.URL(), "~default")
+}
+
+func closeFactorySession(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+sessionID, nil)
+	if err != nil {
+		t.Fatalf("construct close session request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE default Factory Session: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("DELETE Factory Session %q status = %d, want 204: %s", sessionID, resp.StatusCode, payload)
+	}
+}
+
 func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.T) {
+	t.Run("root runtime and scoped status stay aligned", assertManualWorkMoveRootRuntimeAndScopedStatusStayAligned)
+
 	if testing.Short() {
 		t.Skip("slow manual work recovery functional test")
 	}
@@ -113,8 +203,22 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 
 func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
 	t.Helper()
+	return postGeneratedMoveWorkWithRequestID(t, baseURL, workID, stateName, "")
+}
 
-	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
+func postGeneratedMoveWorkWithRequestID(
+	t *testing.T,
+	baseURL string,
+	workID string,
+	stateName string,
+	requestID string,
+) factoryapi.Work {
+	t.Helper()
+	request := factoryapi.MoveWorkRequest{StateName: stateName}
+	if requestID != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal move request: %v", err)
 	}
@@ -132,6 +236,36 @@ func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) fact
 		t.Fatalf("decode move response: %v", err)
 	}
 	return work
+}
+
+func assertGeneratedMoveWorkConflict(
+	t *testing.T,
+	baseURL string,
+	workID string,
+	stateName string,
+	requestID string,
+) {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.MoveWorkRequest{
+		StateName: stateName,
+		RequestId: &requestID,
+	})
+	if err != nil {
+		t.Fatalf("marshal duplicate move request: %v", err)
+	}
+	resp, err := http.Post(
+		support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move"),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST duplicate /work/%s/move: %v", workID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("duplicate move status = %d, want 409: %s", resp.StatusCode, payload)
+	}
 }
 
 func waitForGeneratedWorkIDsAtState(t *testing.T, baseURL string, workIDs []string, stateName string, timeout time.Duration) {
