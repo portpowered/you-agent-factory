@@ -46,6 +46,12 @@ func normalize(input Input) (processInput, error) {
 
 	environment := make(map[string]string, len(input.Env))
 	for _, entry := range input.Env {
+		// Windows includes reserved current-directory entries such as
+		// "=C:=C:\\work" in os.Environ. They are not ordinary environment
+		// variables and cannot be looked up by the CLI.
+		if strings.HasPrefix(entry, "=") {
+			continue
+		}
 		name, value, ok := strings.Cut(entry, "=")
 		if !ok || name == "" {
 			return processInput{}, fmt.Errorf("normalize process input: invalid environment entry %q", entry)

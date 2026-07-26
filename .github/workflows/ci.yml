@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   # Keep this pinned version aligned with ui/package.json's packageManager value.
@@ -347,6 +347,11 @@ jobs:
           fi
 
           echo "Independent Build, Lint, and API checks succeeded."
+
+  long-local-inference:
+    name: Long Local Inference
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/long-local-inference.yml
 
   release-surface-smoke:
     name: Release Surface Smoke

@@ -616,7 +616,7 @@ endif
 
 ui-build:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec tsc -b && $(NPM) exec vite build && node scripts/normalize-dist-output.mjs
+	cd ui && $(NPM) run build
 else
 	cd ui && $(UI_SCRIPT) build
 endif
