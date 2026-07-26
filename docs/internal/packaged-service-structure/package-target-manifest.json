@@ -250,6 +250,9 @@
     "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
+    "pkg/services/workers/internal/services/runtime_assembly",
+    "pkg/services/workers/internal/services/runtime_assembly/internal/service",
+    "pkg/services/workers/internal/services/runtime_assembly/wire",
     "pkg/services/workers/invocation",
     "pkg/services/workers/process",
     "pkg/services/workers/prompting",
@@ -1402,6 +1405,21 @@
       "packagePath": "pkg/services/workers/interface",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runtime_assembly"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/internal/service",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runtime_assembly"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/wire",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runtime_assembly"
     },
     {
       "packagePath": "pkg/services/workers/invocation",

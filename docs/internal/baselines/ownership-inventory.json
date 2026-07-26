@@ -3604,6 +3604,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/wire",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/invocation",
       "disposition": "retain",
       "destination": "workers",
