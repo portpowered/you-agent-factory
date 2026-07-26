@@ -309,6 +309,11 @@ func startRootRuntimeMCPServer(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	homeDir := t.TempDir()
+	t.Cleanup(func() {
+		// Remove initializer-owned files before testing.TempDir performs its
+		// strict Windows cleanup, matching the project-root persistence cleanup.
+		_ = os.RemoveAll(homeDir)
+	})
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	serveErr := make(chan error, 1)
