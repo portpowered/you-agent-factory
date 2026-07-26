@@ -7,7 +7,6 @@ import (
 	"go/printer"
 	"go/token"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -75,53 +74,6 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 				)
 			}
 		}
-	}
-}
-
-func TestProviderInferencePortHasSingleLeafOwner(t *testing.T) {
-	t.Parallel()
-
-	workersRoot := filepath.Join("..", "workers")
-	const canonical = "provider/inferencecontract/contract.go"
-	err := filepath.WalkDir(workersRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(workersRoot, path)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
-		for _, declaration := range file.Decls {
-			generic, ok := declaration.(*ast.GenDecl)
-			if !ok || generic.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range generic.Specs {
-				typed, ok := specification.(*ast.TypeSpec)
-				if !ok || typed.Name.Name != "Provider" {
-					continue
-				}
-				if relative != canonical {
-					t.Errorf(
-						"%s redeclares Provider; the external inference port is owned only by %s",
-						relative,
-						canonical,
-					)
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan Workers provider contracts: %v", err)
 	}
 }
 

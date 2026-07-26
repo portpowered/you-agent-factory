@@ -58,6 +58,7 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 	for index, importPath := range []string{
 		"github.com/portpowered/infinite-you/pkg/services/models",
 		"github.com/portpowered/infinite-you/pkg/services/workers/agypty",
+		providersLeafEffectContractImport,
 		"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
 		"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic",
 		"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear",

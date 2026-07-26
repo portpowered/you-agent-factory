@@ -87,8 +87,35 @@ primary-result behavior.
   non-overwrite policy in Factory Definitions and lifecycle activation in
   Initializer; the embedded publication package and catalog must not acquire
   either responsibility.
-- The customer-implementable provider inference contract lives in
-  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+- The customer-implementable provider inference contract currently lives in
+  `pkg/services/workers/provider/inferencecontract/` as migration debt. Durable
+  ownership belongs to the Providers Execution leaf
+  (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
+  encodes that ownership with deliberate fixtures, while Workers continues to
+  host the live declaration until later Providers packets land. The checker
+  resolves imports before classifying aliases, defined selector types, or
+  interfaces embedding the canonical leaf, so local type names and valid Go
+  declaration forms cannot create a second edges-owned contract. Catalog
+  enumeration and one-attempt execution share one Providers-owned source of
+  truth that absorbs Standardized Providers protocol/registry/open-config/testkit;
+  the checker rejects competing provider catalog, registry, conductor, or
+  execution-contract abstractions outside Providers and the absorbed Workers
+  `provider/` migration-debt surfaces. `pkg/services/edges`
+  may aggregate the exact leaf effect contract unchanged and must not redefine
+  or alias it. The checker recognizes the effect by its `Infer` method
+  signature rather than a local type name, resolves the standard-library
+  `context.Context` parameter through normal, renamed, and dot imports, and
+  resolves leaf aliases through the declaring file's imports, so unrelated
+  `Provider` interfaces and aliases remain valid. Do not exempt declarations
+  solely because they reuse the production aggregator type name: the AST shape
+  distinguishes an allowed `Edges` struct field from an `Edges` alias, defined
+  type, or interface that redeclares the leaf contract. Inspect nested field type
+  expressions in every non-Providers declaration too: direct leaf fields preserve
+  the imported contract, while anonymous interfaces or other wrappers create a
+  locally owned redefinition even outside `edges`. Preserve the explicit Workers
+  inference-contract migration-debt exception. Prove ownership behavior with
+  deliberate `run()` fixtures rather than package-local source inventories.
+  Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
   result agreement, and exactly-once close before they reach orchestration.
