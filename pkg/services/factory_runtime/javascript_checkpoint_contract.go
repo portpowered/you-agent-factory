@@ -6,16 +6,12 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-// JavaScriptCheckpointStore is the Factory Runtime capability for retaining
-// checkpoint records belonging to one JavaScript workflow session.
 type JavaScriptCheckpointStore interface {
 	Put(factorydefinitions.JavaScriptCheckpointRecord)
 	List() []factorydefinitions.JavaScriptCheckpointRecord
 	Get(string) (factorydefinitions.JavaScriptCheckpointRecord, bool)
 }
 
-// JavaScriptCheckpointStoreFactory constructs an isolated checkpoint store for
-// one live JavaScript workflow session.
 type JavaScriptCheckpointStoreFactory func() JavaScriptCheckpointStore
 
 const (
@@ -24,8 +20,6 @@ const (
 	JavaScriptResumeStrategy                 = "replay_completed_dispatches_then_continue"
 )
 
-// JavaScriptCheckpointSummary is the durable resume contract for one
-// JavaScript workflow session.
 type JavaScriptCheckpointSummary struct {
 	SchemaVersion        int            `json:"schemaVersion"`
 	Kind                 string         `json:"kind"`
@@ -44,8 +38,6 @@ type JavaScriptCheckpointSummary struct {
 	CheckpointState      map[string]any `json:"checkpointState,omitempty"`
 }
 
-// JavaScriptCheckpointSummaryInput carries the facts needed to build one
-// durable checkpoint summary.
 type JavaScriptCheckpointSummaryInput struct {
 	SessionID       string
 	CheckpointID    string
@@ -59,9 +51,80 @@ type JavaScriptCheckpointSummaryInput struct {
 	Records         []JavaScriptRuntimeRecord
 }
 
-// JavaScriptCheckpointSummaries projects durable checkpoint summaries from
-// JavaScript runtime records.
 type JavaScriptCheckpointSummaries interface {
 	Build(JavaScriptCheckpointSummaryInput) *JavaScriptCheckpointSummary
 	Latest(JavaScriptCheckpointSummaryInput) *JavaScriptCheckpointSummary
+}
+
+// CheckpointOutcome is the plain success vocabulary for Factory Runtime root
+// checkpoint operations. Peers branch on these values without Petri marking
+// snapshots or JavaScript checkpoint strategy types.
+type CheckpointOutcome string
+
+const (
+	// CheckpointOutcomeCaptured indicates a versioned checkpoint was captured.
+	CheckpointOutcomeCaptured CheckpointOutcome = "CAPTURED"
+	// CheckpointOutcomeLoaded indicates a checkpoint was loaded for inspect or
+	// compatibility checking.
+	CheckpointOutcomeLoaded CheckpointOutcome = "LOADED"
+	// CheckpointOutcomeRestored indicates a compatible opaque checkpoint was
+	// restored into mutable Runtime execution state.
+	CheckpointOutcomeRestored CheckpointOutcome = "RESTORED"
+)
+
+// Checkpoint is the plain versioned checkpoint value published at the Runtime
+// root. Payload is opaque strategy checkpoint bytes; peers must not interpret
+// it as Petri marking snapshots or JavaScript checkpoint strategy records.
+// Recordings remains the owner of immutable history; this value is Runtime's
+// mutable execution-checkpoint vocabulary only.
+type Checkpoint struct {
+	CheckpointID  string
+	SchemaVersion int
+	// StrategyKind is an opaque strategy discriminator string. It is not a
+	// peer-facing Petri or JavaScript type; nested IMP-RUN packets own codec
+	// meaning.
+	StrategyKind string
+	Payload      []byte
+}
+
+// CaptureCheckpointRequest is the plain capture input published at the Runtime
+// root.
+type CaptureCheckpointRequest struct {
+	CheckpointID string
+}
+
+// CaptureCheckpointResult is the plain capture success shape published at the
+// Runtime root.
+type CaptureCheckpointResult struct {
+	Outcome    CheckpointOutcome
+	Checkpoint Checkpoint
+}
+
+// LoadCheckpointRequest is the plain load/inspect-compatibility input published
+// at the Runtime root.
+type LoadCheckpointRequest struct {
+	CheckpointID          string
+	ExpectedSchemaVersion int
+}
+
+// LoadCheckpointResult is the plain load/inspect success shape published at the
+// Runtime root. Compatible reports whether the loaded checkpoint matches the
+// expected schema version when ExpectedSchemaVersion is non-zero.
+type LoadCheckpointResult struct {
+	Outcome    CheckpointOutcome
+	Checkpoint Checkpoint
+	Compatible bool
+}
+
+// RestoreCheckpointRequest is the plain restore input published at the Runtime
+// root. Checkpoint.Payload remains opaque strategy bytes.
+type RestoreCheckpointRequest struct {
+	Checkpoint Checkpoint
+}
+
+// RestoreCheckpointResult is the plain restore success shape published at the
+// Runtime root.
+type RestoreCheckpointResult struct {
+	Outcome      CheckpointOutcome
+	CheckpointID string
 }

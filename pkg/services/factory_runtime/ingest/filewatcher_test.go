@@ -16,6 +16,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -64,6 +65,53 @@ func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.Fa
 }
 func (m *mockFactory) Pause(_ context.Context) error  { return nil }
 func (m *mockFactory) Resume(_ context.Context) error { return nil }
+func (m *mockFactory) Terminate(_ context.Context, _ factory.TerminateRequest) (factory.TerminateResult, error) {
+	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+}
+func (m *mockFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
+func (m *mockFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{
+		Outcome:       factory.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (m *mockFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	return factory.AcceptDispatchResultResult{
+		Outcome:       factory.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (m *mockFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome: factory.CheckpointOutcomeCaptured,
+		Checkpoint: factory.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+func (m *mockFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+}
+func (m *mockFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

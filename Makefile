@@ -127,7 +127,8 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke public-release-package-smoke model-provider-package-smoke model-provider-reference-input-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
+.PHONY: public-release-package-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
@@ -199,7 +200,11 @@ api-smoke:
 api-package-pack-smoke:
 	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
 
+api-package-verify: api-package-pack-smoke
+
 packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
+
+packaged-factory-package-verify: packaged-factory-package-smoke
 
 packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
@@ -220,6 +225,8 @@ public-release-package-smoke:
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs
 	node scripts/model-provider-package.mjs smoke
+
+model-provider-package-verify: model-provider-package-smoke
 
 model-provider-reference-input-smoke:
 	cd ui && $(UI_SCRIPT) test:model-provider-reference-input
@@ -440,7 +447,7 @@ long-tests:
 	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
-	$(GO) test ./pkg/services/models/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/models/internal/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 pr-inference-approval:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
@@ -651,7 +658,6 @@ release-surface-smoke:
 
 ui-deps:
 	cd ui && $(UI_INSTALL)
-	cd ui && $(UI_SCRIPT) prepare:packaged-factories
 
 ui-verify-fresh-npm-install:
 	cd ui && $(NPM) run verify:fresh-npm-install

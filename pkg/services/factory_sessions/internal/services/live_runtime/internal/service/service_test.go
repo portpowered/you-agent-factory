@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -119,6 +120,34 @@ func TestServiceCoordinatesLifecycleAndPreservesTypedRejection(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsRootOnlyRuntimeForLegacySnapshotPaths(t *testing.T) {
+	t.Parallel()
+
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) {
+		return &rootOnlyRuntime{}, nil
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	_, snapshotErr := service.Snapshot(context.Background(), "session-1")
+	if snapshotErr == nil || !strings.Contains(snapshotErr.Error(), "legacy Factory Runtime observation is unavailable") {
+		t.Fatalf("Snapshot error = %v, want unavailable legacy observation", snapshotErr)
+	}
+
+	_, controlErr := service.ApplyControl(
+		context.Background(),
+		"session-1",
+		factorysessions.LifecycleControlPause,
+		factorysessions.ControlRequest{},
+	)
+	if controlErr == nil || !strings.Contains(controlErr.Error(), "legacy Factory Runtime observation is unavailable") {
+		t.Fatalf("ApplyControl error = %v, want unavailable legacy observation", controlErr)
+	}
+}
+
 func testDependencies() liveruntime.Dependencies {
 	return liveruntime.Dependencies{
 		OpenForTarget:  func(context.Context, factorysessions.Target) (string, error) { return "session", nil },
@@ -135,7 +164,10 @@ func testDependencies() liveruntime.Dependencies {
 	}
 }
 
+type rootOnlyRuntime struct{ factoryruntime.Service }
+
 type testFactoryRuntime struct {
+	factoryruntime.Service
 	state      string
 	pauseCalls int
 }
@@ -143,6 +175,70 @@ type testFactoryRuntime struct {
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }
 func (f *testFactoryRuntime) Pause(context.Context) error  { f.pauseCalls++; return nil }
 func (f *testFactoryRuntime) Resume(context.Context) error { return nil }
+func (f *testFactoryRuntime) ControlPause(ctx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	err := f.Pause(ctx)
+	return factoryruntime.PauseResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
+}
+func (f *testFactoryRuntime) ControlResume(ctx context.Context, _ factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	err := f.Resume(ctx)
+	return factoryruntime.ResumeResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
+}
+func (f *testFactoryRuntime) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	return f.Terminate(ctx, req)
+}
+func (f *testFactoryRuntime) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
+	return factoryruntime.WaitToCompleteResult{Done: f.WaitToComplete()}
+}
+func (f *testFactoryRuntime) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+	return factoryruntime.MoveWorkResult{}, nil
+}
+func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
+}
+func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, nil
+}
+func (f *testFactoryRuntime) PlanDispatch(_ context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+	return factoryruntime.PlanDispatchResult{
+		Outcome:       factoryruntime.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *testFactoryRuntime) AcceptDispatchResult(_ context.Context, req factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+	return factoryruntime.AcceptDispatchResultResult{
+		Outcome:       factoryruntime.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *testFactoryRuntime) CaptureCheckpoint(_ context.Context, req factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factoryruntime.CaptureCheckpointResult{
+		Outcome: factoryruntime.CheckpointOutcomeCaptured,
+		Checkpoint: factoryruntime.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+func (f *testFactoryRuntime) LoadCheckpoint(_ context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+	}
+	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+}
+func (f *testFactoryRuntime) RestoreCheckpoint(_ context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
+	return factoryruntime.RestoreCheckpointResult{
+		Outcome:      factoryruntime.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 func (f *testFactoryRuntime) GetFactoryEvents(context.Context) ([]factorydefinitions.FactoryEvent, error) {
 	return nil, nil
 }

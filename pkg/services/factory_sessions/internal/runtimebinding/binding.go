@@ -379,10 +379,12 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 			return generation
 		}
 		if runtime := instance.RuntimeService(); runtime != nil {
-			snapshot, err := runtime.GetEngineStateSnapshot(context.Background())
-			if err == nil && snapshot != nil {
-				if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
-					return generation
+			if observation, observationErr := LegacyObservationForService(runtime); observationErr == nil {
+				snapshot, err := observation.GetEngineStateSnapshot(context.Background())
+				if err == nil && snapshot != nil {
+					if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
+						return generation
+					}
 				}
 			}
 		}
@@ -632,6 +634,44 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 		return nil, err
 	}
 	return bundle.RuntimeService(), nil
+}
+
+// LegacyObservationForService isolates migration-era Petri snapshot access
+// from the singular Factory Runtime Service contract.
+func LegacyObservationForService(runtime factory.Service) (factory.APIFactory, error) {
+	observation, ok := runtime.(factory.APIFactory)
+	if !ok || observation == nil {
+		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
+	}
+	return observation, nil
+}
+
+// LegacyEventSource is the migration-only event-history capability retained
+// while Factory Session invocation still derives its observation from the
+// legacy snapshot and canonical Factory Event stream together.
+type LegacyEventSource interface {
+	GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
+}
+
+// LegacyEventSourceForService isolates migration-era event-history access from
+// the singular Factory Runtime Service contract.
+func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, error) {
+	source, ok := runtime.(LegacyEventSource)
+	if !ok || source == nil {
+		return nil, fmt.Errorf("legacy Factory Runtime event history is unavailable")
+	}
+	return source, nil
+}
+
+// LegacyInvocationSourcesForService resolves the paired compatibility
+// capabilities still needed by invocation observation in one boundary check.
+func LegacyInvocationSourcesForService(runtime factory.Service) (factory.APIFactory, LegacyEventSource, error) {
+	observation, err := LegacyObservationForService(runtime)
+	if err != nil {
+		return nil, nil, err
+	}
+	events, err := LegacyEventSourceForService(runtime)
+	return observation, events, err
 }
 
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {

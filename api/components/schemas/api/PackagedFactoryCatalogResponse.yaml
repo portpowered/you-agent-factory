@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - factories
+properties:
+  factories:
+    type: array
+    description: Built-in Factory definitions in stable lexical name order.
+    items:
+      $ref: './PackagedFactoryCatalogEntry.yaml'
