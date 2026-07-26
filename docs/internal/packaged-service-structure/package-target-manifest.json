@@ -260,6 +260,9 @@
     "pkg/services/workers/internal/services/runtime_assembly",
     "pkg/services/workers/internal/services/runtime_assembly/internal/service",
     "pkg/services/workers/internal/services/runtime_assembly/wire",
+    "pkg/services/workers/internal/services/workstations",
+    "pkg/services/workers/internal/services/workstations/internal/service",
+    "pkg/services/workers/internal/services/workstations/wire",
     "pkg/services/workers/invocation",
     "pkg/services/workers/process",
     "pkg/services/workers/prompting",
@@ -1463,6 +1466,21 @@
       "packagePath": "pkg/services/workers/internal/services/runtime_assembly/wire",
       "disposition": "retain",
       "destination": "workers/internal/services/runtime_assembly"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/wire",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/invocation",

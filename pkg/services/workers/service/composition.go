@@ -22,6 +22,7 @@ import (
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
@@ -101,6 +102,7 @@ func NewRuntime(
 		return nil, err
 	}
 	runtimeService.runtimeAssembly = assembly
+	runtimeService.workstations = workstationswire.NewService()
 	return runtimeService, nil
 }
 

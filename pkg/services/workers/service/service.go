@@ -20,6 +20,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
@@ -64,6 +65,7 @@ type Service struct {
 	providerRegistry                  *providerregistry.Registry
 	invocationConductor               *providerconductor.Conductor
 	runtimeAssembly                   runtimeassembly.Service
+	workstations                      workstations.Service
 }
 
 var _ workers.RuntimeService = (*Service)(nil)
@@ -226,6 +228,63 @@ func (s *Service) BuildRuntime(
 		)
 	}
 	return s.runtimeAssembly.Build(ctx, request)
+}
+
+// StartWorkstationPool delegates lifecycle activation to the parent-private
+// workstation capability.
+func (s *Service) StartWorkstationPool(
+	ctx context.Context,
+	request workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationPoolStartResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Start(ctx, request)
+}
+
+// StopWorkstationPool delegates terminal shutdown to the parent-private
+// workstation capability.
+func (s *Service) StopWorkstationPool(
+	ctx context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationPoolStopResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Stop(ctx)
+}
+
+// WorkstationRoute reports availability through the private lifecycle owner.
+func (s *Service) WorkstationRoute(
+	ctx context.Context,
+	request workers.WorkstationRouteRequest,
+) (workers.WorkstationRouteResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationRouteResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Route(ctx, request)
+}
+
+// DispatchWorkstation delegates execution to the private workstation owner.
+func (s *Service) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Dispatch(ctx, request)
+}
+
+// CancelWorkstationDispatch delegates explicit cancellation to the private
+// workstation owner.
+func (s *Service) CancelWorkstationDispatch(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Cancel(ctx, request)
 }
 
 func (s *Service) modelInvocationExecutor(
