@@ -9,6 +9,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -73,6 +74,204 @@ func TestFactoryConfigInitCommandHandlerMapsCreateStableInputs(t *testing.T) {
 	}
 	if got.Name != "staging" || got.Dir != "factories" || got.From != "factory.json" || !got.SetCurrent || !got.JSON {
 		t.Fatalf("create config = %#v, want stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsEachMissingCreateInput(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
+		},
+	)
+	name := resolvedTestValue{id: "you.factory.create.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	dir := resolvedTestValue{id: "you.factory.create.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	from := resolvedTestValue{id: "you.factory.create.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")}
+	setCurrent := resolvedTestValue{id: "you.factory.create.flag.set-current", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)}
+	cases := []struct {
+		name      string
+		inputs    resolvedinput.Inputs
+		inherited resolvedinput.Inputs
+		wantID    string
+	}{
+		{name: "dir", inputs: resolvedTestInputs(t, name), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.dir"},
+		{name: "from", inputs: resolvedTestInputs(t, name, dir), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.from"},
+		{name: "set-current", inputs: resolvedTestInputs(t, name, dir, from), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.set-current"},
+		{name: "globals", inputs: resolvedTestInputs(t, name, dir, from, setCurrent), inherited: resolvedinput.Inputs{}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := handler.FactoryCreate(&cobra.Command{}, test.inputs, test.inherited)
+			var accessErr *resolvedinput.AccessError
+			if !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("FactoryCreate() error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerMapsUpdateStableInputs(t *testing.T) {
+	var got factorycli.UpdateFromFileConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			UpdateFactoryFromFile: func(cfg factorycli.UpdateFromFileConfig) error {
+				got = cfg
+				return nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")},
+		resolvedTestValue{id: "you.factory.update.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.factory.update.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	if err := handler.FactoryUpdate(cmd, inputs, resolvedFactoryGlobals(t, true, false, false)); err != nil {
+		t.Fatalf("FactoryUpdate() error = %v", err)
+	}
+	if got.Name != "staging" || got.Dir != "factories" || got.From != "factory.json" || !got.JSON {
+		t.Fatalf("update config = %#v, want stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsEachMissingUpdateInput(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
+		},
+	)
+	name := resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	dir := resolvedTestValue{id: "you.factory.update.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	from := resolvedTestValue{id: "you.factory.update.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")}
+	cases := []struct {
+		name      string
+		inputs    resolvedinput.Inputs
+		inherited resolvedinput.Inputs
+		wantID    string
+	}{
+		{name: "dir", inputs: resolvedTestInputs(t, name), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.update.flag.dir"},
+		{name: "from", inputs: resolvedTestInputs(t, name, dir), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.update.flag.from"},
+		{name: "globals", inputs: resolvedTestInputs(t, name, dir, from), inherited: resolvedinput.Inputs{}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := handler.FactoryUpdate(&cobra.Command{}, test.inputs, test.inherited)
+			var accessErr *resolvedinput.AccessError
+			if !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("FactoryUpdate() error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingTrailingInputs(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
+		DeleteFactory:        func(factorycli.DeleteConfig) error { return nil },
+		ValidateFactory:      func(factorycli.ValidateConfig) error { return nil },
+		FlattenFactoryConfig: func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		ExpandFactoryConfig:  func(configcli.FactoryConfigExpandConfig) error { return nil },
+	})
+	deleteName := resolvedTestValue{id: "you.factory.delete.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	deleteDir := resolvedTestValue{id: "you.factory.delete.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	validatePath := resolvedTestValue{id: "you.factory.config.validate.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	flattenPath := resolvedTestValue{id: "you.factory.config.flatten.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	expandPath := resolvedTestValue{id: "you.factory.config.expand.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	cases := []struct {
+		name   string
+		run    func() error
+		wantID string
+	}{
+		{name: "delete-dir", run: func() error {
+			return handler.FactoryDelete(&cobra.Command{}, resolvedTestInputs(t, deleteName), resolvedFactoryGlobals(t, false, false, false))
+		}, wantID: "you.factory.delete.flag.dir"},
+		{name: "delete-globals", run: func() error {
+			return handler.FactoryDelete(&cobra.Command{}, resolvedTestInputs(t, deleteName, deleteDir), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "validate-globals", run: func() error {
+			return handler.FactoryConfigValidate(&cobra.Command{}, resolvedTestInputs(t, validatePath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "flatten-globals", run: func() error {
+			return handler.FactoryConfigFlatten(&cobra.Command{}, resolvedTestInputs(t, flattenPath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "expand-globals", run: func() error {
+			return handler.FactoryConfigExpand(&cobra.Command{}, resolvedTestInputs(t, expandPath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var accessErr *resolvedinput.AccessError
+			if err := test.run(); !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("handler error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingServices(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{})
+	cmd := &cobra.Command{}
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "query", run: func() error { return handler.FactoryQuery(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "delete", run: func() error { return handler.FactoryDelete(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "replace", run: func() error { return handler.FactoryReplaceCurrent(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "validate", run: func() error { return handler.FactoryConfigValidate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "flatten", run: func() error { return handler.FactoryConfigFlatten(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "expand", run: func() error { return handler.FactoryConfigExpand(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "init", run: func() error { return handler.Init(cmd, resolvedinput.Inputs{}, globals) }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.run(); err == nil || !strings.Contains(err.Error(), "service is required") {
+				t.Fatalf("missing service error = %v", err)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingRequiredInputs(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
+		QueryFactory:          func(factorycli.QueryConfig) error { return nil },
+		ListFactories:         func(factorycli.ListConfig) error { return nil },
+		CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
+		UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
+		DeleteFactory:         func(factorycli.DeleteConfig) error { return nil },
+		ReplaceFactoryCurrent: func(factorycli.ReplaceCurrentConfig) error { return nil },
+		ValidateFactory:       func(factorycli.ValidateConfig) error { return nil },
+		FlattenFactoryConfig:  func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		ExpandFactoryConfig:   func(configcli.FactoryConfigExpandConfig) error { return nil },
+		ConfigureInit:         func(initsetup.Config) error { return nil },
+		HomeDir:               func() (string, error) { return "operator-home", nil },
+	})
+	cmd := &cobra.Command{}
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "delete", run: func() error { return handler.FactoryDelete(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "replace", run: func() error { return handler.FactoryReplaceCurrent(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "validate", run: func() error { return handler.FactoryConfigValidate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "flatten", run: func() error { return handler.FactoryConfigFlatten(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "expand", run: func() error { return handler.FactoryConfigExpand(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "init", run: func() error { return handler.Init(cmd, resolvedinput.Inputs{}, globals) }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var accessErr *resolvedinput.AccessError
+			if err := test.run(); !errors.As(err, &accessErr) {
+				t.Fatalf("missing input error = %v, want AccessError", err)
+			}
+		})
 	}
 }
 

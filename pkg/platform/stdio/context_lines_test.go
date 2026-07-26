@@ -43,3 +43,23 @@ func TestContextLineReaderStopsWaitingOnCancellation(t *testing.T) {
 		t.Fatalf("ReadLine() error = %v, want context cancellation", readErr)
 	}
 }
+
+func TestContextLineReaderRejectsInvalidConstructionAndReads(t *testing.T) {
+	if _, err := NewContextLineReader(nil, 1); err == nil {
+		t.Fatal("NewContextLineReader(nil) error = nil")
+	}
+	if _, err := NewContextLineReader(strings.NewReader("line"), 0); err == nil {
+		t.Fatal("NewContextLineReader(limit=0) error = nil")
+	}
+	var reader *ContextLineReader
+	if _, err := reader.ReadLine(context.Background()); err == nil {
+		t.Fatal("nil ReadLine() error = nil")
+	}
+	valid, err := NewContextLineReader(strings.NewReader("line"), 1)
+	if err != nil {
+		t.Fatalf("NewContextLineReader() error = %v", err)
+	}
+	if _, err := valid.ReadLine(nil); err == nil {
+		t.Fatal("ReadLine(nil) error = nil")
+	}
+}
