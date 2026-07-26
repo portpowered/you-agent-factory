@@ -90,6 +90,48 @@ func TestFactoryNamesReturnsAtomicSensitiveSafeFailure(t *testing.T) {
 	}
 }
 
+func TestRegisterFactoryNamesPreservesFallbackAfterFlagTerminator(t *testing.T) {
+	run := &cobra.Command{Use: "run", DisableFlagParsing: true}
+	run.Flags().String("named", "", "")
+	run.ValidArgsFunction = func(
+		*cobra.Command,
+		[]string,
+		string,
+	) ([]cobra.Completion, cobra.ShellCompDirective) {
+		return []cobra.Completion{"static"}, cobra.ShellCompDirectiveDefault
+	}
+	calls := 0
+	err := cobracompletion.RegisterFactoryNames(
+		run,
+		func(
+			context.Context,
+			cobracompletion.FactoryNamesRequest,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			calls++
+			return []cobra.Completion{"dynamic"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		func(*cobra.Command, string) (cobracompletion.FactoryNamesRequest, bool) {
+			return cobracompletion.FactoryNamesRequest{}, true
+		},
+	)
+	if err != nil {
+		t.Fatalf("RegisterFactoryNames() error = %v", err)
+	}
+
+	got, directive := run.ValidArgsFunction(
+		run,
+		[]string{"--", "--named"},
+		"@you/",
+	)
+	if !reflect.DeepEqual(got, []cobra.Completion{"static"}) ||
+		directive != cobra.ShellCompDirectiveDefault {
+		t.Fatalf("completion = (%#v, %v), want static fallback", got, directive)
+	}
+	if calls != 0 {
+		t.Fatalf("dynamic completion calls = %d, want zero after terminator", calls)
+	}
+}
+
 func assertAtomicFailure(
 	t *testing.T,
 	got []cobra.Completion,

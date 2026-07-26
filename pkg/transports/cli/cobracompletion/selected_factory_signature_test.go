@@ -356,6 +356,23 @@ func TestRegisterSelectedFactorySignatureBridgesDisabledFlagParsing(t *testing.T
 
 	got, directive = run.ValidArgsFunction(run, nil, "")
 	assertCompletionResult(t, "fallback", got, directive, []cobra.Completion{"static"}, cobra.ShellCompDirectiveDefault)
+
+	got, directive = run.ValidArgsFunction(
+		run,
+		[]string{"--", "--named", "alpha"},
+		"--out",
+	)
+	assertCompletionResult(
+		t,
+		"terminator fallback",
+		got,
+		directive,
+		[]cobra.Completion{"static"},
+		cobra.ShellCompDirectiveDefault,
+	)
+	if len(requests) != 2 {
+		t.Fatalf("dynamic requests after terminator = %d, want 2 unchanged", len(requests))
+	}
 }
 
 func selectedFactorySignatureOperation(

@@ -8,6 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -145,6 +146,9 @@ func factoryNameValueRequest(
 	args []string,
 	toComplete string,
 ) (prefix string, completionPrefix string, selected bool) {
+	if _, _, terminated := runcli.SplitFlagTerminator(args); terminated {
+		return "", "", false
+	}
 	longPrefix := "--" + SelectedFactoryFlagName + "="
 	if strings.HasPrefix(toComplete, longPrefix) {
 		return strings.TrimPrefix(toComplete, longPrefix), longPrefix, true

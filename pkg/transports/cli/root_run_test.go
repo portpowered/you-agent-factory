@@ -177,6 +177,73 @@ func TestRunCanonicalNamedSelectionCompletesSignatureInputs(t *testing.T) {
 	}
 }
 
+func TestRunCompletionPreservesPositionalInputAfterFlagTerminator(t *testing.T) {
+	dynamicCalls := 0
+	options := CommandFactory{
+		completeFactoryNames: func(
+			context.Context,
+			cobracompletion.FactoryNamesRequest,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			dynamicCalls++
+			return []cobra.Completion{"dynamic-factory"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		completeSelectedFactorySignature: func(
+			context.Context,
+			cobracompletion.SelectedFactorySignatureRequest,
+		) cobracompletion.SelectedFactorySignatureResult {
+			dynamicCalls++
+			return cobracompletion.SelectedFactorySignatureResult{
+				Completions: []cobra.Completion{"--dynamic-signature"},
+				Directive:   cobra.ShellCompDirectiveNoFileComp,
+			}
+		},
+	}
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "factory-looking positional input",
+			args: []string{"__complete", "run", "--", "--named", "@you/"},
+		},
+		{
+			name: "signature-looking positional input",
+			args: []string{
+				"__complete", "run", "--", "--named", "does-not-exist", "--m",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			commands, err := buildRunSubmitProductionCommands(
+				&cliGlobalOptions{},
+				&cliDiagnosticsOptions{},
+				&cliOperatorDefaultsOptions{},
+				options,
+			)
+			if err != nil {
+				t.Fatalf("buildRunSubmitProductionCommands() error = %v", err)
+			}
+			var output bytes.Buffer
+			root := &cobra.Command{Use: "you"}
+			root.SetOut(&output)
+			root.SetErr(io.Discard)
+			root.AddCommand(commands.Run)
+			root.SetArgs(test.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute Cobra completion protocol: %v", err)
+			}
+			if strings.Contains(output.String(), "dynamic-") ||
+				!strings.Contains(output.String(), ":0") {
+				t.Fatalf("Cobra completion output = %q, want static default", output.String())
+			}
+		})
+	}
+	if dynamicCalls != 0 {
+		t.Fatalf("dynamic completion calls = %d, want zero after terminator", dynamicCalls)
+	}
+}
+
 // Legacy mutable delegates remain test-only while older command tests migrate
 // to CommandFactory. Production command construction has no mutable
 // package-level service bindings.

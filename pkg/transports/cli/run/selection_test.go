@@ -3,6 +3,7 @@ package run
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -11,6 +12,22 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"go.uber.org/zap"
 )
+
+func TestSplitFlagTerminatorPreservesCanonicalRunTokenization(t *testing.T) {
+	args := []string{"--named", "alpha", "input", "--", "--named", "positional"}
+	flagArgs, positional, terminated := SplitFlagTerminator(args)
+
+	if !terminated ||
+		!reflect.DeepEqual(flagArgs, []string{"--named", "alpha", "input"}) ||
+		!reflect.DeepEqual(positional, []string{"--named", "positional"}) {
+		t.Fatalf(
+			"SplitFlagTerminator() = (%#v, %#v, %t)",
+			flagArgs,
+			positional,
+			terminated,
+		)
+	}
+}
 
 func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	output := &bytes.Buffer{}

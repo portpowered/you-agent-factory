@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -197,7 +198,11 @@ func selectedFactorySignatureRequest(
 	args []string,
 	toComplete string,
 ) (SelectedFactorySignatureRequest, bool) {
-	factoryName := selectedFactoryName(args)
+	flagArgs, _, terminated := runcli.SplitFlagTerminator(args)
+	if terminated {
+		return SelectedFactorySignatureRequest{}, false
+	}
+	factoryName := selectedFactoryName(flagArgs)
 	if factoryName == "" {
 		return SelectedFactorySignatureRequest{}, false
 	}
