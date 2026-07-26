@@ -18,14 +18,26 @@ const VITEST_COMPATIBILITY_PATTERNS: Array<{
     reason: "declares a Vitest environment",
   },
 ];
-const BUN_COMPATIBLE_VI_APIS = new Set(["fn", "mocked"]);
+const BUN_NATIVE_VI_APIS = new Set(["fn", "mocked"]);
+const BUN_SHIMMED_VI_APIS = new Set([
+  "clearAllMocks",
+  "restoreAllMocks",
+  "spyOn",
+  "stubGlobal",
+  "unstubAllGlobals",
+]);
 
 function findUnsupportedViApis(source: string): string[] {
+  const usesBunViShim = /import\s*\{\s*bunVi\s+as\s+vi\s*\}/.test(source);
   return [
     ...new Set(
       [...source.matchAll(/\bvi\.([A-Za-z_]+)/g)]
         .map((match) => match[1])
-        .filter((api) => !BUN_COMPATIBLE_VI_APIS.has(api)),
+        .filter(
+          (api) =>
+            !BUN_NATIVE_VI_APIS.has(api) &&
+            !(usesBunViShim && BUN_SHIMMED_VI_APIS.has(api)),
+        ),
     ),
   ].sort();
 }
