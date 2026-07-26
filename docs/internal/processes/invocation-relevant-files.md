@@ -11,6 +11,16 @@ primary-result behavior.
   catalog provenance, and filesystem location out of the effective schema so
   equivalent definitions produce the same downstream facts without
   materialization, sessions, provider startup, or runtime probing.
+- For a selected Factory with an active invocation signature, effective-schema
+  composition replaces the static positional/stdin compatibility carrier while
+  retaining run-level flags and other static inputs as reserved namespaces.
+  Map the effective Factory-parameter projection into Work's preparation
+  contract once, then carry the detached `PreparedInvocationInput` through the
+  CLI-only Factory Session request field. Factory Sessions must consume that
+  prepared value directly so canonical ordering and positional, named, stdin,
+  and default provenance are not collapsed into a second structured-argument
+  normalization. Public API requests leave the prepared field nil and retain
+  Factory Sessions-owned normalization.
 - A conductor-routed native integration must carry the complete cloned
   `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
   Keep provider selection and response delivery conductor-owned, while the

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/spf13/cobra"
 )
 
 func defaultNamedFactoriesRootForTest() (string, error) {
@@ -183,15 +185,15 @@ func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
 	for _, want := range []string{
 		"Factory invocation help",
 		"Selected factory: portable (named factory alpha)",
-		"Usage:\n  you run --named alpha <input> [--confirm <true|false>] [--mode <value>] [--output <file-path>]",
+		"Usage:\n  you run --named alpha <input> [--artifact <file-path>] [--confirm <true|false>] [--mode <value>]",
 		"positional 1 <input>",
 		"--confirm <true|false>",
 		"Named form also accepts bare `--confirm` as `true`.",
 		"stdin",
 		"Accepted values: fast, safe.",
 		"Default: safe.",
-		"Path parameter: output",
-		"you run --named alpha 'Fix the lint issues' --mode safe --output report.md",
+		"Path parameter: artifact",
+		"you run --named alpha 'Fix the lint issues' --artifact report.md --mode safe",
 		"you run --named alpha 'Fix the lint issues' --mode fast",
 		"Existing operational flags such as `--no-record`, `--with-mock-workers`, `--server`, and `--json` still apply.",
 	} {
@@ -383,7 +385,7 @@ func portableFactoryPayloadWithInvocationSignature() []byte {
         "bindings": [{"kind": "NAMED"}]
       },
       {
-        "name": "output",
+        "name": "artifact",
         "description": "Optional output file path.",
         "aliases": ["out"],
         "typeHint": "FILE_PATH",
@@ -392,14 +394,14 @@ func portableFactoryPayloadWithInvocationSignature() []byte {
     ],
     "outputContract": {
       "mode": "FILE",
-      "pathParameter": "output",
+      "pathParameter": "artifact",
       "contentType": "text/plain",
       "fileExtension": ".txt"
     },
     "examples": [
       {
         "name": "positional-input",
-        "argv": ["Fix the lint issues", "--mode", "safe", "--output", "report.md"]
+        "argv": ["Fix the lint issues", "--mode", "safe", "--artifact", "report.md"]
       },
       {
         "name": "stdin-input",
@@ -442,7 +444,7 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 	}
 
 	root := newLegacyTestRootCommandWithCatalogAndInvocationInput(transportNamedFactoryCatalog{"alpha": factoryDir}, programmedInvocationInput(work.PreparedInvocationInput{NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
-		"input": {Values: []string{"draft"}}, "mode": {Values: []string{"fast"}}, "confirm": {Values: []string{"true"}}, "output": {Values: []string{"result.md"}},
+		"input": {Values: []string{"draft"}}, "mode": {Values: []string{"fast"}}, "confirm": {Values: []string{"true"}}, "artifact": {Values: []string{"result.md"}},
 	}}}, nil))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -470,13 +472,127 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 	}
 
 	wantValues := map[string]string{
-		"input":   "draft",
-		"mode":    "fast",
-		"confirm": "true",
-		"output":  "result.md",
+		"input":    "draft",
+		"mode":     "fast",
+		"confirm":  "true",
+		"artifact": "result.md",
 	}
 	for name, want := range wantValues {
 		assertInvocationArgumentValue(t, got, name, want)
+	}
+}
+
+func TestResolveRunFactoryPromptNamedAndFileSelectionsPrepareEquivalentCanonicalInputOnce(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
+		t.Fatalf("write Factory fixture: %v", err)
+	}
+
+	type observation struct {
+		request work.InvocationInputPreparationRequest
+		result  work.PreparedInvocationInput
+	}
+	runSelection := func(flag, value string) observation {
+		t.Helper()
+		cmd := &cobra.Command{Use: "run"}
+		cmd.SetContext(context.Background())
+		cmd.Flags().String("named", "", "")
+		cmd.Flags().String("factory", "", "")
+		cmd.Flags().String("work", "", "")
+		if err := cmd.Flags().Set(flag, value); err != nil {
+			t.Fatalf("set %s: %v", flag, err)
+		}
+		cmd.SetIn(strings.NewReader(""))
+
+		var calls int
+		var request work.InvocationInputPreparationRequest
+		preparation := rootInvocationInputScript{prepare: func(
+			ctx context.Context,
+			got work.InvocationInputPreparationRequest,
+		) (work.PreparedInvocationInput, error) {
+			calls++
+			request = got
+			return work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, got)
+		}}
+		cfg := runcli.RunConfig{
+			Dir:                   factoryDir,
+			LoadFactoryConfigFile: loadTestFactoryConfigFile,
+		}
+		if flag == "factory" {
+			cfg.FactoryConfigPath = factoryPath
+		}
+		if err := resolveRunFactoryPrompt(cmd, &cfg, []string{
+			"draft", "--mode", "fast", "--confirm", "--out=result.md",
+		}, preparation); err != nil {
+			t.Fatalf("resolve %s Factory prompt: %v", flag, err)
+		}
+		if calls != 1 {
+			t.Fatalf("%s preparation calls = %d, want exactly 1", flag, calls)
+		}
+		return observation{request: request, result: *cfg.PreparedInvocationInput}
+	}
+
+	named := runSelection("named", "alpha")
+	file := runSelection("factory", factoryPath)
+	if !reflect.DeepEqual(named.request.Signature, file.request.Signature) {
+		t.Fatalf("effective signatures differ: named=%#v file=%#v", named.request.Signature, file.request.Signature)
+	}
+	if !reflect.DeepEqual(named.result, file.result) {
+		t.Fatalf("canonical inputs differ: named=%#v file=%#v", named.result, file.result)
+	}
+}
+
+func TestResolveRunFactoryPromptNamedAndFileSelectionsReturnEquivalentStableFailure(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
+		t.Fatalf("write Factory fixture: %v", err)
+	}
+	resolve := func(flag string) (error, int) {
+		t.Helper()
+		cmd := &cobra.Command{Use: "run"}
+		cmd.SetContext(context.Background())
+		cmd.Flags().String("named", "", "")
+		cmd.Flags().String("factory", "", "")
+		cmd.Flags().String("work", "", "")
+		if err := cmd.Flags().Set(flag, "selected"); err != nil {
+			t.Fatalf("set %s: %v", flag, err)
+		}
+		cmd.SetIn(strings.NewReader(""))
+		calls := 0
+		preparation := rootInvocationInputScript{prepare: func(
+			ctx context.Context,
+			request work.InvocationInputPreparationRequest,
+		) (work.PreparedInvocationInput, error) {
+			calls++
+			return work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+		}}
+		cfg := runcli.RunConfig{Dir: factoryDir, LoadFactoryConfigFile: loadTestFactoryConfigFile}
+		if flag == "factory" {
+			cfg.FactoryConfigPath = factoryPath
+		}
+		err := resolveRunFactoryPrompt(
+			cmd, &cfg, []string{"draft", "--mode", "unsupported"}, preparation,
+		)
+		return err, calls
+	}
+
+	namedErr, namedCalls := resolve("named")
+	fileErr, fileCalls := resolve("factory")
+	if namedErr == nil || fileErr == nil {
+		t.Fatalf("invalid choice errors = named:%v file:%v", namedErr, fileErr)
+	}
+	if namedErr.Error() != fileErr.Error() ||
+		!strings.Contains(namedErr.Error(), string(work.ArgumentErrorCodeStringValidationMismatch)) {
+		t.Fatalf("selection failures differ: named=%q file=%q", namedErr, fileErr)
+	}
+	if namedCalls != 1 || fileCalls != 1 {
+		t.Fatalf("normalization calls = named:%d file:%d, want exactly one each", namedCalls, fileCalls)
 	}
 }
 

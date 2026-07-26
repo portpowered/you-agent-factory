@@ -29,6 +29,7 @@ import (
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -794,14 +795,24 @@ func resolveRunFactoryPrompt(
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		signatureSource = cfg.FactoryConfigPath
 	}
-	signature, err := runcli.ResolveFactoryInvocationSignature(
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	schema, diagnostics, err := runcli.ResolveFactoryInvocationInputSchema(
 		cmd.Context(),
+		manifest,
+		"you.run",
 		cfg.LoadFactoryConfigFile,
 		signatureSource,
 	)
 	if err != nil {
 		return err
 	}
+	if err := runcli.MapCompositionDiagnostics(diagnostics); err != nil {
+		return err
+	}
+	signature := runcli.InvocationSignatureFromEffectiveSchema(schema)
 	if signature != nil {
 		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
 	}

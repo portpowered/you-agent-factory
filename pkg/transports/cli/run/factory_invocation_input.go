@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -30,6 +31,53 @@ const (
 	InvocationInputSourceStdin      = runconfig.InvocationInputSourceStdin
 	InvocationInputSourceWorkFile   = runconfig.InvocationInputSourceWorkFile
 )
+
+// InvocationSignatureFromEffectiveSchema maps the transport-owned effective
+// schema into Work's normalization contract. The effective schema remains the
+// authority; the selected Factory's authored signature is not consulted again.
+func InvocationSignatureFromEffectiveSchema(
+	schema climanifest.EffectiveInputSchema,
+) *work.InvocationSignatureConfig {
+	if schema.FactoryInputMode != climanifest.EffectiveFactoryInputModeSignature {
+		return nil
+	}
+	signature := &work.InvocationSignatureConfig{
+		UnknownNamedArgumentPolicy: schema.UnknownNamedArgumentPolicy,
+		Parameters:                 make([]work.InvocationParameterConfig, 0, len(schema.FactoryParameters)),
+	}
+	for _, parameter := range schema.FactoryParameters {
+		mapped := work.InvocationParameterConfig{
+			Name:          parameter.CanonicalName,
+			ExternalName:  parameter.PreferredExternalName,
+			Aliases:       append([]string(nil), parameter.Aliases...),
+			Description:   parameter.Description,
+			Required:      parameter.Required,
+			Choices:       append([]string(nil), parameter.Choices...),
+			DefaultValues: append([]string(nil), parameter.DefaultValues...),
+			ValueMode:     parameter.ValueMode,
+			TypeHint:      parameter.TypeHint,
+			Sensitive:     parameter.Sensitive,
+			Bindings:      append([]work.InvocationParameterBindingConfig(nil), parameter.Bindings...),
+		}
+		if parameter.DefaultValue != nil {
+			mapped.DefaultValue = *parameter.DefaultValue
+		}
+		signature.Parameters = append(signature.Parameters, mapped)
+	}
+	return signature
+}
+
+// MapCompositionDiagnostics returns the first deterministic composition
+// failure in the stable CLI error vocabulary.
+func MapCompositionDiagnostics(diagnostics []climanifest.CompositionDiagnostic) error {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return &InvocationError{
+		Code:    diagnostics[0].Code,
+		Message: diagnostics[0].Message,
+	}
+}
 
 // MapInvocationInputError represents Work-owned preparation failures using the
 // stable CLI error vocabulary.
@@ -233,9 +281,14 @@ func runFactoryInvocation(
 	if streamRenderer != nil {
 		consume = streamRenderer.PresentFactoryEvents
 	}
-	outcome, err := invocation.InvokeFactory(
-		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request), consume,
-	)
+	invocationRequest := factorysessionmapping.InvocationRequestFromAPI(request)
+	if cfg.PreparedInvocationInput != nil && cfg.PreparedInvocationInput.NormalizedArguments != nil {
+		invocationRequest.Args = nil
+		invocationRequest.Content = nil
+		invocationRequest.ContentProvided = false
+		invocationRequest.PreparedInvocationInput = work.ClonePreparedInvocationInput(cfg.PreparedInvocationInput)
+	}
+	outcome, err := invocation.InvokeFactory(ctx, target, invocationRequest, consume)
 	if err != nil {
 		return MapInvocationFailure(err)
 	}

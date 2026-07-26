@@ -354,6 +354,59 @@ func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.
 	}
 }
 
+func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *testing.T) {
+	prepared := work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
+			"input": {
+				Values:  []string{"draft"},
+				Sources: []work.ArgumentSource{{Kind: work.ArgumentSourceKindPositional, Name: "1"}},
+			},
+		}},
+	}
+	apiRequest := invocationRequestFromNormalizedArguments(*prepared.NormalizedArguments)
+	var captured factorysessions.InvocationRequest
+	operation := testInvocationOperation{invokeFactory: func(
+		_ context.Context,
+		_ factorysessions.InvocationTarget,
+		request factorysessions.InvocationRequest,
+		_ factorysessions.FactoryEventConsumer,
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		captured = request
+		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
+			Status: interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText, Text: "done",
+			}},
+		}}, nil
+	}}
+	var output bytes.Buffer
+	err := runFactoryInvocation(
+		context.Background(),
+		RunConfig{PreparedInvocationInput: &prepared, Output: &output},
+		factorysessions.InvocationTarget{},
+		*apiRequest,
+		operation,
+		testResponsePresentation(),
+	)
+	if err != nil {
+		t.Fatalf("runFactoryInvocation: %v", err)
+	}
+	if captured.Args != nil || captured.ContentProvided {
+		t.Fatalf("execution request retained plain API carriers: %#v", captured)
+	}
+	if captured.PreparedInvocationInput == nil ||
+		!reflect.DeepEqual(
+			captured.PreparedInvocationInput.NormalizedArguments.Arguments,
+			prepared.NormalizedArguments.Arguments,
+		) {
+		t.Fatalf("prepared execution input = %#v, want detached canonical input", captured.PreparedInvocationInput)
+	}
+	prepared.NormalizedArguments.Arguments["input"] = work.NormalizedArgument{Values: []string{"mutated"}}
+	if got := captured.PreparedInvocationInput.NormalizedArguments.Arguments["input"].Values[0]; got != "draft" {
+		t.Fatalf("captured canonical input aliased caller mutation: %q", got)
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
 	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {

@@ -98,6 +98,83 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 }
 
+func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for named and explicit Factory invocation parity")
+	}
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	initStdout, initStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory,
+		[]string{"you", "--json", "config", "init"},
+	)
+	if initStderr != "" {
+		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
+	}
+	factoryDir := packagedFactoryDir(t, initStdout, packagedGoalFactoryName)
+	factoryPath := filepath.Join(factoryDir, "factory.json")
+	addEffectiveSignatureFixture(t, factoryPath)
+	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: packagedGoalExecuteWorkstationName,
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+	common := []string{
+		"--with-mock-workers", "--no-record", "--quiet",
+		mockWorkersPath, "equivalent canonical prompt",
+	}
+	namedStdout, namedStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory,
+		append([]string{"you", "run", "--named", packagedGoalFactoryName}, common...),
+	)
+	fileStdout, fileStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory,
+		append([]string{"you", "run", "--factory", factoryPath}, common...),
+	)
+	if namedStderr != "" || fileStderr != "" {
+		t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
+	}
+	if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
+		t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
+	}
+}
+
+func addEffectiveSignatureFixture(t *testing.T, factoryPath string) {
+	t.Helper()
+	payload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read installed Factory: %v", err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode installed Factory: %v", err)
+	}
+	factory["invocationSignature"] = map[string]any{
+		"unknownNamedArgumentPolicy": "REJECT",
+		"parameters": []any{map[string]any{
+			"name":     "input",
+			"required": true,
+			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+		}},
+	}
+	updated, err := json.MarshalIndent(factory, "", "  ")
+	if err != nil {
+		t.Fatalf("encode signature Factory fixture: %v", err)
+	}
+	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
+		t.Fatalf("write signature Factory fixture: %v", err)
+	}
+}
+
 func runHermeticNamedInvocation(
 	t *testing.T,
 	factoryName string,
@@ -192,6 +269,11 @@ func executeCustomerCommand(
 
 func assertPackagedFactoryInstalled(t *testing.T, payload, name string) {
 	t.Helper()
+	_ = packagedFactoryDir(t, payload, name)
+}
+
+func packagedFactoryDir(t *testing.T, payload, name string) string {
+	t.Helper()
 	var result struct {
 		PackagedFactories []struct {
 			Name       string `json:"name"`
@@ -208,9 +290,10 @@ func assertPackagedFactoryInstalled(t *testing.T, payload, name string) {
 		if _, err := os.Stat(filepath.Join(factory.FactoryDir, "factory.json")); err != nil {
 			t.Fatalf("installed packaged Factory %q: %v", name, err)
 		}
-		return
+		return factory.FactoryDir
 	}
 	t.Fatalf("config init result omitted packaged Factory %q: %#v", name, result.PackagedFactories)
+	return ""
 }
 
 func writeMockWorkersConfig(t *testing.T, config workers.MockWorkersConfig) string {

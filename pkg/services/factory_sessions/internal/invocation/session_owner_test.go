@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,42 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	}
 	if len(submitted.Content) != 1 || submitted.Content[0].Text != "hello" {
 		t.Fatalf("submitted content = %#v, want primary structured input", submitted.Content)
+	}
+}
+
+func TestSessionOwner_PreparedCLIArgumentsRetainCanonicalValuesOrderAndProvenance(t *testing.T) {
+	cfg := sessionOwnerSignatureFactoryConfig()
+	cfg.InvocationSignature.Parameters[0].ValueMode = work.InvocationParameterValueModeRepeated
+	var submitted workdomain.SubmitRequest
+	owner := successfulSessionOwner(cfg, func(request workdomain.SubmitRequest) { submitted = request })
+	prepared := &work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
+			"input": {
+				Values: []string{"first", "second"},
+				Sources: []work.ArgumentSource{
+					{Kind: work.ArgumentSourceKindPositional, Name: "1"},
+					{Kind: work.ArgumentSourceKindDefault, Name: "input"},
+				},
+			},
+		}},
+	}
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", InvocationRequest{
+		PreparedInvocationInput: prepared,
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	argument := submitted.InvocationArguments.Arguments["input"]
+	if !reflect.DeepEqual(argument.Values, []string{"first", "second"}) {
+		t.Fatalf("argument values = %#v, want stable canonical order", argument.Values)
+	}
+	wantSources := []work.InvocationArgumentSource{
+		{Kind: string(work.ArgumentSourceKindPositional), Name: "1"},
+		{Kind: string(work.ArgumentSourceKindDefault), Name: "input"},
+	}
+	if !reflect.DeepEqual(argument.Sources, wantSources) {
+		t.Fatalf("argument sources = %#v, want preserved provenance %#v", argument.Sources, wantSources)
 	}
 }
 

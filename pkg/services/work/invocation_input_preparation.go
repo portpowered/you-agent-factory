@@ -25,6 +25,21 @@ type PreparedInvocationInput struct {
 	NormalizedArguments *NormalizedArguments
 }
 
+// ClonePreparedInvocationInput returns a detached copy safe to carry across a
+// transport-to-service boundary.
+func ClonePreparedInvocationInput(input *PreparedInvocationInput) *PreparedInvocationInput {
+	if input == nil {
+		return nil
+	}
+	cloned := &PreparedInvocationInput{Source: input.Source}
+	if input.ResolvedInput != nil {
+		resolved := cloneResolvedInput(*input.ResolvedInput)
+		cloned.ResolvedInput = &resolved
+	}
+	cloned.NormalizedArguments = cloneNormalizedArguments(input.NormalizedArguments)
+	return cloned
+}
+
 // InvocationInputPreparation is the focused Work-owned role used by transports
 // that inject preparation alone. Cross-service peers that depend on the
 // singular Work root should call Service.PrepareInvocationInput instead.
