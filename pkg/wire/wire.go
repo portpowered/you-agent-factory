@@ -217,6 +217,10 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideFactoryScaffoldCommandInitializer,
 	provideFactoryDefinitionPersistence,
 	provideNamedFactoryPersistenceOperation,
+	provideEffectiveFactoryCatalogDiscovery,
+	provideEffectiveFactoryDefinitionNormalizer,
+	provideEffectiveFactoryCatalogOperation,
+	provideEffectiveFactoryDefinitionsService,
 )
 
 var workerServiceSet = wire.NewSet(
@@ -257,9 +261,6 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
 	provideQueryFactoryOperation,
-	provideEffectiveFactoryCatalogDiscovery,
-	provideEffectiveFactoryDefinitionNormalizer,
-	provideEffectiveFactoryCatalogOperation,
 	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
 	provideValidateFactoryOperation,

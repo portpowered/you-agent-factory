@@ -1,4 +1,4 @@
-package factory_list
+package catalog
 
 import (
 	"context"

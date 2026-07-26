@@ -71,11 +71,27 @@ func List(
 	if err != nil {
 		return err
 	}
-	entries, err := projectListEntries(ctx, result.Entries, current)
+	entries, err := ProjectEffectiveFactoryList(ctx, result, current)
 	if err != nil {
 		return err
 	}
 	return renderListResult(ctx, entries, result.Diagnostics, cfg)
+}
+
+// ProjectEffectiveFactoryList maps one service-owned catalog result to the
+// detached list representation without performing discovery.
+func ProjectEffectiveFactoryList(
+	ctx context.Context,
+	result factorydefinitions.ListEffectiveFactoriesResult,
+	current string,
+) ([]ListEntry, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return projectListEntries(ctx, result.Entries, current)
 }
 
 func validateListConfig(

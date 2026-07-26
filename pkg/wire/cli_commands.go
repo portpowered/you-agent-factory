@@ -193,6 +193,12 @@ func provideEffectiveFactoryCatalogOperation(
 	return factorydefinitionsservice.NewEffectiveCatalog(discovery, normalize)
 }
 
+func provideEffectiveFactoryDefinitionsService(
+	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
+) (*factorydefinitionsservice.EffectiveCatalogService, error) {
+	return factorydefinitionsservice.NewEffectiveCatalogService(catalog)
+}
+
 func provideCurrentFactoryPointerReader(
 	namedPaths factorydefinitions.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryPointerReader {
@@ -200,10 +206,10 @@ func provideCurrentFactoryPointerReader(
 }
 
 func provideListFactoriesOperation(
-	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
 	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
-	return factorycli.NewList(catalog, readCurrent)
+	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
 }
 
 func provideValidateFactoryOperation(
