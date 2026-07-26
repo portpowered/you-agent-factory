@@ -2,6 +2,17 @@ name: Development Package
 
 on:
   pull_request:
+    paths:
+      - api/**
+      - contracts/**
+      - packages/**
+      - scripts/api-package-*
+      - scripts/packaged-factories-*
+      - scripts/model-provider-*
+      - .github/workflows/**
+      - Makefile
+      - go.mod
+      - go.sum
   push:
     branches:
       - main
@@ -20,39 +31,56 @@ env:
   GO_VERSION: 1.25.0
 
 jobs:
+  classify:
+    name: Classify Development Package Verification
+    runs-on: ubuntu-latest
+    outputs:
+      run_api_package: ${{ steps.classify.outputs.run_api_package || 'true' }}
+      run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
+      run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
+      run_frontend: ${{ steps.classify.outputs.run_frontend || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - id: classify
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
+
   validate:
     name: Validate Development Package Prerequisites (${{ matrix.name }})
+    needs: classify
+    if: >-
+      (matrix.lane == 'api' && needs.classify.outputs.run_api_package == 'true') ||
+      (matrix.lane == 'packaged-factories' && needs.classify.outputs.run_packaged_factories_package == 'true') ||
+      (matrix.lane == 'model-providers' && needs.classify.outputs.run_model_providers_package == 'true') ||
+      (matrix.lane == 'frontend-public' && needs.classify.outputs.run_frontend == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Typecheck
-            command: make typecheck
-            needs_playwright: false
-          - name: Lint and package boundaries
-            command: make lint
-            needs_playwright: false
-          - name: Repository tests
-            command: make test
-            needs_playwright: false
-          - name: Contract generation
-            command: make contracts-smoke
-            needs_playwright: false
-          - name: API parity
-            command: make api-smoke
-            needs_playwright: false
-          - name: API package consumption
-            command: make api-package-pack-smoke
+          - name: API contract and package validation
+            lane: api
+            command: make contracts-smoke api-smoke api-package-verify
             needs_playwright: false
           - name: Packaged Factories consumption
-            command: make packaged-factory-package-smoke
+            lane: packaged-factories
+            command: make packaged-factory-package-verify
+            needs_playwright: false
+          - name: Model Providers consumption
+            lane: model-providers
+            command: make model-provider-package-verify
             needs_playwright: false
           - name: Complete public package release
             command: make public-release-package-smoke
             needs_playwright: false
           - name: Public frontend package release
+            lane: frontend-public
             command: make ui-public-package-release
             needs_playwright: true
     steps:
