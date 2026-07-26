@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -28,6 +30,27 @@ type inertConstructionSpy struct {
 type rootDispatchExecutor struct {
 	request workers.WorkstationExecutionRequest
 	result  workers.WorkResult
+}
+
+type rootBlockingExecutor struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (executor *rootBlockingExecutor) Execute(
+	ctx context.Context,
+	_ workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+	select {
+	case executor.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-executor.release:
+		return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
+	case <-ctx.Done():
+		return workers.WorkResult{}, ctx.Err()
+	}
 }
 
 func (executor *rootDispatchExecutor) Execute(
@@ -176,6 +199,76 @@ func TestServiceDelegatesWorkstationDispatchThroughWorkersRoot(t *testing.T) {
 		executor.request.Dispatch.Execution.RequestID != "request-1" ||
 		executor.request.Dispatch.Execution.TraceID != "trace-1" {
 		t.Fatalf("executor request = %#v", executor.request)
+	}
+}
+
+func TestServicePreservesCanonicalWorkstationSaturationThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	executor := &rootBlockingExecutor{
+		started: make(chan struct{}, 2),
+		release: make(chan struct{}),
+	}
+	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	if _, err := root.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName:      "review",
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      executor,
+			Capacity:      1,
+			QueueCapacity: 1,
+		}}},
+	); err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+
+	results := make(chan error, 33)
+	dispatch := func(id string) {
+		go func() {
+			_, err := root.DispatchWorkstation(
+				context.Background(),
+				rootDispatchRequest(id, "review"),
+			)
+			results <- err
+		}()
+	}
+	dispatch("running")
+	<-executor.started
+	for index := range 32 {
+		dispatch(fmt.Sprintf("waiting-%d", index))
+	}
+
+	saturated := 0
+	for saturated < 31 {
+		select {
+		case err := <-results:
+			if !errors.Is(err, workers.ErrWorkstationSaturated) {
+				t.Fatalf("concurrent DispatchWorkstation() error = %v", err)
+			}
+			saturated++
+		case <-time.After(time.Second):
+			t.Fatalf("saturation results = %d, want 31", saturated)
+		}
+	}
+	close(executor.release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("accepted DispatchWorkstation() error = %v", err)
+		}
+	}
+}
+
+func rootDispatchRequest(dispatchID string, workstationName string) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: workstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{
+				DispatchID:      dispatchID,
+				TransitionID:    "transition-" + dispatchID,
+				WorkstationName: workstationName,
+			},
+		},
 	}
 }
 

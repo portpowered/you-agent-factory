@@ -23,7 +23,18 @@ const (
 type Pool struct {
 	mu     sync.RWMutex
 	state  lifecycleState
-	routes map[string]workstations.Route
+	routes map[string]*routePool
+}
+
+type routePool struct {
+	binding workstations.Route
+	mu      sync.Mutex
+	running int
+	waiting []*admission
+}
+
+type admission struct {
+	ready chan struct{}
 }
 
 var _ workstations.Service = (*Pool)(nil)
@@ -118,19 +129,23 @@ func (p *Pool) Dispatch(
 		return workers.WorkstationDispatchResult{}, err
 	}
 
-	route, release, err := p.acquireBinding(name)
+	route, releaseLifecycle, err := p.acquireRoute(name)
 	if err != nil {
 		return workers.WorkstationDispatchResult{}, err
 	}
-	defer release()
-	if route.Executor == nil {
+	defer releaseLifecycle()
+	if route.binding.Executor == nil {
 		return workers.WorkstationDispatchResult{}, workers.ErrMissingWorkstationBinding
 	}
+	if err := route.admit(ctx); err != nil {
+		return workers.WorkstationDispatchResult{}, err
+	}
+	defer route.release()
 
 	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
-	execution.RunnerID = route.RunnerSelection.RunnerID
-	execution.RunnerSelectionSource = route.RunnerSelection.Source
-	result, executeErr := route.Executor.Execute(ctx, execution)
+	execution.RunnerID = route.binding.RunnerSelection.RunnerID
+	execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
+	result, executeErr := route.binding.Executor.Execute(ctx, execution)
 	result.DispatchID = execution.Dispatch.DispatchID
 	result.TransitionID = execution.Dispatch.TransitionID
 	return workers.WorkstationDispatchResult{
@@ -140,28 +155,79 @@ func (p *Pool) Dispatch(
 	}, executeErr
 }
 
-func (p *Pool) acquireBinding(
+func (p *Pool) acquireRoute(
 	name string,
-) (workstations.Route, func(), error) {
+) (*routePool, func(), error) {
 	p.mu.RLock()
 	switch p.state {
 	case stateConstructed:
 		p.mu.RUnlock()
-		return workstations.Route{}, nil, workers.ErrWorkstationPoolUnavailable
+		return nil, nil, workers.ErrWorkstationPoolUnavailable
 	case stateStopped:
 		p.mu.RUnlock()
-		return workstations.Route{}, nil, workers.ErrWorkstationPoolStopped
+		return nil, nil, workers.ErrWorkstationPoolStopped
 	case stateRunning:
 		route, ok := p.routes[name]
 		if !ok {
 			p.mu.RUnlock()
-			return workstations.Route{}, nil, workers.ErrUnknownWorkstationRoute
+			return nil, nil, workers.ErrUnknownWorkstationRoute
 		}
 		return route, p.mu.RUnlock, nil
 	default:
 		p.mu.RUnlock()
-		return workstations.Route{}, nil, workers.ErrWorkstationPoolUnavailable
+		return nil, nil, workers.ErrWorkstationPoolUnavailable
 	}
+}
+
+func (route *routePool) admit(ctx context.Context) error {
+	route.mu.Lock()
+	if route.running < route.binding.Capacity && len(route.waiting) == 0 {
+		route.running++
+		route.mu.Unlock()
+		return nil
+	}
+	if len(route.waiting) >= route.binding.QueueCapacity {
+		route.mu.Unlock()
+		return workers.ErrWorkstationSaturated
+	}
+	entry := &admission{ready: make(chan struct{})}
+	route.waiting = append(route.waiting, entry)
+	route.mu.Unlock()
+
+	select {
+	case <-entry.ready:
+		return nil
+	case <-ctx.Done():
+		return route.cancelWaiting(entry, ctx.Err())
+	}
+}
+
+func (route *routePool) cancelWaiting(entry *admission, cancellation error) error {
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	for index, queued := range route.waiting {
+		if queued != entry {
+			continue
+		}
+		route.waiting = append(route.waiting[:index], route.waiting[index+1:]...)
+		return cancellation
+	}
+	// Promotion already committed a running slot. Execution observes the
+	// cancelled context and release returns that slot exactly once.
+	return nil
+}
+
+func (route *routePool) release() {
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	route.running--
+	if len(route.waiting) == 0 {
+		return
+	}
+	next := route.waiting[0]
+	route.waiting = route.waiting[1:]
+	route.running++
+	close(next.ready)
 }
 
 func validDispatch(request workers.WorkstationDispatchRequest) (string, error) {
@@ -183,11 +249,11 @@ func contextError(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func routeSnapshot(routes []workstations.Route) (map[string]workstations.Route, error) {
+func routeSnapshot(routes []workstations.Route) (map[string]*routePool, error) {
 	if len(routes) == 0 {
 		return nil, workers.ErrInvalidWorkstationPoolStart
 	}
-	snapshot := make(map[string]workstations.Route, len(routes))
+	snapshot := make(map[string]*routePool, len(routes))
 	for _, route := range routes {
 		name := strings.TrimSpace(route.WorkstationName)
 		if name == "" {
@@ -201,7 +267,22 @@ func routeSnapshot(routes []workstations.Route) (map[string]workstations.Route, 
 			)
 		}
 		route.WorkstationName = name
-		snapshot[name] = route
+		route.Capacity = normalizedLimit(route.Capacity, workers.DefaultWorkstationCapacity)
+		route.QueueCapacity = normalizedLimit(
+			route.QueueCapacity,
+			workers.DefaultWorkstationQueueCapacity,
+		)
+		if route.Capacity < 0 || route.QueueCapacity < 0 {
+			return nil, workers.ErrInvalidWorkstationPoolStart
+		}
+		snapshot[name] = &routePool{binding: route}
 	}
 	return snapshot, nil
+}
+
+func normalizedLimit(configured int, fallback int) int {
+	if configured == 0 {
+		return fallback
+	}
+	return configured
 }

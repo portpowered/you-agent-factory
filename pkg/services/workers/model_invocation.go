@@ -22,6 +22,12 @@ const (
 	WorkstationPoolLifecycleOutcomeAlreadyRunning WorkstationPoolLifecycleOutcome = "ALREADY_RUNNING"
 	WorkstationPoolLifecycleOutcomeStopped        WorkstationPoolLifecycleOutcome = "STOPPED"
 	WorkstationPoolLifecycleOutcomeAlreadyStopped WorkstationPoolLifecycleOutcome = "ALREADY_STOPPED"
+
+	// DefaultWorkstationCapacity preserves bounded behavior for bindings that
+	// predate explicit workstation admission limits.
+	DefaultWorkstationCapacity = 1
+	// DefaultWorkstationQueueCapacity bounds waiting work for legacy bindings.
+	DefaultWorkstationQueueCapacity = 1
 )
 
 var (
@@ -37,6 +43,9 @@ var (
 	ErrUnknownWorkstationRoute = errors.New("Workers workstation route is unknown")
 	// ErrMissingWorkstationBinding reports a configured route without an executor.
 	ErrMissingWorkstationBinding = errors.New("Workers workstation executor binding is missing")
+	// ErrWorkstationSaturated reports a route whose running and waiting capacity
+	// are both occupied.
+	ErrWorkstationSaturated = errors.New("Workers workstation route is saturated")
 )
 
 // WorkstationPoolStartRequest supplies the detached runtime bindings that are
@@ -124,6 +133,12 @@ type AssembledRuntimeBinding struct {
 	RoleKind        RuntimeBuildRoleKind
 	RunnerSelection ResolvedRunnerSelection
 	Executor        WorkstationRequestExecutor
+	// Capacity is the maximum concurrent executor calls for this workstation.
+	// Zero selects DefaultWorkstationCapacity for compatibility.
+	Capacity int
+	// QueueCapacity is the maximum accepted dispatches waiting for a slot.
+	// Zero selects DefaultWorkstationQueueCapacity for compatibility.
+	QueueCapacity int
 }
 
 // RuntimeBuildResult carries detached assembled-binding success facts for one

@@ -13,6 +13,8 @@ type Route struct {
 	WorkstationName string
 	RunnerSelection workers.ResolvedRunnerSelection
 	Executor        workers.WorkstationRequestExecutor
+	Capacity        int
+	QueueCapacity   int
 }
 
 // Service owns workstation pool lifecycle and route availability.

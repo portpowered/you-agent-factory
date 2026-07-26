@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -21,6 +23,71 @@ type recordingExecutor struct {
 type blockingExecutor struct {
 	started chan struct{}
 	release chan struct{}
+}
+
+type controlledExecutor struct {
+	mu       sync.Mutex
+	running  int
+	max      int
+	started  chan string
+	releases map[string]chan struct{}
+}
+
+type panicOnceExecutor struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (executor *panicOnceExecutor) Execute(
+	_ context.Context,
+	_ workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	executor.calls++
+	if executor.calls == 1 {
+		panic("executor panic")
+	}
+	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
+}
+
+func newControlledExecutor(dispatchIDs ...string) *controlledExecutor {
+	executor := &controlledExecutor{
+		started:  make(chan string, len(dispatchIDs)),
+		releases: make(map[string]chan struct{}, len(dispatchIDs)),
+	}
+	for _, dispatchID := range dispatchIDs {
+		executor.releases[dispatchID] = make(chan struct{})
+	}
+	return executor
+}
+
+func (executor *controlledExecutor) Execute(
+	ctx context.Context,
+	request workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+	dispatchID := request.Dispatch.DispatchID
+	executor.mu.Lock()
+	executor.running++
+	if executor.running > executor.max {
+		executor.max = executor.running
+	}
+	release := executor.releases[dispatchID]
+	executor.mu.Unlock()
+	executor.started <- dispatchID
+	select {
+	case <-release:
+	case <-ctx.Done():
+		return workers.WorkResult{}, ctx.Err()
+	}
+	executor.mu.Lock()
+	executor.running--
+	executor.mu.Unlock()
+	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
+}
+
+func (executor *controlledExecutor) release(dispatchID string) {
+	close(executor.releases[dispatchID])
 }
 
 func (executor *blockingExecutor) Execute(
@@ -157,6 +224,17 @@ func TestPoolRejectsInvalidRoutesAndCancelledLifecycleCalls(t *testing.T) {
 				{WorkstationName: "review"},
 				{WorkstationName: " review "},
 			},
+		},
+		{
+			name:   "negative capacity",
+			routes: []workstations.Route{{WorkstationName: "review", Capacity: -1}},
+		},
+		{
+			name: "negative queue capacity",
+			routes: []workstations.Route{{
+				WorkstationName: "review",
+				QueueCapacity:   -1,
+			}},
 		},
 	}
 	for _, testCase := range testCases {
@@ -443,6 +521,228 @@ func TestPoolStopWaitsForAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
 		dispatchRequest("dispatch-late", "transition-late", "review"),
 	); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
 		t.Fatalf("Dispatch() after stop error = %v, want ErrWorkstationPoolStopped", err)
+	}
+}
+
+func TestPoolEnforcesCapacityBoundedQueueAndFIFO(t *testing.T) {
+	t.Parallel()
+
+	executor := newControlledExecutor("dispatch-1", "dispatch-2", "dispatch-3")
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+		Capacity:        1,
+		QueueCapacity:   2,
+	})
+
+	results := make(chan error, 3)
+	dispatchAsync(pool, "dispatch-1", "review", results)
+	assertStarted(t, executor, "dispatch-1")
+	dispatchAsync(pool, "dispatch-2", "review", results)
+	waitForQueued(t, pool, "review", 1)
+	dispatchAsync(pool, "dispatch-3", "review", results)
+	waitForQueued(t, pool, "review", 2)
+
+	if _, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-saturated", "transition", "review"),
+	); !errors.Is(err, workers.ErrWorkstationSaturated) {
+		t.Fatalf("saturated Dispatch() error = %v, want ErrWorkstationSaturated", err)
+	}
+	executor.release("dispatch-1")
+	assertStarted(t, executor, "dispatch-2")
+	executor.release("dispatch-2")
+	assertStarted(t, executor, "dispatch-3")
+	executor.release("dispatch-3")
+	assertDispatchErrors(t, results, 3)
+
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	if executor.max != 1 {
+		t.Fatalf("maximum concurrent executor calls = %d, want 1", executor.max)
+	}
+}
+
+func TestPoolCapacityGreaterThanOneAndIndependentRoutesProgress(t *testing.T) {
+	t.Parallel()
+
+	executor := newControlledExecutor("a-1", "a-2", "a-3", "b-1")
+	pool := New()
+	if _, err := pool.Start(context.Background(), []workstations.Route{
+		{
+			WorkstationName: "route-a",
+			Executor:        executor,
+			Capacity:        2,
+			QueueCapacity:   1,
+		},
+		{
+			WorkstationName: "route-b",
+			Executor:        executor,
+			Capacity:        1,
+			QueueCapacity:   1,
+		},
+	}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	results := make(chan error, 4)
+	dispatchAsync(pool, "a-1", "route-a", results)
+	assertStarted(t, executor, "a-1")
+	dispatchAsync(pool, "a-2", "route-a", results)
+	assertStarted(t, executor, "a-2")
+	dispatchAsync(pool, "a-3", "route-a", results)
+	waitForQueued(t, pool, "route-a", 1)
+	if _, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("a-saturated", "transition", "route-a"),
+	); !errors.Is(err, workers.ErrWorkstationSaturated) {
+		t.Fatalf("route-a saturation error = %v, want ErrWorkstationSaturated", err)
+	}
+
+	dispatchAsync(pool, "b-1", "route-b", results)
+	assertStarted(t, executor, "b-1")
+	executor.release("b-1")
+	executor.release("a-1")
+	assertStarted(t, executor, "a-3")
+	executor.release("a-2")
+	executor.release("a-3")
+	assertDispatchErrors(t, results, 4)
+
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	if executor.max != 3 {
+		t.Fatalf("cross-route maximum concurrent executor calls = %d, want 3", executor.max)
+	}
+}
+
+func TestPoolReleasesCapacityWhenExecutorPanics(t *testing.T) {
+	t.Parallel()
+
+	executor := &panicOnceExecutor{}
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+		Capacity:        1,
+		QueueCapacity:   1,
+	})
+
+	recovered := make(chan any, 1)
+	go func() {
+		defer func() {
+			recovered <- recover()
+		}()
+		_, _ = pool.Dispatch(
+			context.Background(),
+			dispatchRequest("dispatch-panic", "transition-panic", "review"),
+		)
+	}()
+	if panicValue := <-recovered; panicValue == nil {
+		t.Fatal("Dispatch() did not propagate executor panic")
+	}
+	if _, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-after-panic", "transition-after-panic", "review"),
+	); err != nil {
+		t.Fatalf("Dispatch() after panic error = %v", err)
+	}
+}
+
+func TestPoolCancelledWaiterReleasesBoundedQueueAccounting(t *testing.T) {
+	t.Parallel()
+
+	executor := newControlledExecutor("dispatch-running", "dispatch-next")
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+		Capacity:        1,
+		QueueCapacity:   1,
+	})
+
+	results := make(chan error, 2)
+	dispatchAsync(pool, "dispatch-running", "review", results)
+	assertStarted(t, executor, "dispatch-running")
+	waitingContext, cancelWaiting := context.WithCancel(context.Background())
+	waitingResult := make(chan error, 1)
+	go func() {
+		_, err := pool.Dispatch(
+			waitingContext,
+			dispatchRequest("dispatch-cancelled", "transition-cancelled", "review"),
+		)
+		waitingResult <- err
+	}()
+	waitForQueued(t, pool, "review", 1)
+	cancelWaiting()
+	if err := <-waitingResult; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled queued Dispatch() error = %v, want context.Canceled", err)
+	}
+
+	dispatchAsync(pool, "dispatch-next", "review", results)
+	waitForQueued(t, pool, "review", 1)
+	executor.release("dispatch-running")
+	assertStarted(t, executor, "dispatch-next")
+	executor.release("dispatch-next")
+	assertDispatchErrors(t, results, 2)
+}
+
+func startPool(t *testing.T, pool *Pool, route workstations.Route) {
+	t.Helper()
+	if _, err := pool.Start(context.Background(), []workstations.Route{route}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+}
+
+func dispatchAsync(pool *Pool, dispatchID string, route string, results chan<- error) {
+	go func() {
+		_, err := pool.Dispatch(
+			context.Background(),
+			dispatchRequest(dispatchID, "transition-"+dispatchID, route),
+		)
+		results <- err
+	}()
+}
+
+func assertStarted(t *testing.T, executor *controlledExecutor, dispatchID string) {
+	t.Helper()
+	select {
+	case got := <-executor.started:
+		if got != dispatchID {
+			t.Fatalf("executor start = %q, want %q", got, dispatchID)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("executor did not start %q", dispatchID)
+	}
+}
+
+func waitForQueued(t *testing.T, pool *Pool, routeName string, count int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		route := pool.routes[routeName]
+		route.mu.Lock()
+		queued := len(route.waiting)
+		route.mu.Unlock()
+		if queued == count {
+			return
+		}
+		runtime.Gosched()
+	}
+	t.Fatalf("route %q did not reach queued count %d", routeName, count)
+}
+
+func assertDispatchErrors(t *testing.T, results <-chan error, count int) {
+	t.Helper()
+	for range count {
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Fatalf("Dispatch() error = %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("Dispatch() did not complete")
+		}
 	}
 }
 

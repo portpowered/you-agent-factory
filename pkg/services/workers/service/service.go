@@ -308,6 +308,8 @@ func workstationRoutes(
 			WorkstationName: binding.RoleName,
 			RunnerSelection: binding.RunnerSelection,
 			Executor:        binding.Executor,
+			Capacity:        binding.Capacity,
+			QueueCapacity:   binding.QueueCapacity,
 		})
 	}
 	return routes, nil
