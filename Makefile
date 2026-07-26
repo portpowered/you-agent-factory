@@ -120,7 +120,7 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-reference-input-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke public-release-package-smoke model-provider-package-smoke model-provider-reference-input-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
@@ -190,7 +190,7 @@ api-smoke:
 	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
-	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
 
 packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
 
@@ -206,6 +206,9 @@ packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
 	node scripts/packaged-factories-package-pr-dry-run.mjs --event-name pull_request --prerequisite-result success --ref refs/pull/local/head --repository portpowered/you-agent-factory --run-id 1 --source-commit $(shell git rev-parse HEAD) --pull-request-head-sha $(shell git rev-parse HEAD) --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-dry-run --workspace-directory .
 
 packaged-factory-package-consumer-smoke: packaged-factory-package-candidate-dry-run
+
+public-release-package-smoke:
+	node --test scripts/public-package-set.test.mjs scripts/public-release-package-publish.test.mjs scripts/public-release-package-candidate.test.mjs
 
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs

@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+
+import { assertPackedExportTargets } from "./package-export-validation.mjs";
 
 export const REVIEWED_PACK_FILES = Object.freeze([
 	"README.md",
@@ -153,6 +155,13 @@ export async function packPackage({ packageDirectory, packDestination }) {
 
 export async function packAndVerify(input) {
 	const packed = await packPackage(input);
+	const manifest = JSON.parse(
+		await readFile(
+			join(resolve(input.packageDirectory), "package.json"),
+			"utf8",
+		),
+	);
+	assertPackedExportTargets(packed.packageName, manifest.exports, packed.files);
 	assertReviewedInventory(packed.files);
 	return packed;
 }
