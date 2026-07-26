@@ -15,6 +15,12 @@ entries and lowering accepted debt over expanding a baseline.
 file-count gate rejects new oversized packages, count increases, and entries
 that were not lowered or removed when the corresponding package shrank.
 
+For Packaged Service Structure FND-12, the maintainer-runnable public behavior
+baseline suite map (CLI, HTTP, MCP, replay, visualization activation) lives in
+[`fnd-12-public-behavior-baseline-suite-map.md`](./fnd-12-public-behavior-baseline-suite-map.md).
+That map names focused Make/`go test` entry points and marks success vs
+typed-failure coverage; it does not own PR #1262 CLI-manifest baselines.
+
 `ownership-inventory.json` is the PSS-F01 frozen package-destination inventory.
 It maps every production `pkg` package to one committed owner, approved family,
 Process Edges exception, or deletion/move successor. It also freezes owner and

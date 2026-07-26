@@ -1,11 +1,25 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
+import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+import {
+  assertCandidateSetEvidence,
+  FRONTEND_ONLY_CANDIDATE_SCOPE,
+} from "../../scripts/public-package-set.mjs";
 
 const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const semverPattern =
@@ -48,6 +62,21 @@ export function patchPublicPackageManifest(manifest, version) {
   return next;
 }
 
+export function assertFrontendCandidateEvidence(evidence) {
+  assertPublishVersion(evidence?.version);
+  assertCandidateSetEvidence(evidence, FRONTEND_ONLY_CANDIDATE_SCOPE);
+  return evidence;
+}
+
+const npmPackArguments = (stagedDirectory, outputDirectory) => [
+  "pack",
+  stagedDirectory,
+  "--json",
+  "--ignore-scripts",
+  "--pack-destination",
+  outputDirectory,
+];
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -82,10 +111,27 @@ function run(command, args, options = {}) {
 
 function runNpm(args, options = {}) {
   if (process.platform !== "win32") return run("npm", args, options);
-  if (!process.env.npm_execpath) {
-    throw new Error("npm_execpath is required to run npm safely on Windows");
+  const configuredNpmCli = process.env.npm_execpath;
+  const npmCli =
+    configuredNpmCli &&
+    /(?:^|[\\/])npm(?:-cli)?\.[cm]?js$/i.test(configuredNpmCli) &&
+    existsSync(configuredNpmCli)
+      ? configuredNpmCli
+      : path.join(
+          path.dirname(process.execPath),
+          "node_modules/npm/bin/npm-cli.js",
+        );
+  if (!existsSync(npmCli)) {
+    throw new Error("npm CLI could not be resolved safely on Windows");
   }
-  return run(process.execPath, [process.env.npm_execpath, ...args], options);
+  return run(process.execPath, [npmCli, ...args], options);
+}
+
+export function packCandidate({ stagedDirectory, outputDirectory }) {
+  return runNpm(npmPackArguments(stagedDirectory, outputDirectory), {
+    cwd: uiRoot,
+    capture: true,
+  });
 }
 
 async function stagePackage({ packageSpec, version, stagingRoot }) {
@@ -105,7 +151,41 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
     );
   }
   await writeFile(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
-  return stagedDirectory;
+  return { manifest: patched, stagedDirectory };
+}
+
+async function snapshotBuildOutputs(stagingRoot) {
+  const snapshots = [];
+  for (const packageSpec of PUBLIC_PACKAGES) {
+    const sourceDirectory = path.join(
+      uiRoot,
+      "packages",
+      packageSpec.directory,
+    );
+    const outputDirectory = path.join(sourceDirectory, "dist");
+    const backupDirectory = path.join(
+      stagingRoot,
+      ".build-output-backups",
+      packageSpec.directory,
+    );
+    try {
+      await stat(outputDirectory);
+      await cp(outputDirectory, backupDirectory, { recursive: true });
+      snapshots.push({ outputDirectory, backupDirectory });
+    } catch (error) {
+      if (error?.code === "ENOENT") snapshots.push({ outputDirectory });
+      else throw error;
+    }
+  }
+  return snapshots;
+}
+
+async function restoreBuildOutputs(snapshots) {
+  for (const { outputDirectory, backupDirectory } of snapshots) {
+    await rm(outputDirectory, { recursive: true, force: true });
+    if (backupDirectory)
+      await cp(backupDirectory, outputDirectory, { recursive: true });
+  }
 }
 
 export async function preparePublicPackageCandidates({
@@ -114,37 +194,31 @@ export async function preparePublicPackageCandidates({
 }) {
   assertPublishVersion(version);
   const resolvedOutput = path.resolve(outputDirectory);
-  const stagingRoot = await mkdtemp(
-    path.join(tmpdir(), "you-public-packages-"),
-  );
+  const stagingRoot = await mkdtemp(path.join(uiRoot, ".you-public-packages-"));
   await mkdir(resolvedOutput, { recursive: true });
   await run("bun", ["run", "link:public-package-dependencies"], {
     cwd: uiRoot,
   });
+  const buildOutputs = await snapshotBuildOutputs(stagingRoot);
   const candidates = [];
   try {
     for (const packageSpec of PUBLIC_PACKAGES) {
-      const stagedDirectory = await stagePackage({
+      const { manifest, stagedDirectory } = await stagePackage({
         packageSpec,
         version,
         stagingRoot,
       });
-      const { stdout } = await runNpm(
-        [
-          "pack",
-          stagedDirectory,
-          "--json",
-          "--pack-destination",
-          resolvedOutput,
-        ],
-        { cwd: uiRoot, capture: true },
-      );
+      const { stdout } = await packCandidate({
+        stagedDirectory,
+        outputDirectory: resolvedOutput,
+      });
       const [report] = JSON.parse(stdout);
       if (report?.name !== packageSpec.name || report?.version !== version) {
         throw new Error(
           `npm pack returned unexpected identity for ${packageSpec.name}`,
         );
       }
+      assertPackedExportTargets(report.name, manifest.exports, report.files);
       candidates.push({
         name: report.name,
         version: report.version,
@@ -153,13 +227,18 @@ export async function preparePublicPackageCandidates({
         shasum: report.shasum,
       });
     }
-    const evidence = { version, packages: candidates };
+    const evidence = {
+      scope: FRONTEND_ONLY_CANDIDATE_SCOPE,
+      version,
+      packages: candidates,
+    };
     await writeFile(
       path.join(resolvedOutput, "public-package-candidates.json"),
       `${JSON.stringify(evidence, null, 2)}\n`,
     );
     return evidence;
   } finally {
+    await restoreBuildOutputs(buildOutputs);
     await rm(stagingRoot, { recursive: true, force: true });
   }
 }
@@ -215,18 +294,7 @@ export async function publishPublicPackageCandidates({
       "utf8",
     ),
   );
-  assertPublishVersion(evidence.version);
-  if (evidence.packages.length !== PUBLIC_PACKAGES.length) {
-    throw new Error("Public package candidate set is incomplete");
-  }
-  if (
-    new Set(evidence.packages.map(({ name }) => name)).size !==
-    evidence.packages.length
-  ) {
-    throw new Error(
-      "Public package candidate set contains duplicate package names",
-    );
-  }
+  assertFrontendCandidateEvidence(evidence);
   for (const packageSpec of PUBLIC_PACKAGES) {
     const candidate = evidence.packages.find(
       ({ name }) => name === packageSpec.name,

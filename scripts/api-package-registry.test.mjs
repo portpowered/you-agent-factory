@@ -70,6 +70,26 @@ test("absent version returns one publish decision without mutating registry stat
 	assert.deepEqual(registryClient.calls, { lookup: 1, download: 0, publish: 0 });
 });
 
+test("stable latest candidate is accepted by protected release reconciliation", async (t) => {
+	const candidate = await candidateFixture(t);
+	candidate.evidence.candidateVersion = "1.2.3";
+	candidate.evidence.distTag = "latest";
+	const registryClient = registrySpy({
+		lookup: async () => ({ status: "absent" }),
+		download: async () => assert.fail("absent versions must not be downloaded"),
+	});
+
+	const result = await reconcileCandidate({
+		...candidate,
+		expectedDistTag: "latest",
+		registryClient,
+	});
+
+	assert.equal(result.outcome, RECONCILIATION_OUTCOMES.PUBLISH_REQUIRED);
+	assert.equal(result.candidateVersion, "1.2.3");
+	assert.equal(result.distTag, "latest");
+});
+
 test("matching existing version is verified without publish or tag mutation", async (t) => {
 	const candidate = await candidateFixture(t);
 	const registryClient = registrySpy({

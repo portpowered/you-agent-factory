@@ -23,10 +23,18 @@
   canonical five-package family, stages manifests with one version and aligned
   internal dependency pins, and writes registry-format tarballs plus evidence
   under `.artifacts/public-packages` by default. The Development Package
-  workflow runs this command as a read-only pull-request dry run, publishes an
-  immutable `dev` version after protected `main` succeeds, and the tagged
-  release workflow publishes the release semver under `latest`. Publication
-  uses npm trusted publishing and verifies every exact version after upload.
+  workflow runs this command as a frontend-only pull-request dry run and
+  publishes only this family at an immutable `dev` version after protected
+  `main` succeeds. API and Packaged Factories join the frontend family only in
+  the complete tagged-release candidate, which publishes one release semver
+  under `latest`. Publication uses npm trusted publishing and verifies every
+  exact version after upload.
+
+- `make public-release-package-smoke` is the required complete-set release
+  behavior gate. It exercises scope validation, real seven-package candidate
+  preparation, and protected publication preflight from the repository root on
+  every Development Package workflow run. Keep the command portable when it
+  invokes npm outside an npm script, including on Windows.
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable
@@ -261,28 +269,33 @@ Wave 0 functional-tests-expansion planning authority lives under
   scripts, lockfiles, workspaces, and links, resolve artifacts only through
   public package specifiers, and validate both generated representations
   against the installed schema before removing the consumer.
-  Pull-request authorization is shared through
-  `scripts/package-development-policy.mjs`; keep the API compatibility re-export
-  and require every candidate to match the reviewed full head SHA after
-  prerequisites succeed. The Development Package pull-request job runs
-  `scripts/packaged-factories-package-pr-dry-run.mjs` without registry access
-  and preserves the exact tarball, candidate evidence, consumer evidence, and
-  no-publish outcome for review. Keep generation, identity, inventory, pack,
-  and installed-consumer failures stage-specific.
-  Protected-main publication must download that package's preserved candidate,
-  rebind its evidence source commit to the protected workflow head, and use the
-  shared `scripts/package-registry.mjs` and
-  `scripts/package-publication.mjs` mechanics. Package wrappers own exact npm
-  identity and installed-consumer semantics; shared orchestration owns local
-  digest verification, immutable-version reconciliation, publish-at-most-once
-  behavior, and bounded retries for transient lookup, download, visibility, and
-  registry-consumer install failures. Candidate identity/digest, immutable
-  conflict, registry integrity, authentication, permission, and installed-data
-  contract failures remain fail-fast and retain classified diagnostics.
-  The tagged Release workflow prepares API and Packaged Factories candidates
-  together from the successful release-candidate workflow's exact head commit,
-  uploads them under separate artifact names, and publishes only those
-  downloaded directories after rechecking their source commit. Local
+  The data-package development policy and dry-run helpers remain available as
+  focused local verification tools, but the Development Package workflow does
+  not prepare or publish API or Packaged Factories candidates. Protected-main
+  development publication preserves and publishes only the frontend family at
+  `0.0.0-dev.<run-id>.<reviewed-source-commit>`.
+  `scripts/public-release-package-candidate.mjs` prepares the tagged-release
+  candidate set from the successful release-candidate workflow's exact head
+  commit: API, Packaged Factories, and the canonical frontend family share one
+  stable release version, preserve source manifests and frontend build outputs,
+  and are recorded exactly once in `release-candidate-evidence.json`. The
+  shared `scripts/package-export-validation.mjs` check rejects any packed API,
+  Packaged Factories, or frontend candidate missing a concrete export target or
+  every match for a wildcard target. Keep the legacy
+  `factories/goal/factory.json` compatibility artifact as a separate Packaged
+  Factories required-file check, outside the general export-map contract, and
+  keep lifecycle scripts disabled for every candidate pack. Prove that behavior
+  at the API, Packaged Factories, and frontend production packing boundaries
+  with lifecycle-hook sentinel fixtures; command-argument inventory assertions
+  are not sufficient release evidence.
+  tagged Release workflow uploads that complete set as one artifact. Its
+  `scripts/public-release-package-publish.mjs` boundary rejects unknown scopes,
+  duplicates, missing or extra packages, source-commit drift, and child
+  evidence or tarball paths that do not match the reviewed top-level evidence,
+  and preflights every represented tarball against all recorded artifact
+  digests before publishing any package. The frontend publisher accepts only the
+  `frontend-only` development scope, while the protected tagged publisher
+  requires the complete `tagged-release` scope. Local
   maintainers can isolate generation, drift, script tests, exact packing,
   pull-request dry-run, and clean-consumer behavior through the focused
   `packaged-factory-*` Make targets documented in

@@ -723,6 +723,9 @@ func resolveRunNamedFactorySelection(
 	resolveNamedFactoryRoots NamedFactoryRootsResolver,
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if namedFactoryCatalog == nil {
 		return fmt.Errorf("Factory Definitions named-factory catalog is required")
 	}
@@ -737,6 +740,9 @@ func resolveRunNamedFactorySelection(
 		return fmt.Errorf("resolve current working directory for --named: process working directory is required")
 	}
 	roots, err := resolveNamedFactoryRoots(homeDir, cwd)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return fmt.Errorf("resolve named-Factory roots: %w", err)
 	}
@@ -745,12 +751,18 @@ func resolveRunNamedFactorySelection(
 		roots.Global,
 		cfg.NamedFactoryName,
 	)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		candidates, candidateErr := resolveNamedFactoryCandidatePaths(
 			roots.Project,
 			roots.Global,
 			cfg.NamedFactoryName,
 		)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 		if candidateErr != nil {
 			return err
 		}
@@ -783,6 +795,7 @@ func resolveRunFactoryPrompt(
 		signatureSource = cfg.FactoryConfigPath
 	}
 	signature, err := runcli.ResolveFactoryInvocationSignature(
+		cmd.Context(),
 		cfg.LoadFactoryConfigFile,
 		signatureSource,
 	)

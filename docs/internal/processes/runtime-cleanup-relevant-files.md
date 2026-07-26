@@ -359,6 +359,11 @@ functional test). The prohibition runs on the `make lint` package-boundary path;
 pre-existing live-tree debt is inventory-only in
 `petri-public-surface-baseline.json` with an exact deletion gate pointing at
 Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
+Each entry's count must match every live occurrence of that exact
+file/import/symbol edge; after creating or editing the inventory, run
+`make pkg-boundary` so an omitted edge or undercount cannot leave the base
+branch lint-broken. Correct a count only when history proves all occurrences
+predate the deletion gate; new references must be retired instead of baselined.
 
 ## Focused Verification
 

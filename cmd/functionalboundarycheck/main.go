@@ -58,11 +58,15 @@ var forbiddenProviderImplementationImports = []string{
 // subpackage is an implementation or composition seam and must stay behind the
 // root-built process harness. Keep this set aligned with the package-boundary
 // policy's publicExternalEffectContractImports.
+//
+// Providers Execution leaf is the durable provider-effect owner; Workers
+// inferencecontract remains migration debt until later Providers packets land.
 var providerPublicEffectContractImports = map[string]struct{}{
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear": {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract": {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                        {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":    {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":         {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":  {},
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+	access,
 	cp,
 	mkdir,
 	mkdtemp,
@@ -16,7 +17,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-	npmPackArguments,
 	packAndVerify,
 	reviewedPackFiles,
 } from "./packaged-factories-package-pack.mjs";
@@ -37,6 +37,24 @@ async function fixturePackage(t) {
 	await cp(packageDirectory, packageRoot, { recursive: true });
 	return { packageRoot, packDestination: root };
 }
+
+test("candidate packing suppresses lifecycle script side effects", async (t) => {
+	const { packageRoot, packDestination } = await fixturePackage(t);
+	const sentinel = join(packDestination, "lifecycle-ran");
+	const manifestPath = join(packageRoot, "package.json");
+	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+	manifest.scripts = { prepack: "node create-sentinel.mjs" };
+	await Promise.all([
+		writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`),
+		writeFile(
+			join(packageRoot, "create-sentinel.mjs"),
+			`import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(sentinel)}, "ran");\n`,
+		),
+	]);
+
+	await packAndVerify({ packageDirectory: packageRoot, packDestination });
+	await assert.rejects(access(sentinel), { code: "ENOENT" });
+});
 
 test("real npm tarball contains the manifest-derived reviewed inventory deterministically", async (t) => {
 	const firstDestination = await temporaryDirectory(
@@ -65,10 +83,6 @@ test("real npm tarball contains the manifest-derived reviewed inventory determin
 		await readFile(first.tarballPath),
 	);
 	assert.notEqual(second.tarballPath, first.tarballPath);
-	assert.ok(
-		npmPackArguments("package", "output").includes("--ignore-scripts"),
-		"npm pack must disable lifecycle scripts",
-	);
 });
 
 test("missing and stale generated artifacts are reported separately", async (t) => {
@@ -171,6 +185,19 @@ test("repository-relative flattened artifact dependencies are rejected", async (
 	await assert.rejects(
 		packAndVerify({ packageDirectory: packageRoot, packDestination }),
 		/package-external file dependencies/,
+	);
+});
+
+test("missing Goal factory compatibility artifact is rejected separately", async (t) => {
+	const { packageRoot, packDestination } = await fixturePackage(t);
+	await unlink(join(packageRoot, "factories", "goal", "factory.json"));
+
+	await assert.rejects(
+		packAndVerify({ packageDirectory: packageRoot, packDestination }),
+		{
+			message:
+				"@you-agent-factory/packaged-factories candidate omits factories/goal/factory.json",
+		},
 	);
 });
 

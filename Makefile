@@ -120,10 +120,11 @@ endef
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-reference-input-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke public-release-package-smoke model-provider-package-smoke model-provider-reference-input-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
+.PHONY: fnd-12-behavior-baselines fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines fnd-12-visualization-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
@@ -189,7 +190,7 @@ api-smoke:
 	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
-	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
 
 packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
 
@@ -205,6 +206,9 @@ packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
 	node scripts/packaged-factories-package-pr-dry-run.mjs --event-name pull_request --prerequisite-result success --ref refs/pull/local/head --repository portpowered/you-agent-factory --run-id 1 --source-commit $(shell git rev-parse HEAD) --pull-request-head-sha $(shell git rev-parse HEAD) --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-dry-run --workspace-directory .
 
 packaged-factory-package-consumer-smoke: packaged-factory-package-candidate-dry-run
+
+public-release-package-smoke:
+	node --test scripts/public-package-set.test.mjs scripts/public-release-package-publish.test.mjs scripts/public-release-package-candidate.test.mjs
 
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs
@@ -259,6 +263,36 @@ cli-manifest-check:
 cli-contract-smoke:
 	$(GO) run ./cmd/clicontractsmoke -root .
 	$(GO) test ./cmd/clicontractsmoke ./pkg/transports/cli/clicontract -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured public behavior baselines (see
+# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# Aggregator runs all five surface pairs; does not migrate packages or refresh
+# PR #1262 CLI-manifest baselines. Pair with `make verify-fast` and `make lint`.
+fnd-12-behavior-baselines:
+	$(MAKE) fnd-12-cli-behavior-baselines
+	$(MAKE) fnd-12-http-behavior-baselines
+	$(MAKE) fnd-12-mcp-behavior-baselines
+	$(MAKE) fnd-12-replay-behavior-baselines
+	$(MAKE) fnd-12-visualization-behavior-baselines
+
+# FND-12 captured public CLI success + typed-failure pair.
+# Does not refresh or re-own PR #1262 CLI-manifest baselines.
+fnd-12-cli-behavior-baselines:
+	$(GO) test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+fnd-12-http-behavior-baselines:
+	$(GO) test ./tests/functional/runtime_api -run '^TestGeneratedAPIIntegrationSmoke_(OpenAPIGeneratedServerAndLiveRuntimeStayAligned|SubmitWorkItemsRejectEmptyStructuredSubmission)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+fnd-12-mcp-behavior-baselines:
+	$(GO) test ./pkg/transports/mcp/server -run '^Test(ServeStdioUsesSDKProtocolAndRegistersCatalog|SDKProtocolErrors)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured public replay success + typed-failure pair.
+fnd-12-replay-behavior-baselines:
+	$(GO) test ./pkg/services/recordings/replay -run '^TestSideEffects_(InferReturnsRecordedProviderResponse|UnmatchedRequestFailsClearly)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured visualization activation success + typed-failure pair.
+fnd-12-visualization-behavior-baselines:
+	$(GO) test ./pkg/services/factory_visualization -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference

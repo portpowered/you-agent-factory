@@ -17,7 +17,7 @@ env:
   BUN_VERSION: 1.3.12
   NODE_VERSION: 24
   NPM_VERSION: 11.15.0
-  GO_VERSION: 1.24.2
+  GO_VERSION: 1.25.0
 
 jobs:
   validate:
@@ -48,6 +48,9 @@ jobs:
             needs_playwright: false
           - name: Packaged Factories consumption
             command: make packaged-factory-package-smoke
+            needs_playwright: false
+          - name: Complete public package release
+            command: make public-release-package-smoke
             needs_playwright: false
           - name: Public frontend package release
             command: make ui-public-package-release
@@ -113,58 +116,7 @@ jobs:
       - name: Install dashboard dependencies
         run: make ui-deps
 
-      - name: Authorize, prepare, and smoke the exact candidate without publishing
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .artifacts/api-development-candidate
-          node scripts/api-package-development-command.mjs \
-            --action dry-run \
-            --event-name "${{ github.event_name }}" \
-            --output-directory .artifacts/api-development-candidate/package \
-            --package-directory packages/api \
-            --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
-            --ref "${{ github.ref }}" \
-            --repository "${{ github.repository }}" \
-            --run-id "${{ github.run_id }}" \
-            --source-commit "${{ github.event.pull_request.head.sha }}" \
-            --workspace-directory "${{ github.workspace }}" \
-            | tee .artifacts/api-development-candidate/dry-run-outcome.json
-
-      - name: Upload the preserved candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-development-candidate-${{ github.run_id }}
-          path: .artifacts/api-development-candidate/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Authorize, prepare, and smoke the exact Packaged Factories candidate without publishing
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .artifacts/packaged-factories-development-candidate/package
-          node scripts/packaged-factories-package-pr-dry-run.mjs \
-            --event-name "${{ github.event_name }}" \
-            --output-directory .artifacts/packaged-factories-development-candidate/package \
-            --package-directory packages/packaged-factories \
-            --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
-            --ref "${{ github.ref }}" \
-            --repository "${{ github.repository }}" \
-            --run-id "${{ github.run_id }}" \
-            --source-commit "${{ github.event.pull_request.head.sha }}" \
-            --workspace-directory "${{ github.workspace }}" \
-            | tee .artifacts/packaged-factories-development-candidate/dry-run-outcome.json
-
-      - name: Upload the preserved Packaged Factories candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: packaged-factories-development-candidate-${{ github.run_id }}
-          path: .artifacts/packaged-factories-development-candidate/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Prepare the canonical frontend package candidates
+      - name: Prepare the frontend-only development package candidates
         run: >-
           make ui-public-package-publish-prepare
           PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.event.pull_request.head.sha }}"
@@ -208,47 +160,7 @@ jobs:
       - name: Install dashboard dependencies
         run: make ui-deps
 
-      - name: Authorize and prepare the exact protected-main candidate
-        run: >-
-          node scripts/api-package-development-command.mjs
-          --action prepare-main
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/api-development-candidate
-          --package-directory packages/api
-          --ref "${{ github.ref }}"
-          --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.sha }}"
-
-      - name: Upload the preserved candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-development-main-candidate-${{ github.run_id }}
-          path: .artifacts/api-development-candidate/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Authorize and prepare the exact protected-main Packaged Factories candidate
-        run: >-
-          node scripts/packaged-factories-package-development-command.mjs
-          --action prepare-main
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/packaged-factories-development-candidate
-          --package-directory packages/packaged-factories
-          --ref "${{ github.ref }}"
-          --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.sha }}"
-
-      - name: Upload the preserved Packaged Factories candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: packaged-factories-development-main-candidate-${{ github.run_id }}
-          path: .artifacts/packaged-factories-development-candidate/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Prepare the canonical frontend package candidates
+      - name: Prepare the frontend-only development package candidates
         run: >-
           make ui-public-package-publish-prepare
           PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.sha }}"
@@ -292,49 +204,13 @@ jobs:
       - name: Pin trusted-publishing-compatible npm
         run: npm install --global npm@${{ env.NPM_VERSION }}
 
-      - name: Download the preserved candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: api-development-main-candidate-${{ github.run_id }}
-          path: .artifacts/api-development-candidate
-
-      - name: Download the preserved Packaged Factories candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: packaged-factories-development-main-candidate-${{ github.run_id }}
-          path: .artifacts/packaged-factories-development-candidate
-
-      - name: Download the canonical frontend package candidates
+      - name: Download the frontend-only development package candidates
         uses: actions/download-artifact@v4
         with:
           name: public-development-main-candidate-${{ github.run_id }}
           path: .artifacts/public-development-candidate
 
-      - name: Authorize, reconcile, publish once when absent, and verify exact consumption
-        run: >-
-          node scripts/api-package-development-command.mjs
-          --action publish-main
-          --candidate-directory .artifacts/api-development-candidate
-          --event-name "${{ github.event_name }}"
-          --prerequisite-result "${{ needs.validate.result }}"
-          --ref "${{ github.ref }}"
-          --repository "${{ github.repository }}"
-          --source-commit "${{ github.sha }}"
-          --workspace-directory "${{ github.workspace }}"
-
-      - name: Authorize, reconcile, publish, and verify the exact Packaged Factories candidate
-        run: >-
-          node scripts/packaged-factories-package-development-command.mjs
-          --action publish-main
-          --candidate-directory .artifacts/packaged-factories-development-candidate
-          --event-name "${{ github.event_name }}"
-          --prerequisite-result "${{ needs.validate.result }}"
-          --ref "${{ github.ref }}"
-          --repository "${{ github.repository }}"
-          --source-commit "${{ github.sha }}"
-          --workspace-directory "${{ github.workspace }}"
-
-      - name: Publish and verify the canonical frontend package family
+      - name: Publish and verify the frontend-only development package family
         working-directory: ui
         run: >-
           npm run publish:public-packages --
