@@ -54,14 +54,14 @@ func NewSelectedFactorySignature(
 		ctx context.Context,
 		request SelectedFactorySignatureRequest,
 	) SelectedFactorySignatureResult {
-		if catalog == nil {
+		if completionCancelled(ctx) || catalog == nil {
 			return selectedFactorySignatureFailure()
 		}
 		result, err := catalog(ctx, factorydefinitions.ListEffectiveFactoriesRequest{
 			ProjectRoot: request.ProjectRoot,
 			GlobalRoot:  request.GlobalRoot,
 		})
-		if err != nil {
+		if err != nil || completionCancelled(ctx) {
 			return selectedFactorySignatureFailure()
 		}
 		entry, found := selectedFactoryEntry(result.Entries, request.FactoryName)
@@ -73,7 +73,7 @@ func NewSelectedFactorySignature(
 			"you.run",
 			entry.InvocationSignature,
 		)
-		if err != nil || len(diagnostics) != 0 {
+		if err != nil || len(diagnostics) != 0 || completionCancelled(ctx) {
 			return selectedFactorySignatureFailure()
 		}
 		if schema.FactoryInputMode != climanifest.EffectiveFactoryInputModeSignature {

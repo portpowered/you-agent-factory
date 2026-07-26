@@ -169,6 +169,125 @@ func TestSelectedFactorySignaturePreservesFallbackAndReturnsAtomicFailure(t *tes
 	}
 }
 
+func TestSelectedFactorySignatureFailuresAreAtomicAndCancellationSkipsDiscovery(t *testing.T) {
+	calls := 0
+	manifest := selectedFactoryRunManifest()
+	complete := cobracompletion.NewSelectedFactorySignature(
+		func(
+			ctx context.Context,
+			_ factorydefinitions.ListEffectiveFactoriesRequest,
+		) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+			calls++
+			switch calls {
+			case 1:
+				return factorydefinitions.ListEffectiveFactoriesResult{}, context.Canceled
+			case 2:
+				cancelContext(t, ctx)
+				return factorydefinitions.ListEffectiveFactoriesResult{
+					Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{
+						Name: "alpha",
+					}},
+				}, nil
+			case 3:
+				return factorydefinitions.ListEffectiveFactoriesResult{}, nil
+			default:
+				return factorydefinitions.ListEffectiveFactoriesResult{
+					Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{
+						Name: "alpha",
+						InvocationSignature: &factorydefinitions.InvocationSignatureConfig{
+							Parameters: []work.InvocationParameterConfig{
+								{
+									Name: "secret-diagnostic-must-not-escape",
+									Bindings: []work.InvocationParameterBindingConfig{{
+										Kind: work.InvocationParameterBindingKindNamed,
+									}},
+								},
+								{
+									Name: "secret-diagnostic-must-not-escape",
+									Bindings: []work.InvocationParameterBindingConfig{{
+										Kind: work.InvocationParameterBindingKindNamed,
+									}},
+								},
+							},
+						},
+					}},
+				}, nil
+			}
+		},
+		manifest,
+	)
+
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	contexts := []context.Context{
+		cancelled,
+		t.Context(),
+		withCancelHook(t.Context()),
+		t.Context(),
+		t.Context(),
+	}
+	for index, ctx := range contexts {
+		result := complete(ctx, cobracompletion.SelectedFactorySignatureRequest{
+			FactoryName: "alpha",
+			Target:      "flags",
+		})
+		assertAtomicSignatureFailure(t, index, result)
+	}
+	if calls != 4 {
+		t.Fatalf("catalog calls = %d, want pre-cancellation to skip discovery", calls)
+	}
+}
+
+func TestSelectedFactorySignatureIsRepeatableAndDoesNotMutateSignature(t *testing.T) {
+	defaultValue := "json"
+	signature := &factorydefinitions.InvocationSignatureConfig{
+		Parameters: []work.InvocationParameterConfig{{
+			Name:         "format",
+			Choices:      []string{"text", "json"},
+			DefaultValue: defaultValue,
+			Bindings: []work.InvocationParameterBindingConfig{{
+				Kind: work.InvocationParameterBindingKindNamed,
+			}},
+		}},
+	}
+	before := *signature
+	before.Parameters = append([]work.InvocationParameterConfig(nil), signature.Parameters...)
+	before.Parameters[0].Choices = append([]string(nil), signature.Parameters[0].Choices...)
+	before.Parameters[0].Bindings = append(
+		[]work.InvocationParameterBindingConfig(nil),
+		signature.Parameters[0].Bindings...,
+	)
+	complete := selectedFactorySignatureOperation(t, signature)
+	request := valueRequest("format")
+
+	first := complete(t.Context(), request)
+	again := complete(t.Context(), request)
+	if !reflect.DeepEqual(first, again) {
+		t.Fatalf("repeated completion differs: first=%#v again=%#v", first, again)
+	}
+	if !reflect.DeepEqual(*signature, before) {
+		t.Fatalf("completion mutated signature: got=%#v want=%#v", *signature, before)
+	}
+}
+
+func assertAtomicSignatureFailure(
+	t *testing.T,
+	index int,
+	result cobracompletion.SelectedFactorySignatureResult,
+) {
+	t.Helper()
+	wantDirective := cobra.ShellCompDirectiveError | cobra.ShellCompDirectiveNoFileComp
+	if len(result.Completions) != 0 || result.Directive != wantDirective ||
+		result.UseFallback {
+		t.Fatalf("failure %d = %#v, want atomic sensitive-safe failure", index, result)
+	}
+}
+
+func withCancelHook(parent context.Context) context.Context {
+	ctx, cancel := context.WithCancel(parent)
+	return context.WithValue(ctx, cancelContextKey{}, context.CancelFunc(cancel))
+}
+
 func TestRegisterSelectedFactorySignatureBridgesDisabledFlagParsing(t *testing.T) {
 	run := &cobra.Command{Use: "run", DisableFlagParsing: true}
 	run.Flags().String("named", "", "")

@@ -53,12 +53,93 @@ func TestBuildProcessFactoryListProjectsEffectiveCatalogWithoutRuntimeOrWrites(t
 	entries, diagnostics := executeRootFactoryList(t, process, home, workingDirectory)
 	assertRootEffectiveList(t, entries, diagnostics, projectRoot, globalRoot)
 	assertRootFactoryNameCompletion(t, process, home, workingDirectory, entries)
+	assertRootSignatureCompletion(t, process, home, workingDirectory)
+	assertRootCanceledCompletion(t, process, home, workingDirectory)
 	after := rootListTreeSnapshot(t, home, workingDirectory)
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("filesystem changed during listing\nbefore: %#v\nafter:  %#v", before, after)
 	}
 	assertRootListEffects(t, initializationCalls.Load(), apiStarts, integration)
 	assertRootCanceledList(t, process, home, workingDirectory)
+}
+
+func assertRootSignatureCompletion(
+	t *testing.T,
+	process interface{ Execute(Input) error },
+	home string,
+	workingDirectory string,
+) {
+	t.Helper()
+	var first bytes.Buffer
+	for index := 0; index < 2; index++ {
+		var output bytes.Buffer
+		var diagnostics bytes.Buffer
+		if err := process.Execute(Input{
+			Args: []string{
+				"you", "__complete", "run", "--named", "aaa-local", "--req",
+			},
+			Env:              homeEnvironment(home),
+			Stdout:           &output,
+			Stderr:           &diagnostics,
+			Context:          context.Background(),
+			WorkingDirectory: workingDirectory,
+		}); err != nil {
+			t.Fatalf("Process.Execute(signature completion) error = %v", err)
+		}
+		if output.String() != "--request\tRequest payload\n:4\n" {
+			t.Fatalf("signature completion output = %q", output.String())
+		}
+		if diagnostics.String() !=
+			"Completion ended with directive: ShellCompDirectiveNoFileComp\n" {
+			t.Fatalf("signature completion diagnostics = %q", diagnostics.String())
+		}
+		if index == 0 {
+			first.WriteString(output.String())
+		} else if output.String() != first.String() {
+			t.Fatalf(
+				"repeated signature completion differs: first=%q again=%q",
+				first.String(),
+				output.String(),
+			)
+		}
+	}
+}
+
+func assertRootCanceledCompletion(
+	t *testing.T,
+	process interface{ Execute(Input) error },
+	home string,
+	workingDirectory string,
+) {
+	t.Helper()
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := process.Execute(Input{
+		Args: []string{
+			"you", "__complete", "run", "--named", "aaa-local", "--req",
+		},
+		Env:              homeEnvironment(home),
+		Stdout:           &output,
+		Stderr:           &diagnostics,
+		Context:          cancelled,
+		WorkingDirectory: workingDirectory,
+	})
+	if err != nil {
+		t.Fatalf("Process.Execute(cancelled completion) error = %v", err)
+	}
+	if output.String() != ":5\n" {
+		t.Fatalf("cancelled completion output = %q, want atomic error directive", output.String())
+	}
+	if strings.Contains(output.String(), "request") ||
+		strings.Contains(diagnostics.String(), "aaa-local") {
+		t.Fatalf(
+			"cancelled completion leaked candidates or selected Factory: (%q, %q)",
+			output.String(),
+			diagnostics.String(),
+		)
+	}
 }
 
 func assertRootFactoryNameCompletion(
@@ -267,7 +348,8 @@ func writeRootListFactory(
 		definition["invocationSignature"] = map[string]any{
 			"parameters": []map[string]any{{
 				"name": "prompt", "externalName": "request", "required": true,
-				"bindings": []map[string]any{{"kind": "NAMED"}},
+				"description": "Request payload",
+				"bindings":    []map[string]any{{"kind": "NAMED"}},
 			}},
 		}
 	}

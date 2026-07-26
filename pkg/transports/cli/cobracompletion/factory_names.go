@@ -43,14 +43,14 @@ func NewFactoryNames(
 		ctx context.Context,
 		request FactoryNamesRequest,
 	) ([]cobra.Completion, cobra.ShellCompDirective) {
-		if catalog == nil {
+		if completionCancelled(ctx) || catalog == nil {
 			return factoryNameFailure()
 		}
 		result, err := catalog(ctx, factorydefinitions.ListEffectiveFactoriesRequest{
 			ProjectRoot: request.ProjectRoot,
 			GlobalRoot:  request.GlobalRoot,
 		})
-		if err != nil {
+		if err != nil || completionCancelled(ctx) {
 			return factoryNameFailure()
 		}
 		projection, err := completionprojection.ProjectFactoryNames(ctx, result)
@@ -157,4 +157,8 @@ func factoryNameValueRequest(
 
 func factoryNameFailure() ([]cobra.Completion, cobra.ShellCompDirective) {
 	return nil, factoryNameFailureDirective()
+}
+
+func completionCancelled(ctx context.Context) bool {
+	return ctx == nil || ctx.Err() != nil
 }
