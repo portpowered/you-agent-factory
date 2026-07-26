@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -122,6 +123,24 @@ func TestResolveFactoryInvocationInputSchemaHonorsCancellationWithoutPartialResu
 				t.Fatalf("loader calls = %d, want %d", loadCalls, wantCalls)
 			}
 		})
+	}
+}
+
+func TestMapInvocationInputErrorPreservesWrappedStableSensitiveFailure(t *testing.T) {
+	t.Parallel()
+
+	const sensitiveValue = "credential-that-must-not-leak"
+	wrapped := fmt.Errorf("%w: %w", work.ErrInvalidInvocationInput, &work.ArgumentError{
+		Code:    work.ArgumentErrorCodeStringValidationMismatch,
+		Message: `parameter "token" value <redacted> is not one of the declared choices`,
+	})
+
+	err := MapInvocationInputError(wrapped)
+	if err == nil || !strings.Contains(err.Error(), string(work.ArgumentErrorCodeStringValidationMismatch)) {
+		t.Fatalf("error = %v, want stable validation code", err)
+	}
+	if strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatalf("mapped error leaked sensitive value: %v", err)
 	}
 }
 

@@ -186,8 +186,10 @@ func provideUpdateFactoryFromFileOperation(
 	}
 }
 
-func provideFactoryConfigRootResolver() factorydefinitions.FactoryConfigRootResolver {
-	return factorydefinitions.NewFactoryConfigRootResolver(platformfilesystem.Local{})
+func provideFactoryConfigRootResolver(
+	source factorydefinitions.AuthoredLayoutReaderFileSystem,
+) factorydefinitions.FactoryConfigRootResolver {
+	return factorydefinitions.NewFactoryConfigRootResolver(source)
 }
 
 func provideFactoryConfigFileLoader(

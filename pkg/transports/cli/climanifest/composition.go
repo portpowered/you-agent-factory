@@ -113,6 +113,8 @@ func ComposeRunInputs(manifest Manifest, commandID string, signature *work.Invoc
 		return schema, nil, nil
 	}
 
+	command = commandWithoutCompatibilityInvocationInput(command)
+	schema.StaticInputs = projectStaticInputs(command)
 	schema.FactoryInputMode = EffectiveFactoryInputModeSignature
 	schema.UnknownNamedArgumentPolicy = normalizedUnknownNamedArgumentPolicy(signature.UnknownNamedArgumentPolicy)
 	schema.FactoryParameters = projectFactoryParameters(signature.Parameters)
@@ -121,6 +123,23 @@ func ComposeRunInputs(manifest Manifest, commandID string, signature *work.Invoc
 		return EffectiveInputSchema{}, diagnostics, nil
 	}
 	return schema, diagnostics, nil
+}
+
+// commandWithoutCompatibilityInvocationInput removes the static prompt/stdin
+// carrier that is active only when a selected Factory has no signature. A
+// signature replaces that carrier with its own positional and stdin bindings;
+// run-level flags and other static inputs remain reserved.
+func commandWithoutCompatibilityInvocationInput(command Command) Command {
+	projected := command
+	projected.Arguments = make(map[string]Argument, len(command.Arguments))
+	for id, argument := range command.Arguments {
+		if containsString(argument.Channels, SourceStdin) ||
+			containsString(argument.AcceptedSources, SourceStdin) {
+			continue
+		}
+		projected.Arguments[id] = argument
+	}
+	return projected
 }
 
 func projectStaticInputs(command Command) []EffectiveStaticInput {
