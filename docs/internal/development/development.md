@@ -106,27 +106,21 @@ Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` fo
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
-Expensive specialty verification that is useful for maintainer confidence but not required to merge a pull request should stay off the required PR path. The current example is `.github/workflows/long-local-inference.yml`, which runs long OMNIVOICE managed-runtime and functional-runtime coverage only through post-merge pushes to `main`, the daily `06:00 UTC` schedule, or explicit `workflow_dispatch` runs. Use that workflow when a change may affect managed local inference runtime setup, model download and cache behavior, or long-running real local inference behavior that the required PR lanes do not need to block on every narrow pull request.
+`.github/workflows/long-local-inference.yml` owns the Linux managed-runtime and real-inference regression. CI invokes it only when the classifier selects the Local Inference lane; it remains independently runnable after merge, on its daily `06:00 UTC` schedule, and through `workflow_dispatch`. Use it when a change affects managed local inference runtime setup, model download/cache behavior, or real local inference behavior.
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow schedules focused verification jobs independently wherever they do
-not share a genuine prerequisite. `Build`, `Lint`, and `API` run `make
-verify-build`, `make verify-lint`, and `make verify-api` respectively, with no
-dependencies on one another. `Release Surface Smoke`, `PR Inference Approval`,
-and the four focused Windows Go suites also schedule independently. After
-`Classify PR Impact`, the UI coverage, browser integration, backend unit
-coverage, and backend functional coverage jobs either run or report an
-intentional skip according to the classifier result. `make
-verify-build-contracts` remains the sequential local aggregate for the focused
-Build, Lint, and API commands; it is not itself a CI verification job.
+The workflow schedules only the ownership-selected lanes. Frontend coverage and
+browser integration are separate jobs, as are backend verification, focused
+real-backend browser verification, API package verification, the two other
+package-family checks, documentation checks, and local inference. `make
+verify-pr` remains the intentionally broad local aggregate, while a CI lane
+uses the direct command shown in the ownership table below.
 
-Use `make run-sharded-ui-coverage` and `make ui-integration-test` to reproduce
-the parallel UI jobs (`make verify-tests` runs both locally through `make
-run-concurrent-ui-verification-lanes`). Use `make test-unit-coverage` and `make
-test-functional-coverage` for the independent backend coverage checks. The
-browser integration job installs Chromium in its own setup; local `make
-release-surface-smoke` installs the browser needed by its smoke path.
+Use `make test-ui-coverage` and `make test-ui-browser-integration` to reproduce
+the frontend jobs. Use `make test-backend-verification` and `make
+ui-durable-session-real-backend-integration-test` for backend-owned changes.
+The browser jobs install Chromium in their own setup.
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -194,39 +188,40 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned aggregate for local full build-contract verification. It runs `make typecheck`, then `make verify-build`, `make verify-lint`, and `make verify-api`. CI runs those three focused commands in independent `Build`, `Lint`, and `API` jobs after each job's own setup.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It starts with maintenance (including the lane audit), integration, and contract evidence before release and built-CLI acceptance, concurrent UI coverage/browser integration, and the independent backend unit and functional coverage lanes. The concurrent orchestrator prefixes each UI lane's stdout with `[UI Coverage]` or `[UI Browser Integration]`, writes per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`, and emits the exact `make <target>` rerun command for any failed lane. GitHub Actions publishes backend unit and functional coverage as separate matrix checks and retains distinct `coverage.out`, `coverage.txt`, and `command.log` artifacts for each. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` use the same shard-and-merge contract through `make run-sharded-ui-coverage` (default `UI_COVERAGE_SHARD_TOTAL=10`). `make test-ui-coverage` remains the monolithic compatibility path for ad hoc comparison runs.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It starts with maintenance (including the lane audit), integration, and contract evidence before release and built-CLI acceptance, concurrent UI coverage/browser integration, and backend unit and functional coverage. CI uses the ownership-selected `Frontend`, `Frontend Browser`, and `Backend` jobs rather than the local shard-and-merge compatibility orchestration. `make test-ui-coverage` remains the direct covered-dashboard command.
 
 `make test-built-cli-acceptance` is the focused rerun command for the hermetic built-CLI S24 acceptance package under `tests/functional/acceptance`. It builds `./cmd/factory`, runs the full behavioral acceptance corpus (including named-goal, stream, subagent, and local-model scenarios that skip under `-short`), and fails with scenario subtest names such as `s24-fresh-install` when the scenario matrix drifts from its documented customer-outcome mapping in `internal/builtcliacceptance/scenarios.go`.
 
-Every pull request schedules these early verification lanes before the lane-specific skip decisions:
+Every pull request begins with `Classify Verification`. The classifier is an additive ownership table: a mixed change runs the union of selected lanes rather than one exclusive bucket. `factory/**` is neutral, so factory-only changes select no product verification. `.github/workflows/**`, `scripts/ci/**`, `Makefile`, `go.mod`, `go.sum`, empty diffs, and unknown paths select every lane conservatively.
 
-1. `Classify PR Impact`
-2. `Typecheck`
-3. `Build`, `Lint`, and `API`
+| Changed surface | Selected CI lanes | Direct local rerun |
+| --- | --- | --- |
+| `docs/reference/**`, `docs/README.md` | Docs Reference | `make docs-reference-smoke` |
+| `README.md` | README | `make readme-check` |
+| `factory/**` only or other internal docs | None | None |
+| `ui/**` | Frontend and Frontend Browser | `make typecheck ui-lint test-ui-coverage`; `make test-ui-browser-integration` |
+| `cmd/**`, `pkg/**`, `internal/**`, `tests/**` | Backend and UI Backend Integration | `make build test-backend-verification`; `make ui-durable-session-real-backend-integration-test` |
+| API contracts, HTTP transport/mapping, generated API output | Frontend, Frontend Browser, Backend, UI Backend Integration, API Package | the corresponding commands above plus `make api-package-verify` |
+| `packages/api/**` or API package scripts | API Package, Frontend, Frontend Browser, Backend, UI Backend Integration | `make api-package-verify` and the corresponding commands above |
+| Packaged Factories package | Packaged Factories Package and Backend | `make packaged-factory-package-verify`; `make build test-backend-verification` |
+| Model Providers package | Model Providers Package and Backend | `make model-provider-package-verify`; `make build test-backend-verification` |
+| Local inference ownership | Backend and Local Inference | `make build test-backend-verification`; `make verify-pr-inference` |
 
-The classifier is what decides whether the three downstream required test lanes run or skip. Treat its four classifications as the maintained routing contract:
+`Verification Policy` is the stable required check. It validates selected results and publishes touched areas, selected and skipped lanes, reasons, and local rerun commands. Lane conditions are applied to jobs, so unselected work does not allocate a hosted runner. Development Package applies the same package ownership to validation and pull-request candidate artifacts; protected `main` still prepares every artifact needed by publication.
 
-| Classification | Touched surfaces | Required downstream lanes | Local rerun guidance |
-| --- | --- | --- | --- |
-| `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` | No downstream lane rerun is expected; if the change was misclassified, rerun the classifier logic through `go run ./cmd/ciclassify ...` or use the full path with `make verify-pr`. |
-| `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make run-sharded-ui-coverage` and `make ui-integration-test` |
-| `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification` |
-| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/transports/http/**`, `pkg/transports/mapping/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
-
-The workflow publishes this routing decision twice in GitHub Actions: the `Classify PR Impact` job summary shows the overall classification, changed-file count, touched areas, and the full required rerun command, and each downstream lane summary shows its own `run` versus `skip` decision together with the specific local rerun command and the short reason emitted by `cmd/ciclassify`.
-
-Treat those lanes as the stable contributor mental model:
+The next table describes focused local verification targets. CI execution is the
+ownership table above; it does not use the historical coverage-shard matrix.
 
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
 | --- | --- | --- | --- |
-| `UI Coverage` | CI: ten parallel `ui-coverage-shard` jobs (main covered Vitest shards via `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage`) plus `ui-coverage-merge` (isolated React Flow pass, `vitest --mergeReports` thresholds, Vitest-only standalone `ui/scripts/dashboard-shell-storybook-responsive.test.mjs`, replay metadata guard). Local: same shard-and-merge contract via `make run-sharded-ui-coverage` (`scripts/ci/run-sharded-ui-coverage.sh`), which wipes `ui/.vitest-reports` and `ui/.vitest-report-timings` before launching shards so stale monolithic or out-of-range shard blobs cannot inflate merged coverage; merge mode also sanitizes `.vitest-reports` to the expected `main-shard-<index>.json` Vitest blob set before `vitest --mergeReports` (slow-file timing JSON lives outside that directory). | `make run-sharded-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. Default shard count is `10` (`UI_COVERAGE_SHARD_TOTAL`); tune it for local comparison runs without changing test semantics. Use `UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage` to reproduce one shard failure, `make test-ui-coverage-merge` after shard blobs exist for merge-only failures, and `make test-ui-coverage` only for the monolithic compatibility path. |
+| `Frontend` | dashboard typecheck, lint, and covered unit verification | `make typecheck ui-lint test-ui-coverage` | Keeps frontend-only behavior separate from browser and backend ownership. |
 | `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. See [UI browser integration stability](ui-browser-integration-stability.md) for sequential suite rules, port/download isolation, and durable wait helpers. |
-| `Backend Verification` | Classifier routing umbrella for the two backend coverage matrix checks below. | `make test-backend-verification` | Keeps classifier output and the aggregate compatibility command stable while CI execution and reports remain split. |
+| `Backend Verification` | `make test-unit-coverage` and `make functional-test-viz` run sequentially in the Backend job. | `make test-backend-verification` | Keeps the direct local aggregate aligned with the selected Backend lane. |
 | `Backend Unit Coverage` | `cmd/gocoveragecheck` executes tests from `./cmd/factory` and maintained backend `./pkg/...` packages while measuring backend-owned code. | `make test-unit-coverage` | Keeps package-level coverage and per-package gates independent from system-level functional coverage. |
 | `Backend Functional Coverage` | `make functional-test-viz`: `functional-boundary-check`, then one `cmd/gocoveragecheck` functional coverage run (profile + JSON), then the Markdown catalog generator. | `make functional-test-viz` | Shows the internal-system coverage contributed by functional flows without unit, stress, or release tests affecting the profile, and uploads the inventory-plus-coverage artifact set. Boundary regressions cannot pass this lane on coverage alone. Coverage-only local reruns remain `make test-functional-coverage`. |
-| `PR Inference Approval` | one named OMNIVOICE long regression (`TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio`) through `make verify-pr-inference` after Linux OMNIVOICE runtime and managed-model cache provisioning | `make verify-pr-inference` | Keeps real local inference merge-blocking without folding the expensive runtime setup into Backend Verification or the classifier-skipped short functional corpus. Narrow regression rerun: `make pr-inference-approval`. |
+| `Local Inference` | one Linux managed-runtime and real-inference regression through `make verify-pr-inference` after OMNIVOICE runtime and managed-model cache provisioning | `make verify-pr-inference` | Runs only when the Local Inference ownership lane is selected; narrow regression rerun: `make pr-inference-approval`. |
 
-UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Main, isolated React Flow, and merge/threshold covered phases run on Bun; the standalone Storybook script phase remains Vitest-only. Keep the main covered Bun pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. **US-004 (2026-05-30):** a three-worker trial on a comparable local runner regressed main-pass time and failed a graph suite timeout—keep the default at two unless new green `make test-ui-coverage` timing on `ubuntu-latest` justifies a change (see `docs/internal/development/ui-coverage-speed-closeout.md` **Main-pass worker trial**). Keep the split workflow-activity current activity card suites listed in `isolatedReactFlowCoverageFiles` inside `ui/scripts/ui-coverage-runner.mjs` (`react-flow-current-activity-card-editor-chrome`, `import-flows`, `graph-semantics`, `layout`, and `topology-localization` test files) in their separate covered React Flow pass with single-worker isolation unless later CI timing evidence proves that changing that isolation boundary is both faster and stable. **US-005 (2026-05-30):** do not add a parallel isolated pass for `src/App.*.test.tsx`—local trials showed main-pass wall time unchanged within noise when app-shell files are excluded, while a bundled single-worker app-shell phase adds ~500s serial cost (~46% lane regression); see `docs/internal/development/ui-coverage-speed-closeout.md` **App shell megatest isolation trial**. **CI sharding (2026-05-30):** pull-request UI Coverage runs `ui-coverage-shard` (matrix `1`–`10`) plus `ui-coverage-merge` instead of one runner invoking `make test-ui-coverage`. Each shard job defaults to one Bun worker (`UI_COVERAGE_MAIN_MAX_WORKERS` still overrides); merged coverage thresholds are enforced in the merge job via `merge-bun-coverage-thresholds.mjs` and `bun-coverage-config.mjs`. See `docs/internal/development/ui-coverage-speed-closeout.md` **CI ten-shard rollout** for before/after timing and the first green proof run.
+UI coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. The selected Frontend CI job runs `make test-ui-coverage` once; the separate Frontend Browser job owns browser-backed integration. Local shard-and-merge commands remain available for comparison and diagnosis, but are not the pull-request CI implementation.
 
 Focused workflow-activity current activity card verification after split coverage changes: `cd ui && bun x vitest run src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-import-flows.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-layout.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-topology-localization.test.tsx`. Broader dashboard jsdom regressions remain `make ui-test`; full covered UI verification remains `make ui-test` or `make test-ui-coverage` as appropriate for the touched surface.
 
@@ -282,9 +277,9 @@ When a required lane fails, GitHub Actions keeps the lane-owned failure evidence
 
 Backend verification failure summaries are rendered by `go run ./cmd/backendverificationsummary -log .artifacts/backend-verification/command.log`. Keep that helper covered with `go test ./cmd/backendverificationsummary`, and keep the summary output focused on the first actionable failure block before falling back to a bounded command-log excerpt.
 
-### PR Inference Approval
+### Local Inference
 
-Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push schedules it independently of Build, Lint, and API.
+The `Local Inference` lane is selected only for local-inference ownership or conservative full verification. It is not folded into Backend Verification. The reusable workflow runs Linux managed-runtime and real-inference coverage once.
 
 **Local rerun commands**
 
@@ -312,7 +307,7 @@ Required Go tests also include `TestRuntimeAPI_CompilesWithFunctionalLongTag`, w
 
 CI provisions Linux `omnivoice-llamacpp` through `scripts/ci/install-omnivoice-command.sh`, sets `INFINITE_YOU_OMNIVOICE_COMMAND` to the installed binary, and caches `.cache/managed-models` plus `.cache/omnivoice-command` under a PR-lane-specific cache key.
 
-**Why this lane is required in PR CI**
+**Why this lane is selected**
 
 Inference-specific code can regress in ways the short Backend Verification corpus does not exercise: compile failures in `functionallong` tests, broken model pull or invocation routes, or factory-level `MODEL_INVOKE` wiring. The PR lane catches that class with one stable long regression before merge. It intentionally runs only the single sentinel test rather than the full specialty sweep so required PR feedback stays bounded.
 

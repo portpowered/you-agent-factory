@@ -18,6 +18,7 @@ func TestClassifyPathsRoutesOwnershipUnion(t *testing.T) {
 	}{
 		{"factory only", []string{"factory/workstations/process.yaml"}, "factory-content", nil},
 		{"reference docs", []string{"docs/reference/factory.md"}, "documentation-reference", []string{laneDocsReference}},
+		{"documentation readme", []string{"docs/README.md"}, "documentation-reference", []string{laneDocsReference}},
 		{"other docs", []string{"docs/guides/factory.md"}, "documentation", nil},
 		{"readme", []string{"README.md"}, "readme", []string{laneReadme}},
 		{"frontend", []string{"ui/src/App.tsx"}, "frontend", []string{laneFrontend}},
@@ -53,7 +54,7 @@ func TestClassifyPathsRoutesOwnershipUnion(t *testing.T) {
 
 func TestClassifyPathsConservativelyRunsEverything(t *testing.T) {
 	t.Parallel()
-	for _, paths := range [][]string{nil, {".github/workflows/ci.yml"}, {"Makefile"}, {"go.mod"}, {"unknown-root-file"}} {
+	for _, paths := range [][]string{nil, {".github/workflows/ci.yml"}, {"scripts/ci/check.sh"}, {"Makefile"}, {"go.mod"}, {"go.sum"}, {"unknown-root-file"}} {
 		result := classifyPaths(paths)
 		if result.Classification != "full" {
 			t.Fatalf("classification = %q, want full", result.Classification)

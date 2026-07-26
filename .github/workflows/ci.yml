@@ -37,6 +37,15 @@ jobs:
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
       run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
       run_local_inference: ${{ steps.classify.outputs.run_local_inference || 'true' }}
+      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || 'Conservative full verification.' }}
+      readme_reason: ${{ steps.classify.outputs.readme_reason || 'Conservative full verification.' }}
+      frontend_reason: ${{ steps.classify.outputs.frontend_reason || 'Conservative full verification.' }}
+      backend_reason: ${{ steps.classify.outputs.backend_reason || 'Conservative full verification.' }}
+      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || 'Conservative full verification.' }}
+      api_package_reason: ${{ steps.classify.outputs.api_package_reason || 'Conservative full verification.' }}
+      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || 'Conservative full verification.' }}
+      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || 'Conservative full verification.' }}
+      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || 'Conservative full verification.' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -212,6 +221,24 @@ jobs:
         env:
           CLASSIFICATION: ${{ needs.classify.outputs.classification }}
           AREAS: ${{ needs.classify.outputs.areas }}
+          RUN_DOCS: ${{ needs.classify.outputs.run_docs_reference }}
+          RUN_README: ${{ needs.classify.outputs.run_readme }}
+          RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
+          RUN_BACKEND: ${{ needs.classify.outputs.run_backend }}
+          RUN_UI_BACKEND: ${{ needs.classify.outputs.run_ui_backend_integration }}
+          RUN_API: ${{ needs.classify.outputs.run_api_package }}
+          RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
+          RUN_PROVIDERS: ${{ needs.classify.outputs.run_model_providers_package }}
+          RUN_INFERENCE: ${{ needs.classify.outputs.run_local_inference }}
+          DOCS_REASON: ${{ needs.classify.outputs.docs_reference_reason }}
+          README_REASON: ${{ needs.classify.outputs.readme_reason }}
+          FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
+          BACKEND_REASON: ${{ needs.classify.outputs.backend_reason }}
+          UI_BACKEND_REASON: ${{ needs.classify.outputs.ui_backend_integration_reason }}
+          API_REASON: ${{ needs.classify.outputs.api_package_reason }}
+          PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
+          PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
+          INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
             docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} inference=${{ needs.local-inference.result }}
         shell: bash
@@ -221,6 +248,24 @@ jobs:
           echo "- Classification: \`$CLASSIFICATION\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Areas: \`$AREAS\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Results: \`$RESULTS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "### Lane decisions" >> "$GITHUB_STEP_SUMMARY"
+          for lane in \
+            "Docs Reference|$RUN_DOCS|${{ needs.docs-reference.result }}|$DOCS_REASON" \
+            "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
+            "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
+            "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
+            "Backend|$RUN_BACKEND|${{ needs.backend.result }}|$BACKEND_REASON" \
+            "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
+            "API Contract And Package|$RUN_API|${{ needs.api-package.result }}|$API_REASON" \
+            "Packaged Factories Package|$RUN_PACKAGED|${{ needs.packaged-factories-package.result }}|$PACKAGED_REASON" \
+            "Model Providers Package|$RUN_PROVIDERS|${{ needs.model-providers-package.result }}|$PROVIDERS_REASON" \
+            "Local Inference|$RUN_INFERENCE|${{ needs.local-inference.result }}|$INFERENCE_REASON"; do
+            IFS='|' read -r name selected result reason <<< "$lane"
+            decision=skip
+            [[ "$selected" == "true" ]] && decision=run
+            echo "- \`$name\`: \`$decision\` (result: \`$result\`) - $reason" >> "$GITHUB_STEP_SUMMARY"
+          done
           if [[ "$RESULTS" == *"failure"* || "$RESULTS" == *"cancelled"* ]]; then
             exit 1
           fi
