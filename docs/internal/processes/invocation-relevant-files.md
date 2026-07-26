@@ -10,6 +10,12 @@ primary-result behavior.
   `workers.ProjectCommandEnvForDiagnostics` for the shared allowlist,
   metadata-only, and sensitive-value redaction policy; never publish effective
   environment values directly.
+- Compose a parent-private Runner and its detached capability metadata in the
+  private Runners wire package, then publish only its common `workers.Runner`
+  binding through the immutable registry. Run the shared conformance kit
+  against the registry-resolved implementation; when the implementation
+  translates the common request into a narrower effect request, use the kit's
+  boundary-specific captured-request assertion to prove caller-owned isolation.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation
