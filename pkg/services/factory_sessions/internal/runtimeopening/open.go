@@ -363,11 +363,15 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
+	if !ok {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
+	}
 	opened := assembleRuntimeProducts(
 		factoryDefinitionOwner,
 		service4,
 		invocationDomain,
-		sessionRuntime,
+		rootRuntime,
 		factoryWorkflows,
 		workflowPreview,
 		workDomain,

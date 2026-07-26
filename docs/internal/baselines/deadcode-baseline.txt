@@ -13,10 +13,8 @@ internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable fu
 internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.UsesGoalRoutingDecisionEnvelope
 internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.WorkResultFromDecisionEnvelopeJSONOrFailed
 internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed
-internal/testutil/mock_factory.go: unreachable func: MockFactory.AcceptDispatchResult
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ApproveDurableFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.CancelDurableFactorySession
-internal/testutil/mock_factory.go: unreachable func: MockFactory.CaptureCheckpoint
 internal/testutil/mock_factory.go: unreachable func: MockFactory.CloseFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.GetCurrentFactory
 internal/testutil/mock_factory.go: unreachable func: MockFactory.GetDurableFactorySession
@@ -36,18 +34,14 @@ internal/testutil/mock_factory.go: unreachable func: MockFactory.ListDurableFact
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ListFactorySessions
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ListModels
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ListSessions
-internal/testutil/mock_factory.go: unreachable func: MockFactory.LoadCheckpoint
 internal/testutil/mock_factory.go: unreachable func: MockFactory.MoveWork
 internal/testutil/mock_factory.go: unreachable func: MockFactory.MoveWorkForSession
-internal/testutil/mock_factory.go: unreachable func: MockFactory.Observe
 internal/testutil/mock_factory.go: unreachable func: MockFactory.OpenFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.Pause
 internal/testutil/mock_factory.go: unreachable func: MockFactory.PauseDurableFactorySession
-internal/testutil/mock_factory.go: unreachable func: MockFactory.PlanDispatch
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ProbeDurableFactorySessionEvents
 internal/testutil/mock_factory.go: unreachable func: MockFactory.PullModel
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ReadDurableFactorySessionEvents
-internal/testutil/mock_factory.go: unreachable func: MockFactory.RestoreCheckpoint
 internal/testutil/mock_factory.go: unreachable func: MockFactory.Resume
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ResumeDurableFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.RetryDurableFactorySessionDispatch
@@ -56,7 +50,6 @@ internal/testutil/mock_factory.go: unreachable func: MockFactory.SaveFactoryForS
 internal/testutil/mock_factory.go: unreachable func: MockFactory.StartDurableFactorySessionAsync
 internal/testutil/mock_factory.go: unreachable func: MockFactory.StartDurableFactorySessionSync
 internal/testutil/mock_factory.go: unreachable func: MockFactory.SubmitWorkRequest
-internal/testutil/mock_factory.go: unreachable func: MockFactory.Terminate
 internal/testutil/mock_factory.go: unreachable func: MockFactory.TerminateDurableFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.acceptedWorkRequest
 internal/testutil/mock_factory.go: unreachable func: MockFactory.applyMockOperatorMove

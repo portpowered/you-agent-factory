@@ -43,6 +43,7 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 
 type registeredWorkRuntime struct {
 	factory.Factory
+	factory.Service
 }
 
 func TestServiceRoutesWorkThroughRegisteredSessionRuntime(t *testing.T) {

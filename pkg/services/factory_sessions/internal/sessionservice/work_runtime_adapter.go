@@ -19,11 +19,19 @@ type workRuntimeAdapter struct {
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	return a.runtime.SubmitWorkRequest(ctx, request)
+	legacyRuntime, ok := a.runtime.(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrCapabilityUnavailable
+	}
+	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	return a.runtime.MoveWork(ctx, workID, state, source, requestID)
+	mover, ok := a.runtime.(factoryruntime.WorkMover)
+	if !ok {
+		return work.OperatorMoveResult{}, factoryruntime.ErrCapabilityUnavailable
+	}
+	return mover.MoveWork(ctx, workID, state, source, requestID)
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {

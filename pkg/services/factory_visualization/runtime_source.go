@@ -2,6 +2,7 @@ package factory_visualization
 
 import (
 	"context"
+	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -35,7 +36,11 @@ func (s *currentRuntimeSource) SubscribeFactoryEvents(
 			return factorysessions.ErrRuntimeNotAvailable
 		}
 		var subscribeErr error
-		stream, subscribeErr = runtime.Factory.SubscribeFactoryEvents(ctx, reconnect, scope)
+		legacyRuntime, ok := runtime.Factory.(factoryruntime.APIFactory)
+		if !ok {
+			return fmt.Errorf("legacy Factory Runtime event subscription is required")
+		}
+		stream, subscribeErr = legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
 		return subscribeErr
 	})
 	return stream, err

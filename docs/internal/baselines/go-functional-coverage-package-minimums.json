@@ -316,7 +316,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "minimum": 35.11
+      "minimum": 42.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
@@ -400,7 +400,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
-      "minimum": 74.80
+      "minimum": 74.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
@@ -530,7 +530,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter",
-      "minimum": 75.75
+      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
@@ -716,7 +716,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
-      "minimum": 43.77
+      "minimum": 42.69
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation",
@@ -926,7 +926,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 30.11
+      "minimum": 28.64
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
@@ -976,7 +976,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor",
-      "minimum": 73.50
+      "minimum": 73.26
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun",

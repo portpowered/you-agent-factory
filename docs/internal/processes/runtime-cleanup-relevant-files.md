@@ -801,28 +801,28 @@ after the domain call returns.
 
 Cross-service Factory Runtime consumers depend on the singular root `Service`
 in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
-`root_errors.go`. Do not publish a second peer-facing Runtime authority
+`composition_contracts.go`. Do not publish a second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
 slices. Prove each published slice with a colocated `factory_test`
 characterization that implements a fake `Service` using only the root package
 and approved peer contracts, without importing `factory_runtime/internal`.
 
-Plain control request/result vocabulary lives in `root_control_contract.go`
+Plain control request/result vocabulary is consolidated in `work_move_errors.go`
 (`PauseRequest`/`PauseResult`, `ResumeRequest`/`ResumeResult`,
 `TerminateRequest`/`TerminateResult`, `WaitToCompleteRequest`/`WaitToCompleteResult`,
-`MoveWorkRequest`/`MoveWorkResult`, plus `Apply*` helpers). Peers call those
-helpers or `Service` methods (`Pause`, `Resume`, `Terminate`, `WaitToComplete`,
-`MoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
+`MoveWorkRequest`/`MoveWorkResult`). Peers call `Service` methods
+(`ControlPause`, `ControlResume`, `ControlTerminate`,
+`ControlWaitToComplete`, `ControlMoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
 `ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
 errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`). Do not route
 control through hosting `Lifecycle.Stop` as the peer authority for this slice.
 
 Plain observation request/result/value vocabulary lives in
-`root_observation_contract.go` (`ObserveRequest`/`ObserveResult`,
+`projection_contracts.go` (`ObserveRequest`/`ObserveResult`,
 `Observation`, `ObservationProgress`, `ObservationDispatchSummary`,
-`ObservationResultView`, `ObservationResourceView`, `ObservationHealth`, plus
-`ApplyObserve`). Peers call `ApplyObserve` or `Service.Observe` and branch on
+`ObservationResultView`, `ObservationResourceView`, `ObservationHealth`).
+Peers call `Service.Observe` and branch on
 `ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
 legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
 JavaScript runtime-record types as the peer source of truth for this slice.
@@ -847,11 +847,10 @@ Migration adapter fakes that explicitly implement `APIFactory` should return
 prohibited Petri public-surface symbols in non-internal packages.
 
 Plain dispatch-plan request/result vocabulary lives in
-`root_dispatch_plan_contract.go` (`PlanDispatchRequest`/`PlanDispatchResult`,
+`execution_contracts.go` (`PlanDispatchRequest`/`PlanDispatchResult`,
 `AcceptDispatchResultRequest`/`AcceptDispatchResultResult`,
-`DispatchPlanOutcome` including `DUPLICATE_IDEMPOTENT`,
-`DispatchResultOutcome`, plus `ApplyPlanDispatch` /
-`ApplyAcceptDispatchResult`). Peers call those helpers or `Service` methods
+`DispatchPlanOutcome` including `DUPLICATE_IDEMPOTENT`, and
+`DispatchResultOutcome`). Peers call `Service` methods
 (`PlanDispatch`, `AcceptDispatchResult`) and branch on root typed errors
 (`ErrDuplicateDispatchIntent`, `ErrUnknownDispatchCorrelation`,
 `ErrInvalidDispatchResultBoundary`, plus `ErrNotRunning`/`ErrNotFound`). Do not
@@ -859,25 +858,24 @@ expose Petri transition objects or Workers construction/implementation types,
 and do not require a separate public Dispatch Service for this slice.
 
 Plain checkpoint request/result/value vocabulary lives in
-`root_checkpoint_contract.go` (`CaptureCheckpointRequest`/`CaptureCheckpointResult`,
+`javascript_checkpoint_contract.go` (`CaptureCheckpointRequest`/`CaptureCheckpointResult`,
 `LoadCheckpointRequest`/`LoadCheckpointResult`,
 `RestoreCheckpointRequest`/`RestoreCheckpointResult`, `Checkpoint` with opaque
-`Payload` bytes, `CheckpointOutcome`, plus `ApplyCaptureCheckpoint` /
-`ApplyLoadCheckpoint` / `ApplyRestoreCheckpoint`). Peers call those helpers or
-`Service` methods (`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`)
+`Payload` bytes, and `CheckpointOutcome`). Peers call `Service` methods
+(`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`)
 and branch on root typed errors (`ErrCheckpointNotFound`, `ErrCorruptCheckpoint`,
 `ErrIncompatibleCheckpoint`, plus `ErrNotRunning`/`ErrNotFound`). Do not expose
 Petri marking snapshots or JavaScript checkpoint strategy types as peer-facing
 vocabulary, and do not claim Recordings immutable history ownership from this
 slice.
 
-Sealed CTR-RUN root invariants for IMP-RUN unlock live in
-`root_contract_seal_characterization_test.go`: one peer-shaped `Service`
+Sealed CTR-RUN root invariants for IMP-RUN unlock live in the root-only peer
+characterization in `javascript_child_contract_test.go`: one peer-shaped `Service`
 consumer reaches control, observation, dispatch-plan, and checkpoint slices
 through the singular root and asserts representative success plus typed
 failures using only the published root package (no `factory_runtime/internal`,
 Petri, or JavaScript strategy imports). Concrete `factoryImpl` entrypoints for
-those slices live in `runtime/root_contract_service.go` (kept out of
+those slices are consolidated in `runtime/worker_pool.go` (kept out of
 `runtime/factory.go` to preserve the backend-size file limit). Nested IMP-RUN
 moves, Wire/root, CLI-manifest, provider-conductor, Workers construction, and
 OpenAPI package-motion edits remain outside this seal.

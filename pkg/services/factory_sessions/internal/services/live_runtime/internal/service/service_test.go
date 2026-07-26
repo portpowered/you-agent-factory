@@ -167,6 +167,7 @@ func testDependencies() liveruntime.Dependencies {
 type rootOnlyRuntime struct{ factoryruntime.Service }
 
 type testFactoryRuntime struct {
+	factoryruntime.Service
 	state      string
 	pauseCalls int
 }
@@ -174,6 +175,23 @@ type testFactoryRuntime struct {
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }
 func (f *testFactoryRuntime) Pause(context.Context) error  { f.pauseCalls++; return nil }
 func (f *testFactoryRuntime) Resume(context.Context) error { return nil }
+func (f *testFactoryRuntime) ControlPause(ctx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	err := f.Pause(ctx)
+	return factoryruntime.PauseResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
+}
+func (f *testFactoryRuntime) ControlResume(ctx context.Context, _ factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	err := f.Resume(ctx)
+	return factoryruntime.ResumeResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
+}
+func (f *testFactoryRuntime) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	return f.Terminate(ctx, req)
+}
+func (f *testFactoryRuntime) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
+	return factoryruntime.WaitToCompleteResult{Done: f.WaitToComplete()}
+}
+func (f *testFactoryRuntime) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+	return factoryruntime.MoveWorkResult{}, nil
+}
 func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
 	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
 }

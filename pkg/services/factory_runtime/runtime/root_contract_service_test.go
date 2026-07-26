@@ -4,11 +4,16 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
+
+type testRuntimeClock struct{}
+
+func (testRuntimeClock) Now() time.Time { return time.Now() }
 
 func newRootContractTestFactory(t *testing.T) *factoryImpl {
 	t.Helper()
@@ -47,7 +52,7 @@ func TestFactoryImpl_Terminate_MapsLifecycleStates(t *testing.T) {
 	ctx := context.Background()
 
 	impl.state = interfaces.FactoryStateRunning
-	got, err := impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
+	got, err := impl.ControlTerminate(ctx, factory.TerminateRequest{Reason: "stop"})
 	requireNoRootErr(t, err, "Terminate(running)")
 	if got.Outcome != factory.ControlOutcomeAccepted {
 		t.Fatalf("Terminate(running) outcome = %q, want ACCEPTED", got.Outcome)
@@ -57,11 +62,11 @@ func TestFactoryImpl_Terminate_MapsLifecycleStates(t *testing.T) {
 	}
 
 	impl.state = interfaces.FactoryStateCompleted
-	_, err = impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
+	_, err = impl.ControlTerminate(ctx, factory.TerminateRequest{Reason: "stop"})
 	requireRootErrIs(t, err, factory.ErrAlreadyStopped, "Terminate(completed)")
 
 	impl.state = interfaces.FactoryState("unknown")
-	_, err = impl.Terminate(ctx, factory.TerminateRequest{Reason: "stop"})
+	_, err = impl.ControlTerminate(ctx, factory.TerminateRequest{Reason: "stop"})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "Terminate(unknown)")
 }
 

@@ -135,12 +135,12 @@ func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Serv
 	}
 	switch operation {
 	case factorysessions.LifecycleControlPause:
-		if err := activeFactory.Pause(ctx); err != nil {
+		if _, err := activeFactory.ControlPause(ctx, factoryruntime.PauseRequest{}); err != nil {
 			return "", fmt.Errorf("pause live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusPaused, nil
 	case factorysessions.LifecycleControlResume:
-		if err := activeFactory.Resume(ctx); err != nil {
+		if _, err := activeFactory.ControlResume(ctx, factoryruntime.ResumeRequest{}); err != nil {
 			return "", fmt.Errorf("resume live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusRunning, nil

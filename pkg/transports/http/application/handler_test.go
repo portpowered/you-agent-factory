@@ -26,6 +26,16 @@ type runtimeRole struct{ factoryruntime.Service }
 func (*runtimeRole) GetEngineStateSnapshot(context.Context) (*factoryruntime.LegacyEngineObservation, error) {
 	return nil, nil
 }
+func (*runtimeRole) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
+}
+func (*runtimeRole) SubscribeFactoryEvents(
+	context.Context,
+	*factorydefinitions.FactoryEventReconnectCursor,
+	factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	return nil, nil
+}
 
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }

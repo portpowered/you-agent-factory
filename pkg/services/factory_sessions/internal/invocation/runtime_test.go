@@ -36,6 +36,7 @@ func newInvocationTestSessionState() *sessionruntime.Service {
 
 type invocationRuntimeFactory struct {
 	factory.Factory
+	factory.Service
 }
 
 func (invocationRuntimeFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {

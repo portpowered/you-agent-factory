@@ -80,7 +80,8 @@ func (r *Bundle) RuntimeService() factory.Service {
 	if r == nil {
 		return nil
 	}
-	return r.Factory
+	service, _ := r.Factory.(factory.Service)
+	return service
 }
 
 func (r *Bundle) Directory() string {

@@ -237,7 +237,11 @@ func (s *Service) SubmitWorkRequestForSession(ctx context.Context, sessionID str
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	return runtime.Factory.SubmitWorkRequest(ctx, request)
+	legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+	}
+	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
 
 // MoveWorkForSession applies an API-originated operator move to one live session.
@@ -246,7 +250,11 @@ func (s *Service) MoveWorkForSession(ctx context.Context, sessionID, workID, sta
 	if err != nil {
 		return work.OperatorMoveResult{}, err
 	}
-	return runtime.Factory.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
+	mover, ok := runtime.Factory.(factory.WorkMover)
+	if !ok {
+		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
+	}
+	return mover.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
 // SubscribeFactoryEventsForSession returns replay followed by live events for
@@ -256,7 +264,11 @@ func (s *Service) SubscribeFactoryEventsForSession(ctx context.Context, sessionI
 	if err != nil {
 		return nil, err
 	}
-	stream, err := runtime.Factory.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+	legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+	}
+	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}

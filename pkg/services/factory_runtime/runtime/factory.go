@@ -98,6 +98,7 @@ type runtimeConfig struct {
 
 // Compile-time checks.
 var _ factory.Factory = (*factoryImpl)(nil)
+var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
 
 // New constructs a Factory from explicit runtime collaborators.

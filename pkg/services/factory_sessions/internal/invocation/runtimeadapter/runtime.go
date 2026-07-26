@@ -46,7 +46,13 @@ func Observe(
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	events, err := activeFactory.GetFactoryEvents(ctx)
+	eventSource, ok := activeFactory.(interface {
+		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
+	})
+	if !ok {
+		return sessioninvocation.SessionInvocationObservation{}, fmt.Errorf("legacy Factory Runtime event history is required")
+	}
+	events, err := eventSource.GetFactoryEvents(ctx)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}

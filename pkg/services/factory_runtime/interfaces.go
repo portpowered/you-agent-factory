@@ -58,39 +58,30 @@ type APIFactory interface {
 // strategy seams. A service may route these operations to a replaceable hosted
 // engine and therefore does not expose the engine run loop.
 type Service interface {
-	WorkMover
-
-	// SubmitWorkRequest injects a canonical work request batch idempotently.
-	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
-
-	// SubscribeFactoryEvents returns canonical factory event history followed
-	// by live events without exposing the legacy engine snapshot.
-	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
-
-	// Pause pauses the factory loop. No transitions fire until resumed.
+	// ControlPause pauses the factory loop. No transitions fire until resumed.
 	// Returns ErrNotRunning when the instance is not running.
-	Pause(ctx context.Context) error
+	ControlPause(ctx context.Context, req PauseRequest) (PauseResult, error)
 
-	// Resume resumes a paused factory loop and actively wakes the engine so
+	// ControlResume resumes a paused factory loop and actively wakes the engine so
 	// already-buffered submissions and worker results can drain. When the
 	// factory is already running, resume is an accepted no-op.
 	// Returns ErrNotRunning when the instance is not running.
-	Resume(ctx context.Context) error
+	ControlResume(ctx context.Context, req ResumeRequest) (ResumeResult, error)
 
-	// Terminate requests cooperative stop of the Factory Runtime instance using
+	// ControlTerminate requests cooperative stop of the Factory Runtime instance using
 	// the published plain terminate/stop control contract. Returns
 	// ErrAlreadyStopped, ErrNotRunning, or ErrInvalidLifecycleTransition for
 	// typed lifecycle failures. Nested IMP-RUN packets own durable stop wiring.
-	Terminate(ctx context.Context, req TerminateRequest) (TerminateResult, error)
+	ControlTerminate(ctx context.Context, req TerminateRequest) (TerminateResult, error)
 
-	// GetFactoryEvents returns the current-process canonical event history.
-	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
-
-	// WaitToComplete returns a channel that is closed when all tokens reach
+	// ControlWaitToComplete returns a channel that is closed when all tokens reach
 	// terminal or failed places and no dispatches are in flight. Callers can
 	// block on this channel to know when the factory has finished all work
 	// without having to manually drive ticks.
-	WaitToComplete() <-chan struct{}
+	ControlWaitToComplete(req WaitToCompleteRequest) WaitToCompleteResult
+
+	// ControlMoveWork relocates Work through Runtime-owned plain vocabulary.
+	ControlMoveWork(ctx context.Context, req MoveWorkRequest) (MoveWorkResult, error)
 
 	// Observe returns a detached orchestration-neutral observation for live
 	// status, progress, dispatch, result, resource, and retained health views.
@@ -136,12 +127,16 @@ type Service interface {
 	RestoreCheckpoint(ctx context.Context, req RestoreCheckpointRequest) (RestoreCheckpointResult, error)
 }
 
-// Factory extends Service with a blocking run loop for hosting-owned engine
-// construction. Cross-service peers use Service, not Factory, as the runtime
-// authority for published root-contract slices.
+// Factory retains the migration-era engine and blocking run-loop surface for
+// hosting-owned construction. Concrete hosted runtimes also implement Service;
+// cross-service root-slice peers depend on Service rather than this engine seam.
 type Factory interface {
-	Service
 	APIFactory
+	WorkMover
+	Pause(ctx context.Context) error
+	Resume(ctx context.Context) error
+	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
+	WaitToComplete() <-chan struct{}
 	// Run starts the factory loop. Blocks until ctx is cancelled or all
 	// work reaches terminal states.
 	Run(ctx context.Context) error
