@@ -18,11 +18,13 @@ func TestClassifyPathsRoutesOwnershipUnion(t *testing.T) {
 	}{
 		{"factory only", []string{"factory/workstations/process.yaml"}, "factory-content", nil},
 		{"reference docs", []string{"docs/reference/factory.md"}, "documentation-reference", []string{laneDocsReference}},
+		{"other docs", []string{"docs/guides/factory.md"}, "documentation", nil},
 		{"readme", []string{"README.md"}, "readme", []string{laneReadme}},
 		{"frontend", []string{"ui/src/App.tsx"}, "frontend", []string{laneFrontend}},
 		{"backend", []string{"cmd/factory/main.go"}, "backend", []string{laneBackend, laneUIBackendIntegration}},
 		{"api", []string{"api/openapi-main.yaml"}, "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"api package", []string{"packages/api/package.json"}, "api-package", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
+		{"api package script", []string{"scripts/api-package-contract.test.mjs"}, "api-package", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"packaged factories package", []string{"packages/packaged-factories/package.json"}, "packaged-factories-package", []string{laneBackend, lanePackagedFactoriesPackage}},
 		{"model providers package", []string{"packages/model-providers/package.json"}, "model-providers-package", []string{laneBackend, laneModelProvidersPackage}},
 		{"local inference", []string{"pkg/services/models/local/runtime.go"}, "local-inference", []string{laneBackend, laneLocalInference}},
