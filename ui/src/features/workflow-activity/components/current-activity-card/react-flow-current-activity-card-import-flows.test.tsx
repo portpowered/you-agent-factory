@@ -1,3 +1,4 @@
+// @component-test-runner vitest: components package declarations contain relative imports Bun cannot execute.
 import "../../../../testing/vitest-dom-capabilities.setup";
 
 import "@testing-library/jest-dom/vitest";

@@ -17,11 +17,18 @@ const VITEST_COMPATIBILITY_PATTERNS: Array<{
     pattern: /@vitest-environment/,
     reason: "declares a Vitest environment",
   },
-  {
-    pattern: /\bvi\./,
-    reason: "uses Vitest mocking or timer APIs",
-  },
 ];
+const BUN_COMPATIBLE_VI_APIS = new Set(["fn", "mocked"]);
+
+function findUnsupportedViApis(source: string): string[] {
+  return [
+    ...new Set(
+      [...source.matchAll(/\bvi\.([A-Za-z_]+)/g)]
+        .map((match) => match[1])
+        .filter((api) => !BUN_COMPATIBLE_VI_APIS.has(api)),
+    ),
+  ].sort();
+}
 
 export interface ClassifiedComponentTestFile {
   path: string;
@@ -34,7 +41,11 @@ export function classifyComponentTestSource(
   source: string,
 ): ClassifiedComponentTestFile {
   if (path.endsWith(EXPLICIT_BUN_COMPONENT_SUFFIX)) {
-    return { path, reason: "explicit native Bun component test", runner: "bun" };
+    return {
+      path,
+      reason: "explicit native Bun component test",
+      runner: "bun",
+    };
   }
 
   if (source.includes(VITEST_COMPONENT_MARKER)) {
@@ -53,6 +64,15 @@ export function classifyComponentTestSource(
         runner: "vitest",
       };
     }
+  }
+
+  const unsupportedViApis = findUnsupportedViApis(source);
+  if (unsupportedViApis.length > 0) {
+    return {
+      path,
+      reason: `uses unsupported Vitest APIs: ${unsupportedViApis.join(", ")}`,
+      runner: "vitest",
+    };
   }
 
   return {

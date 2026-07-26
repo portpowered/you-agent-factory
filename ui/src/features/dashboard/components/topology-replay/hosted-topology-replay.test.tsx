@@ -1,3 +1,4 @@
+// @component-test-runner vitest: components package declarations contain relative imports Bun cannot execute.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
