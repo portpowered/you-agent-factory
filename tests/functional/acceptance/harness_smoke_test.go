@@ -129,6 +129,21 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	}
 }
 
+func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := session.Run(ctx, "-h")
+	session.RequireSuccess(t, "cli-help", result, err)
+	if !strings.Contains(result.Stdout, "Usage:\n  you [flags]") {
+		t.Fatalf("help output did not contain root usage:\n%s", result.Stdout)
+	}
+}
+
 func TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort(t *testing.T) {
 	t.Parallel()
 
