@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -18,7 +17,7 @@ import (
 
 func TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer(t *testing.T) {
 	handler := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
-		InitializeStdio: func(context.Context, startupcli.MCPIntent) error {
+		InitializeStdio: func(context.Context, mcpcli.MCPIntent) error {
 			t.Fatal("initializer must not run before canonical inputs resolve")
 			return nil
 		},
@@ -55,7 +54,7 @@ func TestResolvedServeHandler_RequiresInjectedDependencies(t *testing.T) {
 	})
 	t.Run("runtime home resolver", func(t *testing.T) {
 		err := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
-			InitializeStdio: func(context.Context, startupcli.MCPIntent) error {
+			InitializeStdio: func(context.Context, mcpcli.MCPIntent) error {
 				t.Fatal("initializer must not run without a home resolver")
 				return nil
 			},
@@ -74,7 +73,7 @@ func TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer(t *testing.
 	t.Run("fixture-backed", func(t *testing.T) {
 		want := errors.New("fixture initialize failed")
 		handler := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
-			InitializeStdio: func(_ context.Context, intent startupcli.MCPIntent) error {
+			InitializeStdio: func(_ context.Context, intent mcpcli.MCPIntent) error {
 				if intent.RuntimeBacked || intent.FixtureCatalogPath != "fixtures.json" || intent.HomeDir != "" {
 					t.Fatalf("fixture intent = %#v", intent)
 				}
@@ -93,7 +92,7 @@ func TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer(t *testing.
 		want := errors.New("home unavailable")
 		handler := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
 			HomeDir: func() (string, error) { return "", want },
-			InitializeStdio: func(context.Context, startupcli.MCPIntent) error {
+			InitializeStdio: func(context.Context, mcpcli.MCPIntent) error {
 				t.Fatal("initializer must not run after home failure")
 				return nil
 			},
@@ -108,10 +107,10 @@ func TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer(t *testing.
 		}
 	})
 	t.Run("runtime-backed success", func(t *testing.T) {
-		var got startupcli.MCPIntent
+		var got mcpcli.MCPIntent
 		handler := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
 			HomeDir: func() (string, error) { return "/home/test", nil },
-			InitializeStdio: func(_ context.Context, intent startupcli.MCPIntent) error {
+			InitializeStdio: func(_ context.Context, intent mcpcli.MCPIntent) error {
 				got = intent
 				return nil
 			},

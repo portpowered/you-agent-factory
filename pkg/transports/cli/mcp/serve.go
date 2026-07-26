@@ -14,11 +14,17 @@ const (
 	projectRootInputID    = "you.mcp.serve.flag.project-root"
 )
 
+// MCPIntent is the stdio serve intent delivered to the injected initializer.
+type MCPIntent = startupcli.MCPIntent
+
+// StdioHandler initializes MCP stdio serving for a resolved intent.
+type StdioHandler = startupcli.StdioHandler
+
 // ServeBinding supplies the injected lifecycle operations used by the MCP
 // resolved-input adapter.
 type ServeBinding struct {
 	HomeDir         func() (string, error)
-	InitializeStdio startupcli.StdioHandler
+	InitializeStdio StdioHandler
 }
 
 // ResolvedServeHandler maps canonical stable-ID inputs into the already
@@ -52,7 +58,7 @@ func ResolvedServeHandler(
 				return fmt.Errorf("resolve process home directory: %w", err)
 			}
 		}
-		return binding.InitializeStdio(cmd.Context(), startupcli.MCPIntent{
+		return binding.InitializeStdio(cmd.Context(), MCPIntent{
 			FixtureCatalogPath: fixtureCatalogPath,
 			RuntimeBacked:      runtimeBacked,
 			ProjectRoot:        projectRoot,

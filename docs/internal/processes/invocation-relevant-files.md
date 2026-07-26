@@ -1540,11 +1540,14 @@ response-stream output.
 - After residual baseline/coverage fixes on a completed docs/models/mcp
   cutover, re-prove preserved public behavior with
   `make cli-manifest-check`, `make cli-contract-smoke`, focused
-  docs/models/mcp unit + `tests/functional/cli/docs`,
-  `tests/functional/cli/mcp_serve`, `tests/functional/models/model_list`, and
+  docs/models/mcp unit + `tests/functional/transport/docs`,
+  `tests/functional/transport/mcp_serve`, `tests/functional/models/model_list`, and
   `tests/functional/smoke -run TestDocsCommandSmoke_` evidence, then the
   `make verify-fast` constituents (`make typecheck`, `make mcp-contract-check`,
-  `make ui-test`, `make test`) plus `make lint`. Do not remigrate families or
+  `make ui-test`, `make test`) plus `make lint`. New residual functional sources
+  must use an allowed product-domain noun such as `transport` or `models`
+  (`tests/functional/<domain>/<subsection>/...`); do not add files under the
+  deletion-only `tests/functional/cli` catch-all. Do not remigrate families or
   expand into out-of-scope CLI commands during that re-proof.
 - Dashboard feature routes must account for the production `/dashboard/ui/` SPA
   mount as well as any intentional standalone development path. Prove new routes
