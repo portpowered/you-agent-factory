@@ -771,6 +771,7 @@ func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t 
 		"verify-build-contracts":        "@printf '%s\\n' 'stub:verify-build-contracts'\n",
 		"release-surface-smoke":         "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-ui-coverage":              "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"ui-integration-test":           "@printf '%s\\n' 'stub:ui-integration-test'\n",
 		"test-backend-verification":     "@printf '%s\\n' 'stub:test-backend-verification'\n",
 		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",

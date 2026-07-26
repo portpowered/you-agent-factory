@@ -15,8 +15,10 @@ the default for tests without Vitest-only capabilities, and Vitest temporarily
 owns files that still use `vi` APIs or explicit Vitest environment directives.
 `bun run test:component` measures both groups together and fails when their total
 wall time exceeds 150 seconds (override with `UI_COMPONENT_MAX_DURATION_MS`).
-CI runs this as the dedicated **Frontend Component** lane. Performance tests do
-not share that budget or lane.
+CI runs this as the dedicated **Frontend Component** lane with a 300-second
+hosted-Linux ceiling to account for its slower DOM emulation; local development
+retains the tighter 150-second default. Performance tests do not share either
+budget or lane.
 
 Component setup is capability-based. `ui/src/testing/vitest.setup.ts` contains
 only the guarded console policy, Testing Library configuration, and React act

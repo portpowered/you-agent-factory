@@ -120,7 +120,10 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-deps
-      - run: make ui-component-test
+      - name: Run browserless component tests
+        env:
+          UI_COMPONENT_MAX_DURATION_MS: "300000"
+        run: make ui-component-test
 
   ui-coverage-shard:
     name: Frontend Coverage Shard (${{ matrix.shard }}/4)
