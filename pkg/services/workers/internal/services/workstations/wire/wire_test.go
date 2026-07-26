@@ -15,7 +15,10 @@ func TestNewServiceConstructsInertCapability(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() = nil")
 	}
-	if err := service.Route(context.Background(), "review"); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
+	if _, err := service.Route(
+		context.Background(),
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
 		t.Fatalf("constructed route error = %v, want ErrWorkstationPoolUnavailable", err)
 	}
 }

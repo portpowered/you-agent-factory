@@ -67,8 +67,23 @@ func New() *Pool {
 	}
 }
 
-// Start atomically activates the supplied route snapshot.
+// Start translates the Workers-root request and activates its route snapshot.
 func (p *Pool) Start(
+	ctx context.Context,
+	request workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	routes, err := routesFromBindings(request.Bindings)
+	if err != nil {
+		return workers.WorkstationPoolStartResult{}, err
+	}
+	outcome, err := p.start(ctx, routes)
+	if err != nil {
+		return workers.WorkstationPoolStartResult{}, err
+	}
+	return workers.WorkstationPoolStartResult{Outcome: outcome}, nil
+}
+
+func (p *Pool) start(
 	ctx context.Context,
 	routes []workstations.Route,
 ) (workers.WorkstationPoolLifecycleOutcome, error) {
@@ -96,8 +111,16 @@ func (p *Pool) Start(
 	}
 }
 
-// Stop closes admission and converges concurrent callers on a terminal state.
-func (p *Pool) Stop(ctx context.Context) (workers.WorkstationPoolLifecycleOutcome, error) {
+// Stop closes admission and returns the Workers-root lifecycle result.
+func (p *Pool) Stop(ctx context.Context) (workers.WorkstationPoolStopResult, error) {
+	outcome, err := p.stop(ctx)
+	if err != nil {
+		return workers.WorkstationPoolStopResult{}, err
+	}
+	return workers.WorkstationPoolStopResult{Outcome: outcome}, nil
+}
+
+func (p *Pool) stop(ctx context.Context) (workers.WorkstationPoolLifecycleOutcome, error) {
 	if err := contextError(ctx); err != nil {
 		return "", err
 	}
@@ -134,8 +157,21 @@ func (p *Pool) Stop(ctx context.Context) (workers.WorkstationPoolLifecycleOutcom
 	return workers.WorkstationPoolLifecycleOutcomeStopped, nil
 }
 
-// Route verifies availability against the active immutable snapshot.
-func (p *Pool) Route(ctx context.Context, workstationName string) error {
+// Route verifies availability and returns the Workers-root route result.
+func (p *Pool) Route(
+	ctx context.Context,
+	request workers.WorkstationRouteRequest,
+) (workers.WorkstationRouteResult, error) {
+	if err := p.route(ctx, request.WorkstationName); err != nil {
+		return workers.WorkstationRouteResult{}, err
+	}
+	return workers.WorkstationRouteResult{
+		WorkstationName: request.WorkstationName,
+		Available:       true,
+	}, nil
+}
+
+func (p *Pool) route(ctx context.Context, workstationName string) error {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
@@ -512,6 +548,28 @@ func routeSnapshot(routes []workstations.Route) (map[string]*routePool, error) {
 		snapshot[name] = &routePool{binding: route}
 	}
 	return snapshot, nil
+}
+
+func routesFromBindings(
+	bindings []workers.AssembledRuntimeBinding,
+) ([]workstations.Route, error) {
+	if len(bindings) == 0 {
+		return nil, workers.ErrInvalidWorkstationPoolStart
+	}
+	routes := make([]workstations.Route, 0, len(bindings))
+	for _, binding := range bindings {
+		if binding.RoleKind != workers.RuntimeBuildRoleKindWorkstation {
+			return nil, workers.ErrInvalidWorkstationPoolStart
+		}
+		routes = append(routes, workstations.Route{
+			WorkstationName: binding.RoleName,
+			RunnerSelection: binding.RunnerSelection,
+			Executor:        binding.Executor,
+			Capacity:        binding.Capacity,
+			QueueCapacity:   binding.QueueCapacity,
+		})
+	}
+	return routes, nil
 }
 
 func normalizedLimit(configured int, fallback int) int {

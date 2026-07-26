@@ -128,7 +128,7 @@ func newStressSchedule(t *testing.T) stressSchedule {
 			QueueCapacity:   stressDispatchesPerRoute,
 		},
 	}
-	if _, err := pool.Start(context.Background(), routes); err != nil {
+	if _, err := pool.start(context.Background(), routes); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
@@ -184,7 +184,7 @@ func (schedule stressSchedule) overlap() (<-chan error, <-chan error, <-chan err
 	for range 2 {
 		go func() {
 			<-race
-			_, err := schedule.pool.Start(context.Background(), schedule.routes)
+			_, err := schedule.pool.start(context.Background(), schedule.routes)
 			starts <- err
 		}()
 	}
@@ -192,7 +192,7 @@ func (schedule stressSchedule) overlap() (<-chan error, <-chan error, <-chan err
 	for range 3 {
 		go func() {
 			<-race
-			_, err := schedule.pool.Stop(context.Background())
+			_, err := schedule.pool.stop(context.Background())
 			stops <- err
 		}()
 	}

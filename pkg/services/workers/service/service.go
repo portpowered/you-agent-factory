@@ -239,15 +239,7 @@ func (s *Service) StartWorkstationPool(
 	if s == nil || s.workstations == nil {
 		return workers.WorkstationPoolStartResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	routes, err := workstationRoutes(request.Bindings)
-	if err != nil {
-		return workers.WorkstationPoolStartResult{}, err
-	}
-	outcome, err := s.workstations.Start(ctx, routes)
-	if err != nil {
-		return workers.WorkstationPoolStartResult{}, err
-	}
-	return workers.WorkstationPoolStartResult{Outcome: outcome}, nil
+	return s.workstations.Start(ctx, request)
 }
 
 // StopWorkstationPool delegates terminal shutdown to the parent-private
@@ -258,11 +250,7 @@ func (s *Service) StopWorkstationPool(
 	if s == nil || s.workstations == nil {
 		return workers.WorkstationPoolStopResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	outcome, err := s.workstations.Stop(ctx)
-	if err != nil {
-		return workers.WorkstationPoolStopResult{}, err
-	}
-	return workers.WorkstationPoolStopResult{Outcome: outcome}, nil
+	return s.workstations.Stop(ctx)
 }
 
 // WorkstationRoute reports availability through the private lifecycle owner.
@@ -273,13 +261,7 @@ func (s *Service) WorkstationRoute(
 	if s == nil || s.workstations == nil {
 		return workers.WorkstationRouteResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	if err := s.workstations.Route(ctx, request.WorkstationName); err != nil {
-		return workers.WorkstationRouteResult{}, err
-	}
-	return workers.WorkstationRouteResult{
-		WorkstationName: request.WorkstationName,
-		Available:       true,
-	}, nil
+	return s.workstations.Route(ctx, request)
 }
 
 // DispatchWorkstation delegates execution to the private workstation owner.
@@ -303,28 +285,6 @@ func (s *Service) CancelWorkstationDispatch(
 		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
 	}
 	return s.workstations.Cancel(ctx, request)
-}
-
-func workstationRoutes(
-	bindings []workers.AssembledRuntimeBinding,
-) ([]workstations.Route, error) {
-	if len(bindings) == 0 {
-		return nil, workers.ErrInvalidWorkstationPoolStart
-	}
-	routes := make([]workstations.Route, 0, len(bindings))
-	for _, binding := range bindings {
-		if binding.RoleKind != workers.RuntimeBuildRoleKindWorkstation {
-			return nil, workers.ErrInvalidWorkstationPoolStart
-		}
-		routes = append(routes, workstations.Route{
-			WorkstationName: binding.RoleName,
-			RunnerSelection: binding.RunnerSelection,
-			Executor:        binding.Executor,
-			Capacity:        binding.Capacity,
-			QueueCapacity:   binding.QueueCapacity,
-		})
-	}
-	return routes, nil
 }
 
 func (s *Service) modelInvocationExecutor(

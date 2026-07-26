@@ -119,11 +119,11 @@ func TestPoolLifecycleMakesOnlyStartedRoutesAvailable(t *testing.T) {
 	t.Parallel()
 
 	pool := New()
-	if err := pool.Route(context.Background(), "review"); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
+	if err := pool.route(context.Background(), "review"); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
 		t.Fatalf("constructed route error = %v, want ErrWorkstationPoolUnavailable", err)
 	}
 
-	outcome, err := pool.Start(context.Background(), []workstations.Route{
+	outcome, err := pool.start(context.Background(), []workstations.Route{
 		{WorkstationName: "review"},
 		{WorkstationName: "implement"},
 	})
@@ -133,36 +133,71 @@ func TestPoolLifecycleMakesOnlyStartedRoutesAvailable(t *testing.T) {
 	if outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
 		t.Fatalf("Start() outcome = %q, want STARTED", outcome)
 	}
-	if err := pool.Route(context.Background(), "review"); err != nil {
+	if err := pool.route(context.Background(), "review"); err != nil {
 		t.Fatalf("started route error = %v", err)
 	}
-	if err := pool.Route(context.Background(), "missing"); !errors.Is(err, workers.ErrUnknownWorkstationRoute) {
+	if err := pool.route(context.Background(), "missing"); !errors.Is(err, workers.ErrUnknownWorkstationRoute) {
 		t.Fatalf("unknown route error = %v, want ErrUnknownWorkstationRoute", err)
 	}
 
-	outcome, err = pool.Start(context.Background(), []workstations.Route{{WorkstationName: "other"}})
+	outcome, err = pool.start(context.Background(), []workstations.Route{{WorkstationName: "other"}})
 	if err != nil {
 		t.Fatalf("repeated Start() error = %v", err)
 	}
 	if outcome != workers.WorkstationPoolLifecycleOutcomeAlreadyRunning {
 		t.Fatalf("repeated Start() outcome = %q, want ALREADY_RUNNING", outcome)
 	}
-	if err := pool.Route(context.Background(), "other"); !errors.Is(err, workers.ErrUnknownWorkstationRoute) {
+	if err := pool.route(context.Background(), "other"); !errors.Is(err, workers.ErrUnknownWorkstationRoute) {
 		t.Fatalf("repeated start replaced routes: error = %v", err)
 	}
 
-	outcome, err = pool.Stop(context.Background())
+	outcome, err = pool.stop(context.Background())
 	if err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
 	if outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
 		t.Fatalf("Stop() outcome = %q, want STOPPED", outcome)
 	}
-	if err := pool.Route(context.Background(), "review"); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
+	if err := pool.route(context.Background(), "review"); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
 		t.Fatalf("stopped route error = %v, want ErrWorkstationPoolStopped", err)
 	}
-	if _, err := pool.Start(context.Background(), []workstations.Route{{WorkstationName: "review"}}); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
+	if _, err := pool.start(context.Background(), []workstations.Route{{WorkstationName: "review"}}); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
 		t.Fatalf("Start() after stop error = %v, want ErrWorkstationPoolStopped", err)
+	}
+}
+
+func TestPoolTranslatesWorkersRootLifecycleContracts(t *testing.T) {
+	t.Parallel()
+	pool := New()
+	started, err := pool.Start(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+		}}},
+	)
+	if err != nil || started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
+		t.Fatalf("Start() = %#v, %v", started, err)
+	}
+	route, err := pool.Route(
+		context.Background(),
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	)
+	if err != nil || !route.Available || route.WorkstationName != "review" {
+		t.Fatalf("Route() = %#v, %v", route, err)
+	}
+	stopped, err := pool.Stop(context.Background())
+	if err != nil || stopped.Outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
+		t.Fatalf("Stop() = %#v, %v", stopped, err)
+	}
+	invalid := New()
+	if result, err := invalid.Start(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName: "worker", RoleKind: workers.RuntimeBuildRoleKindWorker,
+		}}},
+	); !errors.Is(err, workers.ErrInvalidWorkstationPoolStart) ||
+		result != (workers.WorkstationPoolStartResult{}) {
+		t.Fatalf("invalid Start() = %#v, %v", result, err)
 	}
 }
 
@@ -170,7 +205,7 @@ func TestPoolStopIsRepeatSafeUnderConcurrentCalls(t *testing.T) {
 	t.Parallel()
 
 	pool := New()
-	if _, err := pool.Start(context.Background(), []workstations.Route{{WorkstationName: "review"}}); err != nil {
+	if _, err := pool.start(context.Background(), []workstations.Route{{WorkstationName: "review"}}); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
@@ -182,7 +217,7 @@ func TestPoolStopIsRepeatSafeUnderConcurrentCalls(t *testing.T) {
 	for range callers {
 		go func() {
 			defer wait.Done()
-			outcome, err := pool.Stop(context.Background())
+			outcome, err := pool.stop(context.Background())
 			outcomes <- outcome
 			errorsCh <- err
 		}()
@@ -244,7 +279,7 @@ func TestPoolRejectsInvalidRoutesAndCancelledLifecycleCalls(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := New().Start(context.Background(), testCase.routes); !errors.Is(err, workers.ErrInvalidWorkstationPoolStart) {
+			if _, err := New().start(context.Background(), testCase.routes); !errors.Is(err, workers.ErrInvalidWorkstationPoolStart) {
 				t.Fatalf("Start() error = %v, want ErrInvalidWorkstationPoolStart", err)
 			}
 		})
@@ -253,10 +288,10 @@ func TestPoolRejectsInvalidRoutesAndCancelledLifecycleCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	pool := New()
-	if _, err := pool.Start(ctx, []workstations.Route{{WorkstationName: "review"}}); !errors.Is(err, context.Canceled) {
+	if _, err := pool.start(ctx, []workstations.Route{{WorkstationName: "review"}}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled Start() error = %v, want context.Canceled", err)
 	}
-	if _, err := pool.Stop(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := pool.stop(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled Stop() error = %v, want context.Canceled", err)
 	}
 }
@@ -265,14 +300,14 @@ func TestPoolCanStopBeforeStartWithoutActivating(t *testing.T) {
 	t.Parallel()
 
 	pool := New()
-	outcome, err := pool.Stop(context.Background())
+	outcome, err := pool.stop(context.Background())
 	if err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
 	if outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
 		t.Fatalf("Stop() outcome = %q, want STOPPED", outcome)
 	}
-	outcome, err = pool.Stop(context.Background())
+	outcome, err = pool.stop(context.Background())
 	if err != nil {
 		t.Fatalf("repeated Stop() error = %v", err)
 	}
@@ -291,7 +326,7 @@ func TestPoolDispatchesToImmutableRouteBindingWithDetachedAttribution(t *testing
 		Output:       "done",
 	}}
 	pool := New()
-	if _, err := pool.Start(context.Background(), []workstations.Route{
+	if _, err := pool.start(context.Background(), []workstations.Route{
 		{
 			WorkstationName: "review",
 			RunnerSelection: workers.ResolvedRunnerSelection{
@@ -389,7 +424,7 @@ func TestPoolDispatchReturnsTypedRoutingFailuresWithoutExecutorEntry(t *testing.
 	); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
 		t.Fatalf("constructed Dispatch() error = %v, want ErrWorkstationPoolUnavailable", err)
 	}
-	if _, err := pool.Start(context.Background(), []workstations.Route{
+	if _, err := pool.start(context.Background(), []workstations.Route{
 		{WorkstationName: "review", Executor: executor},
 		{WorkstationName: "unbound"},
 	}); err != nil {
@@ -452,7 +487,7 @@ func TestPoolDispatchReturnsAttributedResultWithExecutorFailure(t *testing.T) {
 	executeErr := errors.New("executor failed")
 	executor := &recordingExecutor{err: executeErr}
 	pool := New()
-	if _, err := pool.Start(context.Background(), []workstations.Route{{
+	if _, err := pool.start(context.Background(), []workstations.Route{{
 		WorkstationName: "review",
 		Executor:        executor,
 	}}); err != nil {
@@ -485,7 +520,7 @@ func TestPoolStopCancelsAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	pool := New()
-	if _, err := pool.Start(context.Background(), []workstations.Route{{
+	if _, err := pool.start(context.Background(), []workstations.Route{{
 		WorkstationName: "review",
 		Executor:        executor,
 	}}); err != nil {
@@ -507,7 +542,7 @@ func TestPoolStopCancelsAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
 		err     error
 	}, 1)
 	go func() {
-		outcome, err := pool.Stop(context.Background())
+		outcome, err := pool.stop(context.Background())
 		stopDone <- struct {
 			outcome workers.WorkstationPoolLifecycleOutcome
 			err     error
@@ -574,7 +609,7 @@ func TestPoolCapacityGreaterThanOneAndIndependentRoutesProgress(t *testing.T) {
 
 	executor := newControlledExecutor("a-1", "a-2", "a-3", "b-1")
 	pool := New()
-	if _, err := pool.Start(context.Background(), []workstations.Route{
+	if _, err := pool.start(context.Background(), []workstations.Route{
 		{
 			WorkstationName: "route-a",
 			Executor:        executor,
@@ -840,7 +875,7 @@ func TestPoolStopCancelsQueuedAndRunningDispatchesBeforeReturning(t *testing.T) 
 	queued := dispatchResultAsync(pool, context.Background(), "dispatch-queued", "review")
 	waitForQueued(t, pool, "review", 1)
 
-	outcome, err := pool.Stop(context.Background())
+	outcome, err := pool.stop(context.Background())
 	if err != nil || outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
 		t.Fatalf("Stop() = %q, %v", outcome, err)
 	}
@@ -862,7 +897,7 @@ func TestPoolStopCancelsQueuedAndRunningDispatchesBeforeReturning(t *testing.T) 
 
 func startPool(t *testing.T, pool *Pool, route workstations.Route) {
 	t.Helper()
-	if _, err := pool.Start(context.Background(), []workstations.Route{route}); err != nil {
+	if _, err := pool.start(context.Background(), []workstations.Route{route}); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 }

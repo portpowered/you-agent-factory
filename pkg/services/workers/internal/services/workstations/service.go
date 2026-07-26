@@ -19,9 +19,9 @@ type Route struct {
 
 // Service owns workstation pool lifecycle and route availability.
 type Service interface {
-	Start(context.Context, []Route) (workers.WorkstationPoolLifecycleOutcome, error)
-	Stop(context.Context) (workers.WorkstationPoolLifecycleOutcome, error)
-	Route(context.Context, string) error
+	Start(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error)
+	Stop(context.Context) (workers.WorkstationPoolStopResult, error)
+	Route(context.Context, workers.WorkstationRouteRequest) (workers.WorkstationRouteResult, error)
 	Dispatch(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
 	Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 }
