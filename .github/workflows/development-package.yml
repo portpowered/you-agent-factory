@@ -101,47 +101,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - run: make model-provider-package-verify
 
-  dry-run-candidate:
-    name: Build and Smoke Exact Candidate (No Publish)
-    if: ${{ false }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Check out the reviewed pull request commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Prepare the frontend-only development package candidates
-        run: >-
-          make ui-public-package-publish-prepare
-          PACKAGE_VERSION="0.0.0-dev.${{ github.run_id }}.${{ github.event.pull_request.head.sha }}"
-          PACKAGE_OUTPUT=".artifacts/public-development-candidate"
-
-      - name: Upload the frontend package candidates and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-development-candidate-${{ github.run_id }}
-          path: .artifacts/public-development-candidate/
-          if-no-files-found: error
-          retention-days: 7
-
   api-candidate:
     name: Build API Candidate (No Publish)
     needs: classify
