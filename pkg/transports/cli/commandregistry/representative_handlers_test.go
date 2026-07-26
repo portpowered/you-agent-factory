@@ -118,15 +118,18 @@ func TestVerifySessionRunnableCoverageRejectsMissingAndInvalidHandlerIDs(t *test
 func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 	var diagnostic bytes.Buffer
 	createCfg := sessioncli.CreateConfig{}
+	server := "http://127.0.0.1:3456"
 	jsonOutput := true
 	createRunE := commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
-		Config: &createCfg, JSON: &jsonOutput,
+		Config: &createCfg, Server: &server, JSON: &jsonOutput,
 		SessionDiagnosticsBinding: commandregistry.SessionDiagnosticsBinding{
 			Verbose: func() bool { return true }, Debug: boolPtr(true),
 			DiagnosticsWriter: func(*cobra.Command) io.Writer { return &diagnostic },
 		},
 		CreateSession: func(cfg sessioncli.CreateConfig) error {
-			if cfg.Dir != "factory" || !cfg.JSON || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
+			if cfg.Dir != "factory" || cfg.Server != server ||
+				!cfg.JSON || !cfg.Verbose || !cfg.Debug ||
+				cfg.Diagnostics != &diagnostic {
 				t.Fatalf("create config = %#v", cfg)
 			}
 			return nil

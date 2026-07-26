@@ -141,14 +141,18 @@ func TestOpenFromFolder_OpensSelectedTarget(t *testing.T) {
 }
 
 type initNewFactoryHost struct {
-	discoverCalls int
-	targets       []factorysessions.Target
-	scaffoldErr   error
+	discoverCalls      int
+	initialDiscoverErr error
+	targets            []factorysessions.Target
+	scaffoldErr        error
 }
 
 func (h *initNewFactoryHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
 	h.discoverCalls++
 	if h.discoverCalls == 1 {
+		if h.initialDiscoverErr != nil {
+			return nil, h.initialDiscoverErr
+		}
 		return nil, sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
@@ -202,6 +206,38 @@ func TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens(t *testing.T) {
 	}
 	if host.discoverCalls < 2 {
 		t.Fatalf("discover calls = %d, want at least 2", host.discoverCalls)
+	}
+}
+
+func TestOpenFromFolder_InitNewFactoryAcceptsMissingNestedFactory(t *testing.T) {
+	t.Parallel()
+
+	host := &initNewFactoryHost{
+		initialDiscoverErr: sessionvalidation.New(
+			factorysessions.ValidationReasonConfigLoadFailed,
+			"folderPath",
+			errors.New("nested Factory configuration is missing"),
+		),
+		targets: []factorysessions.Target{{
+			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			FactoryDir: "/tmp/factory",
+		}},
+	}
+
+	result, err := controlplane.OpenFromFolder(
+		context.Background(),
+		host,
+		&liveOpenHost{sessionID: "sess-init"},
+		t.TempDir(),
+		nil,
+		false,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("OpenFromFolder: %v", err)
+	}
+	if result.SessionID != "sess-init" {
+		t.Fatalf("session id = %q, want sess-init", result.SessionID)
 	}
 }
 
