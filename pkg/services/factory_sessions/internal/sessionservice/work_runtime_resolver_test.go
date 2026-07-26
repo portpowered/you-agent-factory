@@ -84,6 +84,25 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	}
 }
 
+type conflictingRootRuntime struct {
+	factory.Service
+}
+
+func (conflictingRootRuntime) ControlMoveWork(
+	context.Context,
+	factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{}, factory.ErrMoveWorkRequestConflict
+}
+
+func TestWorkRuntimeAdapterMapsRootMoveConflictToWorkContract(t *testing.T) {
+	adapter := workRuntimeAdapter{runtime: conflictingRootRuntime{}}
+	_, err := adapter.MoveWork(context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "request-1")
+	if !errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
+		t.Fatalf("MoveWork error = %v, want %v", err, work.ErrMoveWorkRequestAlreadyApplied)
+	}
+}
+
 func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t *testing.T) {
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}

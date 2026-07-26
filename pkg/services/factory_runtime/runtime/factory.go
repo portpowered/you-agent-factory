@@ -598,39 +598,63 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 
 // Pause pauses the factory. Repeated calls while already paused are a no-op.
 func (f *factoryImpl) Pause(_ context.Context) error {
-	f.mu.Lock()
-	previousState := f.state
-	if previousState == interfaces.FactoryStatePaused {
-		f.mu.Unlock()
-		return nil
-	}
-	if previousState == interfaces.FactoryStateCompleted || previousState == interfaces.FactoryStateFailed {
-		f.mu.Unlock()
+	_, previousState, err := f.applyPauseControl()
+	if err != nil {
 		return fmt.Errorf("pause factory: invalid state %s", previousState)
 	}
-	f.state = interfaces.FactoryStatePaused
+	return nil
+}
+
+func (f *factoryImpl) applyPauseControl() (factory.ControlOutcome, interfaces.FactoryState, error) {
+	f.mu.Lock()
+	previousState := f.state
+	switch previousState {
+	case interfaces.FactoryStatePaused:
+		f.mu.Unlock()
+		return factory.ControlOutcomeNoOp, previousState, nil
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		f.mu.Unlock()
+		return "", previousState, factory.ErrNotRunning
+	case interfaces.FactoryStateRunning, interfaces.FactoryStateIdle:
+		f.state = interfaces.FactoryStatePaused
+	default:
+		f.mu.Unlock()
+		return "", previousState, factory.ErrInvalidLifecycleTransition
+	}
 	f.mu.Unlock()
 	reason := "pause requested"
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, reason)
 	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, interfaces.FactorySessionLifecycleControlPause, reason)
 	f.recordSessionLifecyclePause()
 	f.logRuntimeLifecycleControl("PAUSE", previousState, interfaces.FactoryStatePaused, "ACCEPTED")
-	return nil
+	return factory.ControlOutcomeAccepted, previousState, nil
 }
 
 // Resume resumes a paused factory.
 func (f *factoryImpl) Resume(_ context.Context) error {
-	f.mu.Lock()
-	previousState := f.state
-	if previousState == interfaces.FactoryStateRunning || previousState == interfaces.FactoryStateIdle {
-		f.mu.Unlock()
-		return nil
-	}
-	if previousState != interfaces.FactoryStatePaused {
-		f.mu.Unlock()
+	_, previousState, err := f.applyResumeControl()
+	if err != nil {
 		return fmt.Errorf("resume factory: invalid state %s", previousState)
 	}
-	f.state = interfaces.FactoryStateRunning
+	return nil
+}
+
+func (f *factoryImpl) applyResumeControl() (factory.ControlOutcome, interfaces.FactoryState, error) {
+	f.mu.Lock()
+	previousState := f.state
+	switch previousState {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStateIdle:
+		f.mu.Unlock()
+		return factory.ControlOutcomeNoOp, previousState, nil
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		f.mu.Unlock()
+		return "", previousState, factory.ErrNotRunning
+	case interfaces.FactoryStatePaused:
+		f.state = interfaces.FactoryStateRunning
+	default:
+		f.mu.Unlock()
+		return "", previousState, factory.ErrInvalidLifecycleTransition
+	}
 	f.mu.Unlock()
 	reason := "resume requested"
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, reason)
@@ -639,7 +663,7 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
 	f.engine.WakeForPendingProcessing()
-	return nil
+	return factory.ControlOutcomeAccepted, previousState, nil
 }
 
 func (f *factoryImpl) automaticTicksPaused() bool {

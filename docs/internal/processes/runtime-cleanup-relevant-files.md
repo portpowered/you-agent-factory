@@ -820,8 +820,14 @@ Plain control request/result vocabulary is consolidated in `work_move_errors.go`
 (`ControlPause`, `ControlResume`, `ControlTerminate`,
 `ControlWaitToComplete`, `ControlMoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
 `ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
-errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`). Do not route
-control through hosting `Lifecycle.Stop` as the peer authority for this slice.
+errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`,
+`ErrMoveWorkRequestConflict`). Concrete root methods must classify lifecycle
+state at the `Service` boundary so repeated pause/resume returns `NO_OP` and
+failures remain matchable with root sentinels. When a consumer-owned adapter
+retains a domain-specific error contract, map the root sentinel back at that
+adapter rather than leaking the consumer package's sentinel through `Service`.
+Do not route control through hosting `Lifecycle.Stop` as the peer authority for
+this slice.
 
 Plain observation request/result/value vocabulary lives in
 `projection_contracts.go` (`ObserveRequest`/`ObserveResult`,

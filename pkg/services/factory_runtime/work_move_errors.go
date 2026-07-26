@@ -7,6 +7,9 @@ var (
 	ErrMoveWorkInvalidState     = errors.New("invalid target state for work type")
 	ErrMoveWorkInFlightDispatch = errors.New("work is in an active dispatch")
 	ErrMoveWorkEngineTerminated = errors.New("engine has terminated")
+	// ErrMoveWorkRequestConflict indicates that an operator move request ID was
+	// already applied and cannot be accepted again.
+	ErrMoveWorkRequestConflict = errors.New("factory runtime move work request conflict")
 )
 
 // ControlOutcome is the plain success vocabulary for Factory Runtime root

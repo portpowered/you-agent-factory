@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -31,6 +32,9 @@ func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, 
 		WorkID: workID, StateName: state, Source: factoryruntime.WorkMoveSource(source), RequestID: requestID,
 	})
 	if err != nil {
+		if errors.Is(err, factoryruntime.ErrMoveWorkRequestConflict) {
+			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
+		}
 		return work.OperatorMoveResult{}, err
 	}
 	return work.OperatorMoveResult{

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -22,18 +23,20 @@ type dispatchPool interface {
 	Stop()
 }
 
-func (f *factoryImpl) ControlPause(ctx context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
-	if err := f.Pause(ctx); err != nil {
+func (f *factoryImpl) ControlPause(_ context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
+	outcome, _, err := f.applyPauseControl()
+	if err != nil {
 		return factory.PauseResult{}, err
 	}
-	return factory.PauseResult{Outcome: factory.ControlOutcomeAccepted}, nil
+	return factory.PauseResult{Outcome: outcome}, nil
 }
 
-func (f *factoryImpl) ControlResume(ctx context.Context, _ factory.ResumeRequest) (factory.ResumeResult, error) {
-	if err := f.Resume(ctx); err != nil {
+func (f *factoryImpl) ControlResume(_ context.Context, _ factory.ResumeRequest) (factory.ResumeResult, error) {
+	outcome, _, err := f.applyResumeControl()
+	if err != nil {
 		return factory.ResumeResult{}, err
 	}
-	return factory.ResumeResult{Outcome: factory.ControlOutcomeAccepted}, nil
+	return factory.ResumeResult{Outcome: outcome}, nil
 }
 
 func (f *factoryImpl) ControlTerminate(_ context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
@@ -67,6 +70,9 @@ func (f *factoryImpl) ControlWaitToComplete(_ factory.WaitToCompleteRequest) fac
 func (f *factoryImpl) ControlMoveWork(ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
 	result, err := f.MoveWork(ctx, req.WorkID, req.StateName, work.WorkStateChangeSource(req.Source), req.RequestID)
 	if err != nil {
+		if errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
+			return factory.MoveWorkResult{}, factory.ErrMoveWorkRequestConflict
+		}
 		return factory.MoveWorkResult{}, err
 	}
 	return factory.MoveWorkResult{

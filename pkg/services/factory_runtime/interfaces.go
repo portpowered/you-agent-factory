@@ -81,6 +81,8 @@ type Service interface {
 	ControlWaitToComplete(req WaitToCompleteRequest) WaitToCompleteResult
 
 	// ControlMoveWork relocates Work through Runtime-owned plain vocabulary.
+	// Returns ErrMoveWorkNotFound or ErrMoveWorkRequestConflict for typed
+	// missing-work and idempotency-conflict failures.
 	ControlMoveWork(ctx context.Context, req MoveWorkRequest) (MoveWorkResult, error)
 
 	// Observe returns a detached orchestration-neutral observation for live

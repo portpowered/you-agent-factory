@@ -74,6 +74,47 @@ func TestFactoryImpl_Terminate_MapsLifecycleStates(t *testing.T) {
 	requireRootErrIs(t, err, factory.ErrNotRunning, "Terminate(unknown)")
 }
 
+func TestFactoryImpl_PauseResume_MapLifecycleStatesAndNoOps(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	ctx := context.Background()
+
+	impl.state = interfaces.FactoryStateRunning
+	paused, err := impl.ControlPause(ctx, factory.PauseRequest{})
+	requireNoRootErr(t, err, "Pause(running)")
+	if paused.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("Pause(running) outcome = %q, want ACCEPTED", paused.Outcome)
+	}
+	paused, err = impl.ControlPause(ctx, factory.PauseRequest{})
+	requireNoRootErr(t, err, "Pause(paused)")
+	if paused.Outcome != factory.ControlOutcomeNoOp {
+		t.Fatalf("Pause(paused) outcome = %q, want NO_OP", paused.Outcome)
+	}
+
+	resumed, err := impl.ControlResume(ctx, factory.ResumeRequest{})
+	requireNoRootErr(t, err, "Resume(paused)")
+	if resumed.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("Resume(paused) outcome = %q, want ACCEPTED", resumed.Outcome)
+	}
+	resumed, err = impl.ControlResume(ctx, factory.ResumeRequest{})
+	requireNoRootErr(t, err, "Resume(running)")
+	if resumed.Outcome != factory.ControlOutcomeNoOp {
+		t.Fatalf("Resume(running) outcome = %q, want NO_OP", resumed.Outcome)
+	}
+
+	impl.state = interfaces.FactoryStateCompleted
+	_, err = impl.ControlPause(ctx, factory.PauseRequest{})
+	requireRootErrIs(t, err, factory.ErrNotRunning, "Pause(completed)")
+	impl.state = interfaces.FactoryStateFailed
+	_, err = impl.ControlResume(ctx, factory.ResumeRequest{})
+	requireRootErrIs(t, err, factory.ErrNotRunning, "Resume(failed)")
+
+	impl.state = interfaces.FactoryState("unknown")
+	_, err = impl.ControlPause(ctx, factory.PauseRequest{})
+	requireRootErrIs(t, err, factory.ErrInvalidLifecycleTransition, "Pause(unknown)")
+	_, err = impl.ControlResume(ctx, factory.ResumeRequest{})
+	requireRootErrIs(t, err, factory.ErrInvalidLifecycleTransition, "Resume(unknown)")
+}
+
 func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
