@@ -60,7 +60,10 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build models command: %v", err))
 	}
-	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
+	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		panic(fmt.Sprintf("build B12 production families: %v", err))
+	}
 
 	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
 		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, b12,
@@ -310,13 +313,17 @@ func newB12ProductionFamilies(
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options CommandFactory,
-) b12ProductionFamilies {
+) (b12ProductionFamilies, error) {
 	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
+	mcpCommand, err := newMCPCommand(options)
+	if err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	return b12ProductionFamilies{
-		MCP:    newMCPCommand(options),
+		MCP:    mcpCommand,
 		Run:    runSubmit.Run,
 		Submit: runSubmit.Submit,
-	}
+	}, nil
 }
 
 func productionRootSubcommands(

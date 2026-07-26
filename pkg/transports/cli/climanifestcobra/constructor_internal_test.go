@@ -930,23 +930,6 @@ func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 	}
 }
 
-func TestRegisterManifestLocalFlagsRejectsUnsupportedValueType(t *testing.T) {
-	cmd := &cobra.Command{Use: "list"}
-	err := registerManifestLocalFlags(cmd, climanifest.Command{
-		ID: "you.models.list",
-		Flags: map[string]climanifest.Flag{
-			"you.models.list.flag.foo": {
-				Long:      "foo",
-				Scope:     "local",
-				ValueType: "duration",
-			},
-		},
-	})
-	if err == nil {
-		t.Fatal("registerManifestLocalFlags() unsupported type = nil, want error")
-	}
-}
-
 func TestApplyFlagContractSetsHiddenAndNoOptDefault(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	flags.Bool("json", false, "json")

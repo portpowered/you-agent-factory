@@ -8570,6 +8570,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": false,
           "minCardinality": 0,
           "maxCardinality": 1,
@@ -8599,9 +8600,17 @@
           ],
           "pattern": "",
           "completion": "static",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.docs.binding.topic",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -8767,6 +8776,12 @@
         "acrossTiers": "replace",
         "multipleBindings": "reject"
       },
+      "handlerBindings": {
+        "you.docs.binding.topic": {
+          "id": "you.docs.binding.topic",
+          "inputId": "you.docs.arg.0"
+        }
+      },
       "channels": {
         "input": [
           "cli",
@@ -8843,6 +8858,50 @@
       "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp", "since": "1.0.0", "state": "active"},
       "name": "mcp",
       "path": "you mcp",
+      "flags": {
+        "you.mcp.flag.debug": {
+          "id": "you.mcp.flag.debug", "long": "debug", "shorthand": "d", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.debug", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.default-worker-model": {
+          "id": "you.mcp.flag.default-worker-model", "long": "default-worker-model", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model", "valueType": "string",
+          "required": false, "default": "", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.default-worker-model", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.default-worker-model-provider": {
+          "id": "you.mcp.flag.default-worker-model-provider", "long": "default-worker-model-provider", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model-provider", "valueType": "string",
+          "required": false, "default": "", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.default-worker-model-provider", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.json": {
+          "id": "you.mcp.flag.json", "long": "json", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.json", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.json", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.server": {
+          "id": "you.mcp.flag.server", "long": "server", "shorthand": "", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.server", "valueType": "string",
+          "required": false, "default": "http://localhost:7437", "changedDefault": false, "noOptionDefault": "",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.server", "state": "active", "since": "1.0.0"}
+        },
+        "you.mcp.flag.verbose": {
+          "id": "you.mcp.flag.verbose", "long": "verbose", "shorthand": "v", "aliases": [],
+          "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "valueType": "bool",
+          "required": false, "default": "false", "changedDefault": false, "noOptionDefault": "true",
+          "repeatable": false, "normalization": "", "completion": "none", "binding": "", "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.flag.verbose", "state": "active", "since": "1.0.0"}
+        }
+      },
       "precedence": {
         "order": [
           "cli",
@@ -8889,14 +8948,19 @@
         "you.mcp.serve.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
         "you.mcp.serve.flag.default-worker-model": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model", "since": "1.0.0", "state": "active"}, "long": "default-worker-model", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.default-worker-model-provider": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model-provider", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model-provider", "since": "1.0.0", "state": "active"}, "long": "default-worker-model-provider", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model-provider", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.fixture-catalog": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.fixture-catalog", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.fixture-catalog", "since": "1.0.0", "state": "active"}, "long": "fixture-catalog", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.fixture-catalog": {"acceptedSources": ["cli", "manifest-default"], "aliases": [], "completion": "none", "defaultValue": {"string": ""}, "handlerBindingId": "you.mcp.serve.binding.fixture-catalog", "id": "you.mcp.serve.flag.fixture-catalog", "kind": "named", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.fixture-catalog", "since": "1.0.0", "state": "active"}, "long": "fixture-catalog", "maxCardinality": 1, "minCardinality": 0, "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "sensitivity": "public", "shorthand": "", "usage": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.json", "shorthand": "", "valueType": "bool", "visibility": "visible"},
-        "you.mcp.serve.flag.project-root": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.project-root", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.project-root", "since": "1.0.0", "state": "active"}, "long": "project-root", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.runtime": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.runtime", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.runtime", "since": "1.0.0", "state": "active"}, "long": "runtime", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.mcp.serve.flag.project-root": {"acceptedSources": ["cli", "manifest-default"], "aliases": [], "completion": "none", "defaultValue": {"string": ""}, "handlerBindingId": "you.mcp.serve.binding.project-root", "id": "you.mcp.serve.flag.project-root", "kind": "named", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.project-root", "since": "1.0.0", "state": "active"}, "long": "project-root", "maxCardinality": 1, "minCardinality": 0, "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "sensitivity": "public", "shorthand": "", "usage": "project root for workflow source resolution in --runtime mode; defaults to the current working directory", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.runtime": {"acceptedSources": ["cli", "manifest-default"], "aliases": [], "completion": "none", "defaultValue": {"boolean": false}, "handlerBindingId": "you.mcp.serve.binding.runtime", "id": "you.mcp.serve.flag.runtime", "kind": "named", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.runtime", "since": "1.0.0", "state": "active"}, "long": "runtime", "maxCardinality": 1, "minCardinality": 0, "noOptionDefaultValue": {"boolean": true}, "normalization": "", "repeatable": false, "required": false, "scope": "local", "sensitivity": "public", "shorthand": "", "usage": "select the shared durable JavaScript runtime execution service instead of the fixture catalog", "valueType": "bool", "visibility": "visible"},
         "you.mcp.serve.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.mcp.serve.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.server", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
       },
       "handler": {"id": "you.mcp.serve.handler"},
+      "handlerBindings": {
+        "you.mcp.serve.binding.fixture-catalog": {"id": "you.mcp.serve.binding.fixture-catalog", "inputId": "you.mcp.serve.flag.fixture-catalog"},
+        "you.mcp.serve.binding.project-root": {"id": "you.mcp.serve.binding.project-root", "inputId": "you.mcp.serve.flag.project-root"},
+        "you.mcp.serve.binding.runtime": {"id": "you.mcp.serve.binding.runtime", "inputId": "you.mcp.serve.flag.runtime"}
+      },
       "id": "you.mcp.serve",
       "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve", "since": "1.0.0", "state": "active"},
       "name": "serve",
@@ -9446,6 +9510,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": true,
           "minCardinality": 1,
           "maxCardinality": 1,
@@ -9453,9 +9518,17 @@
           "enum": [],
           "pattern": "",
           "completion": "none",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.models.inspect.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -9656,6 +9729,12 @@
           "stderr"
         ]
       },
+      "handlerBindings": {
+        "you.models.inspect.binding.model-name": {
+          "id": "you.models.inspect.binding.model-name",
+          "inputId": "you.models.inspect.arg.0"
+        }
+      },
       "outputs": {
         "you.models.inspect.output.human": {
           "id": "you.models.inspect.output.human",
@@ -9750,6 +9829,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": true,
           "minCardinality": 1,
           "maxCardinality": 1,
@@ -9757,9 +9837,17 @@
           "enum": [],
           "pattern": "",
           "completion": "none",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.models.invoke.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -9909,96 +9997,135 @@
           }
         },
         "you.models.invoke.flag.port": {
-          "id": "you.models.invoke.flag.port",
-          "long": "port",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "int",
-          "required": false,
-          "default": "0",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "hidden",
+          "defaultValue": {
+            "int": 0
+          },
+          "handlerBindingId": "you.models.invoke.binding.port",
+          "id": "you.models.invoke.flag.port",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.port",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "port",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "deprecated compatibility port override",
+          "valueType": "int",
+          "visibility": "hidden"
         },
         "you.models.invoke.flag.operation": {
-          "id": "you.models.invoke.flag.operation",
-          "long": "operation",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "TTS",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "completion": "static",
+          "defaultValue": {
+            "string": "TTS"
+          },
+          "enum": [
+            "TTS"
+          ],
+          "handlerBindingId": "you.models.invoke.binding.operation",
+          "id": "you.models.invoke.flag.operation",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.operation",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "operation",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "uppercase model operation to invoke",
+          "valueType": "string",
+          "visibility": "visible"
         },
         "you.models.invoke.flag.text": {
-          "id": "you.models.invoke.flag.text",
-          "long": "text",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.models.invoke.binding.text",
+          "id": "you.models.invoke.flag.text",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.text",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "text",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "sensitive",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "text input for the selected model operation",
+          "valueType": "string",
+          "visibility": "visible"
         },
         "you.models.invoke.flag.output": {
-          "id": "you.models.invoke.flag.output",
-          "long": "output",
-          "shorthand": "",
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
           "aliases": [],
-          "scope": "local",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
           "completion": "none",
-          "binding": "",
-          "visibility": "visible",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.models.invoke.binding.output",
+          "id": "you.models.invoke.flag.output",
+          "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.output",
             "state": "active",
             "since": "1.0.0"
-          }
+          },
+          "long": "output",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "path for streamed model output",
+          "valueType": "string",
+          "visibility": "visible"
         }
       },
       "precedence": {
@@ -10028,6 +10155,28 @@
           "stdout",
           "stderr"
         ]
+      },
+      "handlerBindings": {
+        "you.models.invoke.binding.model-name": {
+          "id": "you.models.invoke.binding.model-name",
+          "inputId": "you.models.invoke.arg.0"
+        },
+        "you.models.invoke.binding.operation": {
+          "id": "you.models.invoke.binding.operation",
+          "inputId": "you.models.invoke.flag.operation"
+        },
+        "you.models.invoke.binding.output": {
+          "id": "you.models.invoke.binding.output",
+          "inputId": "you.models.invoke.flag.output"
+        },
+        "you.models.invoke.binding.port": {
+          "id": "you.models.invoke.binding.port",
+          "inputId": "you.models.invoke.flag.port"
+        },
+        "you.models.invoke.binding.text": {
+          "id": "you.models.invoke.binding.text",
+          "inputId": "you.models.invoke.flag.text"
+        }
       },
       "outputs": {
         "you.models.invoke.output.human": {
@@ -10131,6 +10280,7 @@
           "position": 0,
           "kind": "positional",
           "valueType": "string",
+          "scope": "local",
           "required": true,
           "minCardinality": 1,
           "maxCardinality": 1,
@@ -10138,9 +10288,17 @@
           "enum": [],
           "pattern": "",
           "completion": "none",
-          "channels": [
+          "acceptedSources": [
             "cli"
           ],
+          "handlerBindingId": "you.models.pull.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
           "doubleDash": "terminates-flags"
         }
       },
@@ -10340,6 +10498,12 @@
           "stdout",
           "stderr"
         ]
+      },
+      "handlerBindings": {
+        "you.models.pull.binding.model-name": {
+          "id": "you.models.pull.binding.model-name",
+          "inputId": "you.models.pull.arg.0"
+        }
       },
       "outputs": {
         "you.models.pull.output.human": {

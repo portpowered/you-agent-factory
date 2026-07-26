@@ -5,6 +5,13 @@ Run without a topic to print the quick-start blurb and packaged docs index. Use 
 Usage:
   you docs [topic] [flags]
 
+Examples:
+  # Print the packaged docs index and quick-start blurb.
+  you docs
+
+  # Print one authored reference topic.
+  you docs agents
+
 Flags:
   -h, --help   help for docs
 
