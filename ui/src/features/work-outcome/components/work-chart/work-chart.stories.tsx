@@ -1,14 +1,14 @@
 import type { ComponentProps } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
-import type { WorkChartModel } from "../lib/trends";
+import { getDashboardWorkChartSeriesStyle } from "../../lib/chart-contract";
+import type { WorkChartModel } from "../../lib/trends";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
-} from "../lib/work-chart-legend-contract";
-import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
-import { getWorkOutcomeMessages } from "../messages/work-outcome";
+} from "../../lib/work-chart-legend-contract";
+import { dragWorkChart } from "../../lib/work-chart-zoom-story-contract";
+import { getWorkOutcomeMessages } from "../../messages/work-outcome";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {

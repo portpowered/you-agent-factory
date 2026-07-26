@@ -50,10 +50,6 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/flowchart/components",
   },
   {
-    maxFileCount: 18,
-    relativeDirectoryPath: "src/features/work-outcome/components",
-  },
-  {
     maxFileCount: 17,
     relativeDirectoryPath: "src/features/trace-drilldown/components",
   },
