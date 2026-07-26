@@ -407,9 +407,14 @@ func scriptWorkResult(
 	result.Error = scriptExecutionErrorMessage(executionErr)
 	var providerErr *workers.ProviderError
 	if errors.As(executionErr, &providerErr) {
-		result.FailureMetadata = &workers.WorkFailureMetadata{
-			Family: providerErr.Family,
-			Type:   providerErr.Type,
+		// Preserve the established workstation retry boundary: ordinary script
+		// exit and process failures are terminal Work results, while timeouts
+		// retain their explicit retryable metadata.
+		if providerErr.Type == workers.WorkFailureTypeTimeout {
+			result.FailureMetadata = &workers.WorkFailureMetadata{
+				Family: providerErr.Family,
+				Type:   providerErr.Type,
+			}
 		}
 		if providerErr.Diagnostics != nil {
 			result.Diagnostics = workers.CloneWorkDiagnostics(providerErr.Diagnostics)

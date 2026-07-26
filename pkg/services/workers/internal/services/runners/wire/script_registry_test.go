@@ -82,6 +82,18 @@ func TestNewScriptRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 	}
 }
 
+func TestNewScriptRegistryRejectsInvalidScriptConfiguration(t *testing.T) {
+	_, err := NewScriptRegistry(
+		runners.ScriptConfig{},
+		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
+			return map[string]string{}, nil
+		}),
+	)
+	if err == nil {
+		t.Fatal("NewScriptRegistry() error = nil, want invalid script configuration")
+	}
+}
+
 func TestScriptRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	command := &scriptConformanceCommand{}
 	registry, err := NewScriptRegistry(

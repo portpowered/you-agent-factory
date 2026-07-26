@@ -408,6 +408,7 @@ func TestScriptExecutor_EmitsScriptResponseEventForCommandOutcomes(t *testing.T)
 			if tc.wantErrorText != "" && result.Error != tc.wantErrorText {
 				t.Fatalf("result error = %q, want %q", result.Error, tc.wantErrorText)
 			}
+			assertScriptFailureMetadata(t, result.FailureMetadata, tc.wantFailureMetadata)
 			if len(recorded) != 2 {
 				t.Fatalf("recorded events = %d, want request and response", len(recorded))
 			}
@@ -425,15 +426,16 @@ func TestScriptExecutor_EmitsScriptResponseEventForCommandOutcomes(t *testing.T)
 }
 
 type scriptResponseOutcomeCase struct {
-	name          string
-	runner        CommandRunner
-	wantOutcome   workerexecution.ScriptExecutionOutcome
-	wantFailure   *workerexecution.ScriptFailureType
-	wantExitCode  *int
-	wantStdout    string
-	wantStderr    string
-	wantResult    workerexecution.WorkOutcome
-	wantErrorText string
+	name                string
+	runner              CommandRunner
+	wantOutcome         workerexecution.ScriptExecutionOutcome
+	wantFailure         *workerexecution.ScriptFailureType
+	wantExitCode        *int
+	wantStdout          string
+	wantStderr          string
+	wantResult          workerexecution.WorkOutcome
+	wantErrorText       string
+	wantFailureMetadata *workerexecution.WorkFailureType
 }
 
 func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
@@ -476,6 +478,10 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantStderr:    "partial stderr",
 			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution timeout",
+			wantFailureMetadata: func() *workerexecution.WorkFailureType {
+				value := workerexecution.WorkFailureTypeTimeout
+				return &value
+			}(),
 		},
 		{
 			name: "process error",

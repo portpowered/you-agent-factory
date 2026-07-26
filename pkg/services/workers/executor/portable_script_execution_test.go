@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 func TestPortableCopiedScriptExecution_PreservesCommandArgsWorkingDirectoryAndEnvironment(t *testing.T) {
@@ -114,4 +115,89 @@ func portableEnvironmentContains(environment []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func assertScriptFailureMetadata(
+	t *testing.T,
+	got *workerexecution.WorkFailureMetadata,
+	want *workerexecution.WorkFailureType,
+) {
+	t.Helper()
+	if want == nil && got != nil {
+		t.Fatalf("failure metadata = %#v, want nil", got)
+	}
+	if want != nil && (got == nil || got.Type != *want) {
+		t.Fatalf("failure metadata = %#v, want type %q", got, *want)
+	}
+}
+
+func TestScriptFactoryConstructsRegistryBackedExecutor(t *testing.T) {
+	command := fixedCommandRunner{stdout: []byte("factory output")}
+	clock := workerprocess.ClockFunc(func() time.Time {
+		return time.Date(2026, time.July, 26, 23, 0, 0, 0, time.UTC)
+	})
+	docs := func(string) (map[string]string, error) {
+		return map[string]string{}, nil
+	}
+	factory, err := NewScriptFactory(command, clock, docs)
+	if err != nil {
+		t.Fatalf("NewScriptFactory() error = %v", err)
+	}
+	executor, err := factory.New(
+		&interfaces.FactoryWorkerConfig{Command: "fixture"},
+		nil,
+		"factory-root",
+		nil,
+		nil,
+		clock.Now,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	result, err := executor.Execute(t.Context(), testScriptRequest(work.WorkDispatch{
+		DispatchID:   "dispatch-factory",
+		TransitionID: "transition-factory",
+	}))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "factory output" {
+		t.Fatalf("Execute() result = %#v, want accepted factory output", result)
+	}
+
+	if got, err := factory.WithCommandRunner(nil); err != nil || got != factory {
+		t.Fatalf("WithCommandRunner(nil) = (%p, %v), want original factory", got, err)
+	}
+	replaced, err := factory.WithCommandRunner(fixedCommandRunner{stdout: []byte("replacement")})
+	if err != nil || replaced == factory {
+		t.Fatalf("WithCommandRunner(replacement) = (%p, %v), want detached factory", replaced, err)
+	}
+}
+
+func TestScriptFactoryRejectsIncompleteDependencies(t *testing.T) {
+	clock := workerprocess.ClockFunc(time.Now)
+	docs := func(string) (map[string]string, error) { return nil, nil }
+	for _, tc := range []struct {
+		name   string
+		runner CommandRunner
+		clock  workerprocess.Clock
+		docs   workerexecution.FactoryDocsLoader
+	}{
+		{name: "command runner", clock: clock, docs: docs},
+		{name: "clock", runner: fixedCommandRunner{}, docs: docs},
+		{name: "Factory docs", runner: fixedCommandRunner{}, clock: clock},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := NewScriptFactory(tc.runner, tc.clock, tc.docs); err == nil {
+				t.Fatalf("NewScriptFactory() error = nil, want missing %s", tc.name)
+			}
+		})
+	}
+	var factory *ScriptFactory
+	if _, err := factory.New(nil, nil, "", nil, nil, time.Now); err == nil {
+		t.Fatal("nil ScriptFactory.New() error = nil")
+	}
+	if _, err := factory.WithCommandRunner(fixedCommandRunner{}); err == nil {
+		t.Fatal("nil ScriptFactory.WithCommandRunner() error = nil")
+	}
 }

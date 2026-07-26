@@ -14,11 +14,61 @@ import (
 
 type recordingEffect struct {
 	request platformprocess.CommandRequest
+	result  platformprocess.CommandResult
 }
 
 func (r *recordingEffect) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.request = request
-	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
+	if r.result.Stdout == nil {
+		r.result.Stdout = []byte("ok")
+	}
+	return r.result, nil
+}
+
+type streamingRecordingEffect struct {
+	recordingEffect
+	chunks []string
+}
+
+func (r *streamingRecordingEffect) RunStreaming(
+	_ context.Context,
+	request platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	r.request = request
+	observer(platformprocess.OutputStreamStderr, []byte("warn"))
+	observer(platformprocess.OutputStreamStdout, []byte("ok"))
+	r.chunks = append(r.chunks, "streamed")
+	return platformprocess.CommandResult{Stdout: []byte("ok"), Stderr: []byte("warn")}, nil
+}
+
+type workerCommandRunnerFunc func(context.Context, CommandRequest) (CommandResult, error)
+
+func (run workerCommandRunnerFunc) Run(ctx context.Context, request CommandRequest) (CommandResult, error) {
+	return run(ctx, request)
+}
+
+type streamingWorkerRunner struct {
+	called bool
+}
+
+func (r *streamingWorkerRunner) Run(
+	ctx context.Context,
+	request CommandRequest,
+) (CommandResult, error) {
+	return r.RunStreaming(ctx, request, nil)
+}
+
+func (r *streamingWorkerRunner) RunStreaming(
+	_ context.Context,
+	_ CommandRequest,
+	observer OutputChunkObserver,
+) (CommandResult, error) {
+	r.called = true
+	if observer != nil {
+		observer(OutputStreamStdout, []byte("live"))
+	}
+	return CommandResult{Stdout: []byte("live")}, nil
 }
 
 func TestAdaptCommandRunnerProjectsOnlySubprocessEffectFields(t *testing.T) {
@@ -77,6 +127,130 @@ func TestLoggingCommandRunnerRequiresInjectedClock(t *testing.T) {
 	runner := CommandRunnerWithLogging(AdaptCommandRunner(&recordingEffect{}), nil, nil)
 	if _, err := runner.Run(t.Context(), commandTestRequest()); err == nil || err.Error() != "workers logging command clock is required" {
 		t.Fatalf("Run() error = %v, want missing command clock", err)
+	}
+}
+
+func TestExecCommandRunnerRunStreamingSupportsStreamingAndFallbackEffects(t *testing.T) {
+	t.Run("streaming", func(t *testing.T) {
+		effect := &streamingRecordingEffect{}
+		var chunks []string
+		result, err := (ExecCommandRunner{Runner: effect}).RunStreaming(
+			t.Context(),
+			commandTestRequest(),
+			func(stream string, chunk []byte) {
+				chunks = append(chunks, string(stream)+":"+string(chunk))
+			},
+		)
+		if err != nil {
+			t.Fatalf("RunStreaming() error = %v", err)
+		}
+		if len(effect.chunks) != 1 || string(result.Stdout) != "ok" ||
+			len(chunks) != 2 || chunks[0] != "stderr:warn" || chunks[1] != "stdout:ok" {
+			t.Fatalf("streaming result = %#v chunks = %#v effect = %#v", result, chunks, effect.chunks)
+		}
+	})
+
+	t.Run("fallback", func(t *testing.T) {
+		effect := &recordingEffect{result: platformprocess.CommandResult{
+			Stdout: []byte("complete out"),
+			Stderr: []byte("complete err"),
+		}}
+		var chunks []string
+		result, err := (ExecCommandRunner{Runner: effect}).RunStreaming(
+			t.Context(),
+			commandTestRequest(),
+			func(stream string, chunk []byte) {
+				chunks = append(chunks, string(stream)+":"+string(chunk))
+			},
+		)
+		if err != nil {
+			t.Fatalf("RunStreaming() error = %v", err)
+		}
+		if string(result.Stderr) != "complete err" ||
+			len(chunks) != 2 || chunks[0] != "stdout:complete out" || chunks[1] != "stderr:complete err" {
+			t.Fatalf("fallback result = %#v chunks = %#v", result, chunks)
+		}
+	})
+
+	if _, err := (ExecCommandRunner{}).RunStreaming(t.Context(), commandTestRequest(), nil); err == nil {
+		t.Fatal("RunStreaming() error = nil, want missing process runner")
+	}
+}
+
+func TestLoggingCommandRunnerRunStreamingSupportsStreamingAndFallbackEdges(t *testing.T) {
+	newClock := func() *sequenceCommandClock {
+		return &sequenceCommandClock{times: []time.Time{time.Unix(1, 0), time.Unix(2, 0)}}
+	}
+
+	t.Run("streaming", func(t *testing.T) {
+		edge := &streamingWorkerRunner{}
+		var chunks []string
+		result, err := (LoggingCommandRunner{Runner: edge, Clock: newClock()}).RunStreaming(
+			t.Context(),
+			commandTestRequest(),
+			func(_ string, chunk []byte) {
+				chunks = append(chunks, string(chunk))
+			},
+		)
+		if err != nil {
+			t.Fatalf("RunStreaming() error = %v", err)
+		}
+		if !edge.called || string(result.Stdout) != "live" || len(chunks) != 1 || chunks[0] != "live" {
+			t.Fatalf("streaming result = %#v chunks = %#v called = %t", result, chunks, edge.called)
+		}
+	})
+
+	t.Run("fallback", func(t *testing.T) {
+		edge := workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
+			return CommandResult{Stdout: []byte("out"), Stderr: []byte("err")}, nil
+		})
+		var chunks []string
+		_, err := (LoggingCommandRunner{Runner: edge, Clock: newClock()}).RunStreaming(
+			t.Context(),
+			commandTestRequest(),
+			func(stream string, chunk []byte) {
+				chunks = append(chunks, string(stream)+":"+string(chunk))
+			},
+		)
+		if err != nil {
+			t.Fatalf("RunStreaming() error = %v", err)
+		}
+		if len(chunks) != 2 || chunks[0] != "stdout:out" || chunks[1] != "stderr:err" {
+			t.Fatalf("fallback chunks = %#v", chunks)
+		}
+	})
+
+	if _, err := (LoggingCommandRunner{Clock: newClock()}).RunStreaming(
+		t.Context(), commandTestRequest(), nil,
+	); err == nil {
+		t.Fatal("RunStreaming() error = nil, want missing command runner")
+	}
+	edge := workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
+		return CommandResult{}, nil
+	})
+	if _, err := (LoggingCommandRunner{Runner: edge}).RunStreaming(
+		t.Context(), commandTestRequest(), nil,
+	); err == nil {
+		t.Fatal("RunStreaming() error = nil, want missing command clock")
+	}
+}
+
+func TestStreamingExecCommandRunnerRequiresAndForwardsStreamingEdge(t *testing.T) {
+	if _, err := (StreamingExecCommandRunner{}).Run(t.Context(), commandTestRequest()); err == nil {
+		t.Fatal("Run() error = nil, want missing runner")
+	}
+	nonStreaming := workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
+		return CommandResult{}, nil
+	})
+	if _, err := (StreamingExecCommandRunner{Runner: nonStreaming}).Run(
+		t.Context(), commandTestRequest(),
+	); err == nil {
+		t.Fatal("Run() error = nil, want unsupported streaming edge")
+	}
+	streaming := &streamingWorkerRunner{}
+	result, err := (StreamingExecCommandRunner{Runner: streaming}).Run(t.Context(), commandTestRequest())
+	if err != nil || string(result.Stdout) != "live" || !streaming.called {
+		t.Fatalf("Run() result = %#v error = %v called = %t", result, err, streaming.called)
 	}
 }
 
