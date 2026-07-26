@@ -1,12 +1,10 @@
 package projectionquery_test
 
 import (
-	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
 )
@@ -22,16 +20,20 @@ func TestAcceptedRecordingsRootUsesPrivateProjectionQuery(t *testing.T) {
 		&unusedLedger{},
 		recordingsservice.NewProjectionService(),
 	)
-	malformed := factorydefinitions.FactoryEvent{
-		Id:            "malformed",
-		Type:          factorydefinitions.FactoryEventTypeWorkRequest,
-		SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
-		Context:       factorydefinitions.FactoryEventContext{Tick: 1},
-		Payload:       json.RawMessage(`{"type":`),
+	malformed := recordings.CanonicalEvent{
+		ID:       "malformed",
+		Kind:     "WORK_REQUEST",
+		Sequence: 0,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-1",
+			Sequence:           0,
+		},
+		FactoryTick: 1,
+		Payload:     `{"type":`,
 	}
 
 	result, err := root.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
-		Events:       []factorydefinitions.FactoryEvent{malformed},
+		Events:       []recordings.CanonicalEvent{malformed},
 		SelectedTick: 1,
 	})
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
@@ -41,26 +43,44 @@ func TestAcceptedRecordingsRootUsesPrivateProjectionQuery(t *testing.T) {
 		t.Fatalf("ReconstructWorldState result = %#v, want zero result", result)
 	}
 
-	otherSessionID := "factory-session-2"
-	history := []factorydefinitions.FactoryEvent{{
-		Id: "other-session-cursor",
-		Context: factorydefinitions.FactoryEventContext{
-			SessionID: &otherSessionID,
-			Sequence:  1,
+	scope := recordings.CanonicalEventScope{FactorySessionID: "factory-session-1"}
+	history := []recordings.CanonicalEvent{
+		{
+			ID:       "acknowledged",
+			Sequence: 0,
+			Scope:    scope,
+			Cursor: recordings.CanonicalEventCursor{
+				StreamGenerationID: "generation-1",
+				Sequence:           0,
+			},
 		},
-	}}
+		{
+			ID:       "continuation",
+			Sequence: 2,
+			Scope:    scope,
+			Cursor: recordings.CanonicalEventCursor{
+				StreamGenerationID: "generation-1",
+				Sequence:           2,
+			},
+		},
+	}
 	err = root.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Events: history,
-		Cursor: factorydefinitions.FactoryEventReconnectCursor{
-			AfterEventID: "other-session-cursor",
-		},
-		Scope: factorydefinitions.FactoryEventReconnectScope{
-			SessionID: "factory-session-1",
-		},
+		Cursor: history[0].Cursor,
+		Scope:  scope,
+	})
+	if err != nil {
+		t.Fatalf("ValidateReconnectReplayFrom interleaved scoped history: %v", err)
+	}
+
+	err = root.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
+		Events: history[1:],
+		Cursor: history[0].Cursor,
+		Scope:  scope,
 	})
 	if !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 		t.Fatalf(
-			"ValidateReconnectReplayFrom error = %v, want ErrReconnectCursorNotFound",
+			"ValidateReconnectReplayFrom continuation-only error = %v, want ErrReconnectCursorNotFound",
 			err,
 		)
 	}
