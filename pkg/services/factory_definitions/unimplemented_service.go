@@ -11,6 +11,15 @@ import (
 // already connected to collaborators.
 type UnimplementedService struct{}
 
+// ListEffectiveFactories returns a collaborator-required failure until nested
+// effective-catalog wiring lands.
+func (UnimplementedService) ListEffectiveFactories(
+	context.Context,
+	ListEffectiveFactoriesRequest,
+) (ListEffectiveFactoriesResult, error) {
+	return ListEffectiveFactoriesResult{}, fmt.Errorf("effective Factory catalog collaborator is required")
+}
+
 // ListNamedFactories returns a collaborator-required failure until nested
 // catalog wiring lands.
 func (UnimplementedService) ListNamedFactories(

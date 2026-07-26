@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"context"
+	"io/fs"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -47,7 +49,37 @@ func useNamedFactoryCatalogFake(t *testing.T, catalog namedFactoryCatalogFake) {
 }
 
 func testList(config ListConfig) error {
-	return List(testNamedFactoryCatalog, config)
+	if config.Context == nil {
+		config.Context = context.Background()
+	}
+	var listed []factorydefinitions.NamedFactoryListEntry
+	effective := func(
+		_ context.Context,
+		request factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		var err error
+		listed, err = testNamedFactoryCatalog.ListNamedFactories(request.ProjectRoot)
+		if err != nil {
+			return factorydefinitions.ListEffectiveFactoriesResult{}, err
+		}
+		entries := make([]factorydefinitions.EffectiveFactoryCatalogEntry, 0, len(listed))
+		for _, entry := range listed {
+			location := entry.FactoryDir
+			entries = append(entries, factorydefinitions.EffectiveFactoryCatalogEntry{
+				Name: entry.Name, Location: &location, Definition: &factorydefinitions.FactoryConfig{Name: entry.Name},
+			})
+		}
+		return factorydefinitions.ListEffectiveFactoriesResult{Entries: entries}, nil
+	}
+	readCurrent := func(string) (string, error) {
+		for _, entry := range listed {
+			if entry.Current {
+				return entry.Name, nil
+			}
+		}
+		return "", fs.ErrNotExist
+	}
+	return List(effective, readCurrent, config)
 }
 
 func testDelete(config DeleteConfig) error {

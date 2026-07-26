@@ -61,6 +61,21 @@ func (p fakeDefinitionsPeer) ListNamedFactories(
 	return factorydefinitions.ListNamedFactoriesResult{Entries: entries}, nil
 }
 
+func (p fakeDefinitionsPeer) ListEffectiveFactories(
+	_ context.Context,
+	_ factorydefinitions.ListEffectiveFactoriesRequest,
+) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	entries := make([]factorydefinitions.EffectiveFactoryCatalogEntry, len(p.entries))
+	for index, listed := range p.entries {
+		location := listed.FactoryDir
+		entries[index] = factorydefinitions.EffectiveFactoryCatalogEntry{
+			Name:     listed.Name,
+			Location: &location,
+		}
+	}
+	return factorydefinitions.ListEffectiveFactoriesResult{Entries: entries}, nil
+}
+
 func (p fakeDefinitionsPeer) GetNamedFactory(
 	_ context.Context,
 	request factorydefinitions.GetNamedFactoryRequest,

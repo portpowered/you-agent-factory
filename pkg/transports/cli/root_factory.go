@@ -39,7 +39,7 @@ func requiresSystemInitialization(commandPath string, args []string) bool {
 	switch commandPath {
 	case "you":
 		return len(args) > 0
-	case "you factory list", "you mcp serve", "you run":
+	case "you mcp serve", "you run":
 		return true
 	default:
 		return false
@@ -70,6 +70,7 @@ func productionFactoryConfigInitCommands(
 			ExpandFactoryConfig:   options.ExpandFactoryConfig,
 			ConfigureInit:         options.ConfigureInit,
 			HomeDir:               options.homeDir,
+			ResolveFactoryRoots:   options.resolveNamedFactoryRoots,
 			DiagnosticsWriter:     diagnostics.writer,
 		},
 	)

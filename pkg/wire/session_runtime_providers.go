@@ -310,12 +310,13 @@ func provideFactoryDefinitionsFactory(
 	namedPaths factorydefinitions.NamedPathResolver,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
+	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
 		validator factorydefinitions.Validator,
 	) factorydefinitions.Service {
-		return factorydefinitionsservice.New(
+		definitions := factorydefinitionsservice.New(
 			sessionHost,
 			clock,
 			versionFileSystem,
@@ -345,6 +346,17 @@ func provideFactoryDefinitionsFactory(
 			persistence.ReplaceFactoryLayout,
 			namedPaths,
 		)
+		if definitions == nil {
+			return nil
+		}
+		attached, err := factorydefinitionsservice.AttachEffectiveCatalog(
+			definitions,
+			listEffective,
+		)
+		if err != nil {
+			return nil
+		}
+		return attached
 	}
 }
 

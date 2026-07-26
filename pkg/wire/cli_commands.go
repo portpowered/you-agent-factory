@@ -11,6 +11,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
@@ -156,10 +157,59 @@ func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFa
 	return factorycli.NewQuery(transport.Protocol)
 }
 
-func provideListFactoriesOperation(
+func provideEffectiveFactoryCatalogDiscovery(
 	catalog factorydefinitions.NamedFactoryCatalog,
+	files factorydefinitions.AuthoredLayoutReaderFileSystem,
+	packaged []factorydefinitions.PackagedDefinition,
+) (factorydefinitions.EffectiveFactoryCatalogDiscovery, error) {
+	return factorydefinitionsservice.NewEffectiveCatalogDiscovery(
+		catalog.ListNamedFactories,
+		files.ReadFile,
+		packaged,
+	)
+}
+
+func provideEffectiveFactoryDefinitionNormalizer() factorydefinitions.EffectiveFactoryDefinitionNormalizer {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return func(
+		ctx context.Context,
+		candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
+	) (*factorydefinitions.FactoryConfig, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		definition, err := mapper.Expand(candidate.Canonical)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		return definition, err
+	}
+}
+
+func provideEffectiveFactoryCatalogOperation(
+	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
+	normalize factorydefinitions.EffectiveFactoryDefinitionNormalizer,
+) (factorydefinitions.EffectiveFactoryCatalogOperation, error) {
+	return factorydefinitionsservice.NewEffectiveCatalog(discovery, normalize)
+}
+
+func provideEffectiveFactoryDefinitionsService(
+	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
+) (*factorydefinitionsservice.EffectiveCatalogService, error) {
+	return factorydefinitionsservice.NewEffectiveCatalogService(catalog)
+}
+
+func provideCurrentFactoryPointerReader(
+	namedPaths factorydefinitions.NamedPathResolver,
+) factorydefinitions.CurrentFactoryPointerReader {
+	return namedPaths.ReadCurrentPointer
+}
+
+func provideListFactoriesOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
-	return factorycli.NewList(catalog)
+	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
 }
 
 func provideValidateFactoryOperation(
