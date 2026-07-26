@@ -11,6 +11,9 @@ primary-result behavior.
   catalog provenance, and filesystem location out of the effective schema so
   equivalent definitions produce the same downstream facts without
   materialization, sessions, provider startup, or runtime probing.
+  Explicit config-root resolution must use the same injected authored-reader
+  filesystem edge as config loading so `root.BuildProcess` tests can cancel or
+  fail the metadata lookup itself without replacing service construction.
 - Selected-Factory request preparation must recheck cancellation after pure
   schema composition and after Work normalization before publishing any
   prepared result. Compose the selected Factory schema before deciding that an

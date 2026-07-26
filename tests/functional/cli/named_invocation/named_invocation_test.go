@@ -488,7 +488,7 @@ func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t 
 		factory           string
 		arguments         []string
 		wantCode          string
-		cancelDuringLoad  bool
+		cancelDuringRoot  bool
 		wantContextCancel bool
 	}{
 		{
@@ -531,7 +531,7 @@ func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t 
 			wantCode:  string(work.ArgumentErrorCodeStringValidationMismatch),
 		},
 		{
-			name: "cancellation during explicit file lookup",
+			name: "cancellation during explicit file root lookup",
 			factory: `{
   "name": "canceled",
   "invocationSignature": {
@@ -542,7 +542,7 @@ func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t 
   }
 }`,
 			arguments:         []string{"draft"},
-			cancelDuringLoad:  true,
+			cancelDuringRoot:  true,
 			wantContextCancel: true,
 		},
 	}
@@ -551,7 +551,7 @@ func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t 
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			runPreparationFailureCase(t, test.factory, test.arguments, test.wantCode, test.cancelDuringLoad, test.wantContextCancel)
+			runPreparationFailureCase(t, test.factory, test.arguments, test.wantCode, test.cancelDuringRoot, test.wantContextCancel)
 		})
 	}
 }
@@ -561,7 +561,7 @@ func runPreparationFailureCase(
 	factory string,
 	arguments []string,
 	wantCode string,
-	cancelDuringLoad bool,
+	cancelDuringRoot bool,
 	wantContextCancel bool,
 ) {
 	t.Helper()
@@ -582,8 +582,8 @@ func runPreparationFailureCase(
 		WorkRequestIDGenerator:    observation.nextWorkRequestID,
 		ProviderCommandRunner:     provider,
 	}
-	if cancelDuringLoad {
-		edges.FactoryDefinitionAuthoredReaderFileSystem = cancelingLoadingFileSystem{
+	if cancelDuringRoot {
+		edges.FactoryDefinitionAuthoredReaderFileSystem = cancelingRootLookupFileSystem{
 			target: factoryPath,
 			cancel: cancel,
 		}
@@ -614,6 +614,9 @@ func runPreparationFailureCase(
 	if wantContextCancel {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
+		}
+		if errors.Is(err, errCanceledFactoryRootLookup) {
+			t.Fatalf("Process.Execute() returned lookup failure instead of context cancellation: %v", err)
 		}
 	} else if err == nil || !strings.Contains(err.Error(), wantCode) {
 		t.Fatalf("Process.Execute() error = %v, want stable code %s", err, wantCode)
@@ -661,21 +664,23 @@ func (observation *preparationSideEffectObservation) assertNoExecution(t *testin
 	}
 }
 
-type cancelingLoadingFileSystem struct {
+var errCanceledFactoryRootLookup = errors.New("explicit Factory root lookup failed after cancellation")
+
+type cancelingRootLookupFileSystem struct {
 	target string
 	cancel context.CancelFunc
 }
 
-func (filesystem cancelingLoadingFileSystem) Stat(path string) (fs.FileInfo, error) {
+func (filesystem cancelingRootLookupFileSystem) Stat(path string) (fs.FileInfo, error) {
+	if filepath.Clean(path) == filepath.Clean(filesystem.target) {
+		filesystem.cancel()
+		return nil, errCanceledFactoryRootLookup
+	}
 	return os.Stat(path)
 }
 
-func (filesystem cancelingLoadingFileSystem) ReadFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
-	if err == nil && filepath.Clean(path) == filepath.Clean(filesystem.target) {
-		filesystem.cancel()
-	}
-	return data, err
+func (filesystem cancelingRootLookupFileSystem) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
 
 func errText(err error) string {

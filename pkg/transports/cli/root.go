@@ -704,11 +704,13 @@ func resolveRunFactorySelection(
 	if !factoryChanged {
 		return nil
 	}
-
 	if cfg.ResolveFactoryConfigRoot == nil {
 		return fmt.Errorf("Factory Definitions config root resolver is required")
 	}
 	factoryRoot, err := cfg.ResolveFactoryConfigRoot(cfg.FactoryConfigPath)
+	if contextErr := cmd.Context().Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return err
 	}
