@@ -162,16 +162,3 @@ func execCommand(command ...string) ([]byte, error) {
 }
 
 const checkFixtureDefaultBranch = "main"
-
-func localGitCloneURI(t *testing.T, path string) string {
-	t.Helper()
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		t.Fatalf("resolve fixture path: %v", err)
-	}
-	slash := filepath.ToSlash(abs)
-	if len(slash) >= 2 && slash[1] == ':' {
-		return "file:///" + slash
-	}
-	return "file://" + slash
-}
