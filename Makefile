@@ -651,7 +651,6 @@ release-surface-smoke:
 
 ui-deps:
 	cd ui && $(UI_INSTALL)
-	cd ui && $(UI_SCRIPT) prepare:packaged-factories
 
 ui-verify-fresh-npm-install:
 	cd ui && $(NPM) run verify:fresh-npm-install
