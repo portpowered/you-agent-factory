@@ -184,13 +184,13 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 		t.Fatalf("remove seeded operator config: %v", err)
 	}
 	var stdout bytes.Buffer
+	missingFactory := filepath.Join(fixture.workingDir, "missing-initialization-factory.json")
 	args := []string{
-		"you", "--json", "factory", "list", "--dir",
-		filepath.Join(fixture.homeDir, ".you-agent-factory", "factories"),
+		"you", "run", "--factory", missingFactory,
 	}
 	err := fixture.execute(serviceedges.Edges{}, &stdout, args...)
-	if err != nil {
-		t.Fatalf("Process.Execute(factory list) error = %v; stdout=%q", err, stdout.String())
+	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf("Process.Execute(run missing Factory) error = %v; stdout=%q", err, stdout.String())
 	}
 	packagedFactory := filepath.Join(
 		fixture.homeDir,
@@ -208,8 +208,9 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 	}
 
 	firstConfig := fixture.readConfig()
-	if err := fixture.execute(serviceedges.Edges{}, io.Discard, args...); err != nil {
-		t.Fatalf("Process.Execute(factory list repeat) error = %v", err)
+	err = fixture.execute(serviceedges.Edges{}, io.Discard, args...)
+	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf("Process.Execute(run missing Factory repeat) error = %v", err)
 	}
 	if got := fixture.readConfig(); got != firstConfig {
 		t.Fatalf("repeat initialization rewrote operator config:\nfirst:\n%s\nsecond:\n%s", firstConfig, got)

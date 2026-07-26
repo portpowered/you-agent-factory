@@ -19,7 +19,9 @@ type Service interface {
 	GetCurrentFactoryForSession(context.Context, string) (EditableFactory, error)
 	CurrentFactoryDefinitionVersionAtRoot(string, string) (FactoryVersion, error)
 
-	// Catalog slice: list, get/resolve, delete, and current-pointer read/write.
+	// Catalog slice: effective discovery, list, get/resolve, delete, and
+	// current-pointer read/write.
+	ListEffectiveFactories(context.Context, ListEffectiveFactoriesRequest) (ListEffectiveFactoriesResult, error)
 	ListNamedFactories(context.Context, ListNamedFactoriesRequest) (ListNamedFactoriesResult, error)
 	GetNamedFactory(context.Context, GetNamedFactoryRequest) (GetNamedFactoryResult, error)
 	ResolveNamedFactory(context.Context, ResolveNamedFactoryRequest) (ResolveNamedFactoryResult, error)
@@ -54,6 +56,96 @@ type Service interface {
 	InstallPackagedFactory(context.Context, InstallPackagedFactoryRequest) (InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, CreateFactoryScaffoldRequest) (CreateFactoryScaffoldResult, error)
 }
+
+// ListEffectiveFactoriesRequest selects the project-local and global roots
+// merged with the published packaged Factory catalog.
+type ListEffectiveFactoriesRequest struct {
+	ProjectRoot string
+	GlobalRoot  string
+}
+
+// ListEffectiveFactoriesResult carries the detached, precedence-resolved
+// Factory catalog used by read-only transport projections.
+type ListEffectiveFactoriesResult struct {
+	Entries     []EffectiveFactoryCatalogEntry
+	Diagnostics []EffectiveFactoryCatalogDiagnostic
+}
+
+// EffectiveFactoryCatalogSource identifies one precedence tier without
+// exposing filesystem paths or packaged payload details.
+type EffectiveFactoryCatalogSource string
+
+const (
+	EffectiveFactoryCatalogSourceProjectLocal EffectiveFactoryCatalogSource = "project-local"
+	EffectiveFactoryCatalogSourceGlobal       EffectiveFactoryCatalogSource = "global"
+	EffectiveFactoryCatalogSourcePackaged     EffectiveFactoryCatalogSource = "packaged"
+)
+
+// EffectiveFactoryCatalogDiagnosticCode classifies one isolated candidate
+// failure without retaining the underlying error or definition payload.
+type EffectiveFactoryCatalogDiagnosticCode string
+
+const (
+	EffectiveFactoryCatalogDiagnosticInvalidName EffectiveFactoryCatalogDiagnosticCode = "invalid-name"
+	EffectiveFactoryCatalogDiagnosticUnreadable  EffectiveFactoryCatalogDiagnosticCode = "unreadable"
+	EffectiveFactoryCatalogDiagnosticMalformed   EffectiveFactoryCatalogDiagnosticCode = "malformed"
+)
+
+// EffectiveFactoryCatalogDiagnostic is a deterministic, sensitive-safe
+// description of one candidate omitted from the effective catalog. Name is
+// empty when the candidate name cannot be safely canonicalized.
+type EffectiveFactoryCatalogDiagnostic struct {
+	Code    EffectiveFactoryCatalogDiagnosticCode
+	Source  EffectiveFactoryCatalogSource
+	Name    string
+	Message string
+}
+
+// EffectiveFactoryCatalogEntry is one normalized selectable Factory. Location
+// is nil for packaged definitions that have not been materialized.
+type EffectiveFactoryCatalogEntry struct {
+	Name                string
+	Location            *string
+	Definition          *FactoryConfig
+	InvocationSignature *InvocationSignatureConfig
+}
+
+// EffectiveFactoryCatalogCandidate is one discovered definition payload.
+// Sources return detached payload bytes and omit Location for packaged entries.
+type EffectiveFactoryCatalogCandidate struct {
+	Name      string
+	Location  *string
+	Canonical []byte
+	Failure   EffectiveFactoryCatalogDiagnosticCode
+}
+
+// EffectiveFactoryCatalogDiscovery carries the exact read-only source
+// operations used by effective discovery.
+type EffectiveFactoryCatalogDiscovery struct {
+	ListRoot     func(context.Context, string) ([]EffectiveFactoryCatalogCandidate, error)
+	ListPackaged func(context.Context) ([]EffectiveFactoryCatalogCandidate, error)
+}
+
+// EffectiveFactoryRootListing reads one persisted named-Factory root.
+type EffectiveFactoryRootListing func(string) ([]NamedFactoryListEntry, error)
+
+// EffectiveFactoryCandidateRead reads one already-discovered canonical Factory
+// definition payload.
+type EffectiveFactoryCandidateRead func(string) ([]byte, error)
+
+// EffectiveFactoryDefinitionNormalizer converts one candidate payload into the
+// normalized Factory definition consumed by transport projections.
+type EffectiveFactoryDefinitionNormalizer func(
+	context.Context,
+	EffectiveFactoryCatalogCandidate,
+) (*FactoryConfig, error)
+
+// EffectiveFactoryCatalogOperation owns precedence, shadowing, stable ordering,
+// and detached results for effective Factory discovery.
+type EffectiveFactoryCatalogOperation func(
+	context.Context,
+	ListEffectiveFactoriesRequest,
+) (ListEffectiveFactoriesResult, error)
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
 type ListNamedFactoriesRequest struct {

@@ -900,15 +900,15 @@ func initializePackagedFactory(
 ) string {
 	t.Helper()
 	factoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
-	stdout, stderr := executeCustomerCommand(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		[]string{"you", "--json", "factory", "list", "--dir", factoriesRoot},
-	)
-	if stderr != "" {
-		t.Fatalf("factory list initialization stderr = %q, want empty; stdout=%s", stderr, stdout)
+	missingFactory := filepath.Join(workingDirectory, "missing-initialization-factory.json")
+	err := process.Execute(root.Input{
+		Args:             []string{"you", "run", "--factory", missingFactory},
+		Env:              environment,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+	})
+	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf("Process.Execute(run missing Factory) error = %v", err)
 	}
 	factoryDir := filepath.Join(
 		append([]string{factoriesRoot}, strings.Split(name, "/")...)...,

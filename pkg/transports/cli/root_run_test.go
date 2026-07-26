@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -138,7 +139,15 @@ func (catalog rootNamedFactoryCatalogFake) ResolveNamedFactoryAcrossRoots(
 	return catalog.resolve(projectRoot, globalRoot, name)
 }
 
-var listFactories = factorycli.NewList(rootNamedFactoryCatalogFake{})
+var listFactories = factorycli.NewList(
+	func(
+		context.Context,
+		interfaces.ListEffectiveFactoriesRequest,
+	) (interfaces.ListEffectiveFactoriesResult, error) {
+		return interfaces.ListEffectiveFactoriesResult{}, nil
+	},
+	func(string) (string, error) { return "", fs.ErrNotExist },
+)
 var validateFactory = func(config factorycli.ValidateConfig) error {
 	return fmt.Errorf("Factory Definition validator is required")
 }

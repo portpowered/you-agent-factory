@@ -1,5 +1,6 @@
-// Package completionprojection maps an already-resolved selected-Factory
-// invocation schema into detached facts for shell-specific completion adapters.
+// Package completionprojection maps already-resolved selected-Factory
+// invocation schemas and effective catalogs into detached facts for future
+// shell-specific completion adapters.
 package completionprojection
 
 import (

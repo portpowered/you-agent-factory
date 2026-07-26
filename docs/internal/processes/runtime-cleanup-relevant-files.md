@@ -43,6 +43,22 @@ cross-service consumers should own the narrow interface they actually call.
 List/read projections must carry detached summaries rather than mutable
 session registries, response stores, or live-session implementation pointers.
 
+Parent-private nested services follow the same recursive shape under
+`pkg/services/<owner>/internal/services/<capability>`: keep exactly one
+capability `Service` interface at that root, construct it through the nested
+`wire` package, and place concrete behavior under `internal/service`. Runtime
+assembly must clone mutable opening options before passing them to per-role
+collaborators and return an empty root-owned result on any validation,
+resolution, rejection, or completeness failure so partial bindings never
+escape.
+
+When this recursive shape adds measured Go packages, register every package in
+both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json` in
+import-path order. Record each lane's observed numeric floor for executable
+packages and the standard measurement exception for interface-only packages
+with no measurable statements, then verify both coverage lanes.
+
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout
 normalization and stamps the next durable version afterward. Generated Factory

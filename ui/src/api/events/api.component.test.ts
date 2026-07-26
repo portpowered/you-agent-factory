@@ -1,3 +1,4 @@
+import { bunVi as vi } from "../../testing/bun/vi-compat";
 import {
   openFactoryEventStream,
   probeFactoryEventStreamRecovery,

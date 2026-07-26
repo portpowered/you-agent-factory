@@ -2,8 +2,10 @@ package factory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,14 +14,235 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestList_RendersEffectiveCatalogMetadataDiagnosticsAndPackagedLocation(t *testing.T) {
+	projectLocation := filepath.Join("project", "factory", "alpha")
+	catalog := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return factorydefinitions.ListEffectiveFactoriesResult{
+			Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
+				{
+					Name:     "alpha",
+					Location: &projectLocation,
+					Definition: &factorydefinitions.FactoryConfig{
+						Description: &factorydefinitions.NameValueConfig{Value: "Project Alpha"},
+					},
+					InvocationSignature: &factorydefinitions.InvocationSignatureConfig{
+						Parameters: []factorydefinitions.InvocationParameterConfig{{
+							Name: "prompt", ExternalName: "request", Required: true,
+							Bindings: []factorydefinitions.InvocationParameterBindingConfig{{
+								Kind: work.InvocationParameterBindingKindNamed,
+							}},
+						}},
+					},
+				},
+				{
+					Name:       "zeta-built-in",
+					Definition: &factorydefinitions.FactoryConfig{},
+				},
+			},
+			Diagnostics: []factorydefinitions.EffectiveFactoryCatalogDiagnostic{{
+				Source:  factorydefinitions.EffectiveFactoryCatalogSourceGlobal,
+				Name:    "broken",
+				Code:    factorydefinitions.EffectiveFactoryCatalogDiagnosticMalformed,
+				Message: "Factory definition is malformed",
+			}},
+		}, nil
+	}
+	readCurrent := func(root string) (string, error) {
+		if root == "project-root" {
+			return "alpha", nil
+		}
+		return "", fs.ErrNotExist
+	}
+
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(catalog, readCurrent, ListConfig{
+		Context: context.Background(), ProjectRoot: "project-root", GlobalRoot: "global-root",
+		Output: &output, Diagnostics: &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	want := "NAME\tFACTORY DIRECTORY\tCURRENT\n" +
+		"alpha\t" + projectLocation + "\tyes\n" +
+		"zeta-built-in\t-\t\n"
+	if output.String() != want {
+		t.Fatalf("output = %q, want %q", output.String(), want)
+	}
+	if got := diagnostics.String(); got !=
+		"Factory catalog global broken (malformed): Factory definition is malformed\n" {
+		t.Fatalf("diagnostics = %q", got)
+	}
+
+	var jsonOutput bytes.Buffer
+	err = List(catalog, readCurrent, ListConfig{
+		Context: context.Background(), ProjectRoot: "project-root", GlobalRoot: "global-root",
+		JSON: true, Output: &jsonOutput,
+	})
+	if err != nil {
+		t.Fatalf("List(JSON) error = %v", err)
+	}
+	var entries []ListEntry
+	if err := json.Unmarshal(jsonOutput.Bytes(), &entries); err != nil {
+		t.Fatalf("decode JSON list: %v", err)
+	}
+	if entries[0].Description != "Project Alpha" ||
+		entries[0].InvocationExample != "you run --named alpha --request <prompt>" {
+		t.Fatalf("effective metadata = %#v", entries[0])
+	}
+	if entries[1].FactoryDirectory != absentFactoryLocation ||
+		entries[1].InvocationExample != "" {
+		t.Fatalf("packaged metadata = %#v", entries[1])
+	}
+}
+
+func TestListAndFactoryNameProjectionHaveEffectiveCatalogParity(t *testing.T) {
+	result := factorydefinitions.ListEffectiveFactoriesResult{
+		Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
+			{
+				Name: "@you/zeta",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Packaged Factory"},
+				},
+			},
+			{
+				Name: "alpha",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Project Alpha"},
+				},
+			},
+			{
+				Name: "middle-global",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Global Factory"},
+				},
+			},
+		},
+		Diagnostics: []factorydefinitions.EffectiveFactoryCatalogDiagnostic{{
+			Source:  factorydefinitions.EffectiveFactoryCatalogSourceGlobal,
+			Name:    "broken",
+			Code:    factorydefinitions.EffectiveFactoryCatalogDiagnosticMalformed,
+			Message: "Factory definition is malformed",
+		}},
+	}
+	catalog := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return result, nil
+	}
+	readCurrent := func(string) (string, error) { return "", fs.ErrNotExist }
+
+	var output bytes.Buffer
+	if err := List(catalog, readCurrent, ListConfig{
+		Context: context.Background(), ProjectRoot: "project-root", GlobalRoot: "global-root",
+		JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	var rows []ListEntry
+	if err := json.Unmarshal(output.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list output: %v", err)
+	}
+
+	projected, err := completionprojection.ProjectFactoryNames(context.Background(), result)
+	if err != nil {
+		t.Fatalf("ProjectFactoryNames() error = %v", err)
+	}
+	if len(projected.Candidates) != len(rows) {
+		t.Fatalf("candidate count = %d, list row count = %d", len(projected.Candidates), len(rows))
+	}
+	for index := range rows {
+		candidate := projected.Candidates[index]
+		if candidate.Value != rows[index].Name ||
+			candidate.Description != rows[index].Description {
+			t.Fatalf(
+				"candidate %d = %#v, list row = %#v",
+				index,
+				candidate,
+				rows[index],
+			)
+		}
+	}
+}
+
+func TestList_GlobalCurrentMarksEffectiveProjectOverride(t *testing.T) {
+	location := filepath.Join("project", "factory", "shared")
+	catalog := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return factorydefinitions.ListEffectiveFactoriesResult{
+			Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{
+				Name: "shared", Location: &location, Definition: &factorydefinitions.FactoryConfig{},
+			}},
+		}, nil
+	}
+	readCurrent := func(root string) (string, error) {
+		if root == "project-root" {
+			return "", fs.ErrNotExist
+		}
+		return "shared", nil
+	}
+
+	var output bytes.Buffer
+	err := List(catalog, readCurrent, ListConfig{
+		Context: context.Background(), ProjectRoot: "project-root", GlobalRoot: "global-root",
+		Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got := output.String(); !strings.Contains(got, "shared\t"+location+"\tyes\n") {
+		t.Fatalf("output = %q, want effective project row marked current", got)
+	}
+}
+
+func TestList_CancellationEmitsNoPartialOutput(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	catalog := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		cancel()
+		return factorydefinitions.ListEffectiveFactoriesResult{
+			Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{
+				Name: "must-not-render", Definition: &factorydefinitions.FactoryConfig{},
+			}},
+			Diagnostics: []factorydefinitions.EffectiveFactoryCatalogDiagnostic{{
+				Message: "must not render",
+			}},
+		}, nil
+	}
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(catalog, func(string) (string, error) {
+		return "", fs.ErrNotExist
+	}, ListConfig{
+		Context: ctx, ProjectRoot: "project-root", GlobalRoot: "global-root",
+		Output: &output, Diagnostics: &diagnostics,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("List() error = %v, want context canceled", err)
+	}
+	if output.Len() != 0 || diagnostics.Len() != 0 {
+		t.Fatalf("canceled output = (%q, %q), want atomic empty output", output.String(), diagnostics.String())
+	}
+}
 
 func TestList_WritesHumanReadableTable(t *testing.T) {
 	rootDir := setupNamedFactoriesForListTest(t, []string{"alpha", "beta"}, "beta")
 
 	var out strings.Builder
-	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{ProjectRoot: rootDir, GlobalRoot: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -37,7 +260,7 @@ func TestList_JSONEmitsArray(t *testing.T) {
 	rootDir := setupNamedFactoriesForListTest(t, []string{"alpha"}, "")
 
 	var out bytes.Buffer
-	if err := testList(ListConfig{Dir: rootDir, JSON: true, Output: &out}); err != nil {
+	if err := testList(ListConfig{ProjectRoot: rootDir, GlobalRoot: rootDir, JSON: true, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -54,7 +277,7 @@ func TestList_EmptyRootPrintsEmptyState(t *testing.T) {
 	rootDir := t.TempDir()
 
 	var out strings.Builder
-	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{ProjectRoot: rootDir, GlobalRoot: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if got := out.String(); got != "No factories found.\n" {
@@ -70,7 +293,8 @@ func TestList_InvalidRootFailsBeforePrinting(t *testing.T) {
 		},
 	})
 	var out strings.Builder
-	err := testList(ListConfig{Dir: filepath.Join(t.TempDir(), "missing"), Output: &out})
+	missing := filepath.Join(t.TempDir(), "missing")
+	err := testList(ListConfig{ProjectRoot: missing, GlobalRoot: missing, Output: &out})
 	if err == nil {
 		t.Fatal("expected invalid factory root to fail")
 	}

@@ -1,6 +1,5 @@
 export * from "./failure-analysis-events";
 export * from "./graph-state-smoke-events";
-export * from "./resource-count-backend-world-view";
 export * from "./resource-count-events";
 export * from "./runtime";
 export * from "./runtime-details-backend-world-view";

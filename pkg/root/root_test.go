@@ -314,7 +314,7 @@ func TestProcessInvalidArgumentsReturnsDiagnostic(t *testing.T) {
 	}
 }
 
-func TestProcessSequentialHomesControlConfigPaths(t *testing.T) {
+func TestProcessSequentialHomesKeepEffectiveListingReadOnly(t *testing.T) {
 	ambientHome := t.TempDir()
 	t.Setenv("HOME", ambientHome)
 	t.Setenv("USERPROFILE", ambientHome)
@@ -335,9 +335,12 @@ func TestProcessSequentialHomesControlConfigPaths(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("Process.Execute(factory list, home %q) error = %v", home, err)
 		}
+		if output.Len() == 0 {
+			t.Fatalf("factory list output for supplied home %q is empty", home)
+		}
 		configPath := filepath.Join(home, ".you-agent-factory", "config.json")
-		if _, err := os.Stat(configPath); err != nil {
-			t.Fatalf("Stat(config for supplied home %q) error = %v", home, err)
+		if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+			t.Fatalf("Stat(config for supplied home %q) error = %v, want not-exist", home, err)
 		}
 	}
 	ambientEntries, err := os.ReadDir(ambientHome)
@@ -409,6 +412,36 @@ func TestProcessConcurrentCommandsKeepInvocationStateIndependent(t *testing.T) {
 	}
 }
 
+func TestProcessFactoryListDiscoversPackagedFactoriesWithoutMaterialization(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	var listOutput bytes.Buffer
+	if err := process.Execute(Input{
+		Args: []string{
+			"you", "--json", "factory", "list", "--dir",
+			filepath.Join(home, ".you-agent-factory", "factories"),
+		},
+		Env:              homeEnvironment(home),
+		Stdout:           &listOutput,
+		Context:          context.Background(),
+		WorkingDirectory: t.TempDir(),
+	}); err != nil {
+		t.Fatalf("Process.Execute(factory list) error = %v", err)
+	}
+
+	if !strings.Contains(listOutput.String(), `"factoryDirectory":"-"`) {
+		t.Fatalf("factory list output = %q, want unmaterialized packaged location", listOutput.String())
+	}
+	if entries, err := os.ReadDir(home); err != nil || len(entries) != 0 {
+		t.Fatalf("home entries after factory list = (%v, %v), want empty", entries, err)
+	}
+}
+
 func TestProcessNormalInitializationAndFactoryValidationThroughProductionComposition(t *testing.T) {
 	t.Parallel()
 
@@ -418,18 +451,7 @@ func TestProcessNormalInitializationAndFactoryValidationThroughProductionComposi
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	if err := process.Execute(Input{
-		Args: []string{
-			"you", "--json", "factory", "list", "--dir",
-			filepath.Join(home, ".you-agent-factory", "factories"),
-		},
-		Env:              homeEnvironment(home),
-		Stdout:           io.Discard,
-		Context:          context.Background(),
-		WorkingDirectory: t.TempDir(),
-	}); err != nil {
-		t.Fatalf("Process.Execute(factory list) error = %v", err)
-	}
+	runNormalInitialization(t, process, home)
 
 	var validateOutput bytes.Buffer
 	if err := process.Execute(Input{

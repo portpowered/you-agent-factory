@@ -975,6 +975,24 @@
       "minimum": 96.51
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/internal/service",
+      "minimum": 91.46
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire",
+      "minimum": 60.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/invocation",
       "minimum": 84.21
     },

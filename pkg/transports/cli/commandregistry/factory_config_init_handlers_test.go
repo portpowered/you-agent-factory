@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -15,6 +17,146 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+func TestFactoryConfigInitCommandHandlerMapsEffectiveListRootsAndOutputs(t *testing.T) {
+	workingDirectory := t.TempDir()
+	home := t.TempDir()
+	var got factorycli.ListConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ListFactories: func(cfg factorycli.ListConfig) error {
+				got = cfg
+				return nil
+			},
+			HomeDir: func() (string, error) { return home, nil },
+			ResolveFactoryRoots: func(gotHome, gotWorking string) (factorydefinitions.NamedFactoryRoots, error) {
+				if gotHome != home || gotWorking != workingDirectory {
+					t.Fatalf("root inputs = (%q, %q)", gotHome, gotWorking)
+				}
+				return factorydefinitions.NamedFactoryRoots{
+					Project: filepath.Join(workingDirectory, "factory"),
+					Global:  filepath.Join(home, "factories"),
+				}, nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{
+			id: "you.factory.list.flag.dir", source: resolvedinput.SourceCLIFlag,
+			value: resolvedinput.StringValue("alternate"),
+		},
+	)
+	var output strings.Builder
+	var diagnostics strings.Builder
+	cmd := &cobra.Command{}
+	cmd.SetOut(&output)
+	cmd.SetErr(&diagnostics)
+	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+
+	if err := handler.FactoryList(cmd, inputs, resolvedFactoryGlobals(t, true, false, false)); err != nil {
+		t.Fatalf("FactoryList() error = %v", err)
+	}
+	if got.Context != cmd.Context() ||
+		got.ProjectRoot != filepath.Join(workingDirectory, "alternate") ||
+		got.GlobalRoot != filepath.Join(home, "factories") ||
+		!got.JSON || got.Output != &output || got.Diagnostics != &diagnostics {
+		t.Fatalf("list config = %#v", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsEffectiveListBoundaryFailures(t *testing.T) {
+	workingDirectory := t.TempDir()
+	homeErr := errors.New("home unavailable")
+	rootsErr := errors.New("roots unavailable")
+	validInputs := resolvedTestInputs(t, resolvedTestValue{
+		id: "you.factory.list.flag.dir", source: resolvedinput.SourceManifestDefault,
+		value: resolvedinput.StringValue("factory"),
+	})
+	validGlobals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name     string
+		services commandregistry.FactoryConfigInitServices
+		context  context.Context
+		inputs   resolvedinput.Inputs
+		want     string
+	}{
+		{
+			name: "missing list service", context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			want: "factory list service is required",
+		},
+		{
+			name: "missing dir input",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  resolvedinput.Inputs{},
+			want:    "you.factory.list.flag.dir",
+		},
+		{
+			name: "missing home resolver",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    "home-directory resolver is required",
+		},
+		{
+			name: "home failure",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "", homeErr },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    homeErr.Error(),
+		},
+		{
+			name: "missing working directory",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+			},
+			context: t.Context(), inputs: validInputs,
+			want: "process working directory is required",
+		},
+		{
+			name: "missing roots resolver",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    "Factory Definitions root resolver is required",
+		},
+		{
+			name: "roots failure",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+				ResolveFactoryRoots: func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
+					return factorydefinitions.NamedFactoryRoots{}, rootsErr
+				},
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    rootsErr.Error(),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			handler := commandregistry.NewFactoryConfigInitCommandHandler(test.services)
+			cmd := &cobra.Command{}
+			cmd.SetContext(test.context)
+			err := handler.FactoryList(cmd, test.inputs, validGlobals)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("FactoryList() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
 
 type resolvedTestValue struct {
 	id     string

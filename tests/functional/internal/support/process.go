@@ -33,25 +33,14 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 	return process
 }
 
-// InstallPackagedFactory enters through a normal root-built command so the
+// InstallPackagedFactory enters through a normal runtime command so the
 // Initializer materializes packaged Factories, then returns the selected path.
 func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 	t.Helper()
 
-	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
-	inputs := FakeInputs(t.Context(), []string{
-		"you", "--json", "factory", "list", "--dir", namedFactoriesRoot,
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
+	workingDirectory := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	namedFactoriesRoot := initializeCustomerHome(t, env, workingDirectory)
 	factoryDir := filepath.Join(namedFactoriesRoot, filepath.FromSlash(name))
 	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
 		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", name, factoryDir, err)
@@ -206,13 +195,20 @@ func initializeCustomerHome(t testing.TB, env []string, workingDirectory string)
 	t.Helper()
 	homeDir := environmentHome(env)
 	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	missingFactory := filepath.Join(workingDirectory, "missing-initialization-factory.json")
 	inputs := FakeInputs(t.Context(), []string{
-		"you", "--json", "factory", "list", "--dir", namedFactoriesRoot,
+		"you", "run", "--factory", missingFactory,
 	})
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf(
+			"Process.Execute(run missing Factory) error = %v, want missing Factory diagnostic\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
 	}
 	return namedFactoriesRoot
 }

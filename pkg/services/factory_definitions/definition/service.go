@@ -35,6 +35,7 @@ type Service struct {
 }
 
 type nonCatalogDefaults interface {
+	ListEffectiveFactories(context.Context, factoryroot.ListEffectiveFactoriesRequest) (factoryroot.ListEffectiveFactoriesResult, error)
 	PrepareFactoryLayout(context.Context, factoryroot.PrepareFactoryLayoutRequest) (factoryroot.PrepareFactoryLayoutResult, error)
 	FlattenFactoryLayout(context.Context, factoryroot.FlattenFactoryLayoutRequest) (factoryroot.FlattenFactoryLayoutResult, error)
 	ExpandFactoryLayout(context.Context, factoryroot.ExpandFactoryLayoutRequest) (factoryroot.ExpandFactoryLayoutResult, error)

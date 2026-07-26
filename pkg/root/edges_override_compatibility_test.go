@@ -18,10 +18,6 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
-// TestBuildProcessAppliesTypedEdgesExternalEffectOverride proves the approved
-// root.BuildProcess edges.Edges seam still replaces a representative external
-// effect after construction (operator identity generation during normal
-// initialization).
 func TestBuildProcessAppliesTypedEdgesExternalEffectOverride(t *testing.T) {
 	t.Parallel()
 
@@ -42,12 +38,9 @@ func TestBuildProcessAppliesTypedEdgesExternalEffectOverride(t *testing.T) {
 	}
 }
 
-// TestBuildProcessEmptyEdgesSelectProductionExternalEffectDefaults proves {}
-// edges keep production defaults for the same representative effect.
 func TestBuildProcessEmptyEdgesSelectProductionExternalEffectDefaults(t *testing.T) {
 	t.Parallel()
 
-	const overrideSentinel = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	home := t.TempDir()
 	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
@@ -59,16 +52,40 @@ func TestBuildProcessEmptyEdgesSelectProductionExternalEffectDefaults(t *testing
 	if !operatorsettings.IsLocalBackendScopeID(persisted) {
 		t.Fatalf("backendScopeID = %q, want production local-<uuid> default", persisted)
 	}
-	if persisted == operatorsettings.LocalBackendScopePrefix+overrideSentinel {
-		t.Fatalf("empty edges unexpectedly used override sentinel backendScopeID %q", persisted)
+}
+
+func TestBuildProcessKeepsInitializationEdgeReplacementCompatible(t *testing.T) {
+	t.Parallel()
+
+	var initializationCalls atomic.Int32
+	initializationErr := errors.New("system initialization override selected")
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		SystemInitializationInspectPath: func(string) (fs.FileInfo, error) {
+			initializationCalls.Add(1)
+			return nil, initializationErr
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	home := t.TempDir()
+	err = process.Execute(Input{
+		Args:             []string{"you", "run", "--factory", filepath.Join(home, "missing.json")},
+		Env:              homeEnvironment(home),
+		Context:          context.Background(),
+		WorkingDirectory: home,
+	})
+	if err == nil || !strings.Contains(err.Error(), initializationErr.Error()) {
+		t.Fatalf("Process.Execute(run) error = %v, want %v", err, initializationErr)
+	}
+	if initializationCalls.Load() == 0 {
+		t.Fatal("SystemInitializationInspectPath override was not used")
 	}
 }
 
-// TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible proves
-// functional-style typed edges.Edges replacements still construct through the
-// same BuildProcess bag without an alternate override seam, and that a
-// filesystem replacement is applied during normal initialization.
-func TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible(t *testing.T) {
+// TestBuildProcessFactoryListSkipsInitializationEdges proves effective catalog
+// discovery remains read-only even when the initializer edge would fail.
+func TestBuildProcessFactoryListSkipsInitializationEdges(t *testing.T) {
 	t.Parallel()
 
 	var initializationCalls atomic.Int32
@@ -107,16 +124,11 @@ func TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible(t *testing.T
 		Context:          context.Background(),
 		WorkingDirectory: home,
 	})
-	if err == nil || !strings.Contains(err.Error(), initializationErr.Error()) {
-		t.Fatalf(
-			"Process.Execute(factory list) error = %v stderr=%q, want initialization override %v",
-			err,
-			stderr.String(),
-			initializationErr,
-		)
+	if err != nil {
+		t.Fatalf("Process.Execute(factory list) error = %v stderr=%q", err, stderr.String())
 	}
-	if initializationCalls.Load() == 0 {
-		t.Fatal("SystemInitializationInspectPath override was not used after construction")
+	if initializationCalls.Load() != 0 {
+		t.Fatalf("SystemInitializationInspectPath calls = %d, want 0", initializationCalls.Load())
 	}
 	if apiStarts != 0 {
 		t.Fatalf("APIServerStarter calls = %d during factory list, want 0", apiStarts)
@@ -126,18 +138,15 @@ func TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible(t *testing.T
 func runNormalInitialization(t *testing.T, process *initializerapplication.Process, home string) string {
 	t.Helper()
 
-	var output bytes.Buffer
-	if err := process.Execute(Input{
-		Args: []string{
-			"you", "--json", "factory", "list", "--dir",
-			filepath.Join(home, ".you-agent-factory", "factories"),
-		},
+	missingFactory := filepath.Join(home, "missing.json")
+	err := process.Execute(Input{
+		Args:             []string{"you", "run", "--factory", missingFactory},
 		Env:              homeEnvironment(home),
-		Stdout:           &output,
 		Context:          context.Background(),
 		WorkingDirectory: home,
-	}); err != nil {
-		t.Fatalf("Process.Execute(factory list) error = %v; stdout=%q", err, output.String())
+	})
+	if err == nil || !strings.Contains(err.Error(), "missing.json") {
+		t.Fatalf("Process.Execute(run missing Factory) error = %v", err)
 	}
 	return filepath.Join(home, ".you-agent-factory", "config.json")
 }

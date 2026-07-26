@@ -21,16 +21,57 @@ var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event
 // carries a malformed scope (for example a whitespace-only SessionID).
 var ErrInvalidSubscribeScope = errors.New("invalid subscribe reconnect scope")
 
+// ErrInvalidReconnectCursor reports a malformed cursor that cannot identify a
+// canonical position.
+var ErrInvalidReconnectCursor = errors.New("invalid reconnect cursor")
+
+// ErrReconnectCursorExpired reports a cursor whose retained event is no longer
+// available in the selected canonical history.
+var ErrReconnectCursorExpired = errors.New("reconnect cursor expired")
+
+// ErrReconnectCursorUnavailable reports a cursor for a different or otherwise
+// unavailable stream generation.
+var ErrReconnectCursorUnavailable = errors.New("reconnect cursor unavailable")
+
+// ErrInvalidAppendEvent reports that an append request does not contain the
+// identity, kind, timestamp, scope, or JSON payload required for a canonical
+// Factory Event. Rejected events are never assigned ordering facts.
+var ErrInvalidAppendEvent = errors.New("invalid canonical event append")
+
 // ErrInvalidProjectionInput reports that a projection-query request carries
 // empty or malformed inputs (for example a negative selected tick).
 var ErrInvalidProjectionInput = errors.New("invalid projection query input")
 
-// ErrMissingRecordingTarget reports that a recording-lifecycle request lacks a
-// bound recording target (empty record path or unknown recording id).
+// ErrInvalidProjectionScope reports a malformed or inconsistent Factory
+// Session scope in a projection query.
+var ErrInvalidProjectionScope = errors.New("invalid projection query scope")
+
+// ErrMalformedProjectionOrder reports canonical facts that are duplicated,
+// out of order, discontinuous, or inconsistent with the requested cursor.
+var ErrMalformedProjectionOrder = errors.New("malformed canonical projection order")
+
+// ErrUnsupportedProjectionView reports a detached read-model value whose
+// schema is not supported by this Recordings implementation.
+var ErrUnsupportedProjectionView = errors.New("unsupported projection view")
+
+// ErrMissingRecordingTarget reports that a recording-lifecycle request lacks
+// an opaque artifact reference or identifies an unknown recording.
 var ErrMissingRecordingTarget = errors.New("missing recording target")
 
-// ErrRecordingFlushFailed reports that a recording flush could not complete.
-var ErrRecordingFlushFailed = errors.New("recording flush failed")
+// ErrInvalidRecordingScope reports a malformed Factory Session scope on a
+// recording binding.
+var ErrInvalidRecordingScope = errors.New("invalid recording scope")
+
+// ErrRecordingBindingConflict reports that a requested RecordingID is already
+// bound to a different artifact reference or Factory Session scope.
+var ErrRecordingBindingConflict = errors.New("recording binding conflict")
+
+// ErrInvalidRecordingEvent reports that a canonical event cannot be associated
+// with the selected recording because its scope or ordering facts are invalid.
+var ErrInvalidRecordingEvent = errors.New("invalid recording event")
+
+// ErrInvalidRecordingFailure reports a malformed detached recording failure.
+var ErrInvalidRecordingFailure = errors.New("invalid recording failure")
 
 // ErrRecordingWriteRejected reports that a write was rejected after the
 // recording finished.
@@ -48,19 +89,6 @@ var ErrInvalidReplayArtifact = errors.New("invalid or corrupt replay artifact")
 // unsupported inputs (for example a missing artifact or empty schema version).
 var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 
-// ErrInvalidRecordingDigest reports that portable-recording digest fields fail
-// validation through the artifact-export root-contract slice.
-var ErrInvalidRecordingDigest = errors.New("invalid recording digest")
-
-// ErrInvalidRecordingSummary reports that portable-recording summary fields fail
-// validation through the artifact-export root-contract slice.
-var ErrInvalidRecordingSummary = errors.New("invalid recording summary")
-
-// ErrInvalidRecordingDecode reports that portable-recording decode input could
-// not be read as one valid recording document through the artifact-export
-// root-contract slice.
-var ErrInvalidRecordingDecode = errors.New("invalid recording decode")
-
 // RuntimeOpeningRequest contains Recordings-owned artifact selection for one
 // runtime. Recording paths and flush policy do not leak into unrelated service
 // requests.
@@ -71,55 +99,171 @@ type RuntimeOpeningRequest struct {
 	FlushInterval time.Duration
 }
 
-// EventReconnectCursor is the plain reconnect cursor value published at the
-// Recordings root for the append/subscribe slice.
+// CanonicalEventID is the Recordings-owned identity of one accepted Factory
+// event.
+type CanonicalEventID string
+
+// CanonicalEventSequence is the Recordings-assigned global position of one
+// event in canonical Factory-event order. A session-scoped selection can
+// therefore contain increasing, non-contiguous values where other sessions'
+// events occupy the intervening positions.
+type CanonicalEventSequence int64
+
+// CanonicalEventKind identifies the detached payload vocabulary without
+// exposing a producer, reducer, or transport enum.
+type CanonicalEventKind string
+
+// CanonicalEventScope identifies the Factory Session whose canonical history
+// contains an event. An empty FactorySessionID represents factory-wide scope.
+type CanonicalEventScope struct {
+	FactorySessionID string
+}
+
+// CanonicalEventCursor is a portable reconnect position in global canonical
+// order. StreamGenerationID distinguishes histories whose numeric sequences
+// may overlap; SubscribeRequest.Scope selects which event at that position may
+// be acknowledged.
+type CanonicalEventCursor struct {
+	StreamGenerationID string
+	Sequence           CanonicalEventSequence
+}
+
+// CanonicalEvent is a detached, Recordings-owned canonical fact. Its fields
+// contain only value data: Payload is immutable JSON text rather than a shared
+// byte slice, and no implementation, datastore, runtime, or transport handle
+// can cross this boundary.
+type CanonicalEvent struct {
+	ID          CanonicalEventID
+	Sequence    CanonicalEventSequence
+	FactoryTick int
+	Scope       CanonicalEventScope
+	Cursor      CanonicalEventCursor
+	RecordedAt  time.Time
+	Kind        CanonicalEventKind
+	Payload     string
+}
+
+// SubscriptionOutcomeKind identifies one deterministic observation from a
+// subscription without prescribing its transport or buffering implementation.
+type SubscriptionOutcomeKind string
+
+const (
+	SubscriptionEvent  SubscriptionOutcomeKind = "EVENT"
+	SubscriptionGap    SubscriptionOutcomeKind = "GAP"
+	SubscriptionClosed SubscriptionOutcomeKind = "CLOSED"
+)
+
+// SubscriptionGapCause identifies why ordered delivery cannot continue.
+type SubscriptionGapCause string
+
+const (
+	SubscriptionSequenceDiscontinuity SubscriptionGapCause = "SEQUENCE_DISCONTINUITY"
+	SubscriptionBackpressure          SubscriptionGapCause = "BACKPRESSURE"
+)
+
+// SubscriptionGapFacts describes an observed discontinuity and the cursor from
+// which the peer can reconnect. ExpectedSequence and ObservedSequence identify
+// positions in the requested delivery scope (session-local for a scoped
+// subscription); equal positions identify the first event made unavailable by
+// backpressure. ReconnectFrom remains the last delivered global canonical
+// cursor. An unavailable event is not reported as delivered.
+type SubscriptionGapFacts struct {
+	Cause            SubscriptionGapCause
+	ExpectedSequence CanonicalEventSequence
+	ObservedSequence CanonicalEventSequence
+	ReconnectFrom    CanonicalEventCursor
+}
+
+// SubscriptionOutcome is one explicit subscription observation. Event is set
+// for SubscriptionEvent and Gap is set for SubscriptionGap.
+type SubscriptionOutcome struct {
+	Kind  SubscriptionOutcomeKind
+	Event CanonicalEvent
+	Gap   *SubscriptionGapFacts
+}
+
+// EventSubscription is the implementation-neutral ordered subscription
+// operation. Next may block until an event, discontinuity, closure, or context
+// cancellation; it does not prescribe channels, buffers, goroutines, retention,
+// or transport framing.
+type EventSubscription func(context.Context) SubscriptionOutcome
+
+// Next observes the next ordered subscription outcome.
+func (subscription EventSubscription) Next(ctx context.Context) SubscriptionOutcome {
+	if subscription == nil {
+		return SubscriptionOutcome{Kind: SubscriptionClosed}
+	}
+	return subscription(ctx)
+}
+
+// EventReconnectCursor retains the legacy projection-validation cursor shape.
+// New subscriptions use CanonicalEventCursor.
 type EventReconnectCursor = interfaces.FactoryEventReconnectCursor
 
-// EventReconnectScope is the plain reconnect scope value published at the
-// Recordings root for the append/subscribe slice.
+// EventReconnectScope retains the legacy projection-validation scope shape.
+// New subscriptions use CanonicalEventScope.
 type EventReconnectScope = interfaces.FactoryEventReconnectScope
-
-// EventStream is the plain ordered event stream/result value published at the
-// Recordings root for the append/subscribe slice.
-type EventStream = interfaces.FactoryEventStream
 
 // AppendRecordedEventRequest is the plain ordered-append request peers send
 // through the Recordings root append/subscribe slice.
 type AppendRecordedEventRequest struct {
-	Event interfaces.FactoryEvent
+	Event CanonicalEvent
 }
 
-// AppendRecordedEventResult is the plain ordered-append success outcome.
-type AppendRecordedEventResult struct{}
+// AppendRecordedEventResult is the plain ordered-append success outcome. Event
+// is a detached value and cannot be used to mutate Recordings state.
+type AppendRecordedEventResult struct {
+	Event CanonicalEvent
+}
 
 // SubscribeRequest is the plain reconnect-aware subscribe request peers send
 // through the Recordings root append/subscribe slice.
 type SubscribeRequest struct {
-	Cursor *EventReconnectCursor
-	Scope  EventReconnectScope
+	Cursor *CanonicalEventCursor
+	Scope  CanonicalEventScope
 }
 
 // SubscribeResult is the plain reconnect-aware subscribe success outcome.
 type SubscribeResult struct {
-	Stream EventStream
+	Subscription EventSubscription
 }
 
-// ReconstructWorldStateRequest is the plain world-state reconstruction request
-// peers send through the Recordings root projection-query slice.
+// WorldStateViewSchemaVersion identifies the detached world-state payload
+// schema emitted by the Recordings root query slice.
+type WorldStateViewSchemaVersion string
+
+const WorldStateViewSchemaV1 WorldStateViewSchemaVersion = "recordings.world-state.v1"
+
+// WorldStateView is an immutable-by-contract Recordings-owned read-model value.
+// Payload is JSON text so callers cannot retain a map, slice, projection store,
+// runtime engine, or datastore reference owned by Recordings.
+type WorldStateView struct {
+	SchemaVersion WorldStateViewSchemaVersion
+	Scope         CanonicalEventScope
+	Through       CanonicalEventCursor
+	SelectedTick  int
+	Payload       string
+}
+
+// ReconstructWorldStateRequest is the canonical-fact reconstruction request
+// peers send through the Recordings root projection-query slice. After, when
+// present, identifies the cursor immediately preceding Events.
 type ReconstructWorldStateRequest struct {
-	Events       []interfaces.FactoryEvent
+	Scope        CanonicalEventScope
+	After        *CanonicalEventCursor
+	Events       []CanonicalEvent
 	SelectedTick int
 }
 
 // ReconstructWorldStateResult is the plain detached world-state success outcome.
 type ReconstructWorldStateResult struct {
-	WorldState interfaces.FactoryWorldState
+	WorldState WorldStateView
 }
 
 // SimpleDashboardQueryRequest is the plain simple-dashboard projection request
 // peers send through the Recordings root projection-query slice.
 type SimpleDashboardQueryRequest struct {
-	WorldState interfaces.FactoryWorldState
+	WorldState WorldStateView
 }
 
 // SimpleDashboardQueryResult is the plain simple-dashboard projection outcome.
@@ -130,7 +274,7 @@ type SimpleDashboardQueryResult struct {
 // WorkstationRequestsQueryRequest is the plain workstation-request projection
 // request peers send through the Recordings root projection-query slice.
 type WorkstationRequestsQueryRequest struct {
-	WorldState interfaces.FactoryWorldState
+	WorldState WorldStateView
 }
 
 // WorkstationRequestsQueryResult is the plain workstation-request projection
@@ -141,119 +285,154 @@ type WorkstationRequestsQueryResult struct {
 
 // ValidateReconnectReplayRequest is the plain reconnect-replay validation
 // request peers send through the Recordings root projection-query slice.
+// Events is the complete retained history for Scope, including the event
+// identified by Cursor. The validated replay continuation is the ordered
+// suffix strictly after that acknowledged event.
 type ValidateReconnectReplayRequest struct {
-	Events []interfaces.FactoryEvent
-	Cursor EventReconnectCursor
-	Scope  EventReconnectScope
+	Events []CanonicalEvent
+	Cursor CanonicalEventCursor
+	Scope  CanonicalEventScope
 }
 
-// BindRecordingRequest is the plain recorder construction/binding request peers
-// send through the Recordings root recording-lifecycle slice.
+// RecordingID is the Recordings-owned identity of one bound recording.
+type RecordingID string
+
+// RecordingArtifactReference is an opaque portable artifact reference. It does
+// not grant filesystem authority or expose a writer, transaction, or temporary
+// storage location.
+type RecordingArtifactReference string
+
+// RecordingLifecycleState identifies the observable state of one recording.
+type RecordingLifecycleState string
+
+const (
+	RecordingActive    RecordingLifecycleState = "ACTIVE"
+	RecordingFinalized RecordingLifecycleState = "FINALIZED"
+	RecordingFailed    RecordingLifecycleState = "FAILED"
+)
+
+// RecordingFailure is a detached failure fact accumulated by a recording.
+// Code and Message are values rather than a retained implementation error.
+type RecordingFailure struct {
+	Code       string
+	Message    string
+	RecordedAt time.Time
+}
+
+// RecordingStatusFacts is a detached snapshot of recording lifecycle state.
+// Implementations must return independent cursor, time, and Failures values.
+type RecordingStatusFacts struct {
+	RecordingID    RecordingID
+	Artifact       RecordingArtifactReference
+	Scope          CanonicalEventScope
+	State          RecordingLifecycleState
+	AcceptedEvents int
+	LastEvent      *CanonicalEventCursor
+	FlushedThrough *CanonicalEventCursor
+	Failures       []RecordingFailure
+	FinalizedAt    *time.Time
+}
+
+// BindRecordingRequest identifies the Factory Session and opaque artifact
+// reference for one recording. Repeating an explicit RecordingID with the same
+// Artifact and Scope is idempotent and returns its existing status unchanged.
+// Reusing it with different binding facts returns ErrRecordingBindingConflict.
+// Artifact does not prescribe a file path, datastore key, writer, or
+// persistence implementation.
 type BindRecordingRequest struct {
-	RecordingID   string
-	RecordPath    string
-	FlushInterval time.Duration
+	RecordingID RecordingID
+	Artifact    RecordingArtifactReference
+	Scope       CanonicalEventScope
 }
 
-// BindRecordingResult is the plain recorder construction/binding success
-// outcome.
+// BindRecordingResult reports a newly active or idempotently existing detached
+// recording status.
 type BindRecordingResult struct {
-	RecordingID string
+	Status RecordingStatusFacts
 }
 
-// StartRecordingRequest is the plain start request for one bound recording.
-type StartRecordingRequest struct {
-	RecordingID string
-}
-
-// StartRecordingResult is the plain start success outcome.
-type StartRecordingResult struct{}
-
-// RecordRecordingEventRequest is the plain record-event request for one bound
-// recording.
+// RecordRecordingEventRequest associates one canonical Recordings event with a
+// bound recording.
 type RecordRecordingEventRequest struct {
-	RecordingID string
-	Event       interfaces.FactoryEvent
+	RecordingID RecordingID
+	Event       CanonicalEvent
 }
 
-// RecordRecordingEventResult is the plain record-event success outcome.
-type RecordRecordingEventResult struct{}
+// RecordRecordingEventResult reports the detached status after acceptance.
+type RecordRecordingEventResult struct {
+	Status RecordingStatusFacts
+}
 
-// RecordRecordingErrorRequest is the plain record-error request for one bound
-// recording.
+// RecordRecordingErrorRequest appends one detached failure fact.
 type RecordRecordingErrorRequest struct {
-	RecordingID string
-	Err         error
+	RecordingID RecordingID
+	Failure     RecordingFailure
 }
 
-// RecordRecordingErrorResult is the plain record-error success outcome.
-type RecordRecordingErrorResult struct{}
+// RecordRecordingErrorResult reports failed state with accumulated failures.
+type RecordRecordingErrorResult struct {
+	Status RecordingStatusFacts
+}
 
 // FlushRecordingRequest is the plain flush request for one bound recording.
 type FlushRecordingRequest struct {
-	RecordingID string
+	RecordingID RecordingID
 }
 
-// FlushRecordingResult is the plain flush success outcome.
-type FlushRecordingResult struct{}
+// FlushRecordingResult reports which accepted canonical position is durable
+// without exposing the persistence mechanism.
+type FlushRecordingResult struct {
+	Status RecordingStatusFacts
+}
 
 // FinishRecordingRequest is the plain finish request for one bound recording.
 type FinishRecordingRequest struct {
-	RecordingID string
+	RecordingID RecordingID
 	FinishedAt  time.Time
 }
 
-// FinishRecordingResult is the plain finish success outcome.
-type FinishRecordingResult struct{}
-
-// StopRecordingRequest is the plain stop request for one bound recording.
-type StopRecordingRequest struct {
-	RecordingID string
+// FinishRecordingResult reports finalized state, or failed terminal state when
+// the recording accumulated failures before finalization.
+type FinishRecordingResult struct {
+	Status RecordingStatusFacts
 }
-
-// StopRecordingResult is the plain stop success outcome.
-type StopRecordingResult struct{}
 
 // RecordingStatusRequest is the plain status query for one bound recording.
 type RecordingStatusRequest struct {
-	RecordingID string
+	RecordingID RecordingID
 }
 
 // RecordingStatusResult is the plain status outcome for one bound recording.
 type RecordingStatusResult struct {
-	Started  bool
-	Finished bool
-	Stopped  bool
-	Err      error
+	Status RecordingStatusFacts
 }
 
-// LoadReplayArtifactRequest is the plain replay-load request peers send through
-// the Recordings root replay slice. Cross-service callers supply a path and/or
-// artifact id only; nested implementation types and filesystem effect
-// interfaces are not part of this request shape.
+// LoadReplayArtifactRequest is retained for the pre-neutral replay adapter.
+//
+// Deprecated: peers should use LoadReplayRecordingRequest through Service.
 type LoadReplayArtifactRequest struct {
 	Path       string
 	ArtifactID string
 }
 
-// LoadReplayArtifactResult is the plain detached replay-artifact success
-// outcome.
+// LoadReplayArtifactResult is retained for the pre-neutral replay adapter.
+//
+// Deprecated: peers should use LoadReplayRecordingResult through Service.
 type LoadReplayArtifactResult struct {
 	Artifact *interfaces.ReplayArtifact
 }
 
-// BindReplayExecutionRequest is the plain replay-binding request peers send
-// through the Recordings root replay slice. Callers supply a detached replay
-// artifact value; nested Recordings implementation types and public filesystem
-// effect interfaces are not part of this request shape.
+// BindReplayExecutionRequest is retained for internal runtime compatibility.
+//
+// Deprecated: it is not part of the peer-facing Service replay slice.
 type BindReplayExecutionRequest struct {
 	Artifact *interfaces.ReplayArtifact
 }
 
-// BindReplayExecutionResult is the plain replay execution-binding success
-// outcome. Provider, command-runner, hooks, and completion planner facts are
-// represented as Recordings-owned contract values or approved peer root
-// contracts already published at this boundary.
+// BindReplayExecutionResult is retained for internal runtime compatibility.
+//
+// Deprecated: provider and runner bindings are intentionally excluded from the
+// peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
 	Provider           providercontract.Provider
 	CommandRunner      workerexecution.CommandRunner
@@ -261,61 +440,126 @@ type BindReplayExecutionResult struct {
 	CompletionDelivery CompletionDeliveryPlanner
 }
 
-// BuildPortableArtifactRequest is the plain portable-recording build request
-// peers send through the Recordings root artifact-export slice.
+// PortableArtifactSchemaVersion identifies the detached portable artifact
+// document contract.
+type PortableArtifactSchemaVersion string
+
+const (
+	// PortableArtifactSchemaV1 is the first Recordings-owned portable artifact
+	// schema.
+	PortableArtifactSchemaV1 PortableArtifactSchemaVersion = "recordings.portable-artifact.v1"
+
+	// PortableArtifactIntegritySHA256 identifies the integrity algorithm used
+	// by PortableArtifactSchemaV1.
+	PortableArtifactIntegritySHA256 = "sha256"
+)
+
+var (
+	// ErrPortableArtifactUnavailable reports a recording that is missing or
+	// has not reached a terminal state from which an artifact can be built.
+	ErrPortableArtifactUnavailable = errors.New("portable recording artifact unavailable")
+
+	// ErrUnsupportedPortableArtifactSchema reports an artifact schema that the
+	// receiver cannot validate or decode.
+	ErrUnsupportedPortableArtifactSchema = errors.New("unsupported portable recording artifact schema")
+
+	// ErrInvalidPortableArtifactIntegrity reports a missing, malformed, or
+	// mismatched portable artifact digest.
+	ErrInvalidPortableArtifactIntegrity = errors.New("invalid portable recording artifact integrity")
+
+	// ErrInvalidPortableArtifactOrder reports canonical events whose scope,
+	// cursor, or sequence facts are inconsistent.
+	ErrInvalidPortableArtifactOrder = errors.New("invalid portable recording artifact event order")
+
+	// ErrInvalidPortableArtifact reports malformed detached summary or decode
+	// input that is not a schema, integrity, or ordering failure.
+	ErrInvalidPortableArtifact = errors.New("invalid portable recording artifact")
+)
+
+// PortableArtifactIntegrity contains the completed artifact digest. Digest is
+// computed over the artifact with this Digest field empty.
+type PortableArtifactIntegrity struct {
+	Algorithm string `json:"algorithm"`
+	Digest    string `json:"digest"`
+}
+
+// PortableArtifactSummary contains the detached facts a receiver needs to
+// inspect an artifact without Recordings storage access.
+type PortableArtifactSummary struct {
+	RecordingID RecordingID                `json:"recordingId"`
+	Reference   RecordingArtifactReference `json:"reference,omitempty"`
+	Scope       CanonicalEventScope        `json:"scope"`
+	State       RecordingLifecycleState    `json:"state"`
+	EventCount  int                        `json:"eventCount"`
+	FirstCursor *CanonicalEventCursor      `json:"firstCursor,omitempty"`
+	LastCursor  *CanonicalEventCursor      `json:"lastCursor,omitempty"`
+	Failures    []RecordingFailure         `json:"failures,omitempty"`
+	Available   bool                       `json:"available"`
+}
+
+// PortableArtifact is a detached, self-validating Recordings document. Events
+// remain canonical Recordings facts and preserve their assigned order.
+type PortableArtifact struct {
+	SchemaVersion PortableArtifactSchemaVersion `json:"schemaVersion"`
+	Summary       PortableArtifactSummary       `json:"summary"`
+	Events        []CanonicalEvent              `json:"events"`
+	Integrity     PortableArtifactIntegrity     `json:"integrity"`
+}
+
+// BuildPortableArtifactRequest selects a closed recording by opaque identity.
 type BuildPortableArtifactRequest struct {
-	Facts PortableRecordingCanonicalFacts
+	RecordingID RecordingID
 }
 
-// BuildPortableArtifactResult is the plain detached portable-recording success
-// outcome for the artifact-export slice.
+// BuildPortableArtifactResult returns a detached completed artifact.
 type BuildPortableArtifactResult struct {
-	Recording PortableRecording
+	Artifact PortableArtifact
 }
 
-// ValidatePortableArtifactRequest is the plain portable-recording validate
-// request peers send through the Recordings root artifact-export slice.
+// ValidatePortableArtifactRequest validates one detached artifact.
 type ValidatePortableArtifactRequest struct {
-	Recording PortableRecording
+	Artifact PortableArtifact
 }
 
-// ValidatePortableArtifactResult is the plain validate success outcome.
-type ValidatePortableArtifactResult struct{}
+// ValidatePortableArtifactResult returns its detached summary on success.
+type ValidatePortableArtifactResult struct {
+	Summary PortableArtifactSummary
+}
 
-// DecodePortableArtifactRequest is the plain portable-recording decode request
-// peers send through the Recordings root artifact-export slice. Callers supply
-// encoded payload bytes only; nested implementation types are not part of this
-// request shape.
+// EncodePortableArtifactRequest requests completed portable bytes.
+type EncodePortableArtifactRequest struct {
+	Artifact PortableArtifact
+}
+
+// EncodePortableArtifactResult contains completed bytes, never an open writer,
+// file, transaction, or temporary path.
+type EncodePortableArtifactResult struct {
+	Payload []byte
+}
+
+// DecodePortableArtifactRequest imports completed portable bytes.
 type DecodePortableArtifactRequest struct {
 	Payload []byte
 }
 
-// DecodePortableArtifactResult is the plain detached decode success outcome.
+// DecodePortableArtifactResult contains the validated detached artifact.
 type DecodePortableArtifactResult struct {
-	Recording PortableRecording
+	Artifact PortableArtifact
 }
 
-// SummarizePortableArtifactRequest is the plain portable-recording
-// summary/availability request peers send through the Recordings root
-// artifact-export slice.
+// SummarizePortableArtifactRequest inspects one detached artifact.
 type SummarizePortableArtifactRequest struct {
-	Recording PortableRecording
+	Artifact PortableArtifact
 }
 
-// SummarizePortableArtifactResult is the plain detached summary/availability
-// success outcome for one portable recording.
+// SummarizePortableArtifactResult contains a detached summary copy.
 type SummarizePortableArtifactResult struct {
-	SessionID    string
-	Status       string
-	Artifacts    []PortableRecordingArtifactSummary
-	Availability *PortableRecordingAvailability
-	Failure      *PortableRecordingFailureSummary
+	Summary PortableArtifactSummary
 }
 
-// Ledger is the append/subscribe capability surface embedded in the singular
-// Recordings root Service. Peers should depend on Service rather than treating
-// Ledger as a second peer-facing Recordings authority. Nested ledger storage
-// and event-history implementation packages remain out of the peer import path.
+// Ledger is the legacy runtime append/subscribe composition capability.
+// It remains available to existing runtime callers while producer cutovers are
+// deferred, but it is not part of the peer-facing Service contract.
 type Ledger interface {
 	CanonicalEvents() []interfaces.FactoryEvent
 	Subscribe(
@@ -331,23 +575,14 @@ type Ledger interface {
 
 // Service is the singular Recordings root contract for cross-service peers.
 // Published slices (append/subscribe, projection query, recording lifecycle,
-// replay, and artifact export) are additive methods or embedded capability
-// surfaces on this one named interface and use plain Recordings-owned request,
-// result, value, and typed-error contracts free of peer implementation and
-// ledger storage types. Existing append/subscribe and projection query
-// capabilities remain reachable through this singular root. Peers must depend
-// on Service rather than introducing a second peer-facing Recordings
-// authority. Nested IMP-REC-* implementation moves, event-backbone leases
-// beyond additive root publication, CLI-manifest/provider-conductor ownership
-// changes, and OpenAPI package-motion edits remain out of scope for the
-// root-contract packet.
+// replay, and artifact export) use Recordings-owned request, result, value, and
+// typed-error contracts. Legacy Ledger and ProjectionService capabilities are
+// deliberately excluded so a peer can implement this authority without
+// importing Factory Definitions or Recordings implementation packages.
 type Service interface {
-	Ledger
-	ProjectionService
-
 	// Append publishes one ordered Factory Event through the plain
 	// append/subscribe root-contract slice.
-	Append(AppendRecordedEventRequest) AppendRecordedEventResult
+	Append(AppendRecordedEventRequest) (AppendRecordedEventResult, error)
 	// SubscribeFrom opens a reconnect-aware event stream through the plain
 	// append/subscribe root-contract slice.
 	SubscribeFrom(context.Context, SubscribeRequest) (SubscribeResult, error)
@@ -357,39 +592,39 @@ type Service interface {
 	ReconstructWorldState(ReconstructWorldStateRequest) (ReconstructWorldStateResult, error)
 	// QuerySimpleDashboard returns simple dashboard render data through the
 	// plain projection-query root-contract slice.
-	QuerySimpleDashboard(SimpleDashboardQueryRequest) SimpleDashboardQueryResult
+	QuerySimpleDashboard(SimpleDashboardQueryRequest) (SimpleDashboardQueryResult, error)
 	// QueryWorkstationRequests returns workstation-request projection values
 	// through the plain projection-query root-contract slice.
-	QueryWorkstationRequests(WorkstationRequestsQueryRequest) WorkstationRequestsQueryResult
+	QueryWorkstationRequests(WorkstationRequestsQueryRequest) (WorkstationRequestsQueryResult, error)
 	// ValidateReconnectReplayFrom validates reconnect-replay inputs through
 	// the plain projection-query root-contract slice.
 	ValidateReconnectReplayFrom(ValidateReconnectReplayRequest) error
 
-	// BindRecording constructs or binds one session-scoped recording through
-	// the plain recording-lifecycle root-contract slice.
+	// BindRecording constructs or idempotently returns one session-scoped
+	// recording through the plain recording-lifecycle root-contract slice.
 	BindRecording(BindRecordingRequest) (BindRecordingResult, error)
-	// StartRecording starts periodic flush behavior for one bound recording.
-	StartRecording(context.Context, StartRecordingRequest) (StartRecordingResult, error)
-	// RecordRecordingEvent appends one Factory Event into a bound recording.
+	// RecordRecordingEvent associates one canonical Factory Event with a bound
+	// recording.
 	RecordRecordingEvent(RecordRecordingEventRequest) (RecordRecordingEventResult, error)
-	// RecordRecordingError retains a producer-boundary failure for flush/status.
+	// RecordRecordingError retains a detached producer-boundary failure fact.
 	RecordRecordingError(RecordRecordingErrorRequest) (RecordRecordingErrorResult, error)
 	// FlushRecording flushes one bound recording through the published slice.
 	FlushRecording(FlushRecordingRequest) (FlushRecordingResult, error)
-	// FinishRecording records terminal wall-clock metadata for one recording.
+	// FinishRecording finalizes one recording with terminal metadata.
 	FinishRecording(FinishRecordingRequest) (FinishRecordingResult, error)
-	// StopRecording stops periodic flush behavior for one bound recording.
-	StopRecording(StopRecordingRequest) (StopRecordingResult, error)
-	// QueryRecordingStatus returns start/finish/stop/error status for one
-	// bound recording.
+	// QueryRecordingStatus returns detached lifecycle and accumulated failure
+	// facts for one bound recording.
 	QueryRecordingStatus(RecordingStatusRequest) (RecordingStatusResult, error)
 
-	// LoadReplayArtifact loads one detached replay artifact through the plain
+	// LoadReplayRecording selects finalized canonical facts through the neutral
 	// replay root-contract slice.
-	LoadReplayArtifact(LoadReplayArtifactRequest) (LoadReplayArtifactResult, error)
-	// BindReplayExecution obtains the replay execution binding peers consume
-	// through the plain replay root-contract slice.
-	BindReplayExecution(BindReplayExecutionRequest) (BindReplayExecutionResult, error)
+	LoadReplayRecording(LoadReplayRecordingRequest) (LoadReplayRecordingResult, error)
+	// CreateReplayPlan validates canonical facts and creates an opaque neutral
+	// replay plan without exposing execution or storage machinery.
+	CreateReplayPlan(CreateReplayPlanRequest) (CreateReplayPlanResult, error)
+	// ObserveReplay returns deterministic progress, completion, or divergence
+	// facts for an opaque replay plan.
+	ObserveReplay(ObserveReplayRequest) (ObserveReplayResult, error)
 
 	// BuildPortableArtifact builds one portable recording through the plain
 	// artifact-export root-contract slice.
@@ -397,6 +632,8 @@ type Service interface {
 	// ValidatePortableArtifact validates one portable recording through the
 	// plain artifact-export root-contract slice.
 	ValidatePortableArtifact(ValidatePortableArtifactRequest) (ValidatePortableArtifactResult, error)
+	// EncodePortableArtifact validates and returns completed portable bytes.
+	EncodePortableArtifact(EncodePortableArtifactRequest) (EncodePortableArtifactResult, error)
 	// DecodePortableArtifact decodes and validates one portable recording
 	// payload through the plain artifact-export root-contract slice.
 	DecodePortableArtifact(DecodePortableArtifactRequest) (DecodePortableArtifactResult, error)
@@ -405,11 +642,9 @@ type Service interface {
 	SummarizePortableArtifact(SummarizePortableArtifactRequest) (SummarizePortableArtifactResult, error)
 }
 
-// ProjectionService is the projection-query capability surface embedded in the
-// singular Recordings root Service. Peers should depend on Service rather than
-// treating ProjectionService as a second peer-facing Recordings authority.
-// Canonical replay reduction and dashboard projection stay owned here without
-// exposing the concrete projections package.
+// ProjectionService is the legacy runtime projection composition capability.
+// It remains available to existing runtime callers while consumer cutovers are
+// deferred, but it is not part of the peer-facing Service contract.
 type ProjectionService interface {
 	ReconstructFactoryWorldState(
 		[]interfaces.FactoryEvent,
@@ -446,11 +681,9 @@ type WorldStateReconstructor func(
 	int,
 ) (interfaces.FactoryWorldState, error)
 
-// ReplayArtifactLoader loads one canonical Factory-event replay artifact.
-// Wire may still supply this construction helper for existing Runtime opening
-// callers; peers should prefer LoadReplayArtifact on Service as the
-// cross-service source of truth rather than treating loader injection as the
-// peer seam.
+// ReplayArtifactLoader loads one canonical Factory-event replay artifact for
+// existing Runtime opening callers. It is not the peer-facing replay seam;
+// peers use LoadReplayRecording on Service.
 type ReplayArtifactLoader func(string) (*interfaces.ReplayArtifact, error)
 
 // InitialStructureSource is the only topology capability Recordings consumes.
@@ -541,10 +774,9 @@ type RuntimeRecorderFactory func(
 ) (RuntimeRecorder, error)
 
 // ReplayExecutionFactory constructs the replay-specific provider, command
-// runner, hooks, and completion policy consumed by Factory Runtime. Existing
-// Runtime callers may still consume this construction helper; peers should
-// prefer BindReplayExecution on Service as the cross-service source of truth
-// rather than treating factory injection as the peer seam.
+// runner, hooks, and completion policy consumed by existing Factory Runtime
+// callers. It is not the peer-facing replay seam; peers use neutral plans and
+// observations on Service.
 type ReplayExecutionFactory func(
 	*interfaces.ReplayArtifact,
 ) (
@@ -642,13 +874,9 @@ type SimpleDashboardSessionData struct {
 	ProviderSessions     []interfaces.FactoryWorldProviderSessionRecord
 }
 
-// Portable recording value aliases remain published at the Recordings root so
-// existing Factory Sessions callers compile without importing artifact
-// implementation packages. Peers should prefer the plain artifact-export
-// methods on Service (BuildPortableArtifact, ValidatePortableArtifact,
-// DecodePortableArtifact, SummarizePortableArtifact) as the cross-service
-// source of truth rather than treating these type aliases or the package-level
-// Build/Validate/Decode helpers as the peer seam.
+// Portable recording aliases remain only for compatibility with existing
+// Factory Session callers. They are not part of the Recordings Service portable
+// artifact seam, whose detached values are defined above.
 type PortableRecording = recordingartifacts.Recording
 type PortableRecordingArtifactSummary = recordingartifacts.ArtifactSummary
 type PortableRecordingAvailability = recordingartifacts.AvailabilityDetail

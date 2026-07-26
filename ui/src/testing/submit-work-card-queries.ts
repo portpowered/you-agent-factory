@@ -27,14 +27,6 @@ export const submitWorkCardQueryContract = {
   workTypeFieldName: /Work type/,
 } as const;
 
-export function getSubmitWorkCard<QueryScope extends SyncRoleQuery>(
-  dashboardScope: QueryScope,
-): HTMLElement {
-  return dashboardScope.getByRole("article", {
-    name: submitWorkCardQueryContract.submitWorkCardName,
-  });
-}
-
 export function findSubmitWorkCard<QueryScope extends AsyncRoleQuery>(
   dashboardScope: QueryScope,
 ): Promise<HTMLElement> {

@@ -55,24 +55,6 @@ export function chainRenderAppFetchMock(
   });
 }
 
-export function lastFetchCallBody(
-  fetchMock: FetchMock,
-  predicate: (path: string, method: string) => boolean,
-): unknown {
-  for (let index = fetchMock.mock.calls.length - 1; index >= 0; index -= 1) {
-    const [input, init] = fetchMock.mock.calls[index] ?? [];
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (!predicate(path, method)) {
-      continue;
-    }
-
-    return JSON.parse(String(init?.body ?? "{}"));
-  }
-
-  throw new Error("No matching fetch call found");
-}
-
 export function jsonResponse(
   body: unknown,
   status = 200,

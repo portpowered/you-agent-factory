@@ -209,7 +209,7 @@ jobs:
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
     needs: classify
-    if: always() && needs.classify.outputs.run_backend == 'true'
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -221,22 +221,27 @@ jobs:
           - suite: functional
             label: Functional
     steps:
+      - name: Skip unselected backend coverage lane
+        if: needs.classify.outputs.run_backend != 'true'
+        run: echo "Backend coverage was not selected by CI classification."
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.run_backend == 'true'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: needs.classify.outputs.run_backend == 'true'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build backend
-        if: matrix.suite == 'unit'
+        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'unit'
         run: make build
       - name: Run backend coverage
-        if: matrix.suite == 'unit'
+        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'unit'
         run: make test-unit-coverage
       - name: Run backend functional coverage and visualization
-        if: matrix.suite == 'functional'
+        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
         run: make functional-test-viz
 
   ui-backend-integration:
@@ -259,24 +264,32 @@ jobs:
   api-package:
     name: API Contract And Package
     needs: classify
-    if: always() && needs.classify.outputs.run_api_package == 'true'
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
+      - name: Skip unselected API contract and package lane
+        if: needs.classify.outputs.run_api_package != 'true'
+        run: echo "API contract and package verification was not selected by CI classification."
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.run_api_package == 'true'
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: needs.classify.outputs.run_api_package == 'true'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - uses: oven-sh/setup-bun@v2
+        if: needs.classify.outputs.run_api_package == 'true'
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-node@v4
+        if: needs.classify.outputs.run_api_package == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: make ui-deps contracts-smoke api-smoke api-package-verify
+      - if: needs.classify.outputs.run_api_package == 'true'
+        run: make ui-deps contracts-smoke api-smoke api-package-verify
 
   packaged-factories-package:
     name: Packaged Factories Package

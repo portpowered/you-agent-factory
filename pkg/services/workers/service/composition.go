@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -17,8 +18,10 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
@@ -57,7 +60,7 @@ func NewRuntime(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.RuntimeService, error) {
-	return New(
+	runtimeService, err := New(
 		sessions,
 		modelService,
 		providerCommandRunner,
@@ -88,6 +91,15 @@ func NewRuntime(
 		temporaryFiles,
 		decisionEnvelopes,
 	)
+	if err != nil {
+		return nil, err
+	}
+	assembly, err := newRuntimeAssembly(nil)
+	if err != nil {
+		return nil, err
+	}
+	runtimeService.runtimeAssembly = assembly
+	return runtimeService, nil
 }
 
 // NewRuntimeWithSelection constructs the Workers runtime while preserving
@@ -141,6 +153,11 @@ func NewRuntimeWithSelection(
 	service.scriptCommandInjected = scriptCommandInjected
 	service.providerRegistry = providerRegistry
 	if providerRegistry != nil {
+		assembly, assemblyErr := newRuntimeAssembly(providerRegistry)
+		if assemblyErr != nil {
+			return nil, assemblyErr
+		}
+		service.runtimeAssembly = assembly
 		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.
@@ -149,6 +166,43 @@ func NewRuntimeWithSelection(
 		}
 	}
 	return service, nil
+}
+
+func newRuntimeAssembly(
+	registry *providerregistry.Registry,
+) (runtimeassembly.Service, error) {
+	resolveRunner := func(
+		_ context.Context,
+		identity string,
+	) (workers.ResolvedRunnerSelection, bool, error) {
+		canonical := workers.NormalizeRunnerID(identity)
+		if registry != nil {
+			resolved, err := registry.CanonicalIdentity(canonical)
+			if err != nil {
+				return workers.ResolvedRunnerSelection{}, false, nil
+			}
+			canonical = resolved
+		} else if !workers.IsBuiltInRunnerID(canonical) {
+			return workers.ResolvedRunnerSelection{}, false, nil
+		}
+		return workers.ResolvedRunnerSelection{
+			RunnerID: canonical,
+			Source:   workers.RunnerSelectionSourceFactory,
+		}, true, nil
+	}
+	assembleBinding := func(
+		_ context.Context,
+		role workers.RuntimeBuildRoleRequest,
+		_ workers.RuntimeBuildOpeningOptions,
+		selection workers.ResolvedRunnerSelection,
+	) (workers.AssembledRuntimeBinding, error) {
+		return workers.AssembledRuntimeBinding{
+			RoleName:        role.Name,
+			RoleKind:        role.Kind,
+			RunnerSelection: selection,
+		}, nil
+	}
+	return runtimeassemblywire.NewService(resolveRunner, assembleBinding)
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers implementation selected
