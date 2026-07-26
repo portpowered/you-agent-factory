@@ -227,20 +227,37 @@ func resolvedPreparedSessionInvocationInput(
 		}
 	}
 	prepared := request.PreparedInvocationInput.Clone()
-	if prepared == nil || prepared.NormalizedArguments == nil || prepared.ResolvedInput != nil {
+	if prepared == nil ||
+		(prepared.NormalizedArguments == nil) == (prepared.ResolvedInput == nil) {
 		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
-			Message: "prepared signature invocation arguments are required",
+			Message: "prepared invocation input must contain exactly one canonical result",
 		}
 	}
 	var signature *factorydefinitions.InvocationSignatureConfig
 	if cfg != nil {
 		signature = cfg.InvocationSignature
 	}
-	if signature == nil {
+	if prepared.NormalizedArguments != nil && signature == nil {
 		return ResolvedSessionInvocationInput{}, &work.ArgumentError{
 			Code:    work.ArgumentErrorCodeInvalidActiveSignature,
 			Message: "prepared arguments require a factory invocationSignature",
 		}
+	}
+	if prepared.ResolvedInput != nil {
+		if signature != nil {
+			return ResolvedSessionInvocationInput{}, &work.ArgumentError{
+				Code:    work.ArgumentErrorCodeInvalidActiveSignature,
+				Message: "prepared compatibility input requires a factory without an invocationSignature",
+			}
+		}
+		resolved := *prepared.ResolvedInput
+		return ResolvedSessionInvocationInput{
+			Source:  resolved.Source,
+			Content: resolved.Content,
+			NormalizedArguments: &work.NormalizedArguments{
+				CompatibilityInput: &resolved,
+			},
+		}, nil
 	}
 	return ResolvedSessionInvocationInput{
 		Source:              StructuredArgumentsInputSource,
@@ -375,6 +392,9 @@ func normalizeSessionInvocationError(err error) error {
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.
 func SessionInvocationSourceHint(request InvocationRequest) work.InputSourceLabel {
 	if request.PreparedInvocationInput != nil {
+		if request.PreparedInvocationInput.ResolvedInput != nil {
+			return request.PreparedInvocationInput.ResolvedInput.Source
+		}
 		return StructuredArgumentsInputSource
 	}
 	if request.Args != nil {

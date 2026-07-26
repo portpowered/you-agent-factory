@@ -11,6 +11,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
@@ -194,6 +195,72 @@ func TestResolveRunFactoryPromptPreservesCompleteEffectiveSignatureBehavior(t *t
 	if !reflect.DeepEqual(request.Arguments, completeInvocationArguments()) ||
 		request.StdinText == nil || *request.StdinText != "stdin body" {
 		t.Fatalf("raw Work preparation request = %#v", request)
+	}
+}
+
+func TestResolveRunFactoryPromptEmptySignatureInputStillUsesEffectiveSchema(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, defaultOnlyInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	calls := 0
+	preparation := rootInvocationInputScript{prepare: func(
+		_ context.Context,
+		request work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		calls++
+		if request.Signature == nil || len(request.Signature.Parameters) != 1 ||
+			request.Signature.Parameters[0].DefaultValue != "safe" {
+			t.Fatalf("empty-input preparation signature = %#v, want selected Factory default", request.Signature)
+		}
+		return work.PreparedInvocationInput{NormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
+				"mode": {
+					Values:  []string{"safe"},
+					Sources: []work.ArgumentSource{{Kind: work.ArgumentSourceKindDefault, Name: "default"}},
+				},
+			},
+		}}, nil
+	}}
+
+	if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err != nil {
+		t.Fatalf("resolve empty signature input: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("preparation calls = %d, want exactly one", calls)
+	}
+	if cfg.PreparedInvocationInput == nil ||
+		cfg.PreparedInvocationInput.NormalizedArguments == nil ||
+		cfg.PreparedInvocationInput.NormalizedArguments.Arguments["mode"].Values[0] != "safe" {
+		t.Fatalf("prepared default-only input = %#v", cfg.PreparedInvocationInput)
+	}
+}
+
+func TestResolveRunFactoryPromptEmptyInputStillRejectsSchemaCollision(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, collisionInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	calls := 0
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		calls++
+		return work.PreparedInvocationInput{}, nil
+	}}
+
+	err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation)
+	if err == nil || !strings.Contains(err.Error(), climanifest.CompositionCollisionLongName) {
+		t.Fatalf("error = %v, want empty-input composition collision", err)
+	}
+	if calls != 0 {
+		t.Fatalf("preparation calls = %d, want collision before normalization", calls)
+	}
+	if cfg.PreparedInvocationInput != nil || cfg.InvocationNormalizedArguments != nil {
+		t.Fatalf("collision left partial input: %#v", cfg)
 	}
 }
 
@@ -492,6 +559,32 @@ func sensitiveInvocationSignaturePayload() []byte {
       "externalName": "token",
       "sensitive": true,
       "choices": ["allowed"],
+      "bindings": [{"kind": "NAMED"}]
+    }]
+  }
+}`)
+}
+
+func defaultOnlyInvocationSignaturePayload() []byte {
+	return []byte(`{
+  "name": "portable",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "mode",
+      "defaultValue": "safe",
+      "bindings": [{"kind": "NAMED"}]
+    }]
+  }
+}`)
+}
+
+func collisionInvocationSignaturePayload() []byte {
+	return []byte(`{
+  "name": "portable",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "reserved",
+      "externalName": "quiet",
       "bindings": [{"kind": "NAMED"}]
     }]
   }

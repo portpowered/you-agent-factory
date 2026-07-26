@@ -13,8 +13,11 @@ primary-result behavior.
   materialization, sessions, provider startup, or runtime probing.
 - Selected-Factory request preparation must recheck cancellation after pure
   schema composition and after Work normalization before publishing any
-  prepared result. CLI adapters should recover Work's typed stable failures
-  with `errors.As`, because the real service boundary wraps domain errors.
+  prepared result. Compose the selected Factory schema before deciding that an
+  empty argv/TTY invocation has no input: an active signature can still apply
+  defaults or reject missing required input, and composition can still reject
+  reserved-name collisions. CLI adapters should recover Work's typed stable
+  failures with `errors.As`, because the real service boundary wraps domain errors.
   Prove failure ordering through `root.BuildProcess` using Factory Session ID,
   runtime-host, Work request ID, and provider-command edges; all must remain
   untouched for composition, sensitive normalization, and cancellation
@@ -27,8 +30,13 @@ primary-result behavior.
   CLI-only Factory Session request field. Factory Sessions must consume that
   prepared value directly so canonical ordering and positional, named, stdin,
   and default provenance are not collapsed into a second structured-argument
-  normalization. Public API requests leave the prepared field nil and retain
-  Factory Sessions-owned normalization.
+  normalization. The same detached carrier must preserve no-signature
+  compatibility input and its positional/stdin source through Factory Sessions
+  without converting it back into API content for a second normalization.
+  Factory Sessions validates that structured prepared input accompanies a
+  signature and compatibility prepared input accompanies no signature. Public
+  API requests leave the prepared field nil and retain Factory Sessions-owned
+  normalization.
 - A conductor-routed native integration must carry the complete cloned
   `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
   Keep provider selection and response delivery conductor-owned, while the

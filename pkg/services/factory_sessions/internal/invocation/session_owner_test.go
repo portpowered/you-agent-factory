@@ -133,6 +133,50 @@ func TestSessionOwner_PreparedCLIArgumentsRetainCanonicalValuesOrderAndProvenanc
 	}
 }
 
+func TestSessionOwner_PreparedCLICompatibilityInputRetainsSourceWithoutRenormalizing(t *testing.T) {
+	cfg := sessionOwnerFactoryConfig()
+	resolved := work.ResolvedInput{
+		Source: work.InputSourcePositionalText,
+		Text:   "legacy input",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "legacy input",
+		}},
+	}
+	var submitted workdomain.SubmitRequest
+	var waitInput SessionInvocationWaitInput
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		SubmitWork: func(_ context.Context, _ string, request workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			submitted = request
+			return workdomain.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		},
+		Observe: func(_ context.Context, _ string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			waitInput = input
+			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+		},
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", InvocationRequest{
+		PreparedInvocationInput: &work.PreparedInvocationInput{
+			Source:        resolved.Source,
+			ResolvedInput: &resolved,
+		},
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	if submitted.InvocationArguments != nil {
+		t.Fatalf("compatibility invocation arguments = %#v, want nil", submitted.InvocationArguments)
+	}
+	if !reflect.DeepEqual(submitted.Content, resolved.Content) {
+		t.Fatalf("submitted content = %#v, want prepared content %#v", submitted.Content, resolved.Content)
+	}
+	if waitInput.InputSource != work.InputSourcePositionalText {
+		t.Fatalf("wait input source = %q, want preserved positional source", waitInput.InputSource)
+	}
+}
+
 func TestSessionOwnerRequiresInvocationInputReader(t *testing.T) {
 	t.Parallel()
 

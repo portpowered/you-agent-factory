@@ -787,9 +787,6 @@ func resolveRunFactoryPrompt(
 	if !factoryChanged && !namedChanged {
 		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
-		return nil
-	}
 
 	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {

@@ -407,6 +407,46 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 	}
 }
 
+func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(t *testing.T) {
+	prepared := preparedTextInvocationInput(work.InputSourcePositionalText, "legacy input")
+	apiRequest := invocationRequestFromResolvedInput(*prepared.ResolvedInput)
+	var captured factorysessions.InvocationRequest
+	operation := testInvocationOperation{invokeFactory: func(
+		_ context.Context,
+		_ factorysessions.InvocationTarget,
+		request factorysessions.InvocationRequest,
+		_ factorysessions.FactoryEventConsumer,
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		captured = request
+		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
+			Status: interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText, Text: "done",
+			}},
+		}}, nil
+	}}
+	var output bytes.Buffer
+	err := runFactoryInvocation(
+		context.Background(),
+		RunConfig{PreparedInvocationInput: &prepared, Output: &output},
+		factorysessions.InvocationTarget{},
+		*apiRequest,
+		operation,
+		testResponsePresentation(),
+	)
+	if err != nil {
+		t.Fatalf("runFactoryInvocation: %v", err)
+	}
+	if captured.Args != nil || captured.ContentProvided || len(captured.Content) != 0 {
+		t.Fatalf("execution request retained API compatibility carriers: %#v", captured)
+	}
+	if captured.PreparedInvocationInput == nil ||
+		captured.PreparedInvocationInput.ResolvedInput == nil ||
+		captured.PreparedInvocationInput.ResolvedInput.Text != "legacy input" {
+		t.Fatalf("prepared execution input = %#v, want compatibility result", captured.PreparedInvocationInput)
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
 	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {

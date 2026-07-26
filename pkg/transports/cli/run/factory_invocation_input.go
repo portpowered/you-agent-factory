@@ -283,7 +283,7 @@ func runFactoryInvocation(
 		consume = streamRenderer.PresentFactoryEvents
 	}
 	invocationRequest := factorysessionmapping.InvocationRequestFromAPI(request)
-	if cfg.PreparedInvocationInput != nil && cfg.PreparedInvocationInput.NormalizedArguments != nil {
+	if cfg.PreparedInvocationInput != nil {
 		invocationRequest.Args = nil
 		invocationRequest.Content = nil
 		invocationRequest.ContentProvided = false

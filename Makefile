@@ -90,6 +90,13 @@ define run_verification_step
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
+ifeq ($(OS),Windows_NT)
+define run_verification_step
+	@echo Running $(2) [make $(1)]
+	@$(MAKE) $(1) || (echo FAIL: $(2) [make $(1)] failed. Rerun with: make $(1) & exit /b 1)
+endef
+endif
+
 define run_timed_step
 	@start=$$(date +%s); \
 	if $(1); then \
