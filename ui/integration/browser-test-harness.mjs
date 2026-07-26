@@ -2,8 +2,16 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import http from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
@@ -1378,30 +1386,41 @@ export async function startRealBackendBrowserHarness({
     );
   }
 
-  const child = spawnRepoProcess(
-    "go",
-    [
-      "run",
-      "./tests/functional/internal/support/cmd/browser_api_harness",
-      "--api-port",
-      String(apiPort),
-      "--factory-dir",
-      factoryDir,
-      "--request-id",
-      requestID,
-      "--start-mode",
-      startMode,
-      "--workflow-fixture",
-      workflowFixture,
-      "--workflow-name",
-      workflowName,
-    ],
-    {
-      extraEnv: {
-        CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
-      },
-    },
+  const customerHome = await mkdtemp(
+    path.join(tmpdir(), "you-browser-backend-"),
   );
+  let child;
+  try {
+    child = spawnRepoProcess(
+      "go",
+      [
+        "run",
+        "./tests/functional/internal/support/cmd/browser_api_harness",
+        "--api-port",
+        String(apiPort),
+        "--factory-dir",
+        factoryDir,
+        "--request-id",
+        requestID,
+        "--start-mode",
+        startMode,
+        "--workflow-fixture",
+        workflowFixture,
+        "--workflow-name",
+        workflowName,
+      ],
+      {
+        extraEnv: {
+          CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+          HOME: customerHome,
+          USERPROFILE: customerHome,
+        },
+      },
+    );
+  } catch (error) {
+    await rm(customerHome, { force: true, recursive: true });
+    throw error;
+  }
 
   let stderr = "";
   child.stderr?.on("data", (chunk) => {
@@ -1411,6 +1430,14 @@ export async function startRealBackendBrowserHarness({
   const lineReader = readline.createInterface({
     input: child.stdout,
   });
+  async function stopHarness() {
+    lineReader.close();
+    try {
+      await stopProcess(child);
+    } finally {
+      await rm(customerHome, { force: true, recursive: true });
+    }
+  }
   const ready = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(
@@ -1450,14 +1477,10 @@ export async function startRealBackendBrowserHarness({
     return {
       apiOrigin: payload.apiOrigin,
       sessionID: payload.sessionId,
-      stop: async () => {
-        lineReader.close();
-        await stopProcess(child);
-      },
+      stop: stopHarness,
     };
   } catch (error) {
-    lineReader.close();
-    await stopProcess(child);
+    await stopHarness();
     throw error;
   }
 }
