@@ -69,57 +69,6 @@ export function currentFactoryDocumentFromSnapshot(
   };
 }
 
-export function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = structuredClone(baseFactoryDefinitionDocument);
-  return snapshot;
-}
-
-export function workerDenseSnapshot(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.runtime.active_executions_by_dispatch_id = {
-    "dispatch-draft-active": {
-      dispatch_id: "dispatch-draft-active",
-      started_at: "2026-05-19T01:10:00Z",
-      transition_id: "draft-transition",
-      workstation_name: "draft",
-      workstation_node_id: "draft",
-    },
-  };
-  snapshot.runtime.active_dispatch_ids = ["dispatch-draft-active"];
-  snapshot.runtime.active_workstation_node_ids = ["draft"];
-  snapshot.runtime.active_throttle_pauses = [
-    {
-      affected_worker_types: ["stalled"],
-      lane_id: "provider:codex",
-      model: "gpt-5",
-      paused_until: "2026-05-19T01:15:00Z",
-      provider: "OPENAI",
-      recover_at: "2026-05-19T01:16:00Z",
-    },
-  ];
-  snapshot.runtime.workstation_requests_by_dispatch_id = {
-    "dispatch-review": {
-      counts: {
-        dispatched_count: 1,
-        errored_count: 1,
-        responded_count: 1,
-      },
-      dispatch_id: "dispatch-review",
-      request: {},
-      response: {
-        failure_message: "Provider request failed.",
-        outcome: "FAILED",
-      },
-      transition_id: "review-transition",
-      workstation_name: "review",
-      workstation_node_id: "review",
-      work_items: [],
-    },
-  };
-
-  return snapshot;
-}
 export function dashboardSnapshotWithActiveWorkItemCount(
   count: number,
 ): DashboardSnapshot {

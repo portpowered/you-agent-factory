@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 import type {
@@ -54,7 +54,6 @@ export {
   chainRenderAppFetchMock,
   type FetchMock,
   fetchCallPaths,
-  jsonResponse,
   nonPromptTemplateFetchPaths,
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
@@ -156,16 +155,6 @@ function wrapAppForDashboardSession(
 
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
-export async function settleAppShellDashboardEffects(): Promise<void> {
-  await act(async () => {
-    await Promise.resolve();
-  });
-}
-
-export async function waitForDashboardShell(): Promise<void> {
-  await screen.findByRole("heading", { name: "U" });
-  await settleAppShellDashboardEffects();
-}
 
 export function renderApp({
   app: renderedApp,
@@ -302,14 +291,6 @@ export function renderApp({
     <QueryClientProvider client={queryClient}>{scopedApp}</QueryClientProvider>,
   );
   return { ...result, fetchMock };
-}
-
-export async function renderAppWithDashboardShell(
-  options: RenderAppOptions,
-): Promise<RenderAppResult> {
-  const result = renderApp(options);
-  await waitForDashboardShell();
-  return result;
 }
 
 export function resetCurrentFactoryDocumentMock(): void {

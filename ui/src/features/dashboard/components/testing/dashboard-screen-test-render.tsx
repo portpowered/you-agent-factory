@@ -3,7 +3,6 @@ import {
   type RenderAppOptions,
   type RenderAppResult,
   renderApp,
-  renderAppWithDashboardShell,
 } from "../../../../testing/app-shell-test-utils";
 import { DashboardScreen } from "../dashboard-screen";
 
@@ -13,13 +12,4 @@ export function renderDashboardScreen(
   options: DashboardScreenTestRenderOptions,
 ): RenderAppResult {
   return renderApp({ ...options, app: <DashboardScreen /> });
-}
-
-export function renderDashboardScreenWithShell(
-  options: DashboardScreenTestRenderOptions,
-): Promise<RenderAppResult> {
-  return renderAppWithDashboardShell({
-    ...options,
-    app: <DashboardScreen />,
-  });
 }

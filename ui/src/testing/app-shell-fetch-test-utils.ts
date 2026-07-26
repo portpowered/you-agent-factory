@@ -54,17 +54,3 @@ export function chainRenderAppFetchMock(
     return defaultHandler(input, init);
   });
 }
-
-export function jsonResponse(
-  body: unknown,
-  status = 200,
-  statusText?: string,
-): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    status,
-    statusText,
-  });
-}
