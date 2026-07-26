@@ -92,15 +92,17 @@ type ReconcileRequest struct {
 // DesiredSpec is the plain desired automation configuration peers supply.
 type DesiredSpec struct {
 	AutomationID string
+	SourceID     string
 	Kind         string
-	Enabled      bool
+	State        DesiredLifecycleState
 }
 
 // ObservedInstance is a detached observation of one live automation instance.
 type ObservedInstance struct {
 	AutomationID string
+	SourceID     string
 	InstanceID   string
-	Status       string
+	State        ObservedLifecycleState
 }
 
 // ReconcileResult is the detached set of convergence outcomes peers consume.
@@ -111,18 +113,55 @@ type ReconcileResult struct {
 // ConvergenceOutcome reports how one automation identity converged.
 type ConvergenceOutcome struct {
 	AutomationID string
+	SourceID     string
 	InstanceID   string
-	Action       string
-	Status       string
+	Action       ConvergenceAction
+	Desired      DesiredLifecycleState
+	Observed     ObservedLifecycleState
+	Convergence  ConvergenceStatus
 }
 
-// Convergence action vocabulary peers can branch on without importing
-// implementation packages.
+// DesiredLifecycleState is the requested lifecycle state for a source.
+// It is intentionally distinct from ObservedLifecycleState because desired
+// state cannot represent transitional or failed observations.
+type DesiredLifecycleState string
+
 const (
-	ConvergenceActionCreated   = "created"
-	ConvergenceActionUpdated   = "updated"
-	ConvergenceActionUnchanged = "unchanged"
-	ConvergenceActionRemoved   = "removed"
+	DesiredLifecycleRunning DesiredLifecycleState = "running"
+	DesiredLifecycleStopped DesiredLifecycleState = "stopped"
+)
+
+// ObservedLifecycleState is a detached fact about a source instance.
+type ObservedLifecycleState string
+
+const (
+	ObservedLifecyclePending   ObservedLifecycleState = "pending"
+	ObservedLifecycleStarting  ObservedLifecycleState = "starting"
+	ObservedLifecycleRunning   ObservedLifecycleState = "running"
+	ObservedLifecycleStopping  ObservedLifecycleState = "stopping"
+	ObservedLifecycleStopped   ObservedLifecycleState = "stopped"
+	ObservedLifecycleFailed    ObservedLifecycleState = "failed"
+	ObservedLifecycleCancelled ObservedLifecycleState = "cancelled"
+)
+
+// ConvergenceStatus classifies the relationship between desired and observed
+// state without requiring callers to parse status or error text.
+type ConvergenceStatus string
+
+const (
+	ConvergenceStatusConverged   ConvergenceStatus = "converged"
+	ConvergenceStatusProgressing ConvergenceStatus = "progressing"
+	ConvergenceStatusFailed      ConvergenceStatus = "failed"
+)
+
+// ConvergenceAction reports the logical reconciliation action.
+type ConvergenceAction string
+
+const (
+	ConvergenceActionCreated   ConvergenceAction = "created"
+	ConvergenceActionUpdated   ConvergenceAction = "updated"
+	ConvergenceActionUnchanged ConvergenceAction = "unchanged"
+	ConvergenceActionRemoved   ConvergenceAction = "removed"
 )
 
 // Instance status vocabulary shared by reconcile, source lifecycle, and status

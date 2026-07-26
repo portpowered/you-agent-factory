@@ -63,13 +63,11 @@ func (f *fakeRootService) Reconcile(_ context.Context, req automations.Reconcile
 			Err:  automations.ErrInvalidRequest,
 		}
 	}
-	for _, spec := range req.Desired {
-		if spec.AutomationID == "" {
-			return automations.ReconcileResult{}, &automations.Error{
-				Op:   "Reconcile",
-				Code: automations.ErrorCodeInvalid,
-				Err:  automations.ErrInvalidRequest,
-			}
+	if !validDesiredSpecs(req.Desired) {
+		return automations.ReconcileResult{}, &automations.Error{
+			Op:   "Reconcile",
+			Code: automations.ErrorCodeInvalid,
+			Err:  automations.ErrInvalidRequest,
 		}
 	}
 	if f.conflictOnReconcile {
@@ -81,29 +79,69 @@ func (f *fakeRootService) Reconcile(_ context.Context, req automations.Reconcile
 	}
 
 	outcomes := make([]automations.ConvergenceOutcome, 0, len(req.Desired))
-	observedByAutomation := make(map[string]automations.ObservedInstance, len(req.Observed))
+	observedBySource := make(map[string]automations.ObservedInstance, len(req.Observed))
 	for _, observed := range req.Observed {
-		observedByAutomation[observed.AutomationID] = observed
+		observedBySource[observed.AutomationID+"\x00"+observed.SourceID] = observed
 	}
 	for _, spec := range req.Desired {
-		outcome := automations.ConvergenceOutcome{
-			AutomationID: spec.AutomationID,
-			Action:       automations.ConvergenceActionCreated,
-			Status:       automations.InstanceStatusReady,
-		}
-		if observed, ok := observedByAutomation[spec.AutomationID]; ok {
-			outcome.InstanceID = observed.InstanceID
-			outcome.Action = automations.ConvergenceActionUpdated
-			outcome.Status = observed.Status
-			if observed.Status == "" {
-				outcome.Status = automations.InstanceStatusReady
-			}
-		} else {
-			outcome.InstanceID = "instance:" + spec.AutomationID
-		}
-		outcomes = append(outcomes, outcome)
+		observed, exists := observedBySource[spec.AutomationID+"\x00"+spec.SourceID]
+		outcomes = append(outcomes, fakeConvergenceOutcome(spec, observed, exists))
 	}
 	return automations.ReconcileResult{Outcomes: outcomes}, nil
+}
+
+func validDesiredSpecs(specs []automations.DesiredSpec) bool {
+	for _, spec := range specs {
+		if spec.AutomationID == "" || spec.SourceID == "" {
+			return false
+		}
+		if spec.State != automations.DesiredLifecycleRunning &&
+			spec.State != automations.DesiredLifecycleStopped {
+			return false
+		}
+	}
+	return true
+}
+
+func fakeConvergenceOutcome(
+	spec automations.DesiredSpec,
+	observed automations.ObservedInstance,
+	exists bool,
+) automations.ConvergenceOutcome {
+	outcome := automations.ConvergenceOutcome{
+		AutomationID: spec.AutomationID,
+		SourceID:     spec.SourceID,
+		InstanceID:   "instance:" + spec.AutomationID + ":" + spec.SourceID,
+		Action:       automations.ConvergenceActionCreated,
+		Desired:      spec.State,
+		Observed:     automations.ObservedLifecyclePending,
+		Convergence:  automations.ConvergenceStatusProgressing,
+	}
+	if !exists {
+		return outcome
+	}
+
+	outcome.InstanceID = observed.InstanceID
+	outcome.Observed = observed.State
+	outcome.Action = automations.ConvergenceActionUpdated
+	switch {
+	case observed.State == automations.ObservedLifecycleFailed:
+		outcome.Convergence = automations.ConvergenceStatusFailed
+	case desiredMatchesObserved(spec.State, observed.State):
+		outcome.Action = automations.ConvergenceActionUnchanged
+		outcome.Convergence = automations.ConvergenceStatusConverged
+	}
+	return outcome
+}
+
+func desiredMatchesObserved(
+	desired automations.DesiredLifecycleState,
+	observed automations.ObservedLifecycleState,
+) bool {
+	return desired == automations.DesiredLifecycleRunning &&
+		observed == automations.ObservedLifecycleRunning ||
+		desired == automations.DesiredLifecycleStopped &&
+			observed == automations.ObservedLifecycleStopped
 }
 
 func (f *fakeRootService) StartSource(_ context.Context, req automations.StartSourceRequest) (automations.StartSourceResult, error) {
@@ -350,10 +388,20 @@ func TestServiceReconcile_FakeSuccessDetachedOutcomes(t *testing.T) {
 	var svc automations.Service = &fakeRootService{ready: true}
 	result, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
-			{AutomationID: "auto-a", Kind: "schedule", Enabled: true},
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-a",
+				Kind:         "schedule",
+				State:        automations.DesiredLifecycleRunning,
+			},
 		},
 		Observed: []automations.ObservedInstance{
-			{AutomationID: "auto-a", InstanceID: "inst-a", Status: automations.InstanceStatusRunning},
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-a",
+				InstanceID:   "inst-a",
+				State:        automations.ObservedLifecycleRunning,
+			},
 		},
 	})
 	if err != nil {
@@ -369,11 +417,78 @@ func TestServiceReconcile_FakeSuccessDetachedOutcomes(t *testing.T) {
 	if outcome.InstanceID != "inst-a" {
 		t.Fatalf("Reconcile() outcome.InstanceID = %q, want %q", outcome.InstanceID, "inst-a")
 	}
-	if outcome.Action != automations.ConvergenceActionUpdated {
-		t.Fatalf("Reconcile() outcome.Action = %q, want %q", outcome.Action, automations.ConvergenceActionUpdated)
+	if outcome.SourceID != "source-a" {
+		t.Fatalf("Reconcile() outcome.SourceID = %q, want %q", outcome.SourceID, "source-a")
 	}
-	if outcome.Status != automations.InstanceStatusRunning {
-		t.Fatalf("Reconcile() outcome.Status = %q, want %q", outcome.Status, automations.InstanceStatusRunning)
+	if outcome.Action != automations.ConvergenceActionUnchanged {
+		t.Fatalf("Reconcile() outcome.Action = %q, want %q", outcome.Action, automations.ConvergenceActionUnchanged)
+	}
+	if outcome.Desired != automations.DesiredLifecycleRunning {
+		t.Fatalf("Reconcile() outcome.Desired = %q, want %q", outcome.Desired, automations.DesiredLifecycleRunning)
+	}
+	if outcome.Observed != automations.ObservedLifecycleRunning {
+		t.Fatalf("Reconcile() outcome.Observed = %q, want %q", outcome.Observed, automations.ObservedLifecycleRunning)
+	}
+	if outcome.Convergence != automations.ConvergenceStatusConverged {
+		t.Fatalf("Reconcile() outcome.Convergence = %q, want %q", outcome.Convergence, automations.ConvergenceStatusConverged)
+	}
+}
+
+func TestServiceReconcile_FakeTypedConvergenceAndIdempotentIdentity(t *testing.T) {
+	t.Parallel()
+
+	var svc automations.Service = &fakeRootService{ready: true}
+	req := automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-progressing",
+				Kind:         "schedule",
+				State:        automations.DesiredLifecycleRunning,
+			},
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-failed",
+				Kind:         "events",
+				State:        automations.DesiredLifecycleRunning,
+			},
+		},
+		Observed: []automations.ObservedInstance{
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-progressing",
+				InstanceID:   "inst-progressing",
+				State:        automations.ObservedLifecycleStarting,
+			},
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-failed",
+				InstanceID:   "inst-failed",
+				State:        automations.ObservedLifecycleFailed,
+			},
+		},
+	}
+
+	first, err := svc.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first Reconcile() unexpected error: %v", err)
+	}
+	second, err := svc.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second Reconcile() unexpected error: %v", err)
+	}
+	if first.Outcomes[0].Convergence != automations.ConvergenceStatusProgressing {
+		t.Fatalf("progressing convergence = %q, want %q", first.Outcomes[0].Convergence, automations.ConvergenceStatusProgressing)
+	}
+	if first.Outcomes[1].Convergence != automations.ConvergenceStatusFailed {
+		t.Fatalf("failed convergence = %q, want %q", first.Outcomes[1].Convergence, automations.ConvergenceStatusFailed)
+	}
+	for i := range first.Outcomes {
+		if second.Outcomes[i].AutomationID != first.Outcomes[i].AutomationID ||
+			second.Outcomes[i].SourceID != first.Outcomes[i].SourceID ||
+			second.Outcomes[i].InstanceID != first.Outcomes[i].InstanceID {
+			t.Fatalf("repeated Reconcile() outcome %d identity = %#v, want %#v", i, second.Outcomes[i], first.Outcomes[i])
+		}
 	}
 }
 
@@ -382,7 +497,12 @@ func TestServiceReconcile_FakeTypedInvalidDesiredSpecs(t *testing.T) {
 
 	var svc automations.Service = &fakeRootService{ready: true}
 	_, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
-		Desired: []automations.DesiredSpec{{AutomationID: "", Kind: "schedule", Enabled: true}},
+		Desired: []automations.DesiredSpec{{
+			AutomationID: "",
+			SourceID:     "source-a",
+			Kind:         "schedule",
+			State:        automations.DesiredLifecycleRunning,
+		}},
 	})
 	if err == nil {
 		t.Fatal("Reconcile() error = nil, want typed invalid-request error")
@@ -405,7 +525,12 @@ func TestServiceReconcile_FakeTypedConflict(t *testing.T) {
 	var svc automations.Service = &fakeRootService{ready: true, conflictOnReconcile: true}
 	_, err := svc.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
-			{AutomationID: "auto-a", Kind: "schedule", Enabled: true},
+			{
+				AutomationID: "auto-a",
+				SourceID:     "source-a",
+				Kind:         "schedule",
+				State:        automations.DesiredLifecycleRunning,
+			},
 		},
 	})
 	if err == nil {
@@ -693,10 +818,20 @@ func peerConsumePublishedSlices(ctx context.Context, svc automations.Service) er
 	}
 	if _, err := svc.Reconcile(ctx, automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
-			{AutomationID: "auto-seal", Kind: "schedule", Enabled: true},
+			{
+				AutomationID: "auto-seal",
+				SourceID:     "source-seal",
+				Kind:         "schedule",
+				State:        automations.DesiredLifecycleRunning,
+			},
 		},
 		Observed: []automations.ObservedInstance{
-			{AutomationID: "auto-seal", InstanceID: "inst-seal", Status: automations.InstanceStatusRunning},
+			{
+				AutomationID: "auto-seal",
+				SourceID:     "source-seal",
+				InstanceID:   "inst-seal",
+				State:        automations.ObservedLifecycleRunning,
+			},
 		},
 	}); err != nil {
 		return err
