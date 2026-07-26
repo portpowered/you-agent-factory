@@ -1744,3 +1744,9 @@ response-stream output.
   and use the failed-exit outcome; process-start failures omit an exit code and
   use the process-error outcome. Validation failures occur before request-event
   recording or command invocation.
+- Script interruption remains split across boundaries: the injected platform
+  process edge terminates the complete process tree and waits for command and
+  cleanup completion before returning, while the Script Runner classifies
+  cancellation separately from deadline timeout, retains partial streams, marks
+  timeout diagnostics, and records one matching terminal response. Pre-start
+  cancellation returns without command or event effects.

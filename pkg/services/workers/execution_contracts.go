@@ -196,6 +196,7 @@ type ScriptExecutionOutcome string
 const (
 	ScriptExecutionOutcomeSucceeded      ScriptExecutionOutcome = "SUCCEEDED"
 	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
+	ScriptExecutionOutcomeCanceled       ScriptExecutionOutcome = "CANCELED"
 	ScriptExecutionOutcomeTimedOut       ScriptExecutionOutcome = "TIMED_OUT"
 	ScriptExecutionOutcomeProcessError   ScriptExecutionOutcome = "PROCESS_ERROR"
 )
@@ -205,6 +206,7 @@ const (
 type ScriptFailureType string
 
 const (
+	ScriptFailureTypeCanceled     ScriptFailureType = "CANCELED"
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
 	ScriptFailureTypeProcessError ScriptFailureType = "PROCESS_ERROR"
 )

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -127,11 +128,45 @@ func (r *runner) Execute(
 		observer,
 	)
 	finished := r.now()
+	return r.completeExecution(
+		ctx,
+		commandRequest,
+		requestID,
+		started,
+		finished,
+		result,
+		err,
+	)
+}
+
+func (r *runner) completeExecution(
+	ctx context.Context,
+	commandRequest workers.CommandRequest,
+	requestID string,
+	started time.Time,
+	finished time.Time,
+	result workers.CommandResult,
+	runErr error,
+) (workers.RunnerExecutionResult, error) {
 	duration := finished.Sub(started)
 	diagnostics := commandDiagnostics(commandRequest, result, duration)
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return workers.RunnerExecutionResult{}, ctxErr
+	if runErr != nil {
+		if interruption := classifyInterruption(ctx, runErr); interruption != nil {
+			diagnostics.Command.TimedOut = interruption.timedOut
+			r.record(scriptFailureEvent(
+				commandRequest,
+				requestID,
+				result,
+				duration,
+				interruption.outcome,
+				interruption.failureType,
+				finished,
+			))
+			partial := failureResult(result, diagnostics)
+			if interruption.timedOut {
+				return partial, timeoutFailure(interruption.cause, diagnostics)
+			}
+			return partial, interruption.cause
 		}
 		r.record(scriptFailureEvent(
 			commandRequest,
@@ -139,11 +174,12 @@ func (r *runner) Execute(
 			result,
 			duration,
 			workers.ScriptExecutionOutcomeProcessError,
+			workers.ScriptFailureTypeProcessError,
 			finished,
 		))
 		return failureResult(result, diagnostics), executionFailure(
 			"script command execution failed",
-			err,
+			runErr,
 			diagnostics,
 		)
 	}
@@ -154,6 +190,7 @@ func (r *runner) Execute(
 			result,
 			duration,
 			workers.ScriptExecutionOutcomeFailedExitCode,
+			"",
 			finished,
 		))
 		return failureResult(result, diagnostics), executionFailure(
@@ -169,6 +206,33 @@ func (r *runner) Execute(
 	}, nil
 }
 
+type scriptInterruption struct {
+	cause       error
+	outcome     workers.ScriptExecutionOutcome
+	failureType workers.ScriptFailureType
+	timedOut    bool
+}
+
+func classifyInterruption(ctx context.Context, runErr error) *scriptInterruption {
+	ctxErr := ctx.Err()
+	if errors.Is(ctxErr, context.DeadlineExceeded) || errors.Is(runErr, context.DeadlineExceeded) {
+		return &scriptInterruption{
+			cause:       context.DeadlineExceeded,
+			outcome:     workers.ScriptExecutionOutcomeTimedOut,
+			failureType: workers.ScriptFailureTypeTimeout,
+			timedOut:    true,
+		}
+	}
+	if errors.Is(ctxErr, context.Canceled) || errors.Is(runErr, context.Canceled) {
+		return &scriptInterruption{
+			cause:       context.Canceled,
+			outcome:     workers.ScriptExecutionOutcomeCanceled,
+			failureType: workers.ScriptFailureTypeCanceled,
+		}
+	}
+	return nil
+}
+
 func failureResult(
 	result workers.CommandResult,
 	diagnostics *workers.WorkDiagnostics,
@@ -177,6 +241,16 @@ func failureResult(
 		Content:     strings.TrimSpace(string(result.Stdout)),
 		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
 	}
+}
+
+func timeoutFailure(cause error, diagnostics *workers.WorkDiagnostics) error {
+	failure := workers.NewProviderError(
+		workers.WorkFailureTypeTimeout,
+		"execution timeout",
+		cause,
+	)
+	failure.Diagnostics = workers.CloneWorkDiagnostics(diagnostics)
+	return failure
 }
 
 func executionFailure(

@@ -115,12 +115,11 @@ func scriptFailureEvent(
 	result workers.CommandResult,
 	duration time.Duration,
 	outcome workers.ScriptExecutionOutcome,
+	failureType workers.ScriptFailureType,
 	eventTime time.Time,
 ) workers.ScriptEvent {
-	failureType := workers.ScriptFailureTypeProcessError
 	var exitCode *int
 	if outcome == workers.ScriptExecutionOutcomeFailedExitCode {
-		failureType = ""
 		value := result.ExitCode
 		exitCode = &value
 	}
