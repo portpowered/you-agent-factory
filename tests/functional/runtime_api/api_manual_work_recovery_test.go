@@ -38,10 +38,24 @@ func assertManualWorkMoveRootRuntimeAndScopedStatusStayAligned(t *testing.T) {
 		t.Fatalf("submitted Work = %#v, want one public Work ID", submitted)
 	}
 
-	moved := postGeneratedMoveWork(t, server.URL(), submitted[0].WorkID, "complete")
+	const moveRequestID = "manual-root-work-move-request"
+	moved := postGeneratedMoveWorkWithRequestID(
+		t,
+		server.URL(),
+		submitted[0].WorkID,
+		"complete",
+		moveRequestID,
+	)
 	if got := generatedWorkStateName(moved.State); got != "complete" {
 		t.Fatalf("moved Work state = %q, want complete", got)
 	}
+	assertGeneratedMoveWorkConflict(
+		t,
+		server.URL(),
+		submitted[0].WorkID,
+		"complete",
+		moveRequestID,
+	)
 
 	current := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 	scoped := getGeneratedJSON[factoryapi.StatusResponse](
@@ -189,8 +203,22 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 
 func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
 	t.Helper()
+	return postGeneratedMoveWorkWithRequestID(t, baseURL, workID, stateName, "")
+}
 
-	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
+func postGeneratedMoveWorkWithRequestID(
+	t *testing.T,
+	baseURL string,
+	workID string,
+	stateName string,
+	requestID string,
+) factoryapi.Work {
+	t.Helper()
+	request := factoryapi.MoveWorkRequest{StateName: stateName}
+	if requestID != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal move request: %v", err)
 	}
@@ -208,6 +236,36 @@ func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) fact
 		t.Fatalf("decode move response: %v", err)
 	}
 	return work
+}
+
+func assertGeneratedMoveWorkConflict(
+	t *testing.T,
+	baseURL string,
+	workID string,
+	stateName string,
+	requestID string,
+) {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.MoveWorkRequest{
+		StateName: stateName,
+		RequestId: &requestID,
+	})
+	if err != nil {
+		t.Fatalf("marshal duplicate move request: %v", err)
+	}
+	resp, err := http.Post(
+		support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move"),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST duplicate /work/%s/move: %v", workID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("duplicate move status = %d, want 409: %s", resp.StatusCode, payload)
+	}
 }
 
 func waitForGeneratedWorkIDsAtState(t *testing.T, baseURL string, workIDs []string, stateName string, timeout time.Duration) {
