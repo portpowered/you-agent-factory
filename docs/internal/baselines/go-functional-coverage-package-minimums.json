@@ -1221,6 +1221,10 @@
       "minimum": 47.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifest",
       "minimum": 2.80
     },
