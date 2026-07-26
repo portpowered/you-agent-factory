@@ -115,6 +115,21 @@ func TestFactoryConfigInitFamilyProjectsStaticCompletionMetadata(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigInitFamilyProjectsProviderModelSetupInputs(t *testing.T) {
+	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
+	if err != nil {
+		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
+	}
+	for _, name := range []string{"provider", "model"} {
+		if flag := components.Init.Flags().Lookup(name); flag == nil {
+			t.Fatalf("you init --%s missing", name)
+		}
+	}
+	if got := components.Init.Short; got != "Configure provider and model defaults" {
+		t.Fatalf("you init short help = %q", got)
+	}
+}
+
 func TestNewFactoryConfigInitFamilyComponentsRejectsNilHandler(t *testing.T) {
 	if _, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(nil); err == nil {
 		t.Fatal("NewFactoryConfigInitFamilyComponents(nil) error = nil")

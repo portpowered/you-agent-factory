@@ -525,6 +525,13 @@ response-stream output.
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
+- Public provider/model setup enters through the manifest-derived `you init`
+  handler in `pkg/transports/cli/commandregistry`, which translates stable
+  `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
+  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
+  home-to-config-path translation and human output, while
+  `ConfigDocumentService` retains provider-catalog validation, semantic merge,
+  unrelated-field preservation, and the atomic commit.
 - Canonical `you config init` system bootstrap belongs in
   `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
   `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in

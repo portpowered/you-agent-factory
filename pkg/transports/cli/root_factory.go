@@ -32,6 +32,7 @@ func productionFactoryConfigInitCommands(
 			ExpandFactoryConfig:   options.ExpandFactoryConfig,
 			InitSystemConfig:      options.InitSystemConfig,
 			InitFactory:           options.InitFactory,
+			ConfigureInit:         options.ConfigureInit,
 			HomeDir:               options.homeDir,
 			DiagnosticsWriter:     diagnostics.writer,
 		},

@@ -9,6 +9,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
@@ -96,6 +97,62 @@ func TestFactoryConfigInitCommandHandlerMapsInitStableInputs(t *testing.T) {
 	}
 	if got.Dir != "custom" || got.Type != "ralph" || got.Executor != "claude" || !got.Verbose || !got.Debug {
 		t.Fatalf("init config = %#v, want stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
+	var got initsetup.Config
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ConfigureInit: func(cfg initsetup.Config) error {
+				got = cfg
+				return nil
+			},
+			HomeDir: func() (string, error) { return "operator-home", nil },
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
+		resolvedTestValue{id: "you.init.flag.model", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("free-form/model")},
+		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factory")},
+		resolvedTestValue{id: "you.init.flag.type", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("default")},
+		resolvedTestValue{id: "you.init.flag.executor", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("codex")},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	if err := handler.Init(cmd, inputs, resolvedFactoryGlobals(t, false, false, false)); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if got.HomeDir != "operator-home" || got.Provider != "codex" || got.Model == nil || *got.Model != "free-form/model" {
+		t.Fatalf("init setup config = %#v, want supplied stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerRejectsJSONBeforeSetup(t *testing.T) {
+	called := false
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ConfigureInit: func(initsetup.Config) error {
+				called = true
+				return nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
+	)
+	inherited := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.flag.server", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("http://localhost:7437")},
+		resolvedTestValue{id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)},
+		resolvedTestValue{id: "you.flag.verbose", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+		resolvedTestValue{id: "you.flag.debug", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+	)
+	err := handler.Init(&cobra.Command{}, inputs, inherited)
+	if err == nil || !strings.Contains(err.Error(), "--json is not supported") {
+		t.Fatalf("Init() error = %v, want JSON rejection", err)
+	}
+	if called {
+		t.Fatal("setup service called after JSON rejection")
 	}
 }
 

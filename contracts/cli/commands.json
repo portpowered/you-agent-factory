@@ -4139,18 +4139,17 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Create factory directory structure.\n\nSupported scaffold types:\n  default - single-step task-processing scaffold\n  ralph   - minimal PRD-to-execution scaffold\n\nOmitting --executor preserves the default Codex-backed starter scaffold. Supported starter scaffold values are codex and claude. Omitting --type keeps the current default scaffold behavior. For the default scaffold, --executor chooses which starter worker scaffold is generated.",
+            "canonicalEnglish": "Configure the default model provider and optional model used for worker execution.\n\nSupply --provider for non-interactive setup. The provider must be registered; --model accepts any non-empty model identifier.",
             "id": "you.init.description"
           },
           "title": {
-            "canonicalEnglish": "Create factory directory structure",
+            "canonicalEnglish": "Configure provider and model defaults",
             "id": "you.init.title"
           }
         },
         "examples": [
-          "you init",
-          "you init --dir my-factory --executor claude",
-          "you init --type ralph --dir ralph-factory"
+          "you init --provider codex",
+          "you init --provider claude --model claude-sonnet-4-5"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.init",
@@ -4319,6 +4318,70 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.init.flag.provider": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.init.binding.provider",
+          "id": "you.init.flag.provider",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "provider",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "registered default model provider (required for non-interactive setup)",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.model": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.init.binding.model",
+          "id": "you.init.flag.model",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "model",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "optional non-empty free-form default model identifier",
+          "valueType": "string",
+          "visibility": "visible"
+        },
         "you.init.flag.dir": {
           "acceptedSources": [
             "cli",
@@ -4425,6 +4488,14 @@
         }
       },
       "handlerBindings": {
+        "you.init.binding.model": {
+          "id": "you.init.binding.model",
+          "inputId": "you.init.flag.model"
+        },
+        "you.init.binding.provider": {
+          "id": "you.init.binding.provider",
+          "inputId": "you.init.flag.provider"
+        },
         "you.init.binding.dir": {
           "id": "you.init.binding.dir",
           "inputId": "you.init.flag.dir"
@@ -4454,11 +4525,6 @@
           "channel": "stdout",
           "format": "text",
           "id": "you.init.output.human"
-        },
-        "you.init.output.json": {
-          "channel": "stdout",
-          "format": "json",
-          "id": "you.init.output.json"
         }
       },
       "path": "you init",
@@ -4486,7 +4552,7 @@
         }
       },
       "usage": {
-        "example": "  # Create the default Codex-backed scaffold in ./factory.\n  you init\n\n  # Create a Claude-backed default scaffold in a custom directory.\n  you init --dir my-factory --executor claude\n\n  # Create the minimal Ralph PRD-to-execution scaffold.\n  you init --type ralph --dir ralph-factory",
+        "example": "  # Configure a registered provider non-interactively.\n  you init --provider codex\n\n  # Configure a provider and free-form model identifier.\n  you init --provider claude --model claude-sonnet-4-5",
         "line": "init"
       },
       "visibility": "visible"

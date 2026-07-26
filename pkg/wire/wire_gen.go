@@ -363,6 +363,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v55 := configinitcmd.NewInitializer(systeminitializationService)
 	initSystemConfigOperation := provideInitSystemConfigOperation(v55)
+	providerCatalog := provideOperatorSettingsProviderCatalog(registry)
+	configDocumentService := provideOperatorConfigDocumentService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder)
+	configureInitOperation := provideConfigureInitOperation(configDocumentService)
 	queryFactoryOperation := provideQueryFactoryOperation(wireStandardCLIHTTPProtocol)
 	listFactoriesOperation := provideListFactoriesOperation(v)
 	v56 := provideSubmittedDefinitionValidationOperation(validationService)
@@ -465,6 +468,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ExpandFactoryConfig:               expandFactoryConfigOperation,
 		InitFactory:                       v37,
 		InitSystemConfig:                  initSystemConfigOperation,
+		ConfigureInit:                     configureInitOperation,
 		QueryFactory:                      queryFactoryOperation,
 		ListFactories:                     listFactoriesOperation,
 		ValidateFactory:                   validateFactoryOperation,
@@ -518,6 +522,8 @@ var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, api
 var servicesSet = wire2.NewSet(
 	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
+	provideOperatorSettingsProviderCatalog,
+	provideOperatorConfigDocumentService,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
@@ -697,6 +703,7 @@ var cliCommandOperationsSet = wire2.NewSet(
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideInitSystemConfigOperation,
+	provideConfigureInitOperation,
 	provideQueryFactoryOperation,
 	provideListFactoriesOperation,
 	provideValidateFactoryOperation,

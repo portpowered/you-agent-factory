@@ -300,6 +300,7 @@
     "pkg/transports/cli/factory",
     "pkg/transports/cli/factoryload",
     "pkg/transports/cli/generated",
+    "pkg/transports/cli/initsetup",
     "pkg/transports/cli/mcp",
     "pkg/transports/cli/observation",
     "pkg/transports/cli/resolvedinput",
@@ -1645,6 +1646,11 @@
     },
     {
       "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/initsetup",
       "disposition": "retain",
       "destination": "transports"
     },

@@ -788,7 +788,7 @@ func TestInitCommand_ExecutorFlagMapsToInitConfig(t *testing.T) {
 	}
 }
 
-func TestInitCommand_HelpDocumentsExecutorOptions(t *testing.T) {
+func TestInitCommand_HelpDocumentsProviderModelSetup(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
@@ -800,15 +800,15 @@ func TestInitCommand_HelpDocumentsExecutorOptions(t *testing.T) {
 	}
 
 	help := out.String()
-	for _, want := range []string{"--executor", "codex", "claude"} {
+	for _, want := range []string{
+		"Configure provider and model defaults",
+		"--provider",
+		"--model",
+		"provider must be registered",
+		"any non-empty model identifier",
+	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("init help missing %q:\n%s", want, help)
 		}
-	}
-	if !strings.Contains(help, "Omitting --executor preserves the default Codex-backed starter scaffold") {
-		t.Fatalf("init help should describe default executor behavior:\n%s", help)
-	}
-	if !strings.Contains(help, "Supported starter scaffold values are codex and claude") {
-		t.Fatalf("init help should describe supported executor values:\n%s", help)
 	}
 }

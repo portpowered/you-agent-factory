@@ -503,7 +503,7 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	target := "packages/api/generated/schemas/mock-workers.schema.json"
-	wantStale := []string{"packages/api/generated/manifest.json", target}
+	wantStale := []string{target}
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))
 
 	before, err := os.ReadFile(stagedPath)

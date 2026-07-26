@@ -29,6 +29,7 @@ import (
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -73,6 +74,7 @@ type ExecutionServiceBuilder func(context.Context, string, string, string, strin
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
 type InitSystemConfigOperation func(configinitcmd.InitConfig) error
+type ConfigureInitOperation func(initsetup.Config) error
 type QueryFactoryOperation func(factorycli.QueryConfig) error
 type ListFactoriesOperation func(factorycli.ListConfig) error
 type ValidateFactoryOperation func(factorycli.ValidateConfig) error
@@ -120,6 +122,7 @@ type CommandOperations struct {
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
 	InitSystemConfig                  InitSystemConfigOperation
+	ConfigureInit                     ConfigureInitOperation
 	QueryFactory                      QueryFactoryOperation
 	ListFactories                     ListFactoriesOperation
 	ValidateFactory                   ValidateFactoryOperation
@@ -173,6 +176,7 @@ type CommandFactory struct {
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitFactory           interfaces.ScaffoldInitializer
 	InitSystemConfig      func(configinitcmd.InitConfig) error
+	ConfigureInit         func(initsetup.Config) error
 	QueryFactory          func(factorycli.QueryConfig) error
 	ListFactories         func(factorycli.ListConfig) error
 	ValidateFactory       func(factorycli.ValidateConfig) error
@@ -222,6 +226,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
 		InitSystemConfig:                  operations.InitSystemConfig,
+		ConfigureInit:                     operations.ConfigureInit,
 		QueryFactory:                      operations.QueryFactory,
 		ListFactories:                     operations.ListFactories,
 		ValidateFactory:                   operations.ValidateFactory,

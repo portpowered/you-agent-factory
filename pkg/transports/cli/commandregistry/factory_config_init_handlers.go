@@ -8,6 +8,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
@@ -32,6 +33,8 @@ const (
 	initDirInputID                   = "you.init.flag.dir"
 	initTypeInputID                  = "you.init.flag.type"
 	initExecutorInputID              = "you.init.flag.executor"
+	initProviderInputID              = "you.init.flag.provider"
+	initModelInputID                 = "you.init.flag.model"
 	factoryConfigInitServerInputID   = "you.flag.server"
 	factoryConfigInitJSONInputID     = "you.flag.json"
 	factoryConfigInitVerboseInputID  = "you.flag.verbose"
@@ -69,6 +72,7 @@ type FactoryConfigInitServices struct {
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitSystemConfig      func(configinitcmd.InitConfig) error
 	InitFactory           func(initcmd.ScaffoldConfig) error
+	ConfigureInit         func(initsetup.Config) error
 	HomeDir               func() (string, error)
 	DiagnosticsWriter     func(*cobra.Command) io.Writer
 }
@@ -378,8 +382,63 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.InitFactory == nil {
-		return fmt.Errorf("init service is required")
+	if h == nil {
+		return fmt.Errorf("init handler is required")
+	}
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	if state, ok := inherited.State(factoryConfigInitJSONInputID); ok && state.Changed {
+		return fmt.Errorf("--json is not supported by you init")
+	}
+	if resolvedInputChanged(inputs, initDirInputID, initTypeInputID, initExecutorInputID) {
+		return h.initLegacyFactoryScaffold(cmd, inputs, globals)
+	}
+	if h.services.ConfigureInit == nil {
+		return fmt.Errorf("init provider/model configuration service is required")
+	}
+	if h.services.HomeDir == nil {
+		return fmt.Errorf("init home directory resolver is required")
+	}
+	provider, err := inputs.String(initProviderInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	modelValue, err := inputs.String(initModelInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	var model *string
+	if state, ok := inputs.State(initModelInputID); ok && state.Changed {
+		model = &modelValue
+	}
+	homeDir, err := h.services.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve init home directory: %w", err)
+	}
+	return h.services.ConfigureInit(initsetup.Config{
+		Context: cmd.Context(), HomeDir: homeDir, Provider: provider,
+		Model: model, Output: cmd.OutOrStdout(),
+	})
+}
+
+func resolvedInputChanged(inputs resolvedinput.Inputs, inputIDs ...string) bool {
+	for _, inputID := range inputIDs {
+		if state, ok := inputs.State(inputID); ok && state.Changed {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *FactoryConfigInitCommandHandler) initLegacyFactoryScaffold(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	globals factoryConfigInitGlobals,
+) error {
+	if h.services.InitFactory == nil {
+		return fmt.Errorf("legacy init scaffold service is required")
 	}
 	dir, err := inputs.String(initDirInputID)
 	if err != nil {
@@ -390,10 +449,6 @@ func (h *FactoryConfigInitCommandHandler) Init(
 		return fmt.Errorf("resolve init inputs: %w", err)
 	}
 	executor, err := inputs.String(initExecutorInputID)
-	if err != nil {
-		return fmt.Errorf("resolve init inputs: %w", err)
-	}
-	globals, err := readFactoryConfigInitGlobals(inherited)
 	if err != nil {
 		return fmt.Errorf("resolve init inputs: %w", err)
 	}

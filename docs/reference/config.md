@@ -20,6 +20,20 @@ root unless a same-named canonical factory already exists; conflicts preserve
 both copies and report the locations. Add global `--json` when automation needs
 the paths and per-file outcomes.
 
+Configure the default provider and optional free-form model used by
+model-backed workers:
+
+```bash
+you init --provider codex
+you init --provider claude --model claude-sonnet-4-5
+```
+
+The provider must be registered. The model, when supplied, may be any non-empty
+identifier and is not restricted to a local model catalog. A successful command
+reports the selected defaults and operator-config path. `you init` updates only
+the provider/model defaults and preserves all other operator settings. It does
+not support global `--json`; passing that flag fails without changing the file.
+
 The operator file can supply defaults for model-backed workers that omit their
 own provider or model:
 

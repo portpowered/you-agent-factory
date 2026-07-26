@@ -19,6 +19,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -143,6 +144,12 @@ func provideInitSystemConfigOperation(
 	initialize func(configinitcmd.InitConfig) error,
 ) cli.InitSystemConfigOperation {
 	return initialize
+}
+
+func provideConfigureInitOperation(
+	service operatorsettings.ConfigDocumentService,
+) cli.ConfigureInitOperation {
+	return initsetup.NewConfigurer(service)
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {
