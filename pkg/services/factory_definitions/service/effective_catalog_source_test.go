@@ -68,3 +68,45 @@ func TestSourceDiscoversDiskAndPackagedCandidatesWithoutMaterialization(t *testi
 		t.Fatalf("packaged location = %q, want nil", *packaged[0].Location)
 	}
 }
+
+func TestSourceIsolatesUnreadableCandidateAndContinues(t *testing.T) {
+	t.Parallel()
+
+	goodDir := filepath.Join("/project", "good")
+	badDir := filepath.Join("/project", "bad")
+	discovery, err := factoryservice.NewEffectiveCatalogDiscovery(
+		rootLister{
+			"/project": {
+				{Name: "bad", FactoryDir: badDir},
+				{Name: "good", FactoryDir: goodDir},
+			},
+		}.ListNamedFactories,
+		definitionFiles{
+			filepath.Join(goodDir, factorydefinitions.FactoryConfigFile): definitionJSON("good"),
+		}.ReadFile,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new effective catalog source: %v", err)
+	}
+
+	candidates, err := discovery.ListRoot(t.Context(), "/project")
+	if err != nil {
+		t.Fatalf("list disk candidates: %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("candidates = %#v, want two isolated candidates", candidates)
+	}
+	if got := candidates[0].Failure; got != factorydefinitions.EffectiveFactoryCatalogDiagnosticUnreadable {
+		t.Fatalf("bad candidate failure = %q, want unreadable", got)
+	}
+	if len(candidates[0].Canonical) != 0 {
+		t.Fatalf("bad candidate retained canonical bytes: %q", candidates[0].Canonical)
+	}
+	if got := candidates[1].Failure; got != "" {
+		t.Fatalf("good candidate failure = %q, want empty", got)
+	}
+	if len(candidates[1].Canonical) == 0 {
+		t.Fatal("good candidate canonical bytes are empty")
+	}
+}

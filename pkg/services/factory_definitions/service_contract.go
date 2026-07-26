@@ -67,7 +67,38 @@ type ListEffectiveFactoriesRequest struct {
 // ListEffectiveFactoriesResult carries the detached, precedence-resolved
 // Factory catalog used by read-only transport projections.
 type ListEffectiveFactoriesResult struct {
-	Entries []EffectiveFactoryCatalogEntry
+	Entries     []EffectiveFactoryCatalogEntry
+	Diagnostics []EffectiveFactoryCatalogDiagnostic
+}
+
+// EffectiveFactoryCatalogSource identifies one precedence tier without
+// exposing filesystem paths or packaged payload details.
+type EffectiveFactoryCatalogSource string
+
+const (
+	EffectiveFactoryCatalogSourceProjectLocal EffectiveFactoryCatalogSource = "project-local"
+	EffectiveFactoryCatalogSourceGlobal       EffectiveFactoryCatalogSource = "global"
+	EffectiveFactoryCatalogSourcePackaged     EffectiveFactoryCatalogSource = "packaged"
+)
+
+// EffectiveFactoryCatalogDiagnosticCode classifies one isolated candidate
+// failure without retaining the underlying error or definition payload.
+type EffectiveFactoryCatalogDiagnosticCode string
+
+const (
+	EffectiveFactoryCatalogDiagnosticInvalidName EffectiveFactoryCatalogDiagnosticCode = "invalid-name"
+	EffectiveFactoryCatalogDiagnosticUnreadable  EffectiveFactoryCatalogDiagnosticCode = "unreadable"
+	EffectiveFactoryCatalogDiagnosticMalformed   EffectiveFactoryCatalogDiagnosticCode = "malformed"
+)
+
+// EffectiveFactoryCatalogDiagnostic is a deterministic, sensitive-safe
+// description of one candidate omitted from the effective catalog. Name is
+// empty when the candidate name cannot be safely canonicalized.
+type EffectiveFactoryCatalogDiagnostic struct {
+	Code    EffectiveFactoryCatalogDiagnosticCode
+	Source  EffectiveFactoryCatalogSource
+	Name    string
+	Message string
 }
 
 // EffectiveFactoryCatalogEntry is one normalized selectable Factory. Location
@@ -85,6 +116,7 @@ type EffectiveFactoryCatalogCandidate struct {
 	Name      string
 	Location  *string
 	Canonical []byte
+	Failure   EffectiveFactoryCatalogDiagnosticCode
 }
 
 // EffectiveFactoryCatalogDiscovery carries the exact read-only source

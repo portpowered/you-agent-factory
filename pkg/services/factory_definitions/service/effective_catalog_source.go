@@ -51,6 +51,9 @@ func (s effectiveCatalogSource) listRootCandidates(
 		return nil, err
 	}
 	listed, err := s.listRoot(root)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return nil, contextErr
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -63,15 +66,20 @@ func (s effectiveCatalogSource) listRootCandidates(
 			entry.FactoryDir,
 			factorydefinitions.FactoryConfigFile,
 		))
-		if err != nil {
-			return nil, err
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, contextErr
 		}
 		location := entry.FactoryDir
-		candidates = append(candidates, factorydefinitions.EffectiveFactoryCatalogCandidate{
+		candidate := factorydefinitions.EffectiveFactoryCatalogCandidate{
 			Name:      entry.Name,
 			Location:  &location,
 			Canonical: append([]byte(nil), canonical...),
-		})
+		}
+		if err != nil {
+			candidate.Canonical = nil
+			candidate.Failure = factorydefinitions.EffectiveFactoryCatalogDiagnosticUnreadable
+		}
+		candidates = append(candidates, candidate)
 	}
 	return candidates, nil
 }

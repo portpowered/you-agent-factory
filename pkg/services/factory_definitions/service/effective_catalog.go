@@ -3,12 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
 type effectiveCatalog struct {
@@ -63,34 +61,37 @@ func (c effectiveCatalog) listEffectiveFactories(
 	ctx context.Context,
 	request factorydefinitions.ListEffectiveFactoriesRequest,
 ) (factorydefinitions.ListEffectiveFactoriesResult, error) {
-	if err := validateRequest(request); err != nil {
+	if err := ctx.Err(); err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := validateRequest(request); err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, err
 	}
 
 	project, err := c.discovery.ListRoot(ctx, request.ProjectRoot)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return factorydefinitions.ListEffectiveFactoriesResult{}, contextErr
+	}
 	if err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, fmt.Errorf(
 			"discover project-local Factories: %w",
 			err,
 		)
 	}
-	if err := ctx.Err(); err != nil {
-		return factorydefinitions.ListEffectiveFactoriesResult{}, err
-	}
 	global, err := c.discovery.ListRoot(ctx, request.GlobalRoot)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return factorydefinitions.ListEffectiveFactoriesResult{}, contextErr
+	}
 	if err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, fmt.Errorf(
 			"discover global Factories: %w",
 			err,
 		)
 	}
-	if err := ctx.Err(); err != nil {
-		return factorydefinitions.ListEffectiveFactoriesResult{}, err
-	}
 	packaged, err := c.discovery.ListPackaged(ctx)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return factorydefinitions.ListEffectiveFactoriesResult{}, contextErr
+	}
 	if err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, fmt.Errorf(
 			"discover packaged Factories: %w",
@@ -98,53 +99,27 @@ func (c effectiveCatalog) listEffectiveFactories(
 		)
 	}
 
-	entries, err := c.merge(ctx, project, global, packaged)
+	entries, diagnostics, err := c.merge(ctx,
+		catalogSource{
+			kind:       factorydefinitions.EffectiveFactoryCatalogSourceProjectLocal,
+			candidates: project,
+		},
+		catalogSource{
+			kind:       factorydefinitions.EffectiveFactoryCatalogSourceGlobal,
+			candidates: global,
+		},
+		catalogSource{
+			kind:       factorydefinitions.EffectiveFactoryCatalogSourcePackaged,
+			candidates: packaged,
+		},
+	)
 	if err != nil {
 		return factorydefinitions.ListEffectiveFactoriesResult{}, err
 	}
-	return factorydefinitions.ListEffectiveFactoriesResult{Entries: entries}, nil
-}
-
-func (c effectiveCatalog) merge(
-	ctx context.Context,
-	sources ...[]factorydefinitions.EffectiveFactoryCatalogCandidate,
-) ([]factorydefinitions.EffectiveFactoryCatalogEntry, error) {
-	claimed := make(map[string]struct{})
-	entries := make([]factorydefinitions.EffectiveFactoryCatalogEntry, 0)
-	for _, source := range sources {
-		candidates, err := canonicalCandidates(source)
-		if err != nil {
-			return nil, err
-		}
-		for _, candidate := range candidates {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			if _, shadowed := claimed[candidate.Name]; shadowed {
-				continue
-			}
-			claimed[candidate.Name] = struct{}{}
-			definition, err := c.normalize(ctx, cloneCandidate(candidate))
-			if err != nil {
-				return nil, fmt.Errorf("normalize Factory %q: %w", candidate.Name, err)
-			}
-			if definition == nil {
-				return nil, fmt.Errorf("normalize Factory %q: definition is required", candidate.Name)
-			}
-			entry, err := detachedEntry(candidate, definition)
-			if err != nil {
-				return nil, fmt.Errorf("detach Factory %q: %w", candidate.Name, err)
-			}
-			entries = append(entries, entry)
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
-	})
-	return entries, nil
+	return factorydefinitions.ListEffectiveFactoriesResult{
+		Entries:     entries,
+		Diagnostics: diagnostics,
+	}, nil
 }
 
 func validateRequest(request factorydefinitions.ListEffectiveFactoriesRequest) error {
@@ -155,28 +130,6 @@ func validateRequest(request factorydefinitions.ListEffectiveFactoriesRequest) e
 		return fmt.Errorf("global Factory root is required")
 	}
 	return nil
-}
-
-func canonicalCandidates(
-	source []factorydefinitions.EffectiveFactoryCatalogCandidate,
-) ([]factorydefinitions.EffectiveFactoryCatalogCandidate, error) {
-	candidates := make([]factorydefinitions.EffectiveFactoryCatalogCandidate, len(source))
-	for index, candidate := range source {
-		segments, err := factorynamedpaths.PathSegments(candidate.Name)
-		if err != nil {
-			return nil, err
-		}
-		name, err := factorynamedpaths.NameFromPathSegments(segments)
-		if err != nil {
-			return nil, err
-		}
-		candidate.Name = name
-		candidates[index] = cloneCandidate(candidate)
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		return candidates[i].Name < candidates[j].Name
-	})
-	return candidates, nil
 }
 
 func detachedEntry(
