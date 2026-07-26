@@ -233,6 +233,15 @@ func (injectedProviderRunner) Run(context.Context, workers.CommandRequest) (work
 func (testModelsService) ListModels(context.Context) (models.List, error) {
 	return models.List{}, nil
 }
+func (testModelsService) ListCatalog(context.Context, models.ListModelsRequest) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+func (testModelsService) GetCatalogModel(context.Context, models.GetModelRequest) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+func (testModelsService) GetModelReadiness(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
 func (testModelsService) GetModel(context.Context, string) (models.Detail, error) {
 	return models.Detail{}, nil
 }

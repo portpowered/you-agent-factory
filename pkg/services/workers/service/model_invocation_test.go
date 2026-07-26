@@ -428,6 +428,27 @@ func (workerModelService) CloseRuntimeScope(
 	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (workerModelService) ListCatalog(
+	context.Context,
+	modelinference.ListModelsRequest,
+) (modelinference.ListModelsResult, error) {
+	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetCatalogModel(
+	context.Context,
+	modelinference.GetModelRequest,
+) (modelinference.GetModelResult, error) {
+	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetModelReadiness(
+	context.Context,
+	modelinference.GetModelReadinessRequest,
+) (modelinference.GetModelReadinessResult, error) {
+	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }

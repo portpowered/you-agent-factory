@@ -171,6 +171,27 @@ func (o *Root) CloseRuntimeScope(
 	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
 }
 
+func (o *Root) ListCatalog(
+	context.Context,
+	models.ListModelsRequest,
+) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetCatalogModel(
+	context.Context,
+	models.GetModelRequest,
+) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetModelReadiness(
+	context.Context,
+	models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }

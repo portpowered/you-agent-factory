@@ -55,18 +55,49 @@ func (s *runtimeScopePeerService) CloseRuntimeScope(
 	if request.Scope.IsZero() {
 		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeInvalid
 	}
-	if !strings.HasPrefix(request.Scope.String(), s.owner+":") {
-		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeForeign
-	}
-	if _, ok := s.closed[request.Scope]; ok {
-		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeClosed
-	}
-	if _, ok := s.open[request.Scope]; !ok {
-		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeStale
+	if err := s.scopeUseError(request.Scope); err != nil {
+		return models.CloseRuntimeScopeResult{}, err
 	}
 	delete(s.open, request.Scope)
 	s.closed[request.Scope] = struct{}{}
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+}
+
+func (s *runtimeScopePeerService) scopeUseError(scope models.RuntimeScopeRef) error {
+	if scope.IsZero() {
+		return models.ErrRuntimeScopeInvalid
+	}
+	if !strings.HasPrefix(scope.String(), s.owner+":") {
+		return models.ErrRuntimeScopeForeign
+	}
+	if _, ok := s.closed[scope]; ok {
+		return models.ErrRuntimeScopeClosed
+	}
+	if _, ok := s.open[scope]; !ok {
+		return models.ErrRuntimeScopeStale
+	}
+	return nil
+}
+
+func (*runtimeScopePeerService) ListCatalog(
+	context.Context,
+	models.ListModelsRequest,
+) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+
+func (*runtimeScopePeerService) GetCatalogModel(
+	context.Context,
+	models.GetModelRequest,
+) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (*runtimeScopePeerService) GetModelReadiness(
+	context.Context,
+	models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
 func (s *runtimeScopePeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
@@ -221,29 +252,6 @@ func (unsupportedRuntimeScopePeer) CloseRuntimeScope(
 	models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
 	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
-}
-
-// catalogPeerService is a fake peer implementer of Models root Service that
-// exercises plain catalog list/get contracts using only root-package types.
-type catalogPeerService struct {
-	unsupportedRuntimeScopePeer
-	unavailable bool
-	entries     map[string]models.Detail
-}
-
-func (catalogPeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return catalogPeerService{}, nil
-}
-
-func (s catalogPeerService) ListModels(context.Context) (models.List, error) {
-	if s.unavailable {
-		return models.List{}, models.ErrUnavailable
-	}
-	results := make([]models.Summary, 0, len(s.entries))
-	for _, detail := range s.entries {
-		results = append(results, detail.Summary)
-	}
-	return models.List{Results: results}, nil
 }
 
 func (s catalogPeerService) GetModel(_ context.Context, name string) (models.Detail, error) {

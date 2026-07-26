@@ -18,6 +18,16 @@ type Service interface {
 	// already-closed, and foreign references return distinct Models-owned
 	// failures.
 	CloseRuntimeScope(context.Context, CloseRuntimeScopeRequest) (CloseRuntimeScopeResult, error)
+	// ListCatalog returns detached catalog summaries for one open runtime scope.
+	// Invalid, stale, closed, and foreign scopes retain their Models-owned
+	// classifications; an unavailable catalog returns ErrUnavailable.
+	ListCatalog(context.Context, ListModelsRequest) (ListModelsResult, error)
+	// GetCatalogModel returns detached identity, binding, source, operation, and
+	// catalog status facts for one model in an open runtime scope.
+	GetCatalogModel(context.Context, GetModelRequest) (GetModelResult, error)
+	// GetModelReadiness returns current detached readiness facts for one scoped
+	// model without exposing a catalog assembler, cache, host, or runtime handle.
+	GetModelReadiness(context.Context, GetModelReadinessRequest) (GetModelReadinessResult, error)
 	// ForRuntime binds this already-constructed service to one Factory Session's
 	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
 	// Construction and process-launcher ports remain owned by the injected
@@ -31,9 +41,13 @@ type Service interface {
 	// ListModels returns detached Models-owned catalog summaries (Status,
 	// LoadState, ManagedRuntime readiness) without exposing nested catalog
 	// assemblers. Unavailable catalog scope fails with ErrUnavailable.
+	//
+	// Deprecated: target peers should use ListCatalog with RuntimeScopeRef.
 	ListModels(context.Context) (List, error)
 	// GetModel returns one detached Models-owned catalog Detail. Missing models
 	// fail with ErrNotFound; unavailable catalog scope fails with ErrUnavailable.
+	//
+	// Deprecated: target peers should use GetCatalogModel with RuntimeScopeRef.
 	GetModel(context.Context, string) (Detail, error)
 	// PullModel pulls managed model assets and returns a Models-owned PullResult
 	// (downloaded-file and pull-outcome vocabulary). Not-available, pull-
@@ -47,6 +61,8 @@ type Service interface {
 	// timeout fail with distinct typed host outcomes (ErrHostMissingAssets,
 	// ErrHostLoadingTimeout). Readiness inspect stays on this singular root
 	// Service; peers do not import nested host supervisor types.
+	//
+	// Deprecated: target peers should use GetModelReadiness with RuntimeScopeRef.
 	InspectRuntime(context.Context, string) (Runtime, error)
 	// AcquireLease acquires Models-owned local capacity and returns a HostLease.
 	// Capacity exhausted and runtime-not-ready fail with distinct typed outcomes

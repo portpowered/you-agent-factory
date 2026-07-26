@@ -81,6 +81,29 @@ type OperationSlot struct {
 	Required     *bool
 }
 
+func cloneOperations(operations []Operation) []Operation {
+	cloned := make([]Operation, len(operations))
+	for i, operation := range operations {
+		cloned[i] = operation
+		cloned[i].Inputs = cloneOperationSlots(operation.Inputs)
+		cloned[i].Outputs = cloneOperationSlots(operation.Outputs)
+	}
+	return cloned
+}
+
+func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
+	cloned := make([]OperationSlot, len(slots))
+	for i, slot := range slots {
+		cloned[i] = slot
+		cloned[i].ContentTypes = append([]string(nil), slot.ContentTypes...)
+		if slot.Required != nil {
+			required := *slot.Required
+			cloned[i].Required = &required
+		}
+	}
+	return cloned
+}
+
 // Runtime is the model-owned readiness projection consumed by service and
 // transport adapters.
 type Runtime struct {
@@ -90,6 +113,13 @@ type Runtime struct {
 	Locality            Locality
 	SupportedOperations []Operation
 	Diagnostics         map[string]string
+}
+
+// Clone returns detached readiness facts safe for a peer to retain or mutate.
+func (runtime Runtime) Clone() Runtime {
+	runtime.SupportedOperations = cloneOperations(runtime.SupportedOperations)
+	runtime.Diagnostics = cloneStringMap(runtime.Diagnostics)
+	return runtime
 }
 
 // InvocationError carries managed-runtime readiness context without exposing a
