@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import {

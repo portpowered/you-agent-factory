@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -85,6 +86,26 @@ func TestConfigDocumentServicePersist_PreCommitFailuresPreserveDestination(t *te
 			assertNoTemporaryArtifacts(t, filepath.Dir(path))
 		})
 	}
+}
+
+func TestConfigDocumentServiceConfigureProviderModel_SerializationFailurePreservesDestination(t *testing.T) {
+	t.Parallel()
+	path, original, _ := persistedConfigFixture(t)
+	service := persistedConfigService(testFiles, testCreateTemp)
+	service.Encoder = func(Config) ([]byte, error) {
+		return nil, errors.New("injected serialization failure")
+	}
+	model := "replacement"
+	_, err := service.ConfigureProviderModel(
+		context.Background(),
+		path,
+		ProviderModelUpdate{Model: &model},
+	)
+	if err == nil || !strings.Contains(err.Error(), "injected serialization failure") {
+		t.Fatalf("ConfigureProviderModel() error = %v, want serialization failure", err)
+	}
+	assertConfigBytesUnchanged(t, path, original)
+	assertNoTemporaryArtifacts(t, filepath.Dir(path))
 }
 
 func TestConfigDocumentServicePersist_DeniedDirectoryPermissionsPreserveDestination(t *testing.T) {
@@ -290,6 +311,72 @@ func TestConfigDocumentServiceConfigureProviderModel_InputPathsPersistEquivalent
 	}
 }
 
+func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceTransactions(t *testing.T) {
+	t.Parallel()
+	path, _, _ := persistedConfigFixture(t)
+	files := &readCountingFileSystem{FileSystem: testFiles}
+	lock := &observedLocker{attempted: make(chan struct{}, 2)}
+	encoderEntered := make(chan struct{})
+	releaseEncoder := make(chan struct{})
+	var encodeCalls atomic.Int32
+	service := persistedConfigService(files, testCreateTemp)
+	service.PersistenceLock = lock
+	service.Encoder = func(config Config) ([]byte, error) {
+		if encodeCalls.Add(1) == 1 {
+			close(encoderEntered)
+			<-releaseEncoder
+		}
+		return encodeTestConfig(config)
+	}
+
+	provider := "claude"
+	providerResult := make(chan error, 1)
+	go func() {
+		_, err := service.ConfigureProviderModel(
+			context.Background(),
+			path,
+			ProviderModelUpdate{Provider: &provider},
+		)
+		providerResult <- err
+	}()
+	<-encoderEntered
+	<-lock.attempted
+
+	model := "concurrent-model"
+	modelResult := make(chan error, 1)
+	go func() {
+		_, err := service.ConfigureProviderModel(
+			context.Background(),
+			path,
+			ProviderModelUpdate{Model: &model},
+		)
+		modelResult <- err
+	}()
+	<-lock.attempted
+	readsBeforeReplacement := files.reads.Load()
+	close(releaseEncoder)
+	if readsBeforeReplacement != 1 {
+		t.Fatalf("reads before first replacement = %d, want 1 serialized transaction", readsBeforeReplacement)
+	}
+	if err := <-providerResult; err != nil {
+		t.Fatalf("provider update error = %v", err)
+	}
+	if err := <-modelResult; err != nil {
+		t.Fatalf("model update error = %v", err)
+	}
+
+	document, err := service.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := document.FileConfig().Defaults, (Defaults{
+		WorkerModelProvider: "CLAUDE",
+		WorkerModel:         model,
+	}); got != want {
+		t.Fatalf("defaults = %#v, want both partial updates %#v", got, want)
+	}
+}
+
 func TestConfigDocumentServiceConfigureProviderModelPrompted_InputStopsBeforePersistence(t *testing.T) {
 	t.Parallel()
 	promptFailure := errors.New("prompt failed")
@@ -475,6 +562,30 @@ func (files *faultFileSystem) Rename(oldPath, newPath string) error {
 		files.cancelOnRename()
 	}
 	return files.FileSystem.Rename(oldPath, newPath)
+}
+
+type readCountingFileSystem struct {
+	FileSystem
+	reads atomic.Int32
+}
+
+func (files *readCountingFileSystem) ReadFile(path string) ([]byte, error) {
+	files.reads.Add(1)
+	return files.FileSystem.ReadFile(path)
+}
+
+type observedLocker struct {
+	mutex     sync.Mutex
+	attempted chan struct{}
+}
+
+func (lock *observedLocker) Lock() {
+	lock.attempted <- struct{}{}
+	lock.mutex.Lock()
+}
+
+func (lock *observedLocker) Unlock() {
+	lock.mutex.Unlock()
 }
 
 type faultTemporaryFile struct {

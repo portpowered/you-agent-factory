@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,7 +22,9 @@ var ErrFactorySessionTargetsRequireSelection = errors.New("factory session targe
 
 // CreateConfig holds parameters for the session create command.
 type CreateConfig struct {
+	Server         string
 	Port           int
+	PortExplicit   bool
 	Dir            string
 	InitNewFactory bool
 	ValidateOnly   bool
@@ -79,7 +82,10 @@ func Create(cfg CreateConfig) error {
 		return fmt.Errorf("marshal open factory session request: %w", err)
 	}
 
-	endpoint := createEndpoint(cfg)
+	endpoint, err := createEndpoint(cfg)
+	if err != nil {
+		return fmt.Errorf("resolve session create endpoint: %w", err)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -132,12 +138,24 @@ func Create(cfg CreateConfig) error {
 	}
 }
 
-func createEndpoint(cfg CreateConfig) url.URL {
-	return url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   "/factory-sessions",
+func createEndpoint(cfg CreateConfig) (url.URL, error) {
+	if cfg.PortExplicit || strings.TrimSpace(cfg.Server) == "" {
+		return url.URL{
+			Scheme: "http",
+			Host:   fmt.Sprintf("localhost:%d", cfg.Port),
+			Path:   "/factory-sessions",
+		}, nil
 	}
+
+	endpointURL, err := cliserver.RequestURL(cfg.Server, "/factory-sessions")
+	if err != nil {
+		return url.URL{}, err
+	}
+	parsed, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse session create endpoint: %w", err)
+	}
+	return *parsed, nil
 }
 
 func targetRefFromFlags(kind, name string) (*factoryapi.FactorySessionTargetRef, error) {

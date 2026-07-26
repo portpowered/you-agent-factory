@@ -4,11 +4,11 @@ import type { FactoryEventReconnectCursor } from "../../../api/events";
 import {
   type FactoryTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
-} from "../../timeline/public";
+} from "../../timeline/public/checkpoint-reconnect";
 import {
   dashboardSessionKey,
   shouldResumeFromPersistedCheckpoint,
-} from "../lib/dashboard-session-lifecycle";
+} from "../lib/dashboard-session-key";
 
 export function useDashboardInitialReconnectCursor({
   persistedCheckpoint,
@@ -24,25 +24,40 @@ export function useDashboardInitialReconnectCursor({
     () => dashboardSessionKey(sessionID, refreshToken),
     [refreshToken, sessionID],
   );
-  const shouldResumeFromCheckpoint = useMemo(
+  const reconnectCursor = useMemo(
     () =>
-      shouldResumeFromPersistedCheckpoint({
+      resolveDashboardInitialReconnectCursor({
+        persistedCheckpoint,
         previousSessionKey: previousSessionKeyRef.current,
         refreshToken,
         sessionID,
       }),
-    [refreshToken, sessionID],
+    [persistedCheckpoint, refreshToken, sessionID],
   );
 
   useEffect(() => {
     previousSessionKeyRef.current = sessionKey;
   }, [sessionKey]);
 
-  return useMemo(
-    () =>
-      shouldResumeFromCheckpoint
-        ? reconnectCursorFromCheckpoint(persistedCheckpoint)
-        : undefined,
-    [persistedCheckpoint, shouldResumeFromCheckpoint],
-  );
+  return reconnectCursor;
+}
+
+export function resolveDashboardInitialReconnectCursor({
+  persistedCheckpoint,
+  previousSessionKey,
+  refreshToken,
+  sessionID,
+}: {
+  persistedCheckpoint: FactoryTimelineCheckpoint | null;
+  previousSessionKey: string | null;
+  refreshToken: number;
+  sessionID: string | null;
+}): FactoryEventReconnectCursor | undefined {
+  return shouldResumeFromPersistedCheckpoint({
+    previousSessionKey,
+    refreshToken,
+    sessionID,
+  })
+    ? reconnectCursorFromCheckpoint(persistedCheckpoint)
+    : undefined;
 }

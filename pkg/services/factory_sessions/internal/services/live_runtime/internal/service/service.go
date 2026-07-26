@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 )
 
@@ -78,7 +80,11 @@ func (s *service) Snapshot(ctx context.Context, sessionID string) (*factoryrunti
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(runtime)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}
@@ -100,7 +106,11 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 		s.dependencies.ObserveControl(sessionID, operation, control, "", "", err)
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(activeFactory)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("get engine state snapshot: %w", err)
 	}
@@ -126,12 +136,12 @@ func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Serv
 	}
 	switch operation {
 	case factorysessions.LifecycleControlPause:
-		if err := activeFactory.Pause(ctx); err != nil {
+		if _, err := activeFactory.ControlPause(ctx, factoryruntime.PauseRequest{}); err != nil {
 			return "", fmt.Errorf("pause live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusPaused, nil
 	case factorysessions.LifecycleControlResume:
-		if err := activeFactory.Resume(ctx); err != nil {
+		if _, err := activeFactory.ControlResume(ctx, factoryruntime.ResumeRequest{}); err != nil {
 			return "", fmt.Errorf("resume live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusRunning, nil
@@ -149,6 +159,20 @@ func (s *service) Close(ctx context.Context, sessionID string) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	session, err := s.dependencies.RequireSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if session != nil && session.Runtime != nil && session.Runtime.Factory != nil {
+		_, terminateErr := session.Runtime.Factory.ControlTerminate(ctx, factoryruntime.TerminateRequest{
+			Reason: "factory session closed",
+		})
+		if terminateErr != nil &&
+			!errors.Is(terminateErr, factoryruntime.ErrAlreadyStopped) &&
+			!errors.Is(terminateErr, factoryruntime.ErrNotRunning) {
+			return fmt.Errorf("terminate live factory session: %w", terminateErr)
+		}
 	}
 	return s.dependencies.StopSession(sessionID)
 }

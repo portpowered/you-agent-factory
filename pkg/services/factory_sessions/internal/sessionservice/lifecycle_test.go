@@ -23,7 +23,10 @@ func (h *unifiedLifecycleGatewayHost) DurableExecution() factorysessionexecution
 
 type lifecycleGatewayHost struct {
 	openTestHost
-	factory   factory.Factory
+	factory interface {
+		factory.Factory
+		factory.Service
+	}
 	stopCalls []string
 }
 
@@ -46,6 +49,89 @@ func (f *gatewayLifecycleFactory) Run(context.Context) error { return nil }
 func (f *gatewayLifecycleFactory) Pause(context.Context) error { return nil }
 
 func (f *gatewayLifecycleFactory) Resume(context.Context) error { return nil }
+
+func (f *gatewayLifecycleFactory) ControlPause(ctx context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
+	err := f.Pause(ctx)
+	return factory.PauseResult{Outcome: factory.ControlOutcomeAccepted}, err
+}
+
+func (f *gatewayLifecycleFactory) ControlResume(ctx context.Context, _ factory.ResumeRequest) (factory.ResumeResult, error) {
+	err := f.Resume(ctx)
+	return factory.ResumeResult{Outcome: factory.ControlOutcomeAccepted}, err
+}
+
+func (f *gatewayLifecycleFactory) Terminate(context.Context, factory.TerminateRequest) (factory.TerminateResult, error) {
+	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+}
+
+func (f *gatewayLifecycleFactory) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+	return f.Terminate(ctx, req)
+}
+
+func (f *gatewayLifecycleFactory) ControlWaitToComplete(factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
+	return factory.WaitToCompleteResult{Done: f.WaitToComplete()}
+}
+
+func (f *gatewayLifecycleFactory) ControlMoveWork(
+	ctx context.Context,
+	req factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	result, err := f.MoveWork(ctx, req.WorkID, req.StateName, work.WorkStateChangeSource(req.Source), req.RequestID)
+	return factory.MoveWorkResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, err
+}
+
+func (f *gatewayLifecycleFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
+
+func (f *gatewayLifecycleFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{
+		Outcome:       factory.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+
+func (f *gatewayLifecycleFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	return factory.AcceptDispatchResultResult{
+		Outcome:       factory.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+
+func (f *gatewayLifecycleFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome: factory.CheckpointOutcomeCaptured,
+		Checkpoint: factory.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+
+func (f *gatewayLifecycleFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+}
+
+func (f *gatewayLifecycleFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 
 func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil

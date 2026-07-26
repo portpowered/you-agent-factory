@@ -1,13 +1,9 @@
-import {
-  Button,
-  Label,
-  surfacePanelVariants,
-  Text,
-} from "../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
+import { Button, Label, Text } from "@you-agent-factory/components/primitives";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";
 import { CurrentSelectionSectionHeader } from "../../base/components/layout/current-selection-section-header";
-import { CurrentSelectionSupportingText } from "../../base/public";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 import { workStateGraphNodeId } from "../lib/work-state-graph-node-id";
 import type { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 

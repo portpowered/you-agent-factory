@@ -1,13 +1,15 @@
 import { type ReactNode, useId } from "react";
 
-import { Input, Label, SurfacePanel, Text } from "../../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { Input } from "../../../../components/ui/input";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
 import {
-  CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-} from "../../base/public";
+} from "../../base/components/layout/current-selection-form-layout";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,

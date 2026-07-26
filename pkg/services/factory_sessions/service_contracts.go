@@ -26,9 +26,12 @@ type InvocationRequest struct {
 	Args            *map[string]any
 	Content         []work.WorkContentPart
 	ContentProvided bool
-	RequestID       *string
-	SourceKind      *InvocationInputSourceKind
-	TimeoutMillis   *int64
+	// PreparedInvocationInput carries a Work-normalized CLI invocation. Public
+	// API requests leave this nil and continue through service-owned normalization.
+	PreparedInvocationInput *work.PreparedInvocationInput
+	RequestID               *string
+	SourceKind              *InvocationInputSourceKind
+	TimeoutMillis           *int64
 }
 
 // ResolvedInvocationInput is the Factory Session-owned normalized invocation

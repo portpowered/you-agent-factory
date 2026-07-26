@@ -4,6 +4,8 @@
     "src/main.tsx",
     "src/**/*.test.{ts,tsx,mjs}",
     "src/**/*.stories.tsx",
+    "src/testing/vitest.setup.ts",
+    "src/vite-env.d.ts",
     "integration/**/*.test.mjs",
     "vitest.storybook.config.ts"
   ],

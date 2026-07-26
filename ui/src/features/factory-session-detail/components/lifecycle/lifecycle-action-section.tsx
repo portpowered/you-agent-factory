@@ -1,13 +1,12 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
+import { ActionRow } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import {
-  ActionRow,
   AlertPanel,
   AlertPanelText,
-  DashboardActionButton,
-  DashboardStatusPill,
-  Label,
-  Text,
-} from "../../../../components/ui";
+} from "../../../../components/ui/alert-panel";
+import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import type { FactorySessionLifecycleActionID } from "../../lib/factory-session-lifecycle-controls";
 import {
   getFactorySessionLifecycleActionLabel,

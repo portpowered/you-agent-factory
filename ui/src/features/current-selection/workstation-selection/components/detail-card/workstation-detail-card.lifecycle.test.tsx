@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { DashboardWorkstationRequest } from "../../../../../api/dashboard/types";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";

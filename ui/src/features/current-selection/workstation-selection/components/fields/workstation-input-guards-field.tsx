@@ -4,14 +4,10 @@ import {
 } from "@you-agent-factory/components/forms";
 import { useId } from "react";
 
-import {
-  FormDescription,
-  FormError,
-  Input,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { FormDescription, FormError } from "../../../../../components/ui/form-field";
+import { Input } from "../../../../../components/ui/input";
 import type { EditableWorkstationInputDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
 import {
   createDefaultInputGuard,
@@ -23,7 +19,7 @@ import {
   resolvePeerInputWorkTypes,
   setEditableInputSlotGuard,
 } from "../../../../current-factory-definition/lib/workstation-guards";
-import { CurrentSelectionFormField } from "../../../base/public";
+import { CurrentSelectionFormField } from "../../../base/components/layout/current-selection-form-layout";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationInputGuardsField({

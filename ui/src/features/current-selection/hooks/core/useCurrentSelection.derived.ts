@@ -39,10 +39,10 @@ import {
 } from "./useCurrentSelection.helpers";
 import {
   resolveCurrentFactoryDocumentFromSnapshot,
-  useSelectedWorkerAndWorkTypeData,
+  selectWorkerAndWorkTypeData,
 } from "./useCurrentSelection.selection-metadata";
 
-function useSelectedNode(
+function selectSelectedNode(
   selection: DashboardSelection | null,
   snapshot: DashboardSnapshot | null | undefined,
 ): DashboardWorkstationNode | null {
@@ -59,7 +59,7 @@ function useSelectedNode(
   return null;
 }
 
-function useSelectedStatePlaceData({
+function selectSelectedStatePlaceData({
   projectedWorkstationRequestsByDispatchID,
   selectedStatePlace,
   snapshot,
@@ -70,31 +70,15 @@ function useSelectedStatePlaceData({
   selectedStatePlace: DashboardPlaceRef | null;
   snapshot: DashboardSnapshot | null | undefined;
 }) {
-  const selectedStateCurrentWorkItems = useMemo(
-    () =>
-      currentWorkItemsForPlace(
-        snapshot,
-        selectedStatePlace?.place_id,
-        projectedWorkstationRequestsByDispatchID,
-      ),
-    [
-      projectedWorkstationRequestsByDispatchID,
-      snapshot,
-      selectedStatePlace?.place_id,
-    ],
+  const selectedStateCurrentWorkItems = currentWorkItemsForPlace(
+    snapshot,
+    selectedStatePlace?.place_id,
+    projectedWorkstationRequestsByDispatchID,
   );
-  const selectedStateTerminalHistoryWorkItems = useMemo(
-    () =>
-      terminalHistoryItemsForPlace(
-        snapshot,
-        selectedStatePlace?.place_id,
-        projectedWorkstationRequestsByDispatchID,
-      ),
-    [
-      projectedWorkstationRequestsByDispatchID,
-      snapshot,
-      selectedStatePlace?.place_id,
-    ],
+  const selectedStateTerminalHistoryWorkItems = terminalHistoryItemsForPlace(
+    snapshot,
+    selectedStatePlace?.place_id,
+    projectedWorkstationRequestsByDispatchID,
   );
   const selectedStateTokenCount =
     selectedStatePlace && snapshot
@@ -109,14 +93,14 @@ function useSelectedStatePlaceData({
   };
 }
 
-function useSelectedResourceRuntime(
+function selectSelectedResourceRuntime(
   selection: DashboardSelection | null,
   snapshot: DashboardSnapshot | null | undefined,
 ) {
   const selectedResourceName =
     selection?.kind === "resource" ? selection.resourceName : null;
 
-  return useMemo(() => {
+  return (() => {
     if (!selectedResourceName) {
       return {
         selectedResource: null,
@@ -152,10 +136,10 @@ function useSelectedResourceRuntime(
           )
         : [],
     };
-  }, [selectedResourceName, snapshot]);
+  })();
 }
 
-function useSelectedWorkData({
+function selectSelectedWorkData({
   projectedWorkstationRequestsByDispatchID,
   selection,
   snapshot,
@@ -166,7 +150,7 @@ function useSelectedWorkData({
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
 }) {
-  const selectedWorkRequestHistory = useMemo(() => {
+  const selectedWorkRequestHistory = (() => {
     if (selection?.kind !== "work-item") {
       return [];
     }
@@ -177,8 +161,8 @@ function useSelectedWorkData({
         | undefined,
       selection.workItem.work_id,
     );
-  }, [projectedWorkstationRequestsByDispatchID, selection]);
-  const selectedWorkWorkstationRequests = useMemo(() => {
+  })();
+  const selectedWorkWorkstationRequests = (() => {
     if (selection?.kind !== "work-item") {
       return [];
     }
@@ -187,8 +171,8 @@ function useSelectedWorkData({
       projectedWorkstationRequestsByDispatchID,
       selection.workItem.work_id,
     );
-  }, [projectedWorkstationRequestsByDispatchID, selection]);
-  const selectedWorkProviderSessions = useMemo(() => {
+  })();
+  const selectedWorkProviderSessions = (() => {
     if (!snapshot || selection?.kind !== "work-item") {
       return [];
     }
@@ -207,7 +191,7 @@ function useSelectedWorkData({
       snapshot.runtime.session.provider_sessions,
       selectedWorkRequestHistory,
     );
-  }, [selectedWorkRequestHistory, selection, snapshot]);
+  })();
   const selectedWorkDispatchAttempts =
     selection?.kind === "work-item" && snapshot
       ? buildSelectedWorkDispatchAttempts({
@@ -217,22 +201,18 @@ function useSelectedWorkData({
             projectedWorkstationRequestsByDispatchID,
         })
       : [];
-  const selectedWorkOperationHistory =
-    useMemo((): SelectedWorkOperationHistoryItem[] => {
-      if (selection?.kind !== "work-item") {
-        return [];
-      }
-
-      return buildSelectedWorkOperationHistory({
-        moveOperations:
-          snapshot?.runtime.work_move_operations_by_work_id?.[
-            selection.workItem.work_id
-          ],
-        snapshot,
-        workID: selection.workItem.work_id,
-        workstationRequests: selectedWorkRequestHistory,
-      });
-    }, [selectedWorkRequestHistory, selection, snapshot]);
+  const selectedWorkOperationHistory: SelectedWorkOperationHistoryItem[] =
+    selection?.kind !== "work-item"
+      ? []
+      : buildSelectedWorkOperationHistory({
+          moveOperations:
+            snapshot?.runtime.work_move_operations_by_work_id?.[
+              selection.workItem.work_id
+            ],
+          snapshot,
+          workID: selection.workItem.work_id,
+          workstationRequests: selectedWorkRequestHistory,
+        });
 
   return {
     selectedWorkDispatchAttempts,
@@ -243,7 +223,6 @@ function useSelectedWorkData({
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: derived selection state composes node, state, work, worker, resource, and work-type projections in one return surface.
 export function useCurrentSelectionDerivedState({
   projectedWorkstationRequestsByDispatchID,
   selection,
@@ -257,7 +236,38 @@ export function useCurrentSelectionDerivedState({
   snapshot: DashboardSnapshot | null | undefined;
   terminalWorkDetail: TerminalWorkDetail | null;
 }) {
-  const selectedNode = useSelectedNode(selection, snapshot);
+  return useMemo(
+    () =>
+      deriveCurrentSelectionState({
+        projectedWorkstationRequestsByDispatchID,
+        selection,
+        snapshot,
+        terminalWorkDetail,
+      }),
+    [
+      projectedWorkstationRequestsByDispatchID,
+      selection,
+      snapshot,
+      terminalWorkDetail,
+    ],
+  );
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: pure derivation intentionally exposes one testable projection boundary.
+export function deriveCurrentSelectionState({
+  projectedWorkstationRequestsByDispatchID,
+  selection,
+  snapshot,
+  terminalWorkDetail,
+}: {
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
+  selection: DashboardSelection | null;
+  snapshot: DashboardSnapshot | null | undefined;
+  terminalWorkDetail: TerminalWorkDetail | null;
+}) {
+  const selectedNode = selectSelectedNode(selection, snapshot);
   const currentFactoryDefinition =
     resolveCurrentFactoryDocumentFromSnapshot(snapshot);
   const selectedWorkstationRequest =
@@ -273,7 +283,7 @@ export function useCurrentSelectionDerivedState({
     selectedStateCurrentWorkItems,
     selectedStateTerminalHistoryWorkItems,
     selectedStateTokenCount,
-  } = useSelectedStatePlaceData({
+  } = selectSelectedStatePlaceData({
     projectedWorkstationRequestsByDispatchID,
     selectedStatePlace,
     snapshot,
@@ -287,12 +297,12 @@ export function useCurrentSelectionDerivedState({
             attempt.workstation_name === selectedNode.workstation_name,
         )
       : [];
-  const selectedNodeActiveExecutions = useMemo(
-    () =>
-      activeExecutionsForSelectedWorkstation(snapshot, selection, selectedNode),
-    [selection, selectedNode, snapshot],
+  const selectedNodeActiveExecutions = activeExecutionsForSelectedWorkstation(
+    snapshot,
+    selection,
+    selectedNode,
   );
-  const selectedNodeWorkstationRequests = useMemo(() => {
+  const selectedNodeWorkstationRequests = (() => {
     if (!selectedNode) {
       return [];
     }
@@ -302,7 +312,7 @@ export function useCurrentSelectionDerivedState({
         (request) => request.workstation_node_id === selectedNode.node_id,
       ),
     );
-  }, [projectedWorkstationRequestsByDispatchID, selectedNode]);
+  })();
   const selectedWorkID =
     selection?.kind === "work-item"
       ? selection.workItem.work_id
@@ -311,7 +321,7 @@ export function useCurrentSelectionDerivedState({
         : (terminalWorkDetail?.traceWorkID ?? null);
   const selectedDocTargetPath =
     selection?.kind === "doc" ? selection.targetPath : null;
-  const selectedDocBundledFile = useMemo((): FactoryBundledDocFile | null => {
+  const selectedDocBundledFile = ((): FactoryBundledDocFile | null => {
     if (!snapshot || !selectedDocTargetPath) {
       return null;
     }
@@ -319,22 +329,22 @@ export function useCurrentSelectionDerivedState({
     return (
       findFactoryBundledDocFile(snapshot.factory, selectedDocTargetPath) ?? null
     );
-  }, [selectedDocTargetPath, snapshot]);
+  })();
   const {
     selectedResource,
     selectedResourceName,
     selectedResourceTokenCount,
     selectedResourceWorkerNames,
     selectedResourceWorkstationNames,
-  } = useSelectedResourceRuntime(selection, snapshot);
+  } = selectSelectedResourceRuntime(selection, snapshot);
   const {
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,
     selectedWorkType,
     selectedWorkTypeName,
-  } = useSelectedWorkerAndWorkTypeData(selection, snapshot);
-  const work = useSelectedWorkData({
+  } = selectWorkerAndWorkTypeData(selection, snapshot);
+  const work = selectSelectedWorkData({
     projectedWorkstationRequestsByDispatchID,
     selection,
     snapshot,
@@ -342,25 +352,17 @@ export function useCurrentSelectionDerivedState({
   const completedWorkLabels =
     snapshot?.runtime.session.completed_work_labels ?? [];
   const failedWorkLabels = snapshot?.runtime.session.failed_work_labels ?? [];
-  const completedWorkItems = useMemo(
-    () =>
-      buildTerminalWorkItems(
-        completedWorkLabels,
-        snapshot?.runtime.session.provider_sessions,
-        undefined,
-        projectedWorkstationRequestsByDispatchID,
-      ),
-    [completedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
+  const completedWorkItems = buildTerminalWorkItems(
+    completedWorkLabels,
+    snapshot?.runtime.session.provider_sessions,
+    undefined,
+    projectedWorkstationRequestsByDispatchID,
   );
-  const failedWorkItems = useMemo(
-    () =>
-      buildTerminalWorkItems(
-        failedWorkLabels,
-        snapshot?.runtime.session.provider_sessions,
-        snapshot?.runtime.session.failed_work_details_by_work_id,
-        projectedWorkstationRequestsByDispatchID,
-      ),
-    [failedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
+  const failedWorkItems = buildTerminalWorkItems(
+    failedWorkLabels,
+    snapshot?.runtime.session.provider_sessions,
+    snapshot?.runtime.session.failed_work_details_by_work_id,
+    projectedWorkstationRequestsByDispatchID,
   );
 
   return {

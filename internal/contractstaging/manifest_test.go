@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -17,7 +16,7 @@ import (
 
 const manifestTarget = "packages/api/generated/manifest.json"
 
-func TestGeneratedManifestRecordsRequiredPublicationMetadata(t *testing.T) {
+func TestGeneratedManifestRecordsStableDevelopmentMetadata(t *testing.T) {
 	t.Parallel()
 
 	manifest := decodeRepositoryManifest(t)
@@ -25,7 +24,6 @@ func TestGeneratedManifestRecordsRequiredPublicationMetadata(t *testing.T) {
 		"formatVersion",
 		"packageId",
 		"packageVersion",
-		"sourceCommit",
 		"familyFormatVersions",
 		"exports",
 	}
@@ -39,6 +37,9 @@ func TestGeneratedManifestRecordsRequiredPublicationMetadata(t *testing.T) {
 	}
 	if manifest["packageId"] != "you-agent-factory.api" {
 		t.Fatalf("packageId = %#v, want you-agent-factory.api", manifest["packageId"])
+	}
+	if _, ok := manifest["sourceCommit"]; ok {
+		t.Fatalf("development manifest contains commit-derived provenance: %#v", manifest["sourceCommit"])
 	}
 	families, ok := manifest["familyFormatVersions"].(map[string]any)
 	if !ok || len(families) == 0 {
@@ -108,142 +109,6 @@ func TestManifestDigestChangesWhenStagedArtifactSourceChanges(t *testing.T) {
 	if beforeDigest == afterDigest {
 		t.Fatalf("CLI artifact change did not change manifest digest: %q", beforeDigest)
 	}
-}
-
-func TestShallowGitHistoryRejectsFalseSourceCommit(t *testing.T) {
-	t.Parallel()
-
-	origin := t.TempDir()
-	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
-	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	writeCheckFixture(t, origin, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	for _, artifact := range contractstaging.RawArtifacts() {
-		writeCheckFixture(t, origin, artifact.Source, canonicalFixture(artifact.Source))
-	}
-	initCheckGitRepo(t, origin)
-	writeCheckFixture(t, origin, "unrelated-only.txt", "follow-up")
-	if output, err := exec.Command("git", "-C", origin, "add", "-A").CombinedOutput(); err != nil {
-		t.Fatalf("stage unrelated follow-up: %s", output)
-	}
-	if output, err := exec.Command("git", "-C", origin, "commit", "-m", "unrelated follow-up").CombinedOutput(); err != nil {
-		t.Fatalf("commit unrelated follow-up: %s", output)
-	}
-
-	shallow := filepath.Join(t.TempDir(), "shallow")
-	originURI := localGitCloneURI(t, origin)
-	if output, err := exec.Command("git", "clone", "--depth", "1", originURI, shallow).CombinedOutput(); err != nil {
-		t.Fatalf("shallow clone fixture: %s", output)
-	}
-
-	_, err := contractstaging.Artifacts(shallow)
-	if err == nil {
-		t.Fatal("Artifacts() on shallow clone error = nil, want rejection of false sourceCommit attribution")
-	}
-	if !strings.Contains(err.Error(), "too shallow") {
-		t.Fatalf("Artifacts() error = %v, want shallow-history rejection", err)
-	}
-}
-
-func TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure(t *testing.T) {
-	t.Parallel()
-
-	origin := t.TempDir()
-	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
-	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	writeCheckFixture(t, origin, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	for _, artifact := range contractstaging.RawArtifacts() {
-		writeCheckFixture(t, origin, artifact.Source, canonicalFixture(artifact.Source))
-	}
-	initCheckGitRepo(t, origin)
-
-	runGit(t, origin, "checkout", "-b", "side")
-	writeCheckFixture(t, origin, "side-only.txt", "side")
-	runGit(t, origin, "add", "-A")
-	runGit(t, origin, "commit", "-m", "side branch")
-
-	runGit(t, origin, "checkout", checkFixtureDefaultBranch)
-	writeCheckFixture(t, origin, "main-only.txt", "main")
-	runGit(t, origin, "add", "-A")
-	runGit(t, origin, "commit", "-m", "main branch")
-
-	runGit(t, origin, "merge", "--no-ff", "side", "-m", "merge package source identity paths unchanged")
-
-	artifacts := testArtifactsForRepository(t, origin)
-	manifest := decodeManifestPayload(t, artifacts[manifestTarget])
-	sourceCommit, ok := manifest["sourceCommit"].(string)
-	if !ok || sourceCommit == "" {
-		t.Fatalf("manifest sourceCommit = %#v", manifest["sourceCommit"])
-	}
-	sourceArgs := append([]string{"-C", origin, "rev-list", "-1", "HEAD", "--"}, contractstaging.SourceIdentityPaths()...)
-	wantOutput, err := exec.Command("git", sourceArgs...).Output()
-	if err != nil {
-		t.Fatalf("resolve package source commit: %v", err)
-	}
-	wantSource := strings.TrimSpace(string(wantOutput))
-	if sourceCommit != wantSource {
-		t.Fatalf("manifest sourceCommit = %q, want package source commit %q", sourceCommit, wantSource)
-	}
-}
-
-func TestMergeCommitInRevListWithoutPathChangesResolvesSourceCommit(t *testing.T) {
-	t.Parallel()
-
-	origin := t.TempDir()
-	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
-	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	writeCheckFixture(t, origin, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	for _, artifact := range contractstaging.RawArtifacts() {
-		writeCheckFixture(t, origin, artifact.Source, canonicalFixture(artifact.Source))
-	}
-	initCheckGitRepo(t, origin)
-
-	runGit(t, origin, "checkout", "-b", "feature")
-	writeCheckFixture(t, origin, "internal/contractstaging/openapi.go", "// feature branch openapi marker\n")
-	runGit(t, origin, "add", "-A")
-	runGit(t, origin, "commit", "-m", "feature source identity change")
-
-	runGit(t, origin, "checkout", checkFixtureDefaultBranch)
-	writeCheckFixture(t, origin, "internal/contractstaging/policy.go", "// main branch policy marker\n")
-	runGit(t, origin, "add", "-A")
-	runGit(t, origin, "commit", "-m", "main source identity change")
-
-	runGit(t, origin, "merge", "--no-ff", "feature", "-m", "merge both source identity branches")
-
-	head := strings.TrimSpace(string(runGitOutput(t, origin, "rev-parse", "HEAD")))
-	revListArgs := append([]string{"rev-list", "-1", "HEAD", "--"}, contractstaging.SourceIdentityPaths()...)
-	revListHead := strings.TrimSpace(string(runGitOutput(t, origin, revListArgs...)))
-	if revListHead != head {
-		t.Fatalf("fixture rev-list = %q, want merge tip HEAD %q", revListHead, head)
-	}
-	diffArgs := append([]string{"diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD", "--"}, contractstaging.SourceIdentityPaths()...)
-	if diff := strings.TrimSpace(string(runGitOutput(t, origin, diffArgs...))); diff != "" {
-		t.Fatalf("fixture merge diff-tree = %q, want empty source identity diff", diff)
-	}
-
-	artifacts := testArtifactsForRepository(t, origin)
-	manifest := decodeManifestPayload(t, artifacts[manifestTarget])
-	sourceCommit, ok := manifest["sourceCommit"].(string)
-	if !ok || sourceCommit != head {
-		t.Fatalf("manifest sourceCommit = %#v, want merge tip HEAD %q", manifest["sourceCommit"], head)
-	}
-}
-
-func runGit(t *testing.T, root string, args ...string) {
-	t.Helper()
-	command := append([]string{"-C", root}, args...)
-	if output, err := exec.Command("git", command...).CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %s", args, output)
-	}
-}
-
-func runGitOutput(t *testing.T, root string, args ...string) []byte {
-	t.Helper()
-	command := append([]string{"-C", root}, args...)
-	output, err := exec.Command("git", command...).Output()
-	if err != nil {
-		t.Fatalf("git %v: %v", args, err)
-	}
-	return output
 }
 
 func TestMalformedManifestArtifactHashFailsJoinedManifestContract(t *testing.T) {

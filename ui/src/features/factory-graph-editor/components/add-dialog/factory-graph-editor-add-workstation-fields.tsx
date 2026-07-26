@@ -1,5 +1,5 @@
 import { WorkstationKind } from "../../../../api/generated/openapi";
-import { Checkbox } from "../../../../components/ui";
+import { Checkbox } from "../../../../components/ui/checkbox";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   type EditableWorkstationBehavior,
@@ -7,7 +7,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import type { EditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
-import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/public";
+import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type {

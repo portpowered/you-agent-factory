@@ -1,11 +1,10 @@
 import { useId, useState } from "react";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import {
+  DisclosureButton,
   type DisclosureButtonProps,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../components/ui";
-import { DisclosureButton } from "../../../components/ui/disclosure-button";
+} from "../../../components/ui/disclosure-button";
 import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";
 import { cn } from "../../../lib/cn";
 import {
@@ -18,8 +17,10 @@ import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/lib/workstation-icon-metadata";
-import type { GraphSemanticIconKind } from "../../flowchart/public";
-import { GraphSemanticIcon } from "../../flowchart/public";
+import {
+  GraphSemanticIcon,
+  type GraphSemanticIconKind,
+} from "../../flowchart/components/graph-semantic-icon";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export interface DashboardFlowAxisLegendEdgeItem {

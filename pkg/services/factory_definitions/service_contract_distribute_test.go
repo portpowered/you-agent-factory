@@ -107,8 +107,8 @@ func TestRootService_DistributeSlice_InstallAndScaffoldSameAggregateFacts(t *tes
 		context.Background(),
 		factorydefinitions.CreateFactoryScaffoldRequest{
 			TargetDir: "/factories/goal",
-			Type:      string(factorydefinitions.DefaultScaffoldType),
-			Executor:  factorydefinitions.DefaultStarterExecutor,
+			Type:      "default",
+			Executor:  "codex",
 		},
 	)
 	if err != nil {

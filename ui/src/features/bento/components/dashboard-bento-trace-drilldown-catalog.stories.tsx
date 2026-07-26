@@ -2,7 +2,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
-import { TraceDrilldownWidget } from "../../trace-drilldown/public";
+import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   expectBentoHeaderDragSurface,

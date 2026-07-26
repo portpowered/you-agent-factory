@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../../base/public";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import { WorkstationDispatchRow } from "../detail-card/workstation-dispatch-row";
 
 describe("WorkstationDispatchRow", () => {

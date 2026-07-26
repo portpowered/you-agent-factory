@@ -1,6 +1,6 @@
 import { Save } from "lucide-react";
-import { DashboardActionButton } from "../../../../../components/ui";
-import { EditableConfigurationDiscardHeaderAction } from "../../../base/public";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
+import { EditableConfigurationDiscardHeaderAction } from "../../../base/components/save/editable-configuration-discard-header-action";
 import type { EditableWorkstationSaveState } from "../../lib/keys/detail-card-types";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 

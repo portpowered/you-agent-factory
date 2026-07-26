@@ -31,20 +31,38 @@ export function useDocDetailState(
     (state) => state.pendingFactoryDefinition,
   );
 
-  return useMemo((): DocDetailState => {
-    const bundledFile =
-      savedBundledDoc ??
-      findFactoryBundledDocFile(pendingFactoryDefinition, targetPath);
+  return useMemo(
+    () =>
+      deriveDocDetailState({
+        pendingFactoryDefinition,
+        savedBundledDoc,
+        targetPath,
+      }),
+    [pendingFactoryDefinition, savedBundledDoc, targetPath],
+  );
+}
 
-    if (!bundledFile) {
-      return { status: "empty" };
-    }
+export function deriveDocDetailState({
+  pendingFactoryDefinition,
+  savedBundledDoc,
+  targetPath,
+}: {
+  pendingFactoryDefinition: Parameters<typeof findFactoryBundledDocFile>[0];
+  savedBundledDoc?: FactoryBundledDocFile | null;
+  targetPath: string;
+}): DocDetailState {
+  const bundledFile =
+    savedBundledDoc ??
+    findFactoryBundledDocFile(pendingFactoryDefinition, targetPath);
 
-    return {
-      status: "ready",
-      displayLabel: factoryBundledDocDisplayLabel(targetPath),
-      inlineContent: bundledFile.content?.inline ?? "",
-      targetPath,
-    };
-  }, [pendingFactoryDefinition, savedBundledDoc, targetPath]);
+  if (!bundledFile) {
+    return { status: "empty" };
+  }
+
+  return {
+    status: "ready",
+    displayLabel: factoryBundledDocDisplayLabel(targetPath),
+    inlineContent: bundledFile.content?.inline ?? "",
+    targetPath,
+  };
 }

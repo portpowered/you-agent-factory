@@ -2,4 +2,4 @@
 export {
   DescriptionList as DashboardDescriptionList,
   type DescriptionListProps as DashboardDescriptionListProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/data-display";

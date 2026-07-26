@@ -1,9 +1,7 @@
-import {
-  DashboardIconButtonShell,
-  Text,
-  Textarea,
-} from "../../../components/ui";
-import { WorkContentItemShell } from "../../work-content/public";
+import { Text } from "@you-agent-factory/components/primitives";
+import { DashboardIconButtonShell } from "../../../components/ui/dashboard-icon-button-shell";
+import { Textarea } from "../../../components/ui/textarea";
+import { WorkContentItemShell } from "../../work-content/components/work-content-item-shell";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { getSubmitWorkMessages } from "../messages/submit-work";
 import type {

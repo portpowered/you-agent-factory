@@ -4094,6 +4094,9 @@ type GlobalConfig struct {
 	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
 	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
 
+	// Runtime Runtime observability settings loaded from operator configuration before command-line overrides.
+	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
+
 	// WorkerPresets Named worker model presets loaded from the shared configuration file.
 	WorkerPresets *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
 }
@@ -4105,6 +4108,33 @@ type GlobalConfigDefaults struct {
 
 	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
 	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
+}
+
+// GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
+type GlobalConfigRuntime struct {
+	// Logging Structured runtime log storage settings. Omitted values use the documented production defaults.
+	Logging *GlobalConfigRuntimeArtifactSettings `json:"logging,omitempty"`
+
+	// Metrics Runtime metrics storage settings. Omitted values use the documented production defaults.
+	Metrics *GlobalConfigRuntimeArtifactSettings `json:"metrics,omitempty"`
+}
+
+// GlobalConfigRuntimeArtifactSettings Rolling-file storage settings for one runtime observability artifact.
+type GlobalConfigRuntimeArtifactSettings struct {
+	// Compress Whether rotated artifact files are gzip-compressed.
+	Compress *bool `json:"compress,omitempty"`
+
+	// Directory Optional artifact root. Omission uses the runtime-owned directory below the operator home.
+	Directory *string `json:"directory,omitempty"`
+
+	// MaxAgeDays Maximum age in days for rotated artifact files.
+	MaxAgeDays *int `json:"maxAgeDays,omitempty"`
+
+	// MaxBackups Maximum number of rotated artifact files to retain.
+	MaxBackups *int `json:"maxBackups,omitempty"`
+
+	// MaxSizeMB Maximum artifact file size in megabytes before rotation.
+	MaxSizeMB *int `json:"maxSizeMB,omitempty"`
 }
 
 // GlobalConfigWorkerPreset Named worker model selection available to Factory Session runtime opening.
@@ -4963,6 +4993,30 @@ type OrchestratorPhaseChangedEventPayload struct {
 
 // OrchestratorPhaseStatus Canonical workflow phase lifecycle status for orchestrator phase events.
 type OrchestratorPhaseStatus string
+
+// PackagedFactoryCatalogEntry defines model for PackagedFactoryCatalogEntry.
+type PackagedFactoryCatalogEntry struct {
+	// Json Canonical Factory JSON artifact.
+	Json map[string]interface{} `json:"json"`
+
+	// Name Public built-in Factory name, such as '@you/goal'.
+	Name string `json:"name"`
+
+	// Project Stable Factory project identifier.
+	Project string `json:"project"`
+
+	// Slug URL-safe Factory catalog identity.
+	Slug string `json:"slug"`
+
+	// Yaml Equivalent Factory YAML artifact.
+	Yaml string `json:"yaml"`
+}
+
+// PackagedFactoryCatalogResponse defines model for PackagedFactoryCatalogResponse.
+type PackagedFactoryCatalogResponse struct {
+	// Factories Built-in Factory definitions in stable lexical name order.
+	Factories []PackagedFactoryCatalogEntry `json:"factories"`
+}
 
 // PaginationContext defines model for PaginationContext.
 type PaginationContext struct {
@@ -9524,6 +9578,9 @@ type ServerInterface interface {
 	// Pull or install one managed runtime
 	// (POST /models/{model_name}/pull)
 	PullModel(w http.ResponseWriter, r *http.Request, modelName string)
+	// List built-in packaged factories
+	// (GET /packaged-factories)
+	ListPackagedFactories(w http.ResponseWriter, r *http.Request)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -10751,6 +10808,20 @@ func (siw *ServerInterfaceWrapper) PullModel(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListPackagedFactories operation middleware
+func (siw *ServerInterfaceWrapper) ListPackagedFactories(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPackagedFactories(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProviderSessionDetails operation middleware
 func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
 
@@ -11023,6 +11094,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/models/{model_name}/invocations", wrapper.InvokeModel).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models/{model_name}/pull", wrapper.PullModel).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/packaged-factories", wrapper.ListPackagedFactories).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

@@ -1,6 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
-
+import {
+  mockedBackendBrowserIntegrationFiles,
+  mockedBackendBrowserIntegrationPhaseName,
+} from "./ui-integration-targets.mjs";
 import {
   defaultCapturedStdoutMaxBuffer,
   formatElapsedMs,
@@ -8,16 +11,34 @@ import {
 } from "./ui-test-cost-report.mjs";
 
 export const phaseLogPrefix = "[ui-browser-integration]";
-export const browserIntegrationPhaseName = "Browser integration Vitest pass";
+export const browserIntegrationPhaseName =
+  mockedBackendBrowserIntegrationPhaseName;
 
-const browserIntegrationWorkerArgs = [
+const focusedBrowserIntegrationWorkerArgs = [
   "--no-file-parallelism",
   "--maxWorkers",
   "1",
 ];
 
-export function buildBrowserIntegrationVitestArgs() {
-  return ["run", "--dir", "integration", ...browserIntegrationWorkerArgs];
+export function browserIntegrationMaxWorkers(env = process.env) {
+  const configured = Number(env.UI_BROWSER_INTEGRATION_MAX_WORKERS ?? "3");
+  if (!Number.isInteger(configured) || configured < 1) {
+    throw new Error(
+      `UI_BROWSER_INTEGRATION_MAX_WORKERS must be a positive integer, got "${env.UI_BROWSER_INTEGRATION_MAX_WORKERS}".`,
+    );
+  }
+  return configured;
+}
+
+export function buildBrowserIntegrationVitestArgs(env = process.env) {
+  return [
+    "run",
+    ...mockedBackendBrowserIntegrationFiles,
+    "--fileParallelism",
+    "--maxWorkers",
+    String(browserIntegrationMaxWorkers(env)),
+    "--reporter=verbose",
+  ];
 }
 
 export function buildFocusedBrowserIntegrationVitestArgs(files) {
@@ -25,7 +46,7 @@ export function buildFocusedBrowserIntegrationVitestArgs(files) {
     throw new Error("buildFocusedBrowserIntegrationVitestArgs requires files.");
   }
 
-  return ["run", ...files, ...browserIntegrationWorkerArgs];
+  return ["run", ...files, ...focusedBrowserIntegrationWorkerArgs];
 }
 
 export function formatPhaseElapsed(phaseName, elapsedMs) {
@@ -44,6 +65,10 @@ function runVitestIntegrationPass({
     stdio: ["inherit", "pipe", "inherit"],
     encoding: "utf8",
     maxBuffer: defaultCapturedStdoutMaxBuffer,
+    env: {
+      ...process.env,
+      AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION: "true",
+    },
   });
   const elapsedMs = performance.now() - startedAt;
 

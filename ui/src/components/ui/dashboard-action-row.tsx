@@ -2,4 +2,4 @@
 export {
   ActionRow as DashboardActionRow,
   type ActionRowProps as DashboardActionRowProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/layout";

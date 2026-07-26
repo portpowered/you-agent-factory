@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
-import { Button } from "../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardStatusPanel } from "./dashboard-status-panel";
 

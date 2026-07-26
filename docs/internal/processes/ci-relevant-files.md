@@ -23,10 +23,18 @@
   canonical five-package family, stages manifests with one version and aligned
   internal dependency pins, and writes registry-format tarballs plus evidence
   under `.artifacts/public-packages` by default. The Development Package
-  workflow runs this command as a read-only pull-request dry run, publishes an
-  immutable `dev` version after protected `main` succeeds, and the tagged
-  release workflow publishes the release semver under `latest`. Publication
-  uses npm trusted publishing and verifies every exact version after upload.
+  workflow runs this command as a frontend-only pull-request dry run and
+  publishes only this family at an immutable `dev` version after protected
+  `main` succeeds. API and Packaged Factories join the frontend family only in
+  the complete tagged-release candidate, which publishes one release semver
+  under `latest`. Publication uses npm trusted publishing and verifies every
+  exact version after upload.
+
+- `make public-release-package-smoke` is the required complete-set release
+  behavior gate. It exercises scope validation, real seven-package candidate
+  preparation, and protected publication preflight from the repository root on
+  every Development Package workflow run. Keep the command portable when it
+  invokes npm outside an npm script, including on Windows.
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable
@@ -62,11 +70,26 @@
   fail-fast-disabled matrix gated only by Classify PR Impact. Preserve the
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
-  Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`. Both commands serialize Go package coverage
+  Exact local reruns are `make test-unit-coverage` and
+  `make functional-test-viz` (required Backend Functional Coverage). Coverage-
+  only functional reruns remain `make test-functional-coverage`.
+  `make test-functional-coverage` always runs `functional-boundary-check` first,
+  and `make functional-test-viz` composes that coverage lane once with profile
+  plus `-json-output` before rendering Markdown, so the required CI functional
+  lane cannot succeed without a successful boundary check; the unit coverage
+  lane stays independent of that prerequisite. CI keeps the established upload
+  root `.artifacts/backend-functional-coverage/` by setting
+  `FUNCTIONAL_TEST_VIZ_DIR` for the functional matrix leg, tees `command.log`,
+  and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`,
+  and `command.log` on success and failure when those files exist (upload step
+  uses `if: always()`). Both coverage commands serialize Go package coverage
   writers before canonicalizing repeated source blocks into one sorted profile;
   keep that ordering so concurrent packages cannot corrupt the shared profile
-  and the uploaded artifact matches the totals enforced by the lane.
+  and the uploaded artifact matches the totals enforced by the lane. Prove the
+  functional boundary-before-coverage composition with stubbed Make wrapper
+  smoke under
+  `tests/functional/observability/coverage/functional_coverage_boundary_test.go`
+  rather than the full functional suite.
   The default functional and functional-coverage lanes share dynamic package
   selection through `internal/testlanes`: retain execution of the complete
   `go list ./tests/functional/...` result, the shared-support exclusion, and
@@ -99,11 +122,32 @@
   `gocoveragecheck` coverage-summary JSON file (never a second `.out`
   profile parser), attaches golden manifest provenance fail-closed, and
   writes `.artifacts/functional-test-viz/functional-tests.md` by default
-  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library;
-  Make/CI upload wiring remains a later cell (`make functional-test-viz` is
-  intentionally not owned here). Prove rendering with focused package/cmd
-  golden fixtures under `internal/functionaltestviz/testdata/` rather than
-  executing the full functional suite.
+  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library.
+  Maintainer/CI composition is `make functional-test-viz`: boundary check,
+  one short functional coverage lane with
+  `GO_FUNCTIONAL_COVERAGE_PROFILE` / `GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT`
+  under `.artifacts/functional-test-viz/`, then `cmd/functionaltestviz`.
+  The target is fail-closed: boundary, suite, coverage-floor, metadata, or
+  rendering failures exit non-zero. It never deletes the artifact root on
+  failure, so already-written diagnostics remain (for example profile/JSON
+  after a floor fail, or those files before a render fail). Prove fail-closed
+  preservation with stubbed Make wrapper smoke under
+  `tests/functional/observability/coverage/functional_test_viz_fail_closed_test.go`
+  rather than the full functional suite. Prove rendering with focused
+  package/cmd golden fixtures under `internal/functionaltestviz/testdata/`.
+  Required CI Backend Functional Coverage runs `make functional-test-viz`
+  (with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`) so
+  `functional-boundary-check` stays unavoidable through the nested
+  `test-functional-coverage` call, and the lane uploads Markdown, coverage
+  JSON, profile, and command log on success and failure. Prove default
+  `functional-test-viz` wiring (boundary first, single coverage with profile
+  + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
+  dry-run / stubbed Make wrapper smoke under
+  `tests/functional/observability/coverage/functional_test_viz_contract_test.go`
+  rather than the full functional suite. Those Make helpers scrub ambient
+  `FUNCTIONAL_TEST_VIZ_*` / `GO_FUNCTIONAL_COVERAGE_*` from the child Make
+  environment so default-path assertions still hold when the suite inherits
+  CI's `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
@@ -130,7 +174,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional/internal/support` is the only shared harness exception;
   other `tests/functional/internal/*` roots (for example `restclient`) are
   unclassified deletion-only debt, and new `runtime_api` files or top-level
-  `Test*` scenarios fail immediately. Prove accept/reject outcomes with
+  `Test*` scenarios fail immediately. `tests/functional/providers/<provider>`
+  is an approved provider-specific domain path, while aggregate Go files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt guarded by both package-structure and functional-boundary checks. Prove
+  accept/reject outcomes with
   focused `cmd/pkgstructurecheck` tests (see
   `TestDomainLayoutEnforcementProof`) plus `make pkg-structure` and
   `make verify-fast`. When enabling a new layout rule, baseline the current
@@ -144,6 +192,32 @@ Wave 0 functional-tests-expansion planning authority lives under
   Functional API tests should set the service-level provider and script
   overrides directly and assert the runner is invoked, rather than supplying
   a prebuilt worker application that bypasses this composition boundary.
+
+- `cmd/packagetargetmanifestcheck` owns the Packaged Service Structure
+  package-to-target and deletion manifest schema. The committed inventory lives
+  at `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  may only use the closed destination vocabulary (13 product owners, approved
+  non-service families, and the `edges` architecture exception). Nested
+  destinations are limited to `<owner>/internal/services/<subservice>` using the
+  plan's committed nested subservice names. The top-level `inventory` array is
+  the stable-sorted (byte-order / slash path) ledger seed of every production
+  `pkg/` package (directories with at least one non-test `.go` file); regenerate
+  with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
+  product-owner destination rows (including Providers extraction moves from
+  `workers/provider*` / `cliprovider` / `agypty`) regenerate with
+  `-write-owner-packages`. Process Edges rows retain destination `edges` as the
+  sole broad external-effect architecture exception; regenerate with
+  `-write-edges-packages`, which also records FND-06 Edges-narrowing
+  `futureDebt` without performing that migration. Approved non-service family
+  rows (`initializer`, `root`, `wire`, `platform`, `transports`) and any
+  remaining residual deletion-queue mappings regenerate with
+  `-write-residual-packages`; unknown residuals must not invent top-level
+  owners. Focused validation requires exact one-destination coverage: every
+  `inventory[]` path has exactly one stable-sorted `packages[]` row, and the
+  checker fails on missing, duplicate, unsorted, closed-vocabulary, or incomplete
+  delete-row mappings. Keep `make package-target-manifest-check` in default
+  `make lint`. Keep validators beside this checker rather than inventing
+  alternate destination trees.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
   shipped first-party Factory documents. Keep it in the default `make lint`
@@ -195,28 +269,33 @@ Wave 0 functional-tests-expansion planning authority lives under
   scripts, lockfiles, workspaces, and links, resolve artifacts only through
   public package specifiers, and validate both generated representations
   against the installed schema before removing the consumer.
-  Pull-request authorization is shared through
-  `scripts/package-development-policy.mjs`; keep the API compatibility re-export
-  and require every candidate to match the reviewed full head SHA after
-  prerequisites succeed. The Development Package pull-request job runs
-  `scripts/packaged-factories-package-pr-dry-run.mjs` without registry access
-  and preserves the exact tarball, candidate evidence, consumer evidence, and
-  no-publish outcome for review. Keep generation, identity, inventory, pack,
-  and installed-consumer failures stage-specific.
-  Protected-main publication must download that package's preserved candidate,
-  rebind its evidence source commit to the protected workflow head, and use the
-  shared `scripts/package-registry.mjs` and
-  `scripts/package-publication.mjs` mechanics. Package wrappers own exact npm
-  identity and installed-consumer semantics; shared orchestration owns local
-  digest verification, immutable-version reconciliation, publish-at-most-once
-  behavior, and bounded retries for transient lookup, download, visibility, and
-  registry-consumer install failures. Candidate identity/digest, immutable
-  conflict, registry integrity, authentication, permission, and installed-data
-  contract failures remain fail-fast and retain classified diagnostics.
-  The tagged Release workflow prepares API and Packaged Factories candidates
-  together from the successful release-candidate workflow's exact head commit,
-  uploads them under separate artifact names, and publishes only those
-  downloaded directories after rechecking their source commit. Local
+  The data-package development policy and dry-run helpers remain available as
+  focused local verification tools, but the Development Package workflow does
+  not prepare or publish API or Packaged Factories candidates. Protected-main
+  development publication preserves and publishes only the frontend family at
+  `0.0.0-dev.<run-id>.<reviewed-source-commit>`.
+  `scripts/public-release-package-candidate.mjs` prepares the tagged-release
+  candidate set from the successful release-candidate workflow's exact head
+  commit: API, Packaged Factories, and the canonical frontend family share one
+  stable release version, preserve source manifests and frontend build outputs,
+  and are recorded exactly once in `release-candidate-evidence.json`. The
+  shared `scripts/package-export-validation.mjs` check rejects any packed API,
+  Packaged Factories, or frontend candidate missing a concrete export target or
+  every match for a wildcard target. Keep the legacy
+  `factories/goal/factory.json` compatibility artifact as a separate Packaged
+  Factories required-file check, outside the general export-map contract, and
+  keep lifecycle scripts disabled for every candidate pack. Prove that behavior
+  at the API, Packaged Factories, and frontend production packing boundaries
+  with lifecycle-hook sentinel fixtures; command-argument inventory assertions
+  are not sufficient release evidence.
+  tagged Release workflow uploads that complete set as one artifact. Its
+  `scripts/public-release-package-publish.mjs` boundary rejects unknown scopes,
+  duplicates, missing or extra packages, source-commit drift, and child
+  evidence or tarball paths that do not match the reviewed top-level evidence,
+  and preflights every represented tarball against all recorded artifact
+  digests before publishing any package. The frontend publisher accepts only the
+  `frontend-only` development scope, while the protected tagged publisher
+  requires the complete `tagged-release` scope. Local
   maintainers can isolate generation, drift, script tests, exact packing,
   pull-request dry-run, and clean-consumer behavior through the focused
   `packaged-factory-*` Make targets documented in

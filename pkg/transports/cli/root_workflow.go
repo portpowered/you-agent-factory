@@ -22,7 +22,7 @@ func newSessionHandlerRegistry(
 	}
 	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
 		CreateRunE: commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
-			Config: configs.Create, JSON: &globals.json,
+			Config: configs.Create, Server: &globals.server, JSON: &globals.json,
 			SessionDiagnosticsBinding: diagnosticsBinding, CreateSession: options.CreateSession,
 		}),
 		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{

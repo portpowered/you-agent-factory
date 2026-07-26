@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,86 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	}
 	if len(submitted.Content) != 1 || submitted.Content[0].Text != "hello" {
 		t.Fatalf("submitted content = %#v, want primary structured input", submitted.Content)
+	}
+}
+
+func TestSessionOwner_PreparedCLIArgumentsRetainCanonicalValuesOrderAndProvenance(t *testing.T) {
+	cfg := sessionOwnerSignatureFactoryConfig()
+	cfg.InvocationSignature.Parameters[0].ValueMode = work.InvocationParameterValueModeRepeated
+	var submitted workdomain.SubmitRequest
+	owner := successfulSessionOwner(cfg, func(request workdomain.SubmitRequest) { submitted = request })
+	prepared := &work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
+			"input": {
+				Values: []string{"first", "second"},
+				Sources: []work.ArgumentSource{
+					{Kind: work.ArgumentSourceKindPositional, Name: "1"},
+					{Kind: work.ArgumentSourceKindDefault, Name: "input"},
+				},
+			},
+		}},
+	}
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", InvocationRequest{
+		PreparedInvocationInput: prepared,
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	argument := submitted.InvocationArguments.Arguments["input"]
+	if !reflect.DeepEqual(argument.Values, []string{"first", "second"}) {
+		t.Fatalf("argument values = %#v, want stable canonical order", argument.Values)
+	}
+	wantSources := []work.InvocationArgumentSource{
+		{Kind: string(work.ArgumentSourceKindPositional), Name: "1"},
+		{Kind: string(work.ArgumentSourceKindDefault), Name: "input"},
+	}
+	if !reflect.DeepEqual(argument.Sources, wantSources) {
+		t.Fatalf("argument sources = %#v, want preserved provenance %#v", argument.Sources, wantSources)
+	}
+}
+
+func TestSessionOwner_PreparedCLICompatibilityInputRetainsSourceWithoutRenormalizing(t *testing.T) {
+	cfg := sessionOwnerFactoryConfig()
+	resolved := work.ResolvedInput{
+		Source: work.InputSourcePositionalText,
+		Text:   "legacy input",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "legacy input",
+		}},
+	}
+	var submitted workdomain.SubmitRequest
+	var waitInput SessionInvocationWaitInput
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		SubmitWork: func(_ context.Context, _ string, request workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			submitted = request
+			return workdomain.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		},
+		Observe: func(_ context.Context, _ string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			waitInput = input
+			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+		},
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", InvocationRequest{
+		PreparedInvocationInput: &work.PreparedInvocationInput{
+			Source:        resolved.Source,
+			ResolvedInput: &resolved,
+		},
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	if submitted.InvocationArguments != nil {
+		t.Fatalf("compatibility invocation arguments = %#v, want nil", submitted.InvocationArguments)
+	}
+	if !reflect.DeepEqual(submitted.Content, resolved.Content) {
+		t.Fatalf("submitted content = %#v, want prepared content %#v", submitted.Content, resolved.Content)
+	}
+	if waitInput.InputSource != work.InputSourcePositionalText {
+		t.Fatalf("wait input source = %q, want preserved positional source", waitInput.InputSource)
 	}
 }
 

@@ -9,6 +9,8 @@ export const uiTestCostCategories = [
 
 const vitestFileDurationLinePattern =
   /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
+const vitestVerboseTestDurationLinePattern =
+  /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+>.+\s+(\d+(?:\.\d+)?)ms$/gm;
 
 const ansiEscapePattern = new RegExp(
   `${String.fromCharCode(27)}\\[[0-9;]*m`,
@@ -25,6 +27,7 @@ export function stripAnsi(text) {
 export function parseVitestFileDurationsFromLog(logText) {
   const strippedLog = stripAnsi(logText);
   const durationsByPath = new Map();
+  const verboseDurationsByPath = new Map();
 
   for (const match of strippedLog.matchAll(vitestFileDurationLinePattern)) {
     const [, filePath, durationMsText] = match;
@@ -33,6 +36,22 @@ export function parseVitestFileDurationsFromLog(logText) {
       filePath,
       Math.max(durationsByPath.get(filePath) ?? 0, durationMs),
     );
+  }
+
+  for (const match of strippedLog.matchAll(
+    vitestVerboseTestDurationLinePattern,
+  )) {
+    const [, filePath, durationMsText] = match;
+    verboseDurationsByPath.set(
+      filePath,
+      (verboseDurationsByPath.get(filePath) ?? 0) + Number(durationMsText),
+    );
+  }
+
+  for (const [filePath, durationMs] of verboseDurationsByPath) {
+    if (!durationsByPath.has(filePath)) {
+      durationsByPath.set(filePath, durationMs);
+    }
   }
 
   return [...durationsByPath.entries()].map(([path, durationMs]) => ({
@@ -86,6 +105,18 @@ export function categorizeUiTestFile(filePath) {
     if (normalized.includes("import") || normalized.includes("export")) {
       return "import-export";
     }
+    return "app-shell-integration";
+  }
+  if (
+    normalized.includes("dashboard-replay-wiring.component.test.tsx") ||
+    normalized.includes("dashboard-trace-wiring.component.test.tsx") ||
+    normalized.includes(
+      "dashboard-session-timeline-isolation.component.test.tsx",
+    ) ||
+    normalized.includes(
+      "use-dashboard-snapshot-checkpoint-lifecycle.component.test.tsx",
+    )
+  ) {
     return "app-shell-integration";
   }
   if (

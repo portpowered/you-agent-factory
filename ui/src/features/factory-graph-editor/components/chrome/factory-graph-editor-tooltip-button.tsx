@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import {
   DashboardActionButton,
   type DashboardActionButtonProps,
-} from "../../../../components/ui";
+} from "../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../lib/cn";
 
 export type FactoryGraphEditorTooltipPlacement = "above" | "below";

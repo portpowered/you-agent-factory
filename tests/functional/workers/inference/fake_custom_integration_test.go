@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess proves root-built fake inference completes dispatch.
 func TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	writeExternalProviderWorker(t, dir, "customer.provider")
@@ -56,6 +57,7 @@ func TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess(t 
 	}
 }
 
+// TestFakeCustomIntegrationRemainsInertThroughRootBuildProcessConstruction proves construction has no inference side effects.
 func TestFakeCustomIntegrationRemainsInertThroughRootBuildProcessConstruction(t *testing.T) {
 	t.Parallel()
 

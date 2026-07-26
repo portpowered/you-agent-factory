@@ -1,7 +1,7 @@
 import { EnumSelect } from "@you-agent-factory/components/forms";
-import { Input } from "../../../../../../components/ui";
+import { Input } from "../../../../../../components/ui/input";
 import { WORKER_TIMEOUT_UNITS } from "../../../../../current-factory-definition/lib/worker-timeout-duration";
-import { resolveEditableWorkerTypeOptions } from "../../../../../current-factory-definition/public";
+import { resolveEditableWorkerTypeOptions } from "../../../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationFieldHelp,

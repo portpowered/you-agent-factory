@@ -1,8 +1,9 @@
 import { type DragEvent, useState } from "react";
 
-import { Button, Label, Text } from "../../../components/ui";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/cn";
-import { ChooseFileField } from "../../choose-file/public";
+import { ChooseFileField } from "../../choose-file/components/choose-file-field";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type { SubmitWorkDraftFileItem } from "./submit-work-card";

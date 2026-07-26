@@ -3,11 +3,13 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -17,8 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -139,10 +141,15 @@ func provideExpandFactoryConfigOperation(
 	return configcli.NewExpandFactoryConfig(persistence)
 }
 
-func provideInitSystemConfigOperation(
-	initialize func(configinitcmd.InitConfig) error,
-) cli.InitSystemConfigOperation {
-	return initialize
+func provideConfigureInitOperation(
+	service operatorsettings.ConfigDocumentService,
+) cli.ConfigureInitOperation {
+	return initsetup.NewConfigurer(
+		service,
+		func(input io.Reader, maxLines int) (initsetup.ContextLineReader, error) {
+			return platformstdio.NewContextLineReader(input, maxLines)
+		},
+	)
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {
@@ -186,8 +193,10 @@ func provideUpdateFactoryFromFileOperation(
 	}
 }
 
-func provideFactoryConfigRootResolver() factorydefinitions.FactoryConfigRootResolver {
-	return factorydefinitions.NewFactoryConfigRootResolver(platformfilesystem.Local{})
+func provideFactoryConfigRootResolver(
+	source factorydefinitions.AuthoredLayoutReaderFileSystem,
+) factorydefinitions.FactoryConfigRootResolver {
+	return factorydefinitions.NewFactoryConfigRootResolver(source)
 }
 
 func provideFactoryConfigFileLoader(

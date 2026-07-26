@@ -1,7 +1,7 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
 import { useStore } from "zustand";
 
-import { FactorySimpleSubmissionComposer } from "../../submit-work/public";
+import { FactorySimpleSubmissionComposer } from "../../submit-work/components/composer/factory-simple-submission-composer";
 import { getFactoryEmulatorMessages } from "../messages/factory-emulator";
 import type { FactoryEmulatorInstance } from "../state/factory-emulator-instance";
 import { selectFactoryEmulatorSubmission } from "../state/factory-emulator-submission";

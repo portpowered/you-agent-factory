@@ -195,7 +195,11 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 	built := make(map[string]*cobra.Command, len(plan))
 	targets := make(map[string]*genericFlagValue)
 	for _, item := range plan {
-		built[item.record.Path] = projectCommand(item.record, item.arguments)
+		built[item.record.Path] = projectCommand(
+			item.record,
+			item.arguments,
+			bindings.GuardUnknownSubcommands,
+		)
 	}
 	for _, item := range plan {
 		if err := projectFlags(built[item.record.Path], item, targets, bindings); err != nil {
@@ -458,14 +462,46 @@ func commandParentPath(path string) string {
 	return path[:index]
 }
 
-func projectCommand(record climanifest.Command, arguments []climanifest.Argument) *cobra.Command {
-	return &cobra.Command{
+func projectCommand(
+	record climanifest.Command,
+	arguments []climanifest.Argument,
+	guardUnknownSubcommands bool,
+) *cobra.Command {
+	args := positionalArgsFromManifest(record)
+	if len(arguments) == 0 {
+		args = cobra.NoArgs
+	}
+	command := &cobra.Command{
 		Use:     projectedCommandUsage(record, arguments),
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
 		Long:    commandLong(record),
 		Example: commandExamples(record),
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
+		Args:    args,
+	}
+	if !record.Runnable && guardUnknownSubcommands {
+		configureGenericGroupCommand(command)
+	}
+	return command
+}
+
+func configureGenericGroupCommand(command *cobra.Command) {
+	command.DisableFlagParsing = true
+	command.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+			return cmd.Help()
+		}
+		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+	}
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := command.Args(cmd, args); err != nil {
+			return err
+		}
+		return cmd.Help()
 	}
 }
 
@@ -483,6 +519,7 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 	}
 	handler := bindings.Handlers[record.Handler.ID]
 	cobraHandler := bindings.CobraHandlers[record.Handler.ID]
+	resolvedCobraHandler := bindings.ResolvedCobraHandlers[record.Handler.ID]
 	cmd.RunE = func(command *cobra.Command, args []string) error {
 		if projectRootNoArgumentHelp(command, args, record) {
 			return nil
@@ -497,6 +534,17 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 			}
 			return cobraHandler(command, args, values, persistentInputs)
+		}
+		if resolvedCobraHandler != nil {
+			inputs, err := resolvedCommandInputs(command, record, values)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			persistentInputs, err := ResolvedPersistentInputs(command)
+			if err != nil {
+				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			return resolvedCobraHandler(command, inputs, persistentInputs)
 		}
 		return handler(command.Context(), values)
 	}
@@ -810,6 +858,10 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 	registered := flagSet.Lookup(record.Long)
 	registered.Hidden = record.Visibility == "hidden"
 	registered.Annotations = map[string][]string{"infinite-you/input-id": {record.ID}}
+	registered.Annotations["infinite-you/normalization"] = []string{record.Normalization}
+	registered.Annotations["infinite-you/completion"] = []string{record.Completion}
+	registered.Annotations["infinite-you/enum"] = append([]string(nil), record.Enum...)
+	registered.Annotations["cobra_annotation_flag_aliases"] = append([]string(nil), record.Aliases...)
 	if record.Required {
 		registered.Annotations["infinite-you/required"] = []string{"true"}
 	}

@@ -7,8 +7,8 @@ import type {
 } from "../../../../api/events";
 import {
   deleteTimelineCheckpoint,
-  type StreamDerivedCacheIdentity,
-} from "../../../timeline/public";
+} from "../../../timeline/public/checkpoint-persistence";
+import type { StreamDerivedCacheIdentity } from "../../../timeline/public/stream-identity";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import {
   correlationTokenForIdentityScope,

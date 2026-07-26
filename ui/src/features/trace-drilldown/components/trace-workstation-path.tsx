@@ -7,10 +7,8 @@ import {
   DashboardGraphBackground,
   DashboardGraphControls,
 } from "../../../components/dashboard/dashboard-graph";
-import {
-  FACTORY_GRAPH_EDGE_TYPES,
-  GraphViewportSurface,
-} from "../../graphs/public";
+import { GraphViewportSurface } from "../../graphs/components/dashboard-graph-viewport-surface";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/components/factory-graph-edge";
 import {
   traceDispatchTopologyLayoutKey,
   useTraceDispatchFactoryGraphLayoutPositions,

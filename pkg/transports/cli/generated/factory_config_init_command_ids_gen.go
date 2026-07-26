@@ -6,7 +6,6 @@ package generated
 // contracts/cli/commands.json for the factory/config/init family.
 var FactoryConfigInitFamilyCommandIDs = []string{
 	"you.config",
-	"you.config.init",
 	"you.factory",
 	"you.factory.config",
 	"you.factory.config.expand",

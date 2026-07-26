@@ -1,5 +1,5 @@
 import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
-import { Text } from "../../../../../components/ui";
+import { Text } from "@you-agent-factory/components/primitives";
 import { resolveRunnerSelection } from "../../../../current-factory-definition/lib/runner-selection";
 import {
   getRunnerDisplayName,

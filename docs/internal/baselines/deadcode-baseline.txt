@@ -199,12 +199,6 @@ pkg/services/recordings/replay/event_artifact.go: unreachable func: runStartedFa
 pkg/services/recordings/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
 pkg/services/work/materialize/materialize.go: unreachable func: Options.maxRedirects
 pkg/services/work/materialize/materialize.go: unreachable func: Options.timeout
-pkg/services/work/service/service.go: unreachable func: New
-pkg/services/work/service/service.go: unreachable func: Service.GetEngineStateSnapshotForSession
-pkg/services/work/service/service.go: unreachable func: Service.MoveWorkForSession
-pkg/services/work/service/service.go: unreachable func: Service.SubmitWorkRequestForSession
-pkg/services/work/service/service.go: unreachable func: Service.SubscribeFactoryEventsForSession
-pkg/services/work/service/service.go: unreachable func: Service.runtime
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture
@@ -223,7 +217,6 @@ pkg/transports/cli/baseline/run_flags.go: unreachable func: SerializeRunFlags
 pkg/transports/cli/climanifestcobra/work_constructor_test.go: unreachable func: workCommandWithInheritedFlags
 pkg/transports/cli/factory/validation_test_helper_test.go: unreachable func: testPersistableFactoryDefinitionValidator
 pkg/transports/cli/factory/validation_test_helper_test.go: unreachable func: testValidPersistableFactoryDefinitionValidator
-pkg/transports/cli/mcp/serve.go: unreachable func: NewCommand
 pkg/transports/cli/root_run_test.go: unreachable func: InspectModelAccessor
 pkg/transports/cli/root_run_test.go: unreachable func: InvokeModelAccessor
 pkg/transports/cli/root_run_test.go: unreachable func: ListModelsAccessor

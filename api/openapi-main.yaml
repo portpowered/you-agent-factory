@@ -1460,6 +1460,23 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /packaged-factories:
+    get:
+      tags:
+        - Factory
+      operationId: listPackagedFactories
+      summary: List built-in packaged factories
+      description: Returns the backend-owned built-in factory catalog, including the selected artifacts the dashboard displays. The dashboard must consume this API rather than importing the publication package.
+      responses:
+        '200':
+          description: Published packaged factory catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackagedFactoryCatalogResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     SessionID:
@@ -1858,6 +1875,10 @@ components:
       $ref: './components/schemas/api/FactorySessionSyncExecutionResponse.yaml'
     FactorySessionLifecycleControlKind:
       $ref: './components/schemas/api/FactorySessionLifecycleControlKind.yaml'
+    PackagedFactoryCatalogResponse:
+      $ref: './components/schemas/api/PackagedFactoryCatalogResponse.yaml'
+    PackagedFactoryCatalogEntry:
+      $ref: './components/schemas/api/PackagedFactoryCatalogEntry.yaml'
     FactorySessionLifecycleControlOutcome:
       $ref: './components/schemas/api/FactorySessionLifecycleControlOutcome.yaml'
     FactorySessionLifecycleControlLinks:
@@ -2302,6 +2323,10 @@ components:
       $ref: './components/schemas/api/GlobalConfig.yaml'
     GlobalConfigDefaults:
       $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
+    GlobalConfigRuntime:
+      $ref: './components/schemas/api/GlobalConfigRuntime.yaml'
+    GlobalConfigRuntimeArtifactSettings:
+      $ref: './components/schemas/api/GlobalConfigRuntimeArtifactSettings.yaml'
     GlobalConfigWorkerPreset:
       $ref: './components/schemas/api/GlobalConfigWorkerPreset.yaml'
     GlobalConfigWorkerPresetModelProvider:

@@ -1,11 +1,9 @@
-import { surfacePanelVariants } from "../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import type { FactoryGraphBulkSelectionSummary } from "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
 import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
-import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionDescriptionList,
-  CurrentSelectionDetailItem,
-} from "../../base/public";
+import { CurrentSelectionDescriptionList } from "../../base/components/detail/current-selection-description-list";
+import { CurrentSelectionDetailItem } from "../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionBodyLayout } from "../../base/components/layout/current-selection-body-layout";
 import {
   getGraphBulkSelectionDetailMessages,
   graphBulkSelectionKindLabel,

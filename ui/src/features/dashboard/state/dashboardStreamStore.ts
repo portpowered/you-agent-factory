@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import type { DashboardStreamState } from "../../../api/dashboard/types";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { getDashboardStreamMessages } from "../messages/dashboard-stream";
 
 interface DashboardStreamStoreState {

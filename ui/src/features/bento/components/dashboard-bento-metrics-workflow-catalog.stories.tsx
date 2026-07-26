@@ -1,7 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
-import { WorkTotalsWidget } from "../../work-totals/public";
+import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   emptyDashboardSnapshot,

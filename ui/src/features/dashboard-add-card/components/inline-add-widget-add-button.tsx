@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import type { ReactElement } from "react";
 
-import { Button } from "../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
 
 export interface InlineAddWidgetAddButtonProps {
   disabled: boolean;

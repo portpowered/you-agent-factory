@@ -1,8 +1,8 @@
 import { type HTMLAttributes, type ReactNode, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { AgentBentoCard } from "../../bento/public";
-import type { DashboardSelection } from "../../current-selection/public";
+import { AgentBentoCard } from "../../bento/components/agent-bento";
+import type { DashboardSelection } from "../../current-selection/base/state/selection-types";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";

@@ -16,25 +16,27 @@ export function useTopologyStableFactoryForLayout(
   >(undefined);
 
   return useMemo(() => {
-    if (factory === null) {
-      stableFactoryRef.current = undefined;
-      return null;
-    }
-
-    if (factory === undefined) {
-      stableFactoryRef.current = undefined;
-      return undefined;
-    }
-
-    const previous = stableFactoryRef.current;
-    if (
-      previous &&
-      !doesFactoryDefinitionChangeAffectGraphTopology(previous, factory)
-    ) {
-      return previous;
-    }
-
-    stableFactoryRef.current = factory;
-    return factory;
+    const stableFactory = resolveTopologyStableFactory(
+      stableFactoryRef.current,
+      factory,
+    );
+    stableFactoryRef.current = stableFactory ?? undefined;
+    return stableFactory;
   }, [factory]);
+}
+
+export function resolveTopologyStableFactory(
+  previous: NonNullable<DashboardSnapshot["factory"]> | undefined,
+  factory: DashboardSnapshot["factory"] | null | undefined,
+): DashboardSnapshot["factory"] | null | undefined {
+  if (factory === null || factory === undefined) {
+    return factory;
+  }
+  if (
+    previous &&
+    !doesFactoryDefinitionChangeAffectGraphTopology(previous, factory)
+  ) {
+    return previous;
+  }
+  return factory;
 }

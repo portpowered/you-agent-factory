@@ -1,11 +1,9 @@
 import type { DashboardAgentRunInspection } from "../../../../../api/dashboard/agent-run-inspection-types";
-import {
-  CurrentSelectionDescriptionList,
-  CurrentSelectionDetailItem,
-  CurrentSelectionExpandableSection,
-  CurrentSelectionLabel,
-  useCurrentSelectionDetailMessages,
-} from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
+import { CurrentSelectionDetailItem } from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionLabel } from "../../../base/components/presentation/current-selection-label";
+import { useCurrentSelectionDetailMessages } from "../../../base/components/presentation/current-selection-locale";
 
 export function AgentRunInspectionSection({
   inspection,

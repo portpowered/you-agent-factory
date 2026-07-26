@@ -1,0 +1,34 @@
+name: Setup UI browser dependencies
+description: Restore exact-lockfile UI dependencies and Playwright Chromium for browser tests
+
+inputs:
+  bun-version:
+    description: Bun version used to install the UI dependency tree
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}
+    - id: ui-dependencies
+      name: Restore UI dependencies
+      uses: actions/cache@v4
+      with:
+        path: ui/node_modules
+        key: ui-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-bun-${{ inputs.bun-version }}-${{ hashFiles('ui/bun.lock') }}
+    - name: Install UI dependencies
+      if: steps.ui-dependencies.outputs.cache-hit != 'true'
+      shell: bash
+      run: make ui-deps
+    - id: playwright-browser
+      name: Restore Playwright Chromium
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}
+    - name: Install Playwright Chromium
+      if: steps.playwright-browser.outputs.cache-hit != 'true'
+      shell: bash
+      run: make ui-install-playwright

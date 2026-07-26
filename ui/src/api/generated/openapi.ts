@@ -807,6 +807,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/packaged-factories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List built-in packaged factories
+     * @description Returns the backend-owned built-in factory catalog, including the selected artifacts the dashboard displays. The dashboard must consume this API rather than importing the publication package.
+     */
+    get: operations["listPackagedFactories"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2561,6 +2581,24 @@ export interface components {
      * @enum {string}
      */
     FactorySessionLifecycleControlKind: FactorySessionLifecycleControlKind;
+    PackagedFactoryCatalogResponse: {
+      /** @description Built-in Factory definitions in stable lexical name order. */
+      factories: components["schemas"]["PackagedFactoryCatalogEntry"][];
+    };
+    PackagedFactoryCatalogEntry: {
+      /** @description Public built-in Factory name, such as '@you/goal'. */
+      name: string;
+      /** @description Stable Factory project identifier. */
+      project: string;
+      /** @description URL-safe Factory catalog identity. */
+      slug: string;
+      /** @description Canonical Factory JSON artifact. */
+      json: {
+        [key: string]: unknown;
+      };
+      /** @description Equivalent Factory YAML artifact. */
+      yaml: string;
+    };
     /**
      * @description Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
      * @enum {string}
@@ -4994,6 +5032,7 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      runtime?: components["schemas"]["GlobalConfigRuntime"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
     };
@@ -5003,6 +5042,38 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    };
+    /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
+    GlobalConfigRuntime: {
+      /** @description Structured runtime log storage settings. Omitted values use the documented production defaults. */
+      logging?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+      /** @description Runtime metrics storage settings. Omitted values use the documented production defaults. */
+      metrics?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+    };
+    /** @description Rolling-file storage settings for one runtime observability artifact. */
+    GlobalConfigRuntimeArtifactSettings: {
+      /** @description Optional artifact root. Omission uses the runtime-owned directory below the operator home. */
+      directory?: string;
+      /**
+       * @description Maximum artifact file size in megabytes before rotation.
+       * @default 100
+       */
+      maxSizeMB: number;
+      /**
+       * @description Maximum number of rotated artifact files to retain.
+       * @default 20
+       */
+      maxBackups: number;
+      /**
+       * @description Maximum age in days for rotated artifact files.
+       * @default 30
+       */
+      maxAgeDays: number;
+      /**
+       * @description Whether rotated artifact files are gzip-compressed.
+       * @default false
+       */
+      compress: boolean;
     };
     /** @description Named worker model selection available to Factory Session runtime opening. */
     GlobalConfigWorkerPreset: {
@@ -6940,6 +7011,27 @@ export interface operations {
         };
       };
       404: components["responses"]["CurrentFactoryNotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listPackagedFactories: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Published packaged factory catalog. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PackagedFactoryCatalogResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };

@@ -23,8 +23,8 @@ import (
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
-	factoryscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
+	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	factoryworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingreplay "github.com/portpowered/infinite-you/pkg/services/recordings/replay"
@@ -280,11 +280,7 @@ func provideFactoryScaffoldCommandInitializer(
 	files factorydefinitions.ScaffoldFileSystem,
 	output factorydefinitions.ScaffoldOutput,
 ) (factorydefinitions.ScaffoldInitializer, error) {
-	initializer, err := factoryscaffold.New(files, output)
-	if err != nil {
-		return nil, err
-	}
-	return initializer.Init, nil
+	return factorydefaultscaffold.NewScaffoldInitializer(files, output)
 }
 
 func provideFactoryDefinitionInputInboxSentinelEnsurer(

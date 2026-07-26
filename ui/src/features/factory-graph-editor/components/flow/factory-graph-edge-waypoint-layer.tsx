@@ -1,7 +1,7 @@
 import { useReactFlow, useStore, type XYPosition } from "@xyflow/react";
 import { useCallback, useRef, useState } from "react";
 import { cn } from "../../../../lib/cn";
-import { GraphNodeButton } from "../../../graphs/public";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { FactoryLayoutPoint } from "../../lib/layout/factory-graph-layout-operations";
 
 type DragSession = {

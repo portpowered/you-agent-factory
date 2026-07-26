@@ -1,9 +1,7 @@
 import { CodePanel } from "@you-agent-factory/components/data-display";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import {
-  CurrentSelectionDetailCode,
-  CurrentSelectionLabel,
-} from "../../../base/public";
+import { CurrentSelectionDetailCode } from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionLabel } from "../../../base/components/presentation/current-selection-label";
 
 export function ScriptArgsSection({
   args,

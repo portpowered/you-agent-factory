@@ -24,7 +24,7 @@ import {
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDocument,
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
+import { resetSelectionHistoryStore } from "../features/current-selection/base/state/selectionHistoryStore";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useDashboardStreamStore } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
@@ -106,7 +106,8 @@ export {
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
 
-interface RenderAppOptions {
+export interface RenderAppOptions {
+  app: ReactNode;
   browserLanguage?: string | null;
   browserLanguages?: readonly string[] | null;
   factorySessions?: FactorySessionSummary[];
@@ -123,7 +124,7 @@ interface RenderAppOptions {
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
-interface RenderAppResult extends ReturnType<typeof render> {
+export interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
@@ -260,6 +261,7 @@ export async function waitForDashboardShell(): Promise<void> {
 }
 
 export function renderApp({
+  app: renderedApp,
   browserLanguage,
   browserLanguages,
   factorySessions,
@@ -380,7 +382,9 @@ export function renderApp({
       timelineSnapshots={timelineSnapshots}
       traceFixtures={traceFixtures}
       workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-    />
+    >
+      {renderedApp}
+    </AppShellSeededApp>
   );
   const scopedApp = wrapAppForDashboardSession(
     app,
@@ -443,9 +447,9 @@ export function resetCurrentFactoryDocumentMock(): void {
 
 export function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
-    window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    window.localStorage.clear();
     resetSelectionHistoryStore();
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",

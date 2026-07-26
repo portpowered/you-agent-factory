@@ -3,7 +3,7 @@ import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/co
 import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/dialogs/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { FactoryImportPreviewDialog } from "../../import/public";
+import { FactoryImportPreviewDialog } from "../../import/components/dashboard-import-preview-dialog";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";

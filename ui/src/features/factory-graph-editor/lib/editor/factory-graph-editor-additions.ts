@@ -16,7 +16,7 @@ import {
   DEFAULT_WORKER_TYPE,
   type FactoryGraphAddWorkerType,
   isPollerRunWorkstationType,
-} from "../../../current-factory-definition/public";
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type {
   FactoryGraphAddModelOperationDraft,
   FactoryGraphAddModelOperationValidationErrors,

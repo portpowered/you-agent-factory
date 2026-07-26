@@ -5,23 +5,19 @@ import {
   MonacoTextEditor,
 } from "../../../../components/prompt-editor";
 import { VerticalResizableWidth } from "../../../../components/prompt-editor/vertical-resizable-width";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import {
   AlertPanel,
   AlertPanelText,
-  FormError,
-  FormWarning,
-  Input,
-  Label,
-  Text,
-} from "../../../../components/ui";
+} from "../../../../components/ui/alert-panel";
+import { FormError, FormWarning } from "../../../../components/ui/form-field";
+import { Input } from "../../../../components/ui/input";
 import { FACTORY_DOCS_TARGET_PREFIX } from "../../../current-factory-definition/lib/doc-editable-values";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
-import {
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionFormField,
-  CurrentSelectionSupportingText,
-} from "../../base/public";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionFormField } from "../../base/components/layout/current-selection-form-layout";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 import { formatEditableDocOverwriteFieldLabels } from "../editing/editable-doc-overwrite-fields";
 import type {
   DocDetailCardProps,

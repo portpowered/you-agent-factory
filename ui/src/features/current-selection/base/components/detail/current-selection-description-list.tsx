@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { DescriptionList } from "../../../../../components/ui";
+import { DescriptionList } from "@you-agent-factory/components/data-display";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionDescriptionListProps

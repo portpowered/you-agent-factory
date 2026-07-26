@@ -1,16 +1,14 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
-  openBrowserPage,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const defaultFactoryDefinition = {
   name: "Browser Session Harness Factory",
@@ -185,21 +183,10 @@ function buildReplayLines(factoryDefinition) {
   ];
 }
 
-describe.sequential("dashboard session tabs browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("dashboard session tabs browser integration", () => {
   it(
     "opens an existing factory from folder inspection into a new active session tab",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const openSessionRequests = [];
       const sessionReplayLines = renameReplayWorkstation(
         buildReplayLines(openedFactoryDefinition),
@@ -332,7 +319,7 @@ describe.sequential("dashboard session tabs browser integration", () => {
 
   it(
     "shows outline active session tab styling and moves selection across preloaded tabs",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const replayLines = buildReplayLines(defaultFactoryDefinition);
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,

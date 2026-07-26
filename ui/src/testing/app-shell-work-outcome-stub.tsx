@@ -9,7 +9,7 @@ vi.mock("../features/work-outcome/hooks/useWorkOutcomeChart", () => ({
   useWorkOutcomeChart: () => ({ status: "empty" as const }),
 }));
 
-vi.mock("../features/work-outcome/public", () => ({
+vi.mock("../features/work-outcome/components/work-outcome-widget", () => ({
   WorkOutcomeWidget: ({ headerAction }: { headerAction?: ReactNode }) => (
     <section data-testid="app-shell-work-outcome-stub">
       {headerAction}

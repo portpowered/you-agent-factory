@@ -1,17 +1,15 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
-import { EnumSelect } from "@you-agent-factory/components/forms";
-import { type ReactNode, useId } from "react";
-
 import {
-  AlertPanel,
-  AlertPanelText,
+  EnumSelect,
   FormDescription,
   FormError,
-  Input,
-  Label,
-  surfacePanelVariants,
-  Text,
-} from "../../../../../components/ui";
+} from "@you-agent-factory/components/forms";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { type ReactNode, useId } from "react";
+
+import { AlertPanel, AlertPanelText } from "../../../../../components/ui/alert-panel";
+import { Input } from "../../../../../components/ui/input";
 import { formatList } from "../../../../../components/ui/formatters";
 import { cn } from "../../../../../lib/cn";
 import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
@@ -24,9 +22,11 @@ import { CurrentSelectionExpandableSection } from "../../../base/components/deta
 import { mergeDetailCardSaveFieldErrors } from "../../../base/components/save/detail-card-factory-save-feedback";
 import {
   CurrentSelectionDetailFeedback,
+} from "../../../base/components/detail/current-selection-detail-feedback";
+import {
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-} from "../../../base/public";
+} from "../../../base/components/layout/current-selection-form-layout";
 import { formatEditableOverwriteFieldLabels } from "../../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,

@@ -1,8 +1,8 @@
+import { workContentPartTypeLabel } from "../../work-content/lib/work-content-part-type-label";
 import {
   getWorkContentInspectMessages,
   type WorkContentPartTypeLabels,
-  workContentPartTypeLabel,
-} from "../../work-content/public";
+} from "../../work-content/messages/work-content";
 import type { SubmitWorkDraftItemType } from "../components/submit-work-card";
 import {
   getSubmitWorkMessages,

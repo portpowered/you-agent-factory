@@ -2,7 +2,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../../../api/factory-definition/api";
-import { resolveEditableWorkstationTypeConversionOptions } from "../../../../current-factory-definition/public";
+import { resolveEditableWorkstationTypeConversionOptions } from "../../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { EditableWorkstationConfigurationState } from "../../lib/keys/detail-card-types";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 

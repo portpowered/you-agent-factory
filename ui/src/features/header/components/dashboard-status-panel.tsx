@@ -1,6 +1,6 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-import { Heading } from "../../../components/ui";
+import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";

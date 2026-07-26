@@ -2,15 +2,19 @@ import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
 import {
-  ActionRow as PackageActionRow,
-  Code as PackageCode,
-  DescriptionList as PackageDescriptionList,
-  Heading as PackageHeading,
-  Label as PackageLabel,
-  SurfacePanel as PackageSurfacePanel,
-  Text as PackageText,
-  surfacePanelVariants as packageSurfacePanelVariants,
-} from "@you-agent-factory/components";
+  DescriptionList,
+} from "@you-agent-factory/components/data-display";
+import {
+  ActionRow,
+  SurfacePanel,
+  surfacePanelVariants,
+} from "@you-agent-factory/components/layout";
+import {
+  Code,
+  Heading,
+  Label,
+  Text,
+} from "@you-agent-factory/components/primitives";
 
 import {
   TrendSummaryGrid,
@@ -28,33 +32,17 @@ import {
   DashboardText,
 } from "./dashboard-typography-components";
 import { FormDescription, FormError, FormWarning } from "./form-field";
-import {
-  ActionRow,
-  Code,
-  DescriptionList,
-  Heading,
-  Label,
-  SurfacePanel,
-  surfacePanelVariants,
-  Text,
-} from "./index";
-
 describe("dashboard typography layout package migration", () => {
-  it("re-exports package typography and layout primitives from dashboard UI entrypoints", () => {
-    expect(Text).toBe(PackageText);
-    expect(Heading).toBe(PackageHeading);
-    expect(Label).toBe(PackageLabel);
-    expect(Code).toBe(PackageCode);
-    expect(ActionRow).toBe(PackageActionRow);
-    expect(DescriptionList).toBe(PackageDescriptionList);
-    expect(SurfacePanel).toBe(PackageSurfacePanel);
-    expect(surfacePanelVariants).toBe(packageSurfacePanelVariants);
-    expect(DashboardText).toBe(PackageText);
-    expect(DashboardHeading).toBe(PackageHeading);
-    expect(DashboardLabel).toBe(PackageLabel);
-    expect(DashboardCode).toBe(PackageCode);
-    expect(DashboardActionRow).toBe(PackageActionRow);
-    expect(DashboardDescriptionList).toBe(PackageDescriptionList);
+  it("keeps focused package primitives aligned with deprecated dashboard aliases", () => {
+    expect(DashboardText).toBe(Text);
+    expect(DashboardHeading).toBe(Heading);
+    expect(DashboardLabel).toBe(Label);
+    expect(DashboardCode).toBe(Code);
+    expect(DashboardActionRow).toBe(ActionRow);
+    expect(DashboardDescriptionList).toBe(DescriptionList);
+    expect(surfacePanelVariants({ surface: "low" })).toContain(
+      "bg-surface-container-low",
+    );
   });
 
   it("renders representative typography and dense text through dashboard form surfaces", () => {

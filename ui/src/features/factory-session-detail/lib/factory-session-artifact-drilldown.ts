@@ -2,7 +2,7 @@ import type {
   FactorySessionArtifactDetail,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
-import type { WorkContent } from "../../work-content/public";
+import type { WorkContent } from "../../work-content/lib/work-content-types";
 
 export interface FactorySessionArtifactDrilldown {
   artifactId: string;

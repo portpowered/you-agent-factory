@@ -1,3 +1,6 @@
+// @component-test-runner vitest -- Bun 1.3.12 emits platform-specific Radix ScrollArea act warnings.
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 

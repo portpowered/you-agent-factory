@@ -1,3 +1,4 @@
+// @component-test-runner vitest -- fresh installs resolve workspace client packages through Vite aliases.
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type {

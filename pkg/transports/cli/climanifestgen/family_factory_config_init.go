@@ -9,7 +9,6 @@ import (
 // emit for the B11 factory/config/init cutover family.
 var FactoryConfigInitFamilyCommandIDs = []string{
 	"you.config",
-	"you.config.init",
 	"you.factory",
 	"you.factory.config",
 	"you.factory.config.expand",

@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";

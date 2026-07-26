@@ -1,15 +1,13 @@
 import {
   EnumSelect,
-  OptionalEnumSelect,
-} from "@you-agent-factory/components/forms";
-import type { ReactNode } from "react";
-import type { ModelOperationContentType } from "../../../../api/generated/openapi";
-import {
   FormDescription,
   FormError,
-  Input,
-  Label,
-} from "../../../../components/ui";
+  OptionalEnumSelect,
+} from "@you-agent-factory/components/forms";
+import { Label } from "@you-agent-factory/components/primitives";
+import type { ReactNode } from "react";
+import type { ModelOperationContentType } from "../../../../api/generated/openapi";
+import { Input } from "../../../../components/ui/input";
 import { FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES } from "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { updateEditableModelInvokeBindingDraft } from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
 import { resolveModelInvokeBindingInputSlots } from "../lib/editable-workstation-model-invoke-options";

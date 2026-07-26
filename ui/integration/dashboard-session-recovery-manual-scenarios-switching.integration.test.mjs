@@ -1,16 +1,13 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   defaultFactorySessionID,
   expectNoBrowserErrors,
-  openBrowserPage,
   openDashboardWithSeededCheckpoint,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
@@ -25,6 +22,7 @@ import {
   replayWorldStateWithProviderSessionRef,
   seedTimelineCheckpoint,
 } from "./dashboard-session-recovery-manual-scenarios-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 async function tabReconnectWithoutStaleCursor(
   network,
@@ -52,21 +50,10 @@ async function tabReconnectWithoutStaleCursor(
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: scope-switch scenarios share one preview harness and IndexedDB helpers.
-describe.sequential("dashboard session recovery manual scope-switch scenarios", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("dashboard session recovery manual scope-switch scenarios", () => {
   it(
     "never sends a stale cursor or prior provider-session detail after switching provider account scope",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const priorProviderScopeIdentity = buildStreamIdentity({
         backendScopeID: "/provider/local-account/factory::browser-integration",
       });
@@ -156,7 +143,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
 
   it(
     "keeps tab-local reloads isolated while invalidating shared checkpoints on stream identity change",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const identity = buildStreamIdentity();
       const staleIdentity = buildStreamIdentity({
         streamGenerationID: "2026-01-15T00:00:00Z",

@@ -180,6 +180,9 @@ func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testi
 	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
 		t.Fatal("UsesNativeRunner(codex) = false, want native runner route")
 	}
+	if providers.UsesNativeRunner("gemini") {
+		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route for migrated Gemini")
+	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)
 	}

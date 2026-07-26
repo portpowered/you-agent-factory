@@ -9,7 +9,6 @@
     "formatVersion",
     "packageId",
     "packageVersion",
-    "sourceCommit",
     "familyFormatVersions",
     "exports"
   ],
@@ -25,7 +24,7 @@
       "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
     },
     "sourceCommit": {
-      "description": "The lowercase full-length Git SHA-1 or SHA-256 commit identifying the package source.",
+      "description": "Optional release provenance added while staging a publication candidate; development manifests intentionally omit commit-derived state.",
       "type": "string",
       "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
     },

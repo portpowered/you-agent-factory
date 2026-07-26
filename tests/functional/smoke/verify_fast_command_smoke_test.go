@@ -106,12 +106,14 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
-		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
-		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
+		"test-maintenance":                     "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                     "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                        "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
+		"test-ui-storybook-integration":        "@printf '%s\\n' 'stub:test-ui-storybook-integration'\n",
+		"test-ui-durable-session-real-backend": "@printf '%s\\n' 'stub:test-ui-durable-session-real-backend'\n",
 		"test-unit-coverage":                   "@printf '%s\\n' 'stub:test-unit-coverage'\n",
 		"test-functional-coverage":             "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 		"verify":                               "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
@@ -129,7 +131,7 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
-		"Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage",
+		"Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage",
 		"==> Backend Maintenance lane [make test-maintenance]",
 		"stub:test-maintenance",
 		"==> Backend Integration lane [make test-integration]",
@@ -142,6 +144,10 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"stub:test-built-cli-acceptance",
 		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
 		"stub:run-concurrent-ui-verification-lanes",
+		"==> UI Storybook Integration lane [make test-ui-storybook-integration]",
+		"stub:test-ui-storybook-integration",
+		"==> UI Backend Integration lane [make test-ui-durable-session-real-backend]",
+		"stub:test-ui-durable-session-real-backend",
 		"==> Backend Unit Coverage lane [make test-unit-coverage]",
 		"stub:test-unit-coverage",
 		"==> Backend Functional Coverage lane [make test-functional-coverage]",
@@ -156,6 +162,8 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",
+		"stub:test-ui-storybook-integration",
+		"stub:test-ui-durable-session-real-backend",
 		"stub:test-unit-coverage",
 		"stub:test-functional-coverage",
 	} {
@@ -179,9 +187,9 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
-		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
-		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
+		"test-maintenance":                     "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                     "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                        "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
@@ -273,12 +281,14 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
-		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
-		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
+		"test-maintenance":                     "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                     "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                        "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
+		"test-ui-storybook-integration":        "@printf '%s\\n' 'stub:test-ui-storybook-integration'\n",
+		"test-ui-durable-session-real-backend": "@printf '%s\\n' 'stub:test-ui-durable-session-real-backend'\n",
 		"test-unit-coverage":                   "@printf '%s\\n' 'stub:test-unit-coverage'\n",
 		"test-functional-coverage":             "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 	})
@@ -306,6 +316,10 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"stub:test-built-cli-acceptance",
 		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
 		"stub:run-concurrent-ui-verification-lanes",
+		"==> UI Storybook Integration lane [make test-ui-storybook-integration]",
+		"stub:test-ui-storybook-integration",
+		"==> UI Backend Integration lane [make test-ui-durable-session-real-backend]",
+		"stub:test-ui-durable-session-real-backend",
 		"==> Backend Unit Coverage lane [make test-unit-coverage]",
 		"stub:test-unit-coverage",
 		"==> Backend Functional Coverage lane [make test-functional-coverage]",
@@ -320,6 +334,8 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",
+		"stub:test-ui-storybook-integration",
+		"stub:test-ui-durable-session-real-backend",
 		"stub:test-unit-coverage",
 		"stub:test-functional-coverage",
 	} {
@@ -644,6 +660,7 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
 		"test-functional-long":          "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
@@ -661,7 +678,9 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 		"==> pull-request verification tier [make verify-pr]",
 		"stub:verify-pr",
 		"==> opt-in long and specialty suites [make long-tests]",
-		"Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage",
+		"Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage",
+		"==> UI Performance specialty lane [make test-ui-performance]",
+		"stub:test-ui-performance",
 		"==> Managed Runtime specialty lane [make long-tests-managed-runtime]",
 		"stub:long-tests-managed-runtime",
 		"==> Real Local Inference specialty lane [make long-tests-functional-runtime]",
@@ -682,6 +701,7 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n\t@exit 29\n",
 	})
@@ -751,6 +771,7 @@ func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t 
 		"verify-build-contracts":        "@printf '%s\\n' 'stub:verify-build-contracts'\n",
 		"release-surface-smoke":         "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-ui-coverage":              "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"ui-integration-test":           "@printf '%s\\n' 'stub:ui-integration-test'\n",
 		"test-backend-verification":     "@printf '%s\\n' 'stub:test-backend-verification'\n",
 		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",

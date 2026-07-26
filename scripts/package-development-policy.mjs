@@ -23,13 +23,6 @@ function requiredString(value, name) {
 }
 
 export function planDevelopmentPackage(context) {
-	if (context.prerequisiteResult !== "success") {
-		return {
-			outcome: DEVELOPMENT_PACKAGE_OUTCOMES.BLOCKED,
-			allowedActions: [],
-		};
-	}
-
 	if (context.eventName === "pull_request") {
 		const sourceCommit = requiredString(context.sourceCommit, "source commit");
 		const pullRequestHeadSha = requiredString(
@@ -72,6 +65,14 @@ export function planDevelopmentPackage(context) {
 export function assertDevelopmentPackageAction(context, expectedAction) {
 	const action = requiredString(expectedAction, "expected action");
 	const plan = planDevelopmentPackage(context);
+	if (
+		action === DEVELOPMENT_PACKAGE_ACTIONS.PUBLISH_MAIN &&
+		context.prerequisiteResult !== "success"
+	) {
+		throw new Error(
+			`${DIAGNOSTIC_PREFIX} ${action} is not allowed for outcome ${DEVELOPMENT_PACKAGE_OUTCOMES.BLOCKED}`,
+		);
+	}
 	if (!plan.allowedActions.includes(action)) {
 		throw new Error(
 			`${DIAGNOSTIC_PREFIX} ${action} is not allowed for outcome ${plan.outcome}`,

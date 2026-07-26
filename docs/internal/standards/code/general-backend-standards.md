@@ -142,16 +142,21 @@ Repository package-boundary policy:
 - Direct children of `pkg/` are package families. New root `pkg/` package families are **blocking** unless a maintainer deliberately updates the approved family allowlist with the owning domain and rationale.
 - The durable product-owned root package families are: `pkg/initializer`, `pkg/internal`, `pkg/platform`, `pkg/root`, `pkg/services`, `pkg/transports`, and `pkg/wire`. Product services live below `pkg/services`; the retired `pkg/config`, `pkg/factory`, `pkg/models`, `pkg/orchestrators`, `pkg/work`, and `pkg/workers` roots **MUST NOT** be recreated.
 - Every `pkg/services/<service>` root and every nested
-  `pkg/services/<service>/services/<subservice>` root **MUST** declare exactly
-  one named service interface. Direct production files in that root **MUST NOT**
-  add exported package-level functions; public behavior is exposed through the
-  singular interface, with mostly plain request/result structs at the root.
+  `pkg/services/<service>/internal/services/<subservice>` root **MUST** declare
+  exactly one named service interface. Direct production files in that root
+  **MUST NOT** add exported package-level functions; public behavior is exposed
+  through the singular interface, with mostly plain request/result structs at
+  the root.
 - Direct child directories of every service and subservice root are restricted
-  to `wire`, `internal`, and `services`. `internal` owns the private
-  implementation, `wire` exposes the focused construction providers consumed
-  by canonical root `pkg/wire`, and `services/<subservice>` recursively follows
-  the same package shape. Go files **MUST NOT** live directly in the `services`
-  container.
+  to `wire`, `internal`, and `transports` where transports apply. `internal`
+  owns the private implementation, `wire` exposes the focused construction
+  providers consumed by canonical root `pkg/wire`, and nested services live
+  only under the parent-private
+  `<service-or-subservice>/internal/services/<subservice>` container. Each
+  nested subservice recursively follows the same package shape, with deeper
+  nesting under `<subservice>/internal/services/<child>`. A public sibling
+  `<service>/services/` or `<subservice>/services/` container is non-canonical.
+  Go files **MUST NOT** live directly in an `internal/services` container.
 - `make pkg-structure` mechanically enforces the service-root interface,
   exported-function, recursive directory-shape, and functional-test layout
   rules. Existing violations are exact deletion-only entries in
@@ -198,13 +203,31 @@ Repository package-boundary policy:
   published external-effect contracts unchanged. It **MUST NOT** import a
   composed Models service or runtime, redefine or alias those contracts, or
   receive a general peer-service subpackage exemption.
-- External provider inference follows the same leaf-effect rule:
-  `pkg/services/workers/provider/inferencecontract` owns the single provider
-  inference port consumed by Worker adapters, composition, replay, and
-  `pkg/services/edges`. The Workers service root **MUST NOT** redeclare or alias
-  that port. The package-boundary guard permits only this exact contract
-  package across peer services; it does not exempt provider implementations or
-  other Worker subpackages.
+- External provider inference and process effects follow the same leaf-effect
+  rule as Models: the Providers Execution leaf that directly performs the
+  effect declares the leaf effect contract for that provider inference or
+  process port. `pkg/services/edges` may import those exact Providers leaf
+  effect contracts solely to aggregate them unchanged as the
+  `root.BuildProcess` and functional-test override bag. It **MUST NOT** own,
+  redefine, or alias those contracts, or receive a general peer-service
+  subpackage exemption for Providers implementations. Workers consumes the
+  Providers root for provider execution capability and **MUST NOT** redeclare
+  or alias the leaf effect port as a peer-owned contract. Catalog enumeration
+  and one-attempt execution share one Providers-owned source of truth: they
+  absorb the accepted Standardized Providers protocol, registry, open-config,
+  and testkit model rather than defining a competing ownership path.
+  Maintainers **MUST NOT** introduce a second Providers catalog, registry,
+  conductor, or execution-contract family beside that absorbed model while the
+  neutral-conductor lane remains live. Code still living under
+  `pkg/services/workers/provider/` (including `inferencecontract` and
+  `registry`) is migration debt that hosts the absorbed Standardized Providers
+  surfaces until later Providers packets land; those Workers paths are not a
+  license to fork a parallel catalog or execution abstraction. The
+  package-boundary guard permits only the exact Providers leaf effect contract
+  packages across peer services as injection ports; it does not exempt
+  Providers implementations or other peer subpackages, and it rejects competing
+  provider catalog/registry/conductor/execution abstractions outside Providers
+  and the absorbed Workers provider migration-debt surfaces.
 - Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
 - Run `make pkg-boundary` for dependency and ownership boundaries and
   `make pkg-structure` for recursive service and functional-test package shape;
@@ -251,8 +274,12 @@ Rules:
 - Functional test sources **MUST** live under
   `tests/functional/<domain>/<subsection>/...`, where `<domain>` is a durable
   product-domain noun such as `transport`, `workers`, `orchestration`,
-  `workstations`, `work`, `sessions`, `factory`, `provider_sessions`, `events`,
-  `models`, `guards`, `resources`, `observability`, `product`, or `resilience`.
+  `workstations`, `work`, `sessions`, `factory`, `providers`,
+  `provider_sessions`, `events`, `models`, `guards`, `resources`,
+  `observability`, `product`, or
+  `resilience`. Provider-specific root-process scenarios live under
+  `tests/functional/providers/<provider>/...`; broader worker execution
+  behavior remains under `tests/functional/workers/<subsection>/...`.
   There is no durable `features/` wrapper and no transport-first ownership for
   domain behavior: `transport` owns transport mechanics only, and domain proofs
   live under their domain nouns even when the scenario enters through CLI,

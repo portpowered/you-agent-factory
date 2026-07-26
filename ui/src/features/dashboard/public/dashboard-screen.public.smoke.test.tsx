@@ -28,18 +28,21 @@ let dashboardSnapshotState: ReturnType<
   typeof import("../hooks/useDashboardSnapshot").useDashboardSnapshot
 >;
 
-vi.mock("../../bento/public", () => ({
+vi.mock("../../bento/components/dashboard-bento", () => ({
   DashboardBento: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <section>Dashboard bento {resolvedLocale}</section>;
   },
 }));
 
-vi.mock("../../header/public", () => ({
+vi.mock("../../header/components/dashboard-export-dialog", () => ({
   DashboardExportDialog: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <div>Dashboard export dialog {resolvedLocale}</div>;
   },
+}));
+
+vi.mock("../../header/components/dashboard-header", () => ({
   DashboardHeader: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     const { sessionID } = useDashboardSession();
@@ -49,6 +52,9 @@ vi.mock("../../header/public", () => ({
       </header>
     );
   },
+}));
+
+vi.mock("../../header/components/dashboard-status-panel", () => ({
   DashboardStatusPanel: ({
     detail,
     title,

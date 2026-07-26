@@ -3,9 +3,9 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import {
   factoryTimelineEntryKey,
-  type StreamDerivedCacheIdentity,
   useFactoryTimelineStore,
-} from "../../timeline/public";
+} from "../../timeline/public/store";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 
 export interface DashboardWorkOutcomeStream {
   identity: StreamDerivedCacheIdentity | null;

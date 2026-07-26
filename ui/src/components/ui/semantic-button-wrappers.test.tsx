@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { GraphNodeButton } from "../../features/graphs/public";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { DisclosureButton } from "./disclosure-button";
 import { SelectableCardButton } from "./selectable-card-button";
 

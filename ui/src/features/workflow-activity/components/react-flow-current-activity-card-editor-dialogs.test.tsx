@@ -91,7 +91,7 @@ vi.mock(
   }),
 );
 
-vi.mock("../../import/public", () => ({
+vi.mock("../../import/components/dashboard-import-preview-dialog", () => ({
   FactoryImportPreviewDialog: ({
     onCancel,
     onConfirm,

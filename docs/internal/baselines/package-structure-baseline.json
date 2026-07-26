@@ -829,11 +829,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/acceptance/install_outcomes_test.go",
-      "target": "acceptance"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/acceptance/invalid_quiet_outcomes_test.go",
       "target": "acceptance"
     },
@@ -870,21 +865,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/automat_portability_integration_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_agent_slot_regression_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_factory_schema_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_factory_test.go",
       "target": "bootstrap_portability"
     },
     {
@@ -951,11 +931,6 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
       "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/config_init/config_init_test.go",
-      "target": "config_init"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1429,11 +1404,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/cli_ralph_init_smoke_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/code_review_loop_long_test.go",
       "target": "workflow"
     },
@@ -1681,71 +1651,6 @@
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
       "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/agy/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/claude/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/codex/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/codex/process_harness_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/contract/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/cursor/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/gemini/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/kiro/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/mock_workers/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/observability/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/opencode/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/pi/doc.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/providers/script/doc.go",
-      "target": "providers"
     },
     {
       "rule": "service-root-exported-function",
@@ -2608,6 +2513,41 @@
       "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
     },
     {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/assets_contract.go",
+      "target": "ValidatePullModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/catalog_contract.go",
+      "target": "ValidateGetModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateInspectRuntimeRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateAcquireLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateReleaseLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/local_execution_contract.go",
+      "target": "ValidateLocalInvocationRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/runtime_config_contract.go",
+      "target": "ValidateRuntimeBinding"
+    },
+    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile"
@@ -2615,7 +2555,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/provider_sessions",
-      "target": "pkg/services/provider_sessions/contracts.go:FileSystem,pkg/services/provider_sessions/contracts.go:Service"
+      "target": "pkg/services/provider_sessions/construction_ports.go:FileSystem,pkg/services/provider_sessions/contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2661,6 +2601,31 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
       "target": "<none>"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/agents/internal",
+      "target": "pkg/services/workers/services/agents"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/hosted_logic/internal",
+      "target": "pkg/services/workers/services/hosted_logic"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/inference/internal",
+      "target": "pkg/services/workers/services/inference"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/scripts/internal",
+      "target": "pkg/services/workers/services/scripts"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/services/testing/internal",
+      "target": "pkg/services/workers/services/testing"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -3075,6 +3040,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/service",
+      "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/services",
       "target": "pkg/services/workers"
     },
     {

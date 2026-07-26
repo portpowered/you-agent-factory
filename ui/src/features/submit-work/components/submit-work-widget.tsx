@@ -3,7 +3,7 @@ import { type ReactNode, useState } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { submitWork } from "../../../api/work";
-import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { adaptFactorySimpleSubmissionHost } from "../lib/factory-simple-submission-host-adapter";

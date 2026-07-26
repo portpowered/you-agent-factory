@@ -1,9 +1,7 @@
 import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
-import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionExpandableSection,
-} from "../../base/public";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionBodyLayout } from "../../base/components/layout/current-selection-body-layout";
 import { useResourceDetailState } from "../hooks/use-resource-detail-state";
 import type { ResourceDetailCardProps } from "../lib/detail-card-types";
 import { getResourceDetailMessages } from "../messages/resource-detail";

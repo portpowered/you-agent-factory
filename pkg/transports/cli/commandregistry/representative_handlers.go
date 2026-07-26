@@ -179,6 +179,7 @@ func applySessionDiagnostics(cmd *cobra.Command, binding SessionDiagnosticsBindi
 // SessionCreateBinding supplies handwritten session create dependencies.
 type SessionCreateBinding struct {
 	Config *sessioncli.CreateConfig
+	Server *string
 	JSON   *bool
 	SessionDiagnosticsBinding
 	CreateSession func(sessioncli.CreateConfig) error
@@ -194,6 +195,10 @@ func SessionCreateRunE(binding SessionCreateBinding) RunE {
 			return fmt.Errorf("session create config is required")
 		}
 		cfg := *binding.Config
+		if binding.Server != nil {
+			cfg.Server = *binding.Server
+		}
+		cfg.PortExplicit = cmd.Flags().Changed("port")
 		if binding.JSON != nil {
 			cfg.JSON = *binding.JSON
 		}

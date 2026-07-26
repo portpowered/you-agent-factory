@@ -13,7 +13,7 @@ import {
   type SaveNotificationDeliveryKey,
   type SaveNotificationStableIdentity,
   shouldDeliverSaveNotification,
-} from "../../../../notifications/public";
+} from "../../../../notifications/lib/save-notification-delivery-policy";
 import type { FactoryDocumentSaveState } from "../../hooks/factory-document-save-types";
 import {
   type CurrentSelectionSaveToastMessages,

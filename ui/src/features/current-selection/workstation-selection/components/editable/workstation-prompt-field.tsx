@@ -11,18 +11,15 @@ import {
 } from "../../../../../components/prompt-editor";
 import { VerticalResizableWidth } from "../../../../../components/prompt-editor/vertical-resizable-width";
 import {
-  ExpandablePanelTrigger,
   FormError,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../../../components/ui";
+} from "@you-agent-factory/components/forms";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { ExpandablePanelTrigger } from "../../../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../../../lib/cn";
-import {
-  CurrentSelectionFormField,
-  CurrentSelectionSubtleCode,
-  CurrentSelectionSupportingText,
-} from "../../../base/public";
+import { CurrentSelectionFormField } from "../../../base/components/layout/current-selection-form-layout";
+import { CurrentSelectionSubtleCode } from "../../../base/components/presentation/current-selection-supporting-text";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import type {
   EditableWorkstationPromptHelpState,
   WorkstationDetailCardProps,

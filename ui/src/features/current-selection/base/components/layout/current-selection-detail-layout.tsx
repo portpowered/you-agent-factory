@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
-import { DashboardWidgetFrame } from "../../../../bento/public";
+import { DashboardWidgetFrame } from "../../../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
 import type { SelectionDetailLayoutProps } from "../detail-card/detail-card-types";
 import { useCurrentSelectionShellMessages } from "../presentation/current-selection-locale";

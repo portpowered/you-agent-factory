@@ -6,7 +6,7 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/public";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import {
   type ActiveGraphHighlights,
   filterGraphEdgesForRenderedHandles,

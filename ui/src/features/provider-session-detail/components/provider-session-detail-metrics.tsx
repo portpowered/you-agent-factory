@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Label, Text } from "../../../components/ui";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 
 export function DetailMetric({

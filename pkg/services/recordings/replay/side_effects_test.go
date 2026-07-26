@@ -13,6 +13,9 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// FND-12 captured replay success baseline: matched recorded provider
+// inference returns the recorded response. Invoked by
+// `make fnd-12-replay-behavior-baselines`.
 func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 	artifact := replaySideEffectArtifact(t)
 	sideEffects, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact)
@@ -155,6 +158,8 @@ func TestSideEffects_RunResultStaysDetachedFromRecordedCommandMutation(t *testin
 	}
 }
 
+// FND-12 captured replay typed-failure baseline: unmatched replay key fails
+// with a stable visible error. Invoked by `make fnd-12-replay-behavior-baselines`.
 func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 	sideEffects, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, replaySideEffectArtifact(t))
 	if err != nil {

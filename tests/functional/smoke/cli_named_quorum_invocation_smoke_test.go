@@ -21,7 +21,6 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 	}
 	homeDir := t.TempDir()
 	binaryPath := buildYouCLIBinary(t)
-	initializeCLISystemConfig(t, binaryPath, homeDir)
 	port, err := reserveLocalTCPPort()
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)

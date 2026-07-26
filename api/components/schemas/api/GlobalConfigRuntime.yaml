@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+description: Runtime observability settings loaded from operator configuration before command-line overrides.
+properties:
+  logging:
+    allOf:
+      - $ref: './GlobalConfigRuntimeArtifactSettings.yaml'
+    description: Structured runtime log storage settings. Omitted values use the documented production defaults.
+  metrics:
+    allOf:
+      - $ref: './GlobalConfigRuntimeArtifactSettings.yaml'
+    description: Runtime metrics storage settings. Omitted values use the documented production defaults.

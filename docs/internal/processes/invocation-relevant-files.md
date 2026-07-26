@@ -3,6 +3,53 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Selection-aware `you run` schema resolution belongs at the CLI read boundary:
+  resolve an already-selected named Factory config path or explicit Factory
+  source through the read-only Factory Definitions loader, check cancellation
+  before and after each synchronous lookup, and pass only the loaded invocation
+  signature into pure `climanifest.ComposeRunInputs`. Keep selection identity,
+  catalog provenance, and filesystem location out of the effective schema so
+  equivalent definitions produce the same downstream facts without
+  materialization, sessions, provider startup, or runtime probing.
+  Explicit config-root resolution must use the same injected authored-reader
+  filesystem edge as config loading so `root.BuildProcess` tests can cancel or
+  fail the metadata lookup itself without replacing service construction.
+- Selected-Factory request preparation must recheck cancellation after pure
+  schema composition and after Work normalization before publishing any
+  prepared result. Compose the selected Factory schema before deciding that an
+  empty argv/TTY invocation has no input: an active signature can still apply
+  defaults or reject missing required input, and composition can still reject
+  reserved-name collisions. CLI adapters should recover Work's typed stable
+  failures with `errors.As`, because the real service boundary wraps domain errors.
+  Prove failure ordering through `root.BuildProcess` using Factory Session ID,
+  runtime-host, Work request ID, and provider-command edges; all must remain
+  untouched for composition, sensitive normalization, and cancellation
+  failures.
+- For a selected Factory with an active invocation signature, effective-schema
+  composition replaces the static positional/stdin compatibility carrier while
+  retaining run-level flags and other static inputs as reserved namespaces.
+  Map the effective Factory-parameter projection into Work's preparation
+  contract once, then carry the detached `PreparedInvocationInput` through the
+  CLI-only Factory Session request field. Factory Sessions must consume that
+  prepared value directly so canonical ordering and positional, named, stdin,
+  and default provenance are not collapsed into a second structured-argument
+  normalization. The same detached carrier must preserve no-signature
+  compatibility input and its positional/stdin source through Factory Sessions
+  without converting it back into API content for a second normalization.
+  Factory Sessions validates that structured prepared input accompanies a
+  signature and compatibility prepared input accompanies no signature. Public
+  API requests leave the prepared field nil and retain Factory Sessions-owned
+  normalization.
+- A conductor-routed native integration must carry the complete cloned
+  `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
+  Keep provider selection and response delivery conductor-owned, while the
+  provider-owned command builder receives the original environment, process
+  environment, working directory, worktree, dispatch metadata, worker and
+  workstation metadata, project ID, and input tokens. Prove configured
+  environment and working-directory delivery through `root.BuildProcess` with
+  an injected command-runner edge; do not expose configured secrets in events
+  or assertion output.
+
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
@@ -39,6 +86,11 @@ primary-result behavior.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.
+- Manifest-owned relationship validation may retain a legacy customer
+  diagnostic through a narrow constructor presentation mapping after the
+  generic validator rejects the invocation. Keep the relationship as the sole
+  validation authority and prove the resolved handler or operation is not
+  invoked for the conflicting input.
 - An inherited generic flag reuses its ancestor's persistent Cobra record, so
   its projected metadata must match the declaration after normalizing only the
   stable input ID, scope, inheritance reference, and lifecycle item ID.
@@ -72,8 +124,35 @@ primary-result behavior.
   non-overwrite policy in Factory Definitions and lifecycle activation in
   Initializer; the embedded publication package and catalog must not acquire
   either responsibility.
-- The customer-implementable provider inference contract lives in
-  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+- The customer-implementable provider inference contract currently lives in
+  `pkg/services/workers/provider/inferencecontract/` as migration debt. Durable
+  ownership belongs to the Providers Execution leaf
+  (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
+  encodes that ownership with deliberate fixtures, while Workers continues to
+  host the live declaration until later Providers packets land. The checker
+  resolves imports before classifying aliases, defined selector types, or
+  interfaces embedding the canonical leaf, so local type names and valid Go
+  declaration forms cannot create a second edges-owned contract. Catalog
+  enumeration and one-attempt execution share one Providers-owned source of
+  truth that absorbs Standardized Providers protocol/registry/open-config/testkit;
+  the checker rejects competing provider catalog, registry, conductor, or
+  execution-contract abstractions outside Providers and the absorbed Workers
+  `provider/` migration-debt surfaces. `pkg/services/edges`
+  may aggregate the exact leaf effect contract unchanged and must not redefine
+  or alias it. The checker recognizes the effect by its `Infer` method
+  signature rather than a local type name, resolves the standard-library
+  `context.Context` parameter through normal, renamed, and dot imports, and
+  resolves leaf aliases through the declaring file's imports, so unrelated
+  `Provider` interfaces and aliases remain valid. Do not exempt declarations
+  solely because they reuse the production aggregator type name: the AST shape
+  distinguishes an allowed `Edges` struct field from an `Edges` alias, defined
+  type, or interface that redeclares the leaf contract. Inspect nested field type
+  expressions in every non-Providers declaration too: direct leaf fields preserve
+  the imported contract, while anonymous interfaces or other wrappers create a
+  locally owned redefinition even outside `edges`. Preserve the explicit Workers
+  inference-contract migration-debt exception. Prove ownership behavior with
+  deliberate `run()` fixtures rather than package-local source inventories.
+  Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
   result agreement, and exactly-once close before they reach orchestration.
@@ -120,14 +199,16 @@ primary-result behavior.
   from the same authoritative registry: `NewRuntimeWithSelection` constructs
   `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
   retained provider-native runner with `conductorInvocationRunner` when
-  `ProviderOverride` is absent.   Externally supplied selectable identities
-  resolve onto their canonical conductor identity; bundled built-ins continue
-  on the provider-native Infer/command path without migrating Gemini, Kiro,
-  Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
-  dispatch/failure branches and `ProviderOverride` remain intact and bypass
-  the registry/conductor decorators. Concurrent cancel, overlapping dispatch,
-  and destination write-failure/backpressure evidence lives in
-  `conductor/concurrency_test.go`: cancelled closes still reject late writes,
+  `ProviderOverride` is absent. Externally supplied selectable identities
+  resolve onto their canonical conductor identity. Bundled built-ins remain on
+  the provider-native Infer/command path until their package-owned Integration
+  replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
+  stub on the native path and routes migrated Integrations (currently Gemini)
+  through the conductor without a concrete-provider switch in shared
+  orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
+  remain intact and bypass the registry/conductor decorators. Concurrent cancel,
+  overlapping dispatch, and destination write-failure/backpressure evidence lives
+  in `conductor/concurrency_test.go`: cancelled closes still reject late writes,
   shared-conductor dispatch keeps per-invocation correlation/order/terminals
   isolated, and sink backpressure remains the sole terminal for the affected
   invocation without leaking unsafe provider detail into sibling successes.
@@ -382,6 +463,11 @@ response-stream output.
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+  Compare transport parity through canonical values and semantic provenance
+  (explicit versus default) because physical CLI and structured API source
+  labels intentionally differ. Validation diagnostics for sensitive parameters
+  must retain the stable error code and parameter identity while replacing the
+  rejected value with the Work-owned redaction marker.
 - JavaScript named-factory lookup carries the authored `argsSchema` and `defaultPolicy` through `pkg/orchestrators/javascript/source/` into `pkg/factory/sessions/execution/PrepareStart`. Validate resolved arguments before runtime execution and resolve policy with that default; `workflowruntime.Request.ArgsSchema` preserves the same no-side-effect guard for direct runtime callers.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
@@ -497,42 +583,52 @@ response-stream output.
   `pkg/services/operator_settings.ConfigDocumentService`: validate and encode the
   full candidate before filesystem side effects, publish through a uniquely
   created same-directory temporary file, and treat `Rename` as the single commit
-  boundary after write, sync, close, permission, and cancellation checks. Share
-  one explicit persistence lock between service copies and reads so concurrent
-  callers remain deterministic on platforms where overlapping replacement and
-  reads otherwise produce sharing violations; failed attempts remove only their
-  own temporary artifact and never rewrite the committed destination directly.
+  boundary after write, sync, close, permission, and cancellation checks. Hold
+  one explicit persistence lock across the complete read-merge-replace
+  transaction, and share that lock between service copies and standalone reads,
+  so concurrent partial updates preserve each other's fields and overlapping
+  replacements remain deterministic on platforms with sharing violations.
+  Failed attempts remove only their own temporary artifact and never rewrite
+  the committed destination directly.
   Prompted setup should use a write-free function contract that receives the
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
-- Canonical `you config init` system bootstrap belongs in
-  `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
-  `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in
-  `pkg/transports/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
-  Fresh homes create `~/.you-agent-factory/config.json` through
-  `pkg/services/operator_settings.EnsureLocalBackendScope`; existing config files are
-  validated with `operatorconfig.LoadFileConfig` and left byte-identical on
-  re-run. `pkg/initializer/configinit` receives the Factory Definitions packaged
-  catalog and root persistence capability from Wire and persists only missing
-  catalog entries through that capability;
-  valid installed directories are loaded and skipped without rewriting
-  customer-owned files. Isolated-home rerun coverage lives in
-  `pkg/initializer/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
-  `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
-  `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
-  `pkg/transports/cli/configinit/init_test.go` / `pkg/transports/cli/root_config_init_test.go`. Keep
-  `you factory config` factory.json tooling separate from this top-level
-  operator/system initializer. Post-install bootstrap is invoked from
-  `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
-  `config init` subcommand; installer smoke coverage lives in
-  `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
-  / `scripts/release/smoke-install.ps1`.
+- Public provider/model setup enters through the manifest-derived `you init`
+  handler in `pkg/transports/cli/commandregistry`, which translates stable
+  `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
+  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
+  home-to-config-path translation, prompt rendering, and human output. Enable
+  prompts only from the invocation-local stdin/stdout TTY classifications on
+  the process context, pass Cobra's invocation-local input/output streams, and
+  preserve cancellation from that same context; do not inspect host streams in
+  the transport. The prompt must collect every value without writing before it
+  delegates to the prompted settings operation, while
+  `ConfigDocumentService` retains provider-catalog validation, semantic merge,
+  unrelated-field preservation, and the atomic commit.
+- Normal executable commands run the exact
+  `application.SystemInitializationOperation` through `pkg/initializer` before
+  their handler or lifecycle opens. Wire adapts
+  `pkg/services/system_initialization.Service` to that role; fresh homes create
+  operator config and materialize packaged/default Factories, while reruns
+  validate and preserve customer-owned files. Bare root/help, invalid commands,
+  and `you init` do not activate system initialization: `you init` owns only the
+  atomic provider/model settings update. The retired `you config init` command,
+  its CLI renderer, and installer invocation must remain absent. Root-built
+  replacement/retirement evidence lives in
+  `tests/functional/product/init_setup/init_setup_test.go`; installer behavior
+  lives in `tests/release/install_script_test.go` and
+  `scripts/release/smoke-install.{sh,ps1}`.
+- Root-built functional fixtures that execute initializer-owned commands must
+  use an invocation-local HOME/USERPROFILE and explicit Factory test data.
+  Environment overrides follow last-value-wins process semantics. Do not
+  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through
   `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
-  corresponding materialized `scripts/...` path, which `you config init`
-  installs as editable factory files.
+  corresponding materialized `scripts/...` path, which normal initializer
+  startup installs as editable factory files.
 - Package-owned execution selections belong in the invocation signature and
   JavaScript args schema. Mirror their defaults in the workflow and constrain
   selectable model and reasoning values with the package `defaultPolicy`
@@ -585,6 +681,25 @@ response-stream output.
   `pkg/transports/cli/climanifestcobra/constructor.go`, while its invocation-local
   typed flag values and stable-ID `InputValues` access live with the package's
   other binding state in `pkg/transports/cli/climanifestcobra/options.go`.
+  Canonical command adapters that still need Cobra-owned streams use
+  `GenericBindings.ResolvedCobraHandlers`: local arguments and flags are
+  resolved into `resolvedinput.Inputs` with explicit CLI/default provenance in
+  `pkg/transports/cli/climanifestcobra/bindings.go`, and inherited root inputs
+  arrive as a separate resolved snapshot. Keep raw argument slices and public
+  spellings out of these adapters.
+  For an incremental family migration, project the canonical root, family
+  parent, and completed leaves as one temporary generic tree, detach the family
+  parent, and attach only still-unmigrated leaves through their narrow legacy
+  registry. This preserves inherited root resolution after production root
+  composition without forcing later behavioral slices into the current change;
+  remove each legacy entry as its leaf gains a resolved handler.
+  The fully migrated factory/config/init family follows the same detached-tree
+  pattern in `factory_config_init_constructor.go`, with every local input
+  consumed through `ResolvedCobraHandlers` and no mutable flag-binding table.
+  Families whose established parent commands reject arbitrary trailing tokens
+  should opt into `GenericBindings.GuardUnknownSubcommands`; keep that
+  compatibility behavior in the generic projector instead of reintroducing
+  family-owned flag parsing or public-name dispatch.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.
@@ -616,6 +731,12 @@ response-stream output.
   command-name/alias collisions before creating Cobra commands; Cobra otherwise
   resolves the first matching sibling and can silently dispatch the wrong stable
   handler.
+  The detached docs/models family wrappers live in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go`; `you docs`
+  projects a root/docs subset through the generic constructor and then detaches
+  the docs command for composition into the production root. Its static topic
+  completion must use the authored argument enum, while the packaged docs
+  operation retains its established unsupported-topic diagnostic.
   Treat argument `doubleDash: terminates-flags` as the Cobra-compatible mode and
   fail construction for missing, unknown, or currently unrepresentable modes
   instead of accepting changed parsing semantics. Hidden positional inputs
@@ -640,6 +761,12 @@ response-stream output.
   projection, reject duplicate handler ownership, and invoke the selected
   stable-ID handler with a detached normalized `InputValues` snapshot. Public
   command paths and aliases must not participate in executable lookup.
+  The detached Models family projection in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go` uses this resolved
+  handler boundary for every leaf. Model-name positionals and invoke-local
+  operation, text, output, and compatibility-port flags are canonical inputs;
+  adapters consume their typed local snapshot plus the inherited root snapshot
+  and must not fall back to Cobra arguments or mutable flag targets.
   `GenericConstructor.Construct` is the strict stateless transport role for
   functional projection evidence; keep `NewCommandTree` as the convenience
   constructor while later family migrations remain outside this foundation
@@ -677,11 +804,25 @@ response-stream output.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
-  projection keeps manifest inputs separate from dynamic Factory parameters and
+  projection keeps manifest inputs separate from dynamic Factory parameters,
+  detaches all returned collections, and exposes canonical/preferred names,
+  default shape, normalized value mode, cardinality/consumption, type hints,
+  sensitivity, and bindings without requiring downstream adapters to reinterpret
+  the authored signature. It
   rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
   and stable-binding collisions with sorted diagnostics that identify both
-  owners. Named and explicit-file selectors must not enter this composition
+  owners. Check canonical parameter names, preferred external names, and every
+  alias independently after applying the shared Work normalization trimming;
+  do not limit reserved-spelling checks to parameters with named CLI bindings.
+  Named and explicit-file selectors must not enter this composition
   policy; equivalent selected signatures produce equivalent results.
+  Preserve a nil selected signature as explicit compatibility mode rather than
+  replacing it with an empty active signature: compatibility mode exposes only
+  static inputs and delegates positional text, stdin, and API content to the
+  Work-owned compatibility normalizer. It must not synthesize Factory
+  parameters, unknown-named policy, defaults, validation, help, or completion
+  facts, and both CLI-shaped and API-structured named inputs must fail instead
+  of being ignored.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
   path-specific semantic diagnostics before generation or consumption.
@@ -852,7 +993,56 @@ response-stream output.
   `pkg/workers/provider/commandenv` so provider variables retain the established
   non-interactive Git/editor safeguards, and the production mode-selection
   boundary must preserve provider input validation before starting either
-  runner. Native JSONL fixture tests should
+  runner. When migrating a built-in out of aggregate `provider_behavior`, move
+  argv construction, optional-capability rejection, and
+  `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
+  first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
+  keep only a thin aggregate delegate until the later legacy-branch deletion
+  story. After the migrated provider is registry+conductor exclusive, delete
+  only that provider's corresponding aggregate command/decode/failure/timeout/
+  session branches (and relocate aggregate-owned tests into the provider
+  package); leave the aggregate shell, ProviderOverride, and other providers
+  intact. Move Gemini-native failure and timeout parsing into the same package
+  (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
+  the conductor path consumes provider-owned normalized facts; aggregate exit
+  and timeout bridges may only thin-delegate until legacy deletion. Treat all
+  provider-supplied failure text as classification input only: published
+  failures use fixed class-specific messages, including unknown fallbacks, so
+  unmarked prompts, credentials, and machine-local paths cannot escape a
+  deny-list sanitizer. If a provider command returns `context.Canceled`, return
+  that error before closing the provider response writer so
+  `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
+  non-retryable cancellation. Bind the
+  migrated provider as a registry catalog Integration
+  (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
+  `UsesNativeRunner` route Integrations that no longer advertise the
+  native-runtime compatibility marker through `conductor.Invoke` without adding
+  a concrete-provider switch in shared orchestration. Process composition
+  passes the shared `ProviderCommandRunner` edge into
+  `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
+  Integrations and native executors share one command boundary. Worker
+  construction resolves persisted plus invocation-override permission policy
+  once, then an outer invocation-policy runner records the effective value on
+  `ProviderInferenceRequest`; this outer boundary must wrap the conductor
+  decorator because a migrated Integration does not call the retained native
+  runner. Provider Integrations consume that request-local value when building
+  commands and must not store worker permission policy in registry-global
+  Integration instances. Functional provider packages under
+  `tests/functional/providers/<name>` prove success, command policy, and safe
+  native-failure postures through `root.BuildProcess` /
+  `support.RunFactoryToCompletionWithEdges` without importing provider package
+  internals. `providers` is an approved deep functional domain; aggregate files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt. Prove each migrated
+  Integration against the shared inference contract through
+  `inferencecontract.ExecuteInvocation` for the success and failure postures
+  that apply to that provider's authored support/capability set (for Gemini:
+  prompt_submission + message_snapshots success, plus native
+  auth/invalid/throttle/timeout/unknown failures). Do not invent streaming or
+  tool-lifecycle factories just to call `inferencecontract/testkit.Run` when the
+  manifest does not advertise those capabilities; keep selection on the
+  registry Integration boundary rather than Adapter internals. Native
+  JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
   Provider retry and compaction records should publish only bounded typed facts
@@ -1167,8 +1357,8 @@ response-stream output.
   the generated manifest registers it for every package consumer. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
-  `you config init` installs `@you/subagent` under the global named-factory root
-  before named invocation can resolve it.
+  normal initializer startup installs `@you/subagent` under the global
+  named-factory root before named invocation can resolve it.
 - `pkg/services/factory_definitions/packages/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
@@ -1298,7 +1488,7 @@ response-stream output.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
   invocation, stdout primary-result, and response-stream guidance.
 - `pkg/config/defaultpaths/default_paths.go` owns the canonical shared named-factory
-  root for both `you config init` materialization and `you run --named` lookup;
+  root for both initializer-owned materialization and `you run --named` lookup;
   use `defaultpaths.NamedFactoriesRoot` instead of duplicating the home-relative
   directory in runtime code or tests. `configinit.Init` inventories legacy
   factory identities from their hierarchical directories and migrates them from
@@ -1332,7 +1522,7 @@ response-stream output.
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
 - `packages/packaged-factories/generated/manifest.json` is the single
   registration point for shipped named Factories. Regeneration derives it from
-  authored Factory directories, and `you config init` materializes every
+  authored Factory directories, and normal initializer startup materializes every
   validated manifest entry without separate Go registration. Customer-facing
   packaged invocation guidance belongs in `docs/reference/run.md`.
 - Website Packaged Factory discovery belongs behind
@@ -1463,6 +1653,23 @@ response-stream output.
   flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
 - When a shared merge introduces a backend package-coverage floor that the reviewed head no longer reaches, use the failing CI profile's exact reported value to make the smallest manifest adjustment; do not run the manifest updater against the whole repository because it can ratchet unrelated package floors.
+- Functional event-leak assertions must target the injected sensitive fixture, not generic temporary-directory fragments: root-process event payloads legitimately include the harness's factory source and working-directory paths.
+- After a canonical CLI-family cutover shrinks a package (for example
+  `pkg/transports/cli/mcp` or Models
+  `pkg/services/models/transports/cli` command handlers), restore unit-coverage
+  floors with behavioral tests of resolved-input adapter error paths: missing
+  stable-ID local/inherited inputs, missing injected dependencies, and
+  initializer/home failures that must not invoke the operation. Do not weaken
+  `go-unit-coverage-package-minimums.json` for migration-owned packages.
+- Functional coverage does not inherit unit-test hits. After the same cutover,
+  restore `go-functional-coverage-package-minimums.json` floors with short
+  `tests/functional/...` evidence that exercises the migrated packages under the
+  functional profile: docs topic inventory accessors
+  (`TopicIndexEntries` / `SupportedTopicCommands`) plus alias `you docs` paths,
+  MCP `ResolvedServeHandler` fixture/runtime/error paths (and production
+  `you mcp serve --runtime` missing-home), and process-level
+  `you models list` / `inspect` against an injected `--server`. Do not weaken
+  the functional package floors for migration-owned packages.
 - `pkg/workers/mockworker/runner.go` preserves the original provider command, args,
   and worker identity in `YOU_MOCK_WORKER_*` script environment variables before a
   script mock replaces the command. Functional CLI tests can capture those values
@@ -1471,6 +1678,39 @@ response-stream output.
   replace workflow-result coverage.
 - A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
 - Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.
+- Canonical CLI-family cutovers must extend the production `clicontract` check
+  beyond command identity: compare the constructed positional arguments,
+  effective local/inherited flags, completion choices, normalization, and input
+  relationships against the authored manifest. Generated commands with no
+  declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
+  grouped commands appear variadic to the observable input inventory.
+- When a migrated command starts projecting authored Examples into Cobra help,
+  refresh the matching intentional help fixture under
+  `pkg/transports/cli/baseline/testdata/` (for docs:
+  `docs_help.txt` / `TestDocsHelpBaseline_MatchesFixture`) to the normalized
+  production `--help` output. That ledger path is separate from
+  `intentional_changes.json`, which only tracks planned removals and moves.
+- When migrated construction intentionally changes observable command identity
+  (Examples, Long text, or related inventory fields), refresh
+  `contracts/testdata/baseline/cli-commands.json` with
+  `UPDATE_CLI_BASELINES=1 go test ./pkg/transports/cli/commandidentity -run TestWriteProductionInventoryBaseline`,
+  then restage the packaged projection with `make contracts-generate` /
+  `make contracts-check` so `packages/api/generated/cli/commands.json` and the
+  package manifest stay byte-aligned. Prove with
+  `TestWalk_ProductionInventoryMatchesCommittedBaseline`. Do not hand-edit the
+  staged package copy out of band.
+- After residual baseline/coverage fixes on a completed docs/models/mcp
+  cutover, re-prove preserved public behavior with
+  `make cli-manifest-check`, `make cli-contract-smoke`, focused
+  docs/models/mcp unit + `tests/functional/transport/docs`,
+  `tests/functional/transport/mcp_serve`, `tests/functional/models/model_list`, and
+  `tests/functional/smoke -run TestDocsCommandSmoke_` evidence, then the
+  `make verify-fast` constituents (`make typecheck`, `make mcp-contract-check`,
+  `make ui-test`, `make test`) plus `make lint`. New residual functional sources
+  must use an allowed product-domain noun such as `transport` or `models`
+  (`tests/functional/<domain>/<subsection>/...`); do not add files under the
+  deletion-only `tests/functional/cli` catch-all. Do not remigrate families or
+  expand into out-of-scope CLI commands during that re-proof.
 - Dashboard feature routes must account for the production `/dashboard/ui/` SPA
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;

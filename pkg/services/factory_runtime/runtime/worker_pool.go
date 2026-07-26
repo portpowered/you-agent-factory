@@ -2,12 +2,15 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,6 +21,173 @@ type dispatchPool interface {
 	ResultCh() <-chan workerexecution.WorkResult
 	Start()
 	Stop()
+}
+
+func (f *factoryImpl) ControlPause(_ context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
+	outcome, _, err := f.applyPauseControl()
+	if err != nil {
+		return factory.PauseResult{}, err
+	}
+	return factory.PauseResult{Outcome: outcome}, nil
+}
+
+func (f *factoryImpl) ControlResume(_ context.Context, _ factory.ResumeRequest) (factory.ResumeResult, error) {
+	outcome, _, err := f.applyResumeControl()
+	if err != nil {
+		return factory.ResumeResult{}, err
+	}
+	return factory.ResumeResult{Outcome: outcome}, nil
+}
+
+func (f *factoryImpl) ControlTerminate(_ context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+	f.mu.Lock()
+	state := f.state
+	switch state {
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		f.mu.Unlock()
+		return factory.TerminateResult{}, factory.ErrAlreadyStopped
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		f.state = interfaces.FactoryStateCompleted
+		cancel := f.runCancel
+		f.mu.Unlock()
+		f.recordStateChange(state, interfaces.FactoryStateCompleted, req.Reason)
+		if cancel != nil {
+			cancel()
+		} else {
+			f.completeOnce.Do(func() { close(f.completeCh) })
+		}
+		return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+	default:
+		f.mu.Unlock()
+		return factory.TerminateResult{}, factory.ErrNotRunning
+	}
+}
+
+func (f *factoryImpl) ControlWaitToComplete(_ factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
+	return factory.WaitToCompleteResult{Done: f.WaitToComplete()}
+}
+
+func (f *factoryImpl) ControlMoveWork(ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
+	result, err := f.MoveWork(ctx, req.WorkID, req.StateName, work.WorkStateChangeSource(req.Source), req.RequestID)
+	if err != nil {
+		if errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
+			return factory.MoveWorkResult{}, factory.ErrMoveWorkRequestConflict
+		}
+		return factory.MoveWorkResult{}, err
+	}
+	return factory.MoveWorkResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, nil
+}
+
+func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	if !validObservationScope(req.Scope) {
+		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
+	}
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
+		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+	default:
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+	snapshot, err := f.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factory.ObserveResult{}, err
+	}
+	return factory.ObserveResult{Observation: rootobservation.Project(snapshot, req.Scope)}, nil
+}
+
+func (f *factoryImpl) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{}, f.unavailableRootCapability(
+		req.DispatchID == "" || req.CorrelationID == "",
+		factory.ErrInvalidDispatchResultBoundary,
+		false,
+	)
+}
+
+func (f *factoryImpl) AcceptDispatchResult(
+	_ context.Context,
+	req factory.AcceptDispatchResultRequest,
+) (factory.AcceptDispatchResultResult, error) {
+	var validationErr error
+	if req.ResultOutcome != "" &&
+		req.ResultOutcome != factory.DispatchResultOutcomeSuccess &&
+		req.ResultOutcome != factory.DispatchResultOutcomeFailure &&
+		req.ResultOutcome != factory.DispatchResultOutcomeCancelled {
+		validationErr = factory.ErrInvalidDispatchResultBoundary
+	} else if req.DispatchID == "" || req.CorrelationID == "" {
+		validationErr = factory.ErrUnknownDispatchCorrelation
+	}
+	return factory.AcceptDispatchResultResult{}, f.unavailableRootCapability(
+		validationErr != nil,
+		validationErr,
+		false,
+	)
+}
+
+func (f *factoryImpl) CaptureCheckpoint(
+	_ context.Context,
+	_ factory.CaptureCheckpointRequest,
+) (factory.CaptureCheckpointResult, error) {
+	return factory.CaptureCheckpointResult{}, f.unavailableRootCapability(false, nil, false)
+}
+
+func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	return factory.LoadCheckpointResult{}, f.unavailableRootCapability(
+		req.CheckpointID == "",
+		factory.ErrCheckpointNotFound,
+		true,
+	)
+}
+
+func (f *factoryImpl) RestoreCheckpoint(
+	_ context.Context,
+	req factory.RestoreCheckpointRequest,
+) (factory.RestoreCheckpointResult, error) {
+	var validationErr error
+	switch {
+	case req.Checkpoint.CheckpointID == "":
+		validationErr = factory.ErrCheckpointNotFound
+	case req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0:
+		validationErr = factory.ErrCorruptCheckpoint
+	case req.Checkpoint.SchemaVersion != 1:
+		validationErr = factory.ErrIncompatibleCheckpoint
+	}
+	return factory.RestoreCheckpointResult{}, f.unavailableRootCapability(validationErr != nil, validationErr, false)
+}
+
+func (f *factoryImpl) unavailableRootCapability(invalid bool, invalidErr error, allowStopped bool) error {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		if !allowStopped {
+			return factory.ErrNotRunning
+		}
+	default:
+		return factory.ErrNotRunning
+	}
+	if invalid {
+		return invalidErr
+	}
+	return factory.ErrCapabilityUnavailable
+}
+
+func validObservationScope(scope factory.ObservationScope) bool {
+	switch scope {
+	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
+		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
+		factory.ObservationScopeHealth:
+		return true
+	default:
+		return false
+	}
 }
 
 type workerPool struct {

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as factorySessionsAPI from "../../../../api/factory-sessions";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
-import * as timelinePublic from "../../../timeline/public";
+import * as timelinePublic from "../../../timeline/public/checkpoint-persistence";
 import * as preflightResolver from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
 import {
   correlationTokenForIdentityScope,

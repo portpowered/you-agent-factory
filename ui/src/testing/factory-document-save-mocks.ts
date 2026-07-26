@@ -11,7 +11,7 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../api/current-factory-definition";
-import type { FactoryDocumentSaveInput } from "../features/current-factory-definition/public";
+import type { FactoryDocumentSaveInput } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import { createDeferredPromise } from "./app-shell-export-test-utils";
 import { staleFactoryVersionTarget } from "./factory-validation-target-fixtures";
 

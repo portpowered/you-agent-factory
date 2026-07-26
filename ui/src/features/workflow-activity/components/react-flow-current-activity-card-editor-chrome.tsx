@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { ActionRow } from "../../../components/ui";
+import { ActionRow } from "@you-agent-factory/components/layout";
 import { cn } from "../../../lib/cn";
 import {
   FactoryGraphEditorModeToggle,

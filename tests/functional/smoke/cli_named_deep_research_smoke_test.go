@@ -63,7 +63,6 @@ func runNamedDeepResearchCLI(t *testing.T, invocationArgs ...string) factoryapi.
 	t.Helper()
 	homeDir := t.TempDir()
 	binaryPath := buildYouCLIBinary(t)
-	initializeCLISystemConfig(t, binaryPath, homeDir)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {

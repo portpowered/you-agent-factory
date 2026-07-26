@@ -1,12 +1,10 @@
-import { renderHook } from "@testing-library/react";
-
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import { buildEmptyDashboardRuntimeFixture } from "../../../../components/dashboard/fixtures/runtime";
-import { useCurrentSelectionDerivedState } from "./useCurrentSelection.derived";
+import { deriveCurrentSelectionState } from "./useCurrentSelection.derived";
 
 const reviewWorkItem: DashboardWorkItemRef = {
   display_name: "Selection Story",
@@ -107,49 +105,43 @@ describe("useCurrentSelectionDerivedState", () => {
   const snapshot = buildSnapshot();
 
   it("resolves selected work type fields when selection is work-type", () => {
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: {},
-        selection: { kind: "work-type", workTypeName: "story" },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: {},
+      selection: { kind: "work-type", workTypeName: "story" },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedWorkTypeName).toBe("story");
-    expect(result.current.selectedWorkType).toMatchObject({
+    expect(result.selectedWorkTypeName).toBe("story");
+    expect(result.selectedWorkType).toMatchObject({
       name: "story",
       handlingBehavior: ["DEFAULT"],
     });
   });
 
   it("resolves selected worker fields when selection is worker", () => {
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: {},
-        selection: { kind: "worker", workerName: "reviewer" },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: {},
+      selection: { kind: "worker", workerName: "reviewer" },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedWorkerName).toBe("reviewer");
-    expect(result.current.selectedWorker).toMatchObject({ name: "reviewer" });
-    expect(result.current.selectedWorkerWorkstationNames).toEqual(["Review"]);
+    expect(result.selectedWorkerName).toBe("reviewer");
+    expect(result.selectedWorker).toMatchObject({ name: "reviewer" });
+    expect(result.selectedWorkerWorkstationNames).toEqual(["Review"]);
   });
 
   it("clears selected work type when the type is missing from the snapshot factory", () => {
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: {},
-        selection: { kind: "work-type", workTypeName: "missing" },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: {},
+      selection: { kind: "work-type", workTypeName: "missing" },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedWorkTypeName).toBe("missing");
-    expect(result.current.selectedWorkType).toBeNull();
+    expect(result.selectedWorkTypeName).toBe("missing");
+    expect(result.selectedWorkType).toBeNull();
   });
 
   it("resolves node selection workstation requests and provider sessions", () => {
@@ -157,18 +149,16 @@ describe("useCurrentSelectionDerivedState", () => {
       "dispatch-selection-1": buildReviewRequest(),
     };
 
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: projected,
-        selection: { kind: "node", nodeId: "review" },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: projected,
+      selection: { kind: "node", nodeId: "review" },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedNode).toEqual(reviewNode);
-    expect(result.current.selectedNodeWorkstationRequests).toHaveLength(1);
-    expect(result.current.selectedNodeProviderSessions).toHaveLength(1);
+    expect(result.selectedNode).toEqual(reviewNode);
+    expect(result.selectedNodeWorkstationRequests).toHaveLength(1);
+    expect(result.selectedNodeProviderSessions).toHaveLength(1);
   });
 
   it("resolves work-item selection history and dispatch attempts", () => {
@@ -176,40 +166,36 @@ describe("useCurrentSelectionDerivedState", () => {
       "dispatch-selection-1": buildReviewRequest(),
     };
 
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: projected,
-        selection: {
-          dispatchId: "dispatch-selection-1",
-          kind: "work-item",
-          nodeId: "review",
-          workItem: reviewWorkItem,
-        },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: projected,
+      selection: {
+        dispatchId: "dispatch-selection-1",
+        kind: "work-item",
+        nodeId: "review",
+        workItem: reviewWorkItem,
+      },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedWorkID).toBe("work-selection-1");
-    expect(result.current.selectedWorkRequestHistory).toHaveLength(1);
-    expect(result.current.selectedWorkDispatchAttempts).toHaveLength(1);
-    expect(result.current.selectedWorkOperationHistory).toEqual([
+    expect(result.selectedWorkID).toBe("work-selection-1");
+    expect(result.selectedWorkRequestHistory).toHaveLength(1);
+    expect(result.selectedWorkDispatchAttempts).toHaveLength(1);
+    expect(result.selectedWorkOperationHistory).toEqual([
       { kind: "workstation", request: buildReviewRequest() },
     ]);
   });
 
   it("resolves state-node place work items and token count", () => {
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: {},
-        selection: { kind: "state-node", placeId: "story:queued" },
-        snapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: {},
+      selection: { kind: "state-node", placeId: "story:queued" },
+      snapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.selectedStatePlace?.place_id).toBe("story:queued");
-    expect(result.current.selectedStateTokenCount).toBe(2);
+    expect(result.selectedStatePlace?.place_id).toBe("story:queued");
+    expect(result.selectedStateTokenCount).toBe(2);
   });
 
   it("builds completed and failed terminal work items from session labels", () => {
@@ -218,18 +204,16 @@ describe("useCurrentSelectionDerivedState", () => {
       failedWorkLabels: ["failed-story"],
     });
 
-    const { result } = renderHook(() =>
-      useCurrentSelectionDerivedState({
-        projectedWorkstationRequestsByDispatchID: {},
-        selection: null,
-        snapshot: labeledSnapshot,
-        terminalWorkDetail: null,
-      }),
-    );
+    const result = deriveCurrentSelectionState({
+      projectedWorkstationRequestsByDispatchID: {},
+      selection: null,
+      snapshot: labeledSnapshot,
+      terminalWorkDetail: null,
+    });
 
-    expect(result.current.completedWorkLabels).toEqual(["done-story"]);
-    expect(result.current.failedWorkLabels).toEqual(["failed-story"]);
-    expect(result.current.completedWorkItems).toHaveLength(1);
-    expect(result.current.failedWorkItems).toHaveLength(1);
+    expect(result.completedWorkLabels).toEqual(["done-story"]);
+    expect(result.failedWorkLabels).toEqual(["failed-story"]);
+    expect(result.completedWorkItems).toHaveLength(1);
+    expect(result.failedWorkItems).toHaveLength(1);
   });
 });

@@ -32,4 +32,27 @@ func TestEntrypointHandlersPreserveTypedInputsAndResult(t *testing.T) {
 	}
 }
 
+func TestEntrypointHandlersInitializeSystemWhenConfigured(t *testing.T) {
+	ctx := context.Background()
+	called := false
+	entrypoints := Functions{
+		InitializeSystemFunc: func(got context.Context, homeDir string) error {
+			called = true
+			if got != ctx || homeDir != "customer-home" {
+				t.Fatalf("InitializeSystem() inputs = (%v, %q), want original context and customer-home", got, homeDir)
+			}
+			return nil
+		},
+	}
+	if err := entrypoints.InitializeSystem(ctx, "customer-home"); err != nil {
+		t.Fatalf("InitializeSystem() error = %v", err)
+	}
+	if !called {
+		t.Fatal("InitializeSystemFunc was not called")
+	}
+	if err := (Functions{}).InitializeSystem(ctx, "customer-home"); err != nil {
+		t.Fatalf("nil InitializeSystemFunc error = %v, want nil", err)
+	}
+}
+
 type lifecycleContextKey struct{}

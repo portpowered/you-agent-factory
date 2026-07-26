@@ -1357,7 +1357,7 @@
       "fromOwner": "models",
       "toOwner": "work",
       "class": "command",
-      "evidence": "pkg/services/models -\u003e pkg/services/work"
+      "evidence": "pkg/services/models/internal/local -\u003e pkg/services/work"
     },
     {
       "fromOwner": "models",
@@ -1466,7 +1466,7 @@
       "fromOwner": "transports",
       "toOwner": "factory_definitions",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/commandregistry -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/transports/cli/config -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "transports",
@@ -1490,7 +1490,7 @@
       "fromOwner": "transports",
       "toOwner": "initializer",
       "class": "lifecycle",
-      "evidence": "pkg/transports/cli/mcp -\u003e pkg/initializer/process"
+      "evidence": "pkg/transports/cli/commandregistry -\u003e pkg/initializer/process"
     },
     {
       "fromOwner": "transports",
@@ -1502,7 +1502,7 @@
       "fromOwner": "transports",
       "toOwner": "operator_settings",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/cli -\u003e pkg/services/operator_settings"
+      "evidence": "pkg/transports/cli/initsetup -\u003e pkg/services/operator_settings"
     },
     {
       "fromOwner": "transports",
@@ -1521,12 +1521,6 @@
       "toOwner": "recordings",
       "class": "protocol_composition",
       "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/recordings"
-    },
-    {
-      "fromOwner": "transports",
-      "toOwner": "system_initialization",
-      "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/configinit -\u003e pkg/services/system_initialization"
     },
     {
       "fromOwner": "transports",
@@ -2580,12 +2574,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/scaffold",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/service",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2653,6 +2641,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation/topologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire/defaultscaffold",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2767,6 +2761,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3360,6 +3360,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models/transports/cli",
       "disposition": "retain",
       "destination": "models",
@@ -3439,6 +3457,24 @@
     },
     {
       "packagePath": "pkg/services/recordings/events/snapshot",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -3938,13 +3974,13 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/cli/config",
+      "packagePath": "pkg/transports/cli/completionprojection",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/cli/configinit",
+      "packagePath": "pkg/transports/cli/config",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"
@@ -3987,6 +4023,12 @@
     },
     {
       "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/initsetup",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

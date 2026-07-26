@@ -1,3 +1,5 @@
+import "../../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen, within } from "@testing-library/react";
 
 import type { FactoryGraphBulkSelectionSummary } from "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";

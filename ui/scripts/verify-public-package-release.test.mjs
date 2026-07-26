@@ -23,7 +23,6 @@ describe("verifyPublicPackageRelease", () => {
     expect(observed).toEqual(packageStepLabels);
     expect(observed).toEqual([
       "Public package family: install locked UI prerequisites",
-      "@you-agent-factory/packaged-factories consumer: install physical package candidate",
       "Public package family: run orchestration regression tests",
       "@you-agent-factory/client: run release gate",
       "@you-agent-factory/components: run release gate",
@@ -42,14 +41,13 @@ describe("verifyPublicPackageRelease", () => {
 
   test.each([
     ["install locked UI prerequisites", 0],
-    ["install physical package candidate", 1],
-    ["run release gate", 5],
-    ["run 10,000-event retained-memory regression", 6],
-    ["run focused state and component regressions", 10],
-    ["build browser acceptance stories", 11],
-    ["run desktop, narrow, and reduced-motion browser checks", 12],
-    ["run focused exact-session state and component regressions", 13],
-    ["run desktop and narrow exact-session browser regression", 14],
+    ["run release gate", 4],
+    ["run 10,000-event retained-memory regression", 5],
+    ["run focused state and component regressions", 9],
+    ["build browser acceptance stories", 10],
+    ["run desktop, narrow, and reduced-motion browser checks", 11],
+    ["run focused exact-session state and component regressions", 12],
+    ["run desktop and narrow exact-session browser regression", 13],
   ])(
     "stops after the first failed %s and reports its command outcome",
     async (_failureKind, failedStepIndex) => {

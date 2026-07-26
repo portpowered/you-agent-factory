@@ -9,7 +9,7 @@ import {
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
-import type { WorkstationNodeData } from "../../graphs/public";
+import type { WorkstationNodeData } from "../../graphs/components/workstation-node-view";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,

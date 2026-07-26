@@ -1,4 +1,4 @@
-import { DashboardActionButton } from "../../../../components/ui";
+import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 
 export function FactoryGraphEdgeWaypointControls({
   addWaypointLabel,

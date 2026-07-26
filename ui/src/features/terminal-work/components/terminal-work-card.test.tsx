@@ -1,3 +1,5 @@
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
 import { getTerminalWorkMessages } from "../messages/terminal-work";

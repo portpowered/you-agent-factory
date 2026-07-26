@@ -1,15 +1,10 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useState } from "react";
 import type { components } from "../../../../api/generated/openapi";
-import {
-  AlertPanel,
-  ButtonLink,
-  Heading,
-  Label,
-  Text,
-} from "../../../../components/ui";
+import { ButtonLink, Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../../components/ui/alert-panel";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import { WorkContentReadOnlyList } from "../../../work-content/public";
+import { WorkContentReadOnlyList } from "../../../work-content/components/work-content-read-only-list";
 import { useFactorySessionArtifactDrilldown } from "../../hooks/use-factory-session-artifact-drilldown";
 import { hasUsableArtifactDownload } from "../../lib/factory-session-artifact-drilldown";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";

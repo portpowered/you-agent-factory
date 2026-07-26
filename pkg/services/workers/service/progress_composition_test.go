@@ -190,7 +190,60 @@ func (inertCurrentRuntimeResolver) CurrentRuntime() *factorysessions.LiveRuntime
 	return nil
 }
 
-type testModelsService struct{}
+type testModelsService struct {
+	testRuntimeScopeUnsupported
+}
+
+type testRuntimeScopeUnsupported struct{}
+
+func (testRuntimeScopeUnsupported) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
 
 func (s testModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return s, nil
@@ -215,6 +268,15 @@ func (injectedProviderRunner) Run(context.Context, workers.CommandRequest) (work
 func (testModelsService) ListModels(context.Context) (models.List, error) {
 	return models.List{}, nil
 }
+func (testModelsService) ListCatalog(context.Context, models.ListModelsRequest) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+func (testModelsService) GetCatalogModel(context.Context, models.GetModelRequest) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+func (testModelsService) GetModelReadiness(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
 func (testModelsService) GetModel(context.Context, string) (models.Detail, error) {
 	return models.Detail{}, nil
 }
@@ -223,6 +285,56 @@ func (testModelsService) PullModel(context.Context, string) (models.PullResult, 
 }
 func (testModelsService) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, nil
+}
+
+func (testModelsService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, nil
+}
+
+func (testModelsService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return nil
+}
+
+func (testModelsService) EnsureModelHost(
+	context.Context,
+	models.EnsureModelHostRequest,
+) (models.EnsureModelHostResult, error) {
+	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) InspectModelHost(
+	context.Context,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) StopModelHost(
+	context.Context,
+	models.StopModelHostRequest,
+) (models.StopModelHostResult, error) {
+	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) AcquireModelLease(
+	context.Context,
+	models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) GetModelLease(
+	context.Context,
+	models.GetModelLeaseRequest,
+) (models.GetModelLeaseResult, error) {
+	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) ReleaseModelLease(
+	context.Context,
+	models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
 func (testModelsService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

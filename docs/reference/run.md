@@ -78,8 +78,8 @@ It has a logical split, branch A, branch B, and final merge. The complete
 fan-out/fan-in workflow preserves the original request and both branch outputs;
 the final merge is gated until both branches finish.
 
-Install packaged factories with `you config init`, then invoke it through the
-same named-factory path:
+Packaged Factories are materialized automatically during normal runtime
+initialization. Invoke one through the same named-factory path:
 
 ```bash
 you run --named @you/quorum "Compare the two proposed release plans."

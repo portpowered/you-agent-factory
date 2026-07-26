@@ -1,4 +1,6 @@
-import { Button, Label, SurfacePanel, Text } from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { Button } from "../../../components/ui/button";
 import type { FactoryPngDropState } from "../../import/hooks/use-factory-png-drop";
 import type { ReadFactoryImportPngError } from "../../import/lib/factory-png-import";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";

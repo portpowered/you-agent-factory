@@ -5,15 +5,11 @@ import {
 import { useId } from "react";
 
 import { MonacoGuardSelectorEditor } from "../../../../../components/prompt-editor";
-import {
-  DashboardActionButton,
-  FormDescription,
-  FormError,
-  Input,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
+import { FormDescription, FormError } from "../../../../../components/ui/form-field";
+import { Input } from "../../../../../components/ui/input";
 import {
   createDefaultWorkstationGuard,
   formatWorkstationGuardSummary,
@@ -21,7 +17,7 @@ import {
   type WorkstationLevelGuard,
   type WorkstationLevelGuardType,
 } from "../../../../current-factory-definition/lib/workstation-guards";
-import { CurrentSelectionFormField } from "../../../base/public";
+import { CurrentSelectionFormField } from "../../../base/components/layout/current-selection-form-layout";
 import type { EditableWorkstationWorkstationOptionsState } from "../../lib/keys/detail-card-types";
 import { useStableWorkstationGuardRowKeys } from "../../lib/keys/workstation-guard-row-keys";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";

@@ -1,7 +1,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 
 import { cn } from "../../../lib/cn";
-import { GraphNodeButton } from "../../graphs/public";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";

@@ -215,6 +215,7 @@ test("publish directory loads the preserved candidate and cleans its external co
 	const result = await publishCandidateDirectory(
 		{
 			candidateDirectory: "/preserved",
+			expectedDistTag: "latest",
 			expectedSourceCommit: evidence.sourceCommit,
 			workspaceDirectory: "/workspace",
 		},
@@ -227,6 +228,7 @@ test("publish directory loads the preserved candidate and cleans its external co
 				consumerDirectory = input.consumerDirectory;
 				await access(consumerDirectory);
 				assert.equal(input.evidence, evidence);
+				assert.equal(input.expectedDistTag, "latest");
 				assert.equal(input.registryClient, registryClient);
 				assert.equal(input.tarballPath, "/preserved/candidate.tgz");
 				assert.equal(input.workspaceDirectory, "/workspace");

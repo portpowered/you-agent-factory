@@ -1,4 +1,5 @@
-import { Checkbox, Input } from "../../../../../../components/ui";
+import { Checkbox } from "../../../../../../components/ui/checkbox";
+import { Input } from "../../../../../../components/ui/input";
 import {
   EDITABLE_EXECUTOR_PROVIDERS,
   EDITABLE_MODEL_LOCALITIES,

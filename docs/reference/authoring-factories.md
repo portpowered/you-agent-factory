@@ -305,7 +305,6 @@ result choices.
 `@you/review` accepts one required request input:
 
 ```bash
-you config init
 you run --named @you/review "Draft the release notes"
 ```
 
@@ -369,10 +368,9 @@ also surface `INVOCATION_BLOCKED` or `INVOCATION_NEEDS_HUMAN`. Run
 `you docs sessions` for the inspect-first recovery steps; the built-in does not
 add goal-specific inspect or resume commands.
 
-`you config init` installs the built-in into
-`~/.you-agent-factory/factories`; named invocations only read the
-project-local and global copies already on disk. That keeps the built-in
-editable: if you modify the installed
+Normal initializer startup materializes the built-in into
+`~/.you-agent-factory/factories` before a named runtime opens. That keeps the
+built-in editable: if you modify the installed
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
 the next `you run --named @you/goal` invocation uses your edited version.
 
@@ -386,7 +384,7 @@ you factory list
 you factory list --dir ~/.you-agent-factory/factories
 ```
 
-On upgrade, `you config init` moves valid factories from the retired
+On upgrade, normal initializer startup moves valid factories from the retired
 `~/.you-agent-factory/you-agent-factories` root into the canonical root. If a
 factory already exists in both locations, initialization preserves both copies
 and reports the conflict so you can compare them without losing customer edits.

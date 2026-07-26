@@ -39,7 +39,11 @@ func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessi
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	return session.Runtime.Factory.SubmitWorkRequest(ctx, request)
+	legacyRuntime, ok := session.Runtime.Factory.(factory.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+	}
+	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
 
 func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
@@ -50,18 +54,11 @@ func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, wor
 	if err != nil {
 		return work.OperatorMoveResult{}, err
 	}
-	return session.Runtime.Factory.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
-}
-
-// MoveWork applies a synchronous operator relocation on the current service-owned runtime.
-func (fs *SessionRuntime) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	var result work.OperatorMoveResult
-	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
-		var moveErr error
-		result, moveErr = runtime.Factory.MoveWork(ctx, workID, stateName, source, requestID)
-		return moveErr
-	})
-	return result, err
+	mover, ok := session.Runtime.Factory.(factory.WorkMover)
+	if !ok {
+		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
+	}
+	return mover.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
 func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
@@ -72,7 +69,11 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	stream, err := session.Runtime.Factory.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+	legacyRuntime, ok := session.Runtime.Factory.(factory.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+	}
+	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 	if err != nil || stream == nil {
 		return stream, err
 	}
@@ -97,7 +98,11 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return session.Runtime.Factory.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(session.Runtime.Factory)
+	if err != nil {
+		return nil, err
+	}
+	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
 func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID string) error {

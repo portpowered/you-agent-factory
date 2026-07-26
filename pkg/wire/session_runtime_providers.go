@@ -60,7 +60,13 @@ import (
 )
 
 func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Registry, error) {
-	builtIns, err := providerregistry.BuiltInRegistrations()
+	commandRunner, err := provideWorkersProviderCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+		CommandRunner: commandRunner,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +78,21 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 		)
 	}
 	return providerregistry.New(registrations...)
+}
+
+// provideWorkersProviderCommandRunner resolves the shared provider CLI runner
+// used by native executors and by migrated catalog Integrations on the
+// conductor path. Injected edges win; otherwise the platform process runner is
+// adapted once for both ownership boundaries.
+func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.CommandRunner, error) {
+	if edges.ProviderCommandRunner != nil {
+		return workerprocess.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+	}
+	defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	return workerprocess.AdaptCommandRunner(defaultCommandRunner), nil
 }
 
 func provideFactorySessionProviderIdentityResolver(

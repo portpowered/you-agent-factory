@@ -2,7 +2,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import { selectComboboxOption } from "../../../testing/select-test-helpers";
-import { SubmitWorkWidget } from "../../submit-work/public";
+import { SubmitWorkWidget } from "../../submit-work/components/submit-work-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   expectBentoHeaderDragSurface,

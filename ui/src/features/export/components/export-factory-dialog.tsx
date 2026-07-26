@@ -8,17 +8,15 @@ import {
 } from "@you-agent-factory/components/overlays";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ImportFactoryValue } from "../../../api/session-factory";
+import { Button, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
 import {
-  AlertPanel,
-  AlertPanelText,
-  Button,
   FormDescription,
   FormError,
   FormField,
   FormLabel,
-  Input,
-  Text,
-} from "../../../components/ui";
+} from "../../../components/ui/form-field";
+import { Input } from "../../../components/ui/input";
 import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
 import { downloadBlobAsFile } from "../lib/browser-download";
 import { buildFactoryExportFilename } from "../lib/build-factory-export-filename";

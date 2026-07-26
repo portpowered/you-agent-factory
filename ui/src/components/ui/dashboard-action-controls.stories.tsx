@@ -1,4 +1,4 @@
-import { ActionRow } from "@you-agent-factory/components";
+import { ActionRow } from "@you-agent-factory/components/layout";
 import { expect, within } from "storybook/test";
 import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";

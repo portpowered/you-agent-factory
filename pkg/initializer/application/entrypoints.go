@@ -18,14 +18,28 @@ func (i *Initializer) ProcessContext(ctx context.Context) (context.Context, func
 
 // Initializer owns lifecycle selection and activation after CLI parsing.
 type Initializer struct {
-	stdio processcontract.StdioApplicationOpener
+	stdio                processcontract.StdioApplicationOpener
+	systemInitialization SystemInitializationOperation
 }
 
-func NewInitializer(stdio processcontract.StdioApplicationOpener) (*Initializer, error) {
+// SystemInitializationOperation is the exact pre-lifecycle setup role owned by
+// the Initializer. Wire adapts the system-initialization service to this role.
+type SystemInitializationOperation func(context.Context, string) error
+
+func NewInitializer(
+	stdio processcontract.StdioApplicationOpener,
+	systemInitialization SystemInitializationOperation,
+) (*Initializer, error) {
 	if stdio == nil {
 		return nil, fmt.Errorf("stdio application opener is required")
 	}
-	return &Initializer{stdio: stdio}, nil
+	if systemInitialization == nil {
+		return nil, fmt.Errorf("system initialization service is required")
+	}
+	return &Initializer{
+		stdio:                stdio,
+		systemInitialization: systemInitialization,
+	}, nil
 }
 
 func (i *Initializer) Run(
@@ -55,4 +69,11 @@ func (i *Initializer) Stdio(ctx context.Context, intent processcontract.MCPInten
 		return fmt.Errorf("initialize stdio service: stdio application is required")
 	}
 	return application.Run(ctx)
+}
+
+func (i *Initializer) InitializeSystem(ctx context.Context, homeDir string) error {
+	if i == nil || i.systemInitialization == nil {
+		return fmt.Errorf("system initialization service is required")
+	}
+	return i.systemInitialization(ctx, homeDir)
 }

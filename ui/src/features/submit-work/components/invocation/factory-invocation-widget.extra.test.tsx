@@ -22,10 +22,10 @@ vi.mock("../../../../api/session-factory", async () => {
   };
 });
 
-vi.mock("../../../current-factory-definition/public", async () => {
+vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = (await vi.importActual(
-    "../../../current-factory-definition/public",
-  )) as typeof import("../../../current-factory-definition/public");
+    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  )) as typeof import("../../../current-factory-definition/hooks/useCurrentFactoryDefinition");
 
   return {
     ...actual,

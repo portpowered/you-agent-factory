@@ -1,4 +1,4 @@
-import { Heading, Text } from "@you-agent-factory/components";
+import { Heading, Text } from "@you-agent-factory/components/primitives";
 import type {
   FactoryWorkProgressCategory,
   FactoryWorkProgressProjection,

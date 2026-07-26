@@ -15,20 +15,6 @@ type Scenario struct {
 func S24Scenarios() []Scenario {
 	return []Scenario{
 		{
-			ID:    "s24-fresh-install",
-			Title: "Fresh install",
-			DocumentedOutcome: "Empty isolated home: config init creates operator config, installs packaged factories, " +
-				"and prints actionable created/skipped success messaging.",
-			TestName: "TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome",
-		},
-		{
-			ID:    "s24-migrated-install",
-			Title: "Migrated install",
-			DocumentedOutcome: "Pre-existing isolated home/config: config init preserves customer edits, materializes " +
-				"missing packaged defaults, and reports skipped/created outcomes without corruption.",
-			TestName: "TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite",
-		},
-		{
 			ID:    "s24-absent-provider",
 			Title: "Absent provider",
 			DocumentedOutcome: "Symbolic DEFAULT without concrete provider guidance fails with operator-visible " +

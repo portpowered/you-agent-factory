@@ -1,49 +1,91 @@
-// Package providersessions is the public Provider Sessions service boundary.
 package providersessions
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"strings"
 	"time"
 )
 
-// FileSystem is the exact provider-session storage boundary. Storage layout
-// policy remains in Provider Sessions; Wire selects the concrete filesystem.
-type FileSystem interface {
-	Open(string) (io.ReadCloser, error)
-	Stat(string) (fs.FileInfo, error)
+// Service is the singular Provider Sessions root contract for cross-service
+// peers. Published slices (detached-ref validation/inspection and normalized
+// transcript/detail projection) are additive methods on this one named
+// interface and use plain Provider Sessions-owned request, result, value, and
+// typed-error contracts. Peers depend on Service rather than mixed string-keyed
+// helpers, construction effect ports, or private Codex/Cursor reader types.
+// Nested IMP-PSES reader cuts, CTR-PROV/IMP-PROV, Standardized Providers
+// conductor/migration, CLI-manifest, workers construction, and OpenAPI
+// package-motion edits remain out of scope for the root-contract packet.
+type Service interface {
+	// Details is the published provider-independent session inspection entry on
+	// the singular root. Peers supply provider/kind/id identity strings and
+	// receive a detached Detail value (transcript, parse, usage, and related
+	// normalized facts) or a typed Provider Sessions failure such as
+	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
+	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
+	// invoke this peer API. Additive typed SessionRef slices (Inspect, Project)
+	// share this singular root without replacing Details.
+	Details(provider, kind, id string) (Detail, error)
+
+	// Inspect validates and inspects a detached typed SessionRef identity in the
+	// providers.SessionRef vocabulary (provider + kind + id). Peers receive a
+	// detached InspectResult or a typed Provider Sessions failure such as
+	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. This slice
+	// does not import Providers catalog/execution, enumeration, availability,
+	// capability, or Workers selection-policy types.
+	Inspect(InspectRequest) (InspectResult, error)
+
+	// Project returns a provider-independent normalized transcript/detail
+	// projection for a detached typed SessionRef. Peers receive a ProjectResult
+	// whose Detail covers transcript entries, reasoning summaries,
+	// tool/function-call facts, parse summary, and token usage, or a typed
+	// Provider Sessions failure such as ErrUnsupportedProvider,
+	// ErrUnsupportedKind, ErrSessionNotFound, and/or LookupError. Method
+	// signatures and published values do not name private Codex/Cursor reader
+	// types, filesystem/SQL/OS effect ports, or Providers execution types.
+	Project(ProjectRequest) (ProjectResult, error)
 }
 
-// ResolveHomeDirectory supplies the process home used to derive provider-owned
-// default storage roots.
-type ResolveHomeDirectory func() (string, error)
+// SessionRef is the detached typed provider-session identity in the
+// providers.SessionRef vocabulary (provider + kind + id). Until CTR-PROV
+// publishes the canonical Providers type, this Provider Sessions-owned value is
+// the peer identity accepted by additive root slices. It does not carry
+// Providers catalog/execution or Workers selection-policy fields.
+type SessionRef struct {
+	Provider Provider
+	Kind     string
+	ID       string
+}
 
-// CodexWalkDirectory traverses the configured Codex session tree.
-type CodexWalkDirectory func(string, fs.WalkDirFunc) error
+// InspectRequest asks the root Service to validate and inspect one detached
+// SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
+type InspectRequest struct {
+	Session SessionRef
+}
 
-// CodexResolveSymlinks resolves Codex session paths before containment checks.
-type CodexResolveSymlinks func(string) (string, error)
+// InspectResult is the detached success outcome for typed SessionRef
+// validation/inspection. Normalized transcript/detail projection is published
+// as the additive Project companion slice on the same root Service.
+type InspectResult struct {
+	Session SessionRef
+	Source  SourceMetadata
+}
 
-// CursorWalkDirectory traverses the configured Cursor session storage tree.
-type CursorWalkDirectory func(string, fs.WalkDirFunc) error
+// ProjectRequest asks the root Service for a normalized transcript/detail
+// projection for one detached SessionRef without requiring filesystem/SQL/OS
+// effect ports from the caller.
+type ProjectRequest struct {
+	Session SessionRef
+}
 
-// CursorResolveSymlinks resolves Cursor storage paths before containment checks.
-type CursorResolveSymlinks func(string) (string, error)
-
-// CursorOpenSQLDatabase opens a Cursor database driver connection.
-type CursorOpenSQLDatabase func(driverName, dataSourceName string) (*sql.DB, error)
-
-// OperatingSystem identifies the platform whose provider storage convention
-// should be selected.
-type OperatingSystem string
-
-// Service is the provider-independent session inspection contract.
-type Service interface {
-	Details(provider, kind, id string) (Detail, error)
+// ProjectResult is the detached Detail-shaped projection peers consume for
+// transcript, reasoning, tool/function-call, parse, and usage facts through
+// Provider Sessions root contracts only.
+type ProjectResult struct {
+	Session SessionRef
+	Detail  Detail
 }
 
 type Provider string

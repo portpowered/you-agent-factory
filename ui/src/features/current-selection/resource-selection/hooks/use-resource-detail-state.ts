@@ -12,16 +12,30 @@ export function useResourceDetailState({
   workerNames?: readonly string[] | null;
   workstationNames?: readonly string[] | null;
 }): ResourceDetailState {
-  return useMemo((): ResourceDetailState => {
-    if (!resource) {
-      return { status: "empty" };
-    }
+  return useMemo(
+    () =>
+      deriveResourceDetailState({ resource, workerNames, workstationNames }),
+    [resource, workerNames, workstationNames],
+  );
+}
 
-    return {
-      resource,
-      status: "ready",
-      workerNames: [...(workerNames ?? [])],
-      workstationNames: [...(workstationNames ?? [])],
-    };
-  }, [resource, workerNames, workstationNames]);
+export function deriveResourceDetailState({
+  resource,
+  workerNames,
+  workstationNames,
+}: {
+  resource?: FactoryResource | null;
+  workerNames?: readonly string[] | null;
+  workstationNames?: readonly string[] | null;
+}): ResourceDetailState {
+  if (!resource) {
+    return { status: "empty" };
+  }
+
+  return {
+    resource,
+    status: "ready",
+    workerNames: [...(workerNames ?? [])],
+    workstationNames: [...(workstationNames ?? [])],
+  };
 }

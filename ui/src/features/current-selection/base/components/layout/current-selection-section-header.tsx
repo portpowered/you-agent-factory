@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 
-import {
-  Heading,
-  surfacePanelVariants,
-  Text,
-} from "../../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
+import { Heading, Text } from "@you-agent-factory/components/primitives";
 
 export function CurrentSelectionSectionHeader({
   action,

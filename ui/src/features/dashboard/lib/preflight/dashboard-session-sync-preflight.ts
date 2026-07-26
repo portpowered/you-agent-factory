@@ -1,10 +1,8 @@
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
-import type {
-  FactoryTimelineSyncIdentity,
-  TimelineCheckpointStreamIdentity,
-} from "../../../timeline/public";
+import type { TimelineCheckpointStreamIdentity } from "../../../timeline/public/checkpoint-persistence";
+import type { FactoryTimelineSyncIdentity } from "../../../timeline/public/store";
 
 export interface DashboardSessionRecoveryState {
   reasonCode: string;

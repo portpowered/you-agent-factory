@@ -2,7 +2,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { App } from "./App";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
-import { DashboardScreen } from "./features/dashboard/public";
+import { DashboardScreen } from "./features/dashboard/public/screen";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   currentSelectionCard,

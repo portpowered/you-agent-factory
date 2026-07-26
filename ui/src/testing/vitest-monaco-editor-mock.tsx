@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { vi } from "vitest";
 
 type MonacoEditorMockProps = {
   className?: string;
@@ -160,7 +159,7 @@ function createMockEditorInstance({
       listener({ scrollLeft: 3, scrollTop: 4 });
       return { dispose() {} };
     },
-    trigger: vi.fn(),
+    trigger: () => undefined,
   };
 }
 

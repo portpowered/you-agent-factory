@@ -7,14 +7,9 @@ import { useId, useState } from "react";
 import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import {
-  AlertPanel,
-  Button,
-  DashboardStatusPill,
-  Heading,
-  Label,
-  Text,
-} from "../../../components/ui";
+import { Button, Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../components/ui/alert-panel";
+import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import {
