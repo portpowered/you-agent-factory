@@ -621,7 +621,7 @@ func TestPoolCapacityGreaterThanOneAndIndependentRoutesProgress(t *testing.T) {
 	}
 }
 
-func TestPoolReleasesCapacityWhenExecutorPanics(t *testing.T) {
+func TestPoolNormalizesExecutorPanicAndReleasesCapacity(t *testing.T) {
 	t.Parallel()
 
 	executor := &panicOnceExecutor{}
@@ -633,18 +633,21 @@ func TestPoolReleasesCapacityWhenExecutorPanics(t *testing.T) {
 		QueueCapacity:   1,
 	})
 
-	recovered := make(chan any, 1)
-	go func() {
-		defer func() {
-			recovered <- recover()
-		}()
-		_, _ = pool.Dispatch(
-			context.Background(),
-			dispatchRequest("dispatch-panic", "transition-panic", "review"),
-		)
-	}()
-	if panicValue := <-recovered; panicValue == nil {
-		t.Fatal("Dispatch() did not propagate executor panic")
+	result, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-panic", "transition-panic", "review"),
+	)
+	if err == nil || !strings.Contains(err.Error(), "workstation executor panic: executor panic") {
+		t.Fatalf("Dispatch() panic error = %v", err)
+	}
+	if result.DispatchID != "dispatch-panic" ||
+		result.WorkstationName != "review" ||
+		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed ||
+		result.Result.DispatchID != "dispatch-panic" ||
+		result.Result.TransitionID != "transition-panic" ||
+		result.Result.Outcome != workers.OutcomeFailed ||
+		result.Result.Error != "workstation executor panic: executor panic" {
+		t.Fatalf("Dispatch() panic result = %#v", result)
 	}
 	if _, err := pool.Dispatch(
 		context.Background(),

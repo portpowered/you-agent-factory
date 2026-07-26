@@ -192,13 +192,7 @@ func (p *Pool) Dispatch(
 	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
 	execution.RunnerID = route.binding.RunnerSelection.RunnerID
 	execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
-	defer func() {
-		if panicValue := recover(); panicValue != nil {
-			record.commitFailure(fmt.Errorf("workstation executor panic: %v", panicValue))
-			panic(panicValue)
-		}
-	}()
-	result, executeErr := route.binding.Executor.Execute(executionCtx, execution)
+	result, executeErr := execute(executionCtx, route.binding.Executor, execution)
 	result.DispatchID = execution.Dispatch.DispatchID
 	result.TransitionID = execution.Dispatch.TransitionID
 	dispatchResult := workers.WorkstationDispatchResult{
@@ -211,6 +205,26 @@ func (p *Pool) Dispatch(
 		return record.commitCancellation(executionCtx.Err())
 	}
 	return record.commit(dispatchResult, executeErr)
+}
+
+// execute contains untrusted executor behavior so an implementation panic
+// becomes the same attributed failed terminal result as any other executor
+// failure instead of escaping the Workers root.
+func execute(
+	ctx context.Context,
+	executor workers.WorkstationRequestExecutor,
+	request workers.WorkstationExecutionRequest,
+) (result workers.WorkResult, err error) {
+	defer func() {
+		if panicValue := recover(); panicValue != nil {
+			err = fmt.Errorf("workstation executor panic: %v", panicValue)
+			result = workers.WorkResult{
+				Outcome: workers.OutcomeFailed,
+				Error:   err.Error(),
+			}
+		}
+	}()
+	return executor.Execute(ctx, request)
 }
 
 // Cancel commits cancellation before signaling the execution context, so a
@@ -368,14 +382,6 @@ func (record *dispatchRecord) commit(
 	record.result = result
 	record.err = err
 	return result, err
-}
-
-func (record *dispatchRecord) commitFailure(err error) {
-	result := record.baseResult()
-	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
-	result.Result.Outcome = workers.OutcomeFailed
-	result.Result.Error = err.Error()
-	_, _ = record.commit(result, err)
 }
 
 func (record *dispatchRecord) commitCancellation(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,9 @@ type inertConstructionSpy struct {
 type rootDispatchExecutor struct {
 	request workers.WorkstationExecutionRequest
 	result  workers.WorkResult
+	err     error
+	panic   any
+	calls   int
 }
 
 type rootBlockingExecutor struct {
@@ -57,8 +61,12 @@ func (executor *rootDispatchExecutor) Execute(
 	_ context.Context,
 	request workers.WorkstationExecutionRequest,
 ) (workers.WorkResult, error) {
+	executor.calls++
 	executor.request = request
-	return executor.result, nil
+	if executor.panic != nil {
+		panic(executor.panic)
+	}
+	return executor.result, executor.err
 }
 
 func (spy *inertConstructionSpy) CurrentRuntime() *factorysessions.LiveRuntime {
@@ -309,6 +317,115 @@ func TestServiceDelegatesExplicitWorkstationCancellationThroughRoot(t *testing.T
 		dispatch.result.DispatchID != "dispatch-cancel" {
 		t.Fatalf("DispatchWorkstation() = %#v, %v", dispatch.result, dispatch.err)
 	}
+}
+
+func TestServicePreservesWorkstationExecutorFailureThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	executeErr := errors.New("executor failed")
+	root := startedRootService(t, "review", &rootDispatchExecutor{err: executeErr})
+	result, err := root.DispatchWorkstation(
+		context.Background(),
+		rootDispatchRequest("dispatch-failed", "review"),
+	)
+	if !errors.Is(err, executeErr) ||
+		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed ||
+		result.DispatchID != "dispatch-failed" ||
+		result.WorkstationName != "review" {
+		t.Fatalf("DispatchWorkstation() = %#v, %v", result, err)
+	}
+}
+
+func TestServiceNormalizesWorkstationExecutorPanicThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	root := startedRootService(t, "review", &rootDispatchExecutor{panic: "boom"})
+	result, err := root.DispatchWorkstation(
+		context.Background(),
+		rootDispatchRequest("dispatch-panic", "review"),
+	)
+	if err == nil || !strings.Contains(err.Error(), "workstation executor panic: boom") ||
+		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed ||
+		result.DispatchID != "dispatch-panic" ||
+		result.Result.DispatchID != "dispatch-panic" ||
+		result.Result.Outcome != workers.OutcomeFailed ||
+		result.Result.Error != "workstation executor panic: boom" {
+		t.Fatalf("DispatchWorkstation() = %#v, %v", result, err)
+	}
+}
+
+func TestServiceRejectsUnknownWorkstationRouteThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	executor := &rootDispatchExecutor{}
+	root := startedRootService(t, "review", executor)
+	result, err := root.DispatchWorkstation(
+		context.Background(),
+		rootDispatchRequest("dispatch-unknown", "implement"),
+	)
+	if !errors.Is(err, workers.ErrUnknownWorkstationRoute) ||
+		!emptyWorkstationResult(result) ||
+		executor.calls != 0 {
+		t.Fatalf(
+			"DispatchWorkstation() = %#v, %v; executor calls = %d",
+			result,
+			err,
+			executor.calls,
+		)
+	}
+}
+
+func TestServiceRejectsWorkstationDispatchAfterStopThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	executor := &rootDispatchExecutor{}
+	root := startedRootService(t, "review", executor)
+	if _, err := root.StopWorkstationPool(context.Background()); err != nil {
+		t.Fatalf("StopWorkstationPool() error = %v", err)
+	}
+	result, err := root.DispatchWorkstation(
+		context.Background(),
+		rootDispatchRequest("dispatch-stopped", "review"),
+	)
+	if !errors.Is(err, workers.ErrWorkstationPoolStopped) ||
+		!emptyWorkstationResult(result) ||
+		executor.calls != 0 {
+		t.Fatalf(
+			"DispatchWorkstation() = %#v, %v; executor calls = %d",
+			result,
+			err,
+			executor.calls,
+		)
+	}
+}
+
+func emptyWorkstationResult(result workers.WorkstationDispatchResult) bool {
+	return result.DispatchID == "" &&
+		result.WorkstationName == "" &&
+		result.TerminalOutcome == "" &&
+		result.Result.DispatchID == ""
+}
+
+func startedRootService(
+	t *testing.T,
+	workstationName string,
+	executor workers.WorkstationRequestExecutor,
+) workers.Service {
+	t.Helper()
+	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	if _, err := root.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName:      workstationName,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      executor,
+			Capacity:      1,
+			QueueCapacity: 1,
+		}}},
+	); err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+	return root
 }
 
 func rootDispatchRequest(dispatchID string, workstationName string) workers.WorkstationDispatchRequest {
