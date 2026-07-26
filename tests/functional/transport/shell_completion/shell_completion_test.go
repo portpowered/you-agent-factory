@@ -16,6 +16,7 @@ import (
 const (
 	shellFactoryName = "shell-fixture"
 	shellModeValue   = "json"
+	shellFileName    = "shell-config.json"
 )
 
 func TestGeneratedCompletionScriptsReachBuiltExecutable(t *testing.T) {
@@ -31,6 +32,13 @@ func TestGeneratedCompletionScriptsReachBuiltExecutable(t *testing.T) {
 	workingDirectory := t.TempDir()
 	homeDirectory := t.TempDir()
 	writeShellCompletionFactory(t, workingDirectory)
+	if err := os.WriteFile(
+		filepath.Join(workingDirectory, shellFileName),
+		[]byte("{}"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write shell completion file: %v", err)
+	}
 	environment := cleanShellEnvironment(binaryDir, homeDirectory)
 
 	t.Run("bash", func(t *testing.T) {
@@ -190,6 +198,12 @@ Complete-You 'you run --named shell-fi'
 'mode-start'
 Complete-You 'you run --named shell-fixture --mode j'
 'mode-end'
+'file-start'
+Complete-You 'you run --named shell-fixture --config shell-conf'
+'file-end'
+'inline-file-start'
+Complete-You 'you run --named shell-fixture --config=shell-conf'
+'inline-file-end'
 `, quotePowerShell(scriptPath), quotePowerShell(binaryPath))
 	output := runCommand(
 		t,
@@ -204,6 +218,13 @@ Complete-You 'you run --named shell-fixture --mode j'
 	)
 	assertDelimitedCandidate(t, output, "factory", shellFactoryName)
 	assertDelimitedCandidate(t, output, "mode", shellModeValue)
+	assertDelimitedCandidate(t, output, "file", shellFileName)
+	assertDelimitedCandidate(
+		t,
+		output,
+		"inline-file",
+		"--config="+shellFileName,
+	)
 }
 
 func generateCompletionScript(
@@ -238,13 +259,22 @@ func writeShellCompletionFactory(t *testing.T, workingDirectory string) {
 		"workers":      []any{},
 		"workstations": []any{},
 		"invocationSignature": map[string]any{
-			"parameters": []map[string]any{{
-				"name":         "mode",
-				"externalName": "mode",
-				"description":  "output mode",
-				"choices":      []string{shellModeValue, "text"},
-				"bindings":     []map[string]any{{"kind": "NAMED"}},
-			}},
+			"parameters": []map[string]any{
+				{
+					"name":         "mode",
+					"externalName": "mode",
+					"description":  "output mode",
+					"choices":      []string{shellModeValue, "text"},
+					"bindings":     []map[string]any{{"kind": "NAMED"}},
+				},
+				{
+					"name":         "config",
+					"externalName": "config",
+					"description":  "configuration file",
+					"typeHint":     "FILE_PATH",
+					"bindings":     []map[string]any{{"kind": "NAMED"}},
+				},
+			},
 		},
 	}
 	payload, err := json.Marshal(definition)

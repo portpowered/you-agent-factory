@@ -105,6 +105,95 @@ export const baseFactoryDefinitionDocument: CurrentFactoryDocument = {
   },
 };
 
+export const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
+  ...baseFactoryDefinition,
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+    {
+      model: "gpt-5",
+      name: "reviewer",
+      type: "MODEL_WORKER",
+    },
+    {
+      model: "gpt-5",
+      name: "stalled",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      body: "Draft the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "draft",
+      outputs: [
+        {
+          state: "review",
+          workType: "story",
+        },
+      ],
+      resources: [{ capacity: 1, name: "gpu" }],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+    {
+      body: "Review the draft.",
+      inputs: [
+        {
+          state: "review",
+          workType: "story",
+        },
+      ],
+      name: "review",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "reviewer",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "review",
+          type: "PROCESSING",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  version: {
+    logical: "9",
+    physical: "2026-05-19T01:12:00Z",
+  },
+};
+
 export type MockGraphEditorDraftState = FactoryGraphDraftDerivedState & {
   documentSave: FactoryDocumentSaveState;
   replaceDraft: Mock<(draft: FactoryGraphDraftDerivedState["draft"]) => void>;

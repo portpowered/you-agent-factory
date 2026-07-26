@@ -17,6 +17,7 @@ export {
   type MockEditableFactoryGraphHooks,
   type MockGraphEditorDraftState,
   wireMockEditableFactoryGraph,
+  workerDenseFactoryDefinitionDocument,
 } from "./graph-editor-harness";
 export {
   assertStrictConsoleClean,

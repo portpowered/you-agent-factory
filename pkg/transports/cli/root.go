@@ -272,7 +272,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SetErr(input.Stderr)
 	root.SetContext(input.Context)
 	if factory.observeCLI == nil {
-		return root.Execute()
+		return cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root)
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {

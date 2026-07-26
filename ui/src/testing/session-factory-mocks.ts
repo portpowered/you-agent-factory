@@ -1,3 +1,4 @@
+import type { DashboardSnapshot } from "../api/dashboard";
 import type { components } from "../api/generated/openapi";
 import type {
   CanonicalFactoryDefinition,
@@ -36,6 +37,20 @@ export const sessionFactoryNamedExportDocument: SessionFactoryDocument = {
   name: "semantic-workflow",
   version: defaultSessionFactoryVersion,
 };
+
+export function sessionFactoryDocumentFromSnapshot(
+  snapshot: Pick<DashboardSnapshot, "factory">,
+  version: SessionFactoryVersion = defaultSessionFactoryVersion,
+): SessionFactoryDocument {
+  if (!snapshot.factory) {
+    return sessionFactoryNamedExportDocument;
+  }
+
+  return {
+    ...snapshot.factory,
+    version,
+  };
+}
 
 export interface MockGetSessionFactoryOptions {
   document?: SessionFactoryDocument;
