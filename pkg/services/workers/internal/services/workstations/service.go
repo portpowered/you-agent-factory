@@ -11,6 +11,8 @@ import (
 // Route is one immutable workstation identity in a started pool snapshot.
 type Route struct {
 	WorkstationName string
+	RunnerSelection workers.ResolvedRunnerSelection
+	Executor        workers.WorkstationRequestExecutor
 }
 
 // Service owns workstation pool lifecycle and route availability.
@@ -18,4 +20,5 @@ type Service interface {
 	Start(context.Context, []Route) (workers.WorkstationPoolLifecycleOutcome, error)
 	Stop(context.Context) (workers.WorkstationPoolLifecycleOutcome, error)
 	Route(context.Context, string) error
+	Dispatch(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
 }

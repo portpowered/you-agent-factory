@@ -23,7 +23,7 @@ const (
 type Pool struct {
 	mu     sync.RWMutex
 	state  lifecycleState
-	routes map[string]struct{}
+	routes map[string]workstations.Route
 }
 
 var _ workstations.Service = (*Pool)(nil)
@@ -105,6 +105,77 @@ func (p *Pool) Route(ctx context.Context, workstationName string) error {
 	}
 }
 
+// Dispatch resolves one immutable route binding before invoking its executor.
+func (p *Pool) Dispatch(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	if err := contextError(ctx); err != nil {
+		return workers.WorkstationDispatchResult{}, err
+	}
+	name, err := validDispatch(request)
+	if err != nil {
+		return workers.WorkstationDispatchResult{}, err
+	}
+
+	route, release, err := p.acquireBinding(name)
+	if err != nil {
+		return workers.WorkstationDispatchResult{}, err
+	}
+	defer release()
+	if route.Executor == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrMissingWorkstationBinding
+	}
+
+	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
+	execution.RunnerID = route.RunnerSelection.RunnerID
+	execution.RunnerSelectionSource = route.RunnerSelection.Source
+	result, executeErr := route.Executor.Execute(ctx, execution)
+	result.DispatchID = execution.Dispatch.DispatchID
+	result.TransitionID = execution.Dispatch.TransitionID
+	return workers.WorkstationDispatchResult{
+		DispatchID:      execution.Dispatch.DispatchID,
+		WorkstationName: name,
+		Result:          result,
+	}, executeErr
+}
+
+func (p *Pool) acquireBinding(
+	name string,
+) (workstations.Route, func(), error) {
+	p.mu.RLock()
+	switch p.state {
+	case stateConstructed:
+		p.mu.RUnlock()
+		return workstations.Route{}, nil, workers.ErrWorkstationPoolUnavailable
+	case stateStopped:
+		p.mu.RUnlock()
+		return workstations.Route{}, nil, workers.ErrWorkstationPoolStopped
+	case stateRunning:
+		route, ok := p.routes[name]
+		if !ok {
+			p.mu.RUnlock()
+			return workstations.Route{}, nil, workers.ErrUnknownWorkstationRoute
+		}
+		return route, p.mu.RUnlock, nil
+	default:
+		p.mu.RUnlock()
+		return workstations.Route{}, nil, workers.ErrWorkstationPoolUnavailable
+	}
+}
+
+func validDispatch(request workers.WorkstationDispatchRequest) (string, error) {
+	name := strings.TrimSpace(request.WorkstationName)
+	dispatch := request.Execution.Dispatch
+	if name == "" ||
+		strings.TrimSpace(dispatch.DispatchID) == "" ||
+		strings.TrimSpace(dispatch.WorkstationName) == "" ||
+		dispatch.WorkstationName != name {
+		return "", workers.ErrInvalidWorkstationDispatch
+	}
+	return name, nil
+}
+
 func contextError(ctx context.Context) error {
 	if ctx == nil {
 		return workers.ErrWorkstationPoolUnavailable
@@ -112,11 +183,11 @@ func contextError(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func routeSnapshot(routes []workstations.Route) (map[string]struct{}, error) {
+func routeSnapshot(routes []workstations.Route) (map[string]workstations.Route, error) {
 	if len(routes) == 0 {
 		return nil, workers.ErrInvalidWorkstationPoolStart
 	}
-	snapshot := make(map[string]struct{}, len(routes))
+	snapshot := make(map[string]workstations.Route, len(routes))
 	for _, route := range routes {
 		name := strings.TrimSpace(route.WorkstationName)
 		if name == "" {
@@ -129,7 +200,8 @@ func routeSnapshot(routes []workstations.Route) (map[string]struct{}, error) {
 				name,
 			)
 		}
-		snapshot[name] = struct{}{}
+		route.WorkstationName = name
+		snapshot[name] = route
 	}
 	return snapshot, nil
 }

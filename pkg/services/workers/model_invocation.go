@@ -27,12 +27,16 @@ const (
 var (
 	// ErrInvalidWorkstationPoolStart reports malformed workstation bindings.
 	ErrInvalidWorkstationPoolStart = errors.New("invalid Workers workstation-pool start request")
+	// ErrInvalidWorkstationDispatch reports a malformed workstation dispatch.
+	ErrInvalidWorkstationDispatch = errors.New("invalid Workers workstation dispatch request")
 	// ErrWorkstationPoolUnavailable reports a pool that has not been started.
 	ErrWorkstationPoolUnavailable = errors.New("Workers workstation pool is unavailable")
 	// ErrWorkstationPoolStopped reports a terminal pool that cannot be restarted.
 	ErrWorkstationPoolStopped = errors.New("Workers workstation pool is stopped")
 	// ErrUnknownWorkstationRoute reports a route outside the started snapshot.
 	ErrUnknownWorkstationRoute = errors.New("Workers workstation route is unknown")
+	// ErrMissingWorkstationBinding reports a configured route without an executor.
+	ErrMissingWorkstationBinding = errors.New("Workers workstation executor binding is missing")
 )
 
 // WorkstationPoolStartRequest supplies the detached runtime bindings that are
@@ -62,6 +66,21 @@ type WorkstationRouteRequest struct {
 type WorkstationRouteResult struct {
 	WorkstationName string
 	Available       bool
+}
+
+// WorkstationDispatchRequest carries one detached execution request to the
+// executor binding assembled for the named workstation.
+type WorkstationDispatchRequest struct {
+	WorkstationName string
+	Execution       WorkstationExecutionRequest
+}
+
+// WorkstationDispatchResult attributes one executor result to its original
+// dispatch and workstation route.
+type WorkstationDispatchResult struct {
+	DispatchID      string
+	WorkstationName string
+	Result          WorkResult
 }
 
 // RuntimeBuildRoleKind identifies the kind of role peers ask Workers to
@@ -104,6 +123,7 @@ type AssembledRuntimeBinding struct {
 	RoleName        string
 	RoleKind        RuntimeBuildRoleKind
 	RunnerSelection ResolvedRunnerSelection
+	Executor        WorkstationRequestExecutor
 }
 
 // RuntimeBuildResult carries detached assembled-binding success facts for one
@@ -148,4 +168,6 @@ type Service interface {
 	StopWorkstationPool(context.Context) (WorkstationPoolStopResult, error)
 	// WorkstationRoute reports whether a route belongs to the active snapshot.
 	WorkstationRoute(context.Context, WorkstationRouteRequest) (WorkstationRouteResult, error)
+	// DispatchWorkstation executes through the binding for the requested route.
+	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
 }

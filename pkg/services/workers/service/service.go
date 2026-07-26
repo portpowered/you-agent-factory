@@ -282,6 +282,17 @@ func (s *Service) WorkstationRoute(
 	}, nil
 }
 
+// DispatchWorkstation delegates execution to the private workstation owner.
+func (s *Service) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Dispatch(ctx, request)
+}
+
 func workstationRoutes(
 	bindings []workers.AssembledRuntimeBinding,
 ) ([]workstations.Route, error) {
@@ -293,7 +304,11 @@ func workstationRoutes(
 		if binding.RoleKind != workers.RuntimeBuildRoleKindWorkstation {
 			return nil, workers.ErrInvalidWorkstationPoolStart
 		}
-		routes = append(routes, workstations.Route{WorkstationName: binding.RoleName})
+		routes = append(routes, workstations.Route{
+			WorkstationName: binding.RoleName,
+			RunnerSelection: binding.RunnerSelection,
+			Executor:        binding.Executor,
+		})
 	}
 	return routes, nil
 }

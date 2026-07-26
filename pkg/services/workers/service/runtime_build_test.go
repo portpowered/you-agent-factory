@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
@@ -22,6 +23,19 @@ var _ runtimeassembly.Service = (*recordingRuntimeAssembly)(nil)
 type inertConstructionSpy struct {
 	currentRuntimeCalls int
 	commandCalls        int
+}
+
+type rootDispatchExecutor struct {
+	request workers.WorkstationExecutionRequest
+	result  workers.WorkResult
+}
+
+func (executor *rootDispatchExecutor) Execute(
+	_ context.Context,
+	request workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+	executor.request = request
+	return executor.result, nil
 }
 
 func (spy *inertConstructionSpy) CurrentRuntime() *factorysessions.LiveRuntime {
@@ -99,6 +113,69 @@ func TestServiceWorkstationLifecyclePreservesTypedFailures(t *testing.T) {
 		}}},
 	); !errors.Is(err, workers.ErrInvalidWorkstationPoolStart) {
 		t.Fatalf("worker binding start error = %v, want ErrInvalidWorkstationPoolStart", err)
+	}
+}
+
+func TestServiceDelegatesWorkstationDispatchThroughWorkersRoot(t *testing.T) {
+	t.Parallel()
+
+	executor := &rootDispatchExecutor{
+		result: workers.WorkResult{Outcome: workers.OutcomeAccepted, Output: "routed"},
+	}
+	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	if _, err := root.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName: "review",
+			RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+			RunnerSelection: workers.ResolvedRunnerSelection{
+				RunnerID: workers.RunnerIDCodex,
+				Source:   workers.RunnerSelectionSourceWorkstation,
+			},
+			Executor: executor,
+		}}},
+	); err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+
+	result, err := root.DispatchWorkstation(
+		context.Background(),
+		workers.WorkstationDispatchRequest{
+			WorkstationName: "review",
+			Execution: workers.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{
+					DispatchID:      "dispatch-1",
+					TransitionID:    "transition-1",
+					WorkstationName: "review",
+					Execution: work.ExecutionMetadata{
+						RequestID: "request-1",
+						TraceID:   "trace-1",
+						WorkIDs:   []string{"work-1"},
+					},
+					InputTokens: []any{"input"},
+				},
+				WorkerType:       "reviewer",
+				FactorySessionID: "session-1",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("DispatchWorkstation() error = %v", err)
+	}
+	if result.DispatchID != "dispatch-1" ||
+		result.WorkstationName != "review" ||
+		result.Result.DispatchID != "dispatch-1" ||
+		result.Result.TransitionID != "transition-1" ||
+		result.Result.Output != "routed" {
+		t.Fatalf("DispatchWorkstation() = %#v", result)
+	}
+	if executor.request.RunnerID != workers.RunnerIDCodex ||
+		executor.request.RunnerSelectionSource != workers.RunnerSelectionSourceWorkstation ||
+		executor.request.WorkerType != "reviewer" ||
+		executor.request.FactorySessionID != "session-1" ||
+		executor.request.Dispatch.Execution.RequestID != "request-1" ||
+		executor.request.Dispatch.Execution.TraceID != "trace-1" {
+		t.Fatalf("executor request = %#v", executor.request)
 	}
 }
 
