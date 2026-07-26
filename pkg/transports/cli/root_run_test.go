@@ -2206,7 +2206,7 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 	) *cobra.Command {
 		factory := withTestInjectedPlatformRoles(CommandFactory{})
 		factory.resolveOperatorDefaults = expectOperatorDefaultsResolution(t, wantEnvironment, wantFlags, result, nil)
-		return factory.NewCommand(
+		command := factory.NewCommand(
 			func() (string, error) { return homeDir, nil },
 			func(name string) (string, bool) {
 				value, ok := environment[name]
@@ -2218,6 +2218,8 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 				},
 			},
 		)
+		command.SetContext(startupcli.WithWorkingDirectory(t.Context(), t.TempDir()))
+		return command
 	}
 
 	first := newCommand(

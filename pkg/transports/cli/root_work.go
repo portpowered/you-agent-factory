@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -452,10 +454,21 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	if helpRequested(cmd) {
 		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
 	}
+	currentFactorySelected := runUsesCurrentFactory(cmd)
+	if currentFactorySelected {
+		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
+			mapped := runcli.MapCurrentFactoryFailure(err)
+			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
+			return mapped
+		}
+	}
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+		if currentFactorySelected {
+			err = runcli.MapCurrentFactoryFailure(err)
+		}
 		if len(promptArgs) > 0 {
 			err = runcli.MapInvocationFailure(err)
 		}
@@ -472,6 +485,28 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		}
 	}
 	return err
+}
+
+func runUsesCurrentFactory(cmd *cobra.Command) bool {
+	return cmd != nil &&
+		!cmd.Flags().Changed("dir") &&
+		!cmd.Flags().Changed("factory") &&
+		!cmd.Flags().Changed("named") &&
+		!cmd.Flags().Changed("replay")
+}
+
+func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+	if cmd == nil || cfg == nil {
+		return fmt.Errorf("select Current Factory: run command and config are required")
+	}
+	workingDirectory := strings.TrimSpace(startupcli.WorkingDirectory(cmd.Context()))
+	if workingDirectory == "" {
+		return fmt.Errorf("select Current Factory: process working directory is required")
+	}
+	factoryDir := filepath.Join(workingDirectory, defaultcmd.FactoryDir)
+	cfg.Dir = factoryDir
+	cfg.FactoryConfigPath = filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	return nil
 }
 
 func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConfig) error {

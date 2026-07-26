@@ -83,6 +83,14 @@ primary-result behavior.
   runtime-host, provider, and browser edges, plus a compiled-binary malformed
   config case; do not substitute source-shape assertions for observable help
   output and zero effect calls.
+- Implicit Current Factory execution must derive the exact
+  `<invocation working directory>/factory/factory.json` path from the
+  invocation-local process context and carry it as the Factory Definition
+  `SourcePath`. Do not pass only the relative `factory` directory through the
+  current-pointer resolver: that can depend on the host process directory or
+  redirect through `.current-factory`. Keep API/dashboard activation separate
+  from terminal presentation so a server-disabled batch run can still emit its
+  canonical final view.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
   records into Cobra and resolved inputs; `make cli-manifest-check` compares

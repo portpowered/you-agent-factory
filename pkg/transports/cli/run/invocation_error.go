@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -15,6 +17,8 @@ const (
 	InvocationErrorCodeFailed    = "RUN_INVOCATION_FAILED"
 	InvocationErrorCodeCancelled = "RUN_INVOCATION_CANCELLED"
 	InvocationErrorCodeTimeout   = "RUN_INVOCATION_TIMEOUT"
+	CurrentFactoryNotFoundCode   = "CURRENT_FACTORY_NOT_FOUND"
+	CurrentFactoryInvalidCode    = "CURRENT_FACTORY_INVALID"
 )
 
 type InvocationError struct {
@@ -75,11 +79,34 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 	if code == "" {
 		code = InvocationErrorCodeFailed
 	}
+	family := factoryapi.ErrorFamilyInternalServerError
+	switch code {
+	case CurrentFactoryNotFoundCode:
+		family = factoryapi.ErrorFamilyNotFound
+	case CurrentFactoryInvalidCode:
+		family = factoryapi.ErrorFamilyBadRequest
+	}
 	return factoryapi.ErrorResponse{
 		Code:    factoryapi.ErrorResponseCode(code),
-		Family:  factoryapi.ErrorFamilyInternalServerError,
+		Family:  family,
 		Message: strings.TrimSpace(message),
 	}
+}
+
+// MapCurrentFactoryFailure classifies failures from the exact Current Factory
+// selection before they cross the public run-command error boundary.
+func MapCurrentFactoryFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := invocationErrorResponse(err); ok {
+		return err
+	}
+	code := CurrentFactoryInvalidCode
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		code = CurrentFactoryNotFoundCode
+	}
+	return &InvocationError{Code: code, Message: strings.TrimSpace(err.Error()), Cause: err}
 }
 
 // MapInvocationFailure preserves authored invocation errors and classifies

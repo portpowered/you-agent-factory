@@ -54,6 +54,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		request := &factorysessions.RuntimeOpeningRequest{
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 				Directory:        cfg.Dir,
+				SourcePath:       cfg.FactoryConfigPath,
 				ExecutionBaseDir: cfg.ExecutionBaseDir,
 			},
 			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{

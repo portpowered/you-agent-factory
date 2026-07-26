@@ -63,6 +63,22 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	}
 }
 
+func TestApplyRunIntentDisablesUnrequestedServerWithoutSuppressingTerminalPresentation(t *testing.T) {
+	cfg, err := applyRunIntent(
+		RunConfig{Port: 7437},
+		processcontract.RunIntent{WorkerSidecarsEnabled: true},
+	)
+	if err != nil {
+		t.Fatalf("applyRunIntent: %v", err)
+	}
+	if cfg.Port != 0 {
+		t.Fatalf("port = %d, want server disabled", cfg.Port)
+	}
+	if cfg.SuppressDashboardRendering {
+		t.Fatal("server-disabled run suppressed terminal presentation")
+	}
+}
+
 type selectionDirectJavaScriptStub struct {
 	supported bool
 	request   factorysessions.DirectJavaScriptRunRequest

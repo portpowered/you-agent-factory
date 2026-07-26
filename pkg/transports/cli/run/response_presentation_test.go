@@ -1,10 +1,13 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +50,48 @@ func TestWriteInvocationError_WritesOneStandardErrorResponseForTerminalFailure(t
 	}
 	if response.Message != "goal execution failed [session=session-failed workId=work-failed]" {
 		t.Fatalf("message = %q", response.Message)
+	}
+}
+
+func TestMapCurrentFactoryFailureWritesDeclaredStandardErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantCode   factoryapi.ErrorResponseCode
+		wantFamily factoryapi.ErrorFamily
+	}{
+		{
+			name:       "missing",
+			err:        fmt.Errorf("load Current Factory: %w", fs.ErrNotExist),
+			wantCode:   CurrentFactoryNotFoundCode,
+			wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name:       "invalid",
+			err:        errors.New("parse Current Factory: malformed JSON"),
+			wantCode:   CurrentFactoryInvalidCode,
+			wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var stderr bytes.Buffer
+			mapped := MapCurrentFactoryFailure(test.err)
+			if !WriteInvocationError(&stderr, mapped, false) {
+				t.Fatal("WriteInvocationError did not recognize Current Factory failure")
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(bytes.TrimSpace(stderr.Bytes()), &response); err != nil {
+				t.Fatalf("decode ErrorResponse: %v\n%s", err, stderr.String())
+			}
+			if response.Code != test.wantCode || response.Family != test.wantFamily {
+				t.Fatalf("ErrorResponse = %#v", response)
+			}
+		})
 	}
 }
 

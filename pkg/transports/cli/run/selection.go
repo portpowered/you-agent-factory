@@ -129,6 +129,5 @@ func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig,
 	if !intent.APIEnabled {
 		cfg.Port = 0
 	}
-	cfg.SuppressDashboardRendering = !intent.DashboardEnabled
 	return cfg, nil
 }

@@ -459,8 +459,8 @@ func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaul
 	intent := startupcli.RunIntent{
 		DefaultInvocation:     defaultInvocation,
 		Continuous:            cfg.Continuously,
-		APIEnabled:            cfg.Port > 0 && !invocationOnly,
-		DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
+		APIEnabled:            (defaultInvocation || cfg.WithServer || cfg.WithSite) && cfg.Port > 0 && !invocationOnly,
+		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
 		WorkerSidecarsEnabled: true,
 	}
 	if options.openRunSelection == nil {
