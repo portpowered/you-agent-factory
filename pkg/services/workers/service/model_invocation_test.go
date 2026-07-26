@@ -449,6 +449,27 @@ func (workerModelService) GetModelReadiness(
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (workerModelService) PrepareModelAssets(
+	context.Context,
+	modelinference.PrepareModelAssetsRequest,
+) (modelinference.PrepareModelAssetsResult, error) {
+	return modelinference.PrepareModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) InspectModelAssets(
+	context.Context,
+	modelinference.InspectModelAssetsRequest,
+) (modelinference.InspectModelAssetsResult, error) {
+	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) RemoveModelAssets(
+	context.Context,
+	modelinference.RemoveModelAssetsRequest,
+) (modelinference.RemoveModelAssetsResult, error) {
+	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }

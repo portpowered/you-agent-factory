@@ -192,6 +192,27 @@ func (o *Root) GetModelReadiness(
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
+func (o *Root) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }
@@ -322,6 +343,27 @@ func (s *runtimeService) CloseRuntimeScope(
 	models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
 	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
 func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

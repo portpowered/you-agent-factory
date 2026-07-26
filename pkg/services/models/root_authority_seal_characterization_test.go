@@ -464,3 +464,66 @@ func TestRootContractSeal_PeerDoesNotNeedConstructionPortsForPublishedSlices(t *
 		t.Fatalf("InvokeLocal: %v", err)
 	}
 }
+
+func TestInvocationErrorFromManagedRuntime_ReadyAllowsInvocation(t *testing.T) {
+	t.Parallel()
+
+	err := (models.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: models.ReadinessStateReady,
+		LifecycleState: models.LifecycleStateInstalled,
+	}).InvocationError()
+	if err != nil {
+		t.Fatalf("error = %v, want nil for READY", err)
+	}
+}
+
+func TestInvocationErrorFromManagedRuntime_MissingUsesManagedVocabulary(t *testing.T) {
+	t.Parallel()
+
+	err := (models.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: models.ReadinessStateMissing,
+		LifecycleState: models.LifecycleStateNotInstalled,
+	}).InvocationError()
+	if err == nil {
+		t.Fatal("error = nil, want managed runtime missing")
+	}
+	if !errors.Is(err, models.ErrMissing) {
+		t.Fatalf("error = %v, want ErrMissing", err)
+	}
+	var readinessErr *models.InvocationError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("error = %T, want *InvocationError", err)
+	}
+	if readinessErr.ReadinessState != models.ReadinessStateMissing ||
+		readinessErr.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf(
+			"readiness = (%s, %s), want MISSING NOT_INSTALLED",
+			readinessErr.ReadinessState,
+			readinessErr.LifecycleState,
+		)
+	}
+}
+
+func TestInvocationErrorFromManagedRuntime_LoadingAndFailed(t *testing.T) {
+	t.Parallel()
+
+	loadingErr := (models.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: models.ReadinessStateLoading,
+		LifecycleState: models.LifecycleStateLoading,
+	}).InvocationError()
+	if !errors.Is(loadingErr, models.ErrLoading) {
+		t.Fatalf("loading error = %v, want ErrLoading", loadingErr)
+	}
+
+	failedErr := (models.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: models.ReadinessStateFailed,
+		LifecycleState: models.LifecycleStateNotInstalled,
+	}).InvocationError()
+	if !errors.Is(failedErr, models.ErrFailed) {
+		t.Fatalf("failed error = %v, want ErrFailed", failedErr)
+	}
+}

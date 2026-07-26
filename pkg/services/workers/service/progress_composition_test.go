@@ -210,6 +210,27 @@ func (testRuntimeScopeUnsupported) CloseRuntimeScope(
 	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
 }
 
+func (testRuntimeScopeUnsupported) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (s testModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return s, nil
 }

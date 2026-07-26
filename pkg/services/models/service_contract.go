@@ -28,6 +28,20 @@ type Service interface {
 	// GetModelReadiness returns current detached readiness facts for one scoped
 	// model without exposing a catalog assembler, cache, host, or runtime handle.
 	GetModelReadiness(context.Context, GetModelReadinessRequest) (GetModelReadinessResult, error)
+	// PrepareModelAssets makes configured assets available for one scoped model
+	// and distinguishes already-available assets from newly prepared assets.
+	// Missing/unsupported sources, interrupted preparation, integrity failure,
+	// and cancellation retain distinct Models-owned classifications.
+	PrepareModelAssets(context.Context, PrepareModelAssetsRequest) (PrepareModelAssetsResult, error)
+	// InspectModelAssets returns detached readiness and optional integrity
+	// verification facts without exposing cache layout or filesystem handles.
+	// Unavailable assets, integrity failure, and cancellation are distinct from
+	// runtime-scope failures.
+	InspectModelAssets(context.Context, InspectModelAssetsRequest) (InspectModelAssetsResult, error)
+	// RemoveModelAssets removes scoped model assets and reports whether removal
+	// changed state or the assets were already absent. Cancellation remains a
+	// typed Models-owned failure.
+	RemoveModelAssets(context.Context, RemoveModelAssetsRequest) (RemoveModelAssetsResult, error)
 	// ForRuntime binds this already-constructed service to one Factory Session's
 	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
 	// Construction and process-launcher ports remain owned by the injected
@@ -55,6 +69,9 @@ type Service interface {
 	// (ErrNotAvailable, ErrPullUnsupported, ErrSourceFetchFailed / PullError).
 	// Asset pull stays on this singular root Service; peers do not import a
 	// nested asset-gateway interface.
+	//
+	// Deprecated: target peers should use PrepareModelAssets with
+	// RuntimeScopeRef.
 	PullModel(context.Context, string) (PullResult, error)
 	// InspectRuntime returns Models-owned host readiness for one model
 	// (ReadinessState / LifecycleState vocabulary). Missing assets and loading
