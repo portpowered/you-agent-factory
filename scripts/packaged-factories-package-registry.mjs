@@ -21,6 +21,6 @@ export function reconcileCandidate(input) {
 	return reconcilePackageCandidate({
 		...input,
 		expectedPackageName: PACKAGED_FACTORIES_PACKAGE_NAME,
-		expectedDistTag: DEVELOPMENT_DIST_TAG,
+		expectedDistTag: input.expectedDistTag ?? DEVELOPMENT_DIST_TAG,
 	});
 }

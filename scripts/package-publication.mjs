@@ -174,6 +174,7 @@ async function retryRegistryOperation({
 
 async function verifyPublishedRegistryState({
 	evidence,
+	expectedDistTag,
 	tarballPath,
 	registryClient,
 	reconcile,
@@ -188,6 +189,7 @@ async function verifyPublishedRegistryState({
 		async operation() {
 			const result = await reconcile({
 				evidence,
+				expectedDistTag,
 				tarballPath,
 				registryClient,
 			});
@@ -211,6 +213,7 @@ async function verifyPublishedRegistryState({
 
 async function reconcileInitialRegistryState({
 	evidence,
+	expectedDistTag,
 	tarballPath,
 	registryClient,
 	reconcile,
@@ -222,7 +225,8 @@ async function reconcileInitialRegistryState({
 		attempts: verificationAttempts,
 		delayMs: verificationDelayMs,
 		sleep,
-		operation: () => reconcile({ evidence, tarballPath, registryClient }),
+		operation: () =>
+			reconcile({ evidence, expectedDistTag, tarballPath, registryClient }),
 		exhaustedFailure(lastError) {
 			return lastError;
 		},
@@ -255,6 +259,7 @@ export async function publishAndVerifyCandidate(
 	{
 		consumerDirectory,
 		evidence,
+		expectedDistTag,
 		registryClient,
 		tarballPath,
 		workspaceDirectory,
@@ -270,6 +275,7 @@ export async function publishAndVerifyCandidate(
 	const sleep = dependencies.sleep ?? wait;
 	const initial = await reconcileInitialRegistryState({
 		evidence,
+		expectedDistTag,
 		tarballPath,
 		registryClient,
 		reconcile,
@@ -296,6 +302,7 @@ export async function publishAndVerifyCandidate(
 		try {
 			await verifyPublishedRegistryState({
 				evidence,
+				expectedDistTag,
 				tarballPath,
 				registryClient,
 				reconcile,
@@ -349,7 +356,12 @@ async function candidateFiles(candidateDirectory) {
 }
 
 export async function publishCandidateDirectory(
-	{ candidateDirectory, expectedSourceCommit, workspaceDirectory },
+	{
+		candidateDirectory,
+		expectedDistTag,
+		expectedSourceCommit,
+		workspaceDirectory,
+	},
 	dependencies,
 ) {
 	const loadCandidate = dependencies.candidateFiles ?? candidateFiles;
@@ -372,6 +384,7 @@ export async function publishCandidateDirectory(
 		return await publishAndVerify({
 			...candidate,
 			consumerDirectory,
+			expectedDistTag,
 			registryClient,
 			workspaceDirectory,
 		});

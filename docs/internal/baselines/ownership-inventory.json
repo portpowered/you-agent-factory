@@ -3450,6 +3450,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/projections",
       "disposition": "retain",
       "destination": "recordings",

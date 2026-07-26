@@ -24,6 +24,7 @@ const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const SOURCE_COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const CANDIDATE_VERSION_PATTERN =
 	/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-dev\.([1-9]\d*)\.([0-9a-f]{12})$/;
+const RELEASE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const DEFAULT_REGISTRY_TIMEOUT_MS = 30_000;
 
 export class RegistryReconciliationError extends Error {
@@ -52,11 +53,16 @@ function requireCandidateEvidence(
 	const versionMatch = CANDIDATE_VERSION_PATTERN.exec(
 		evidence.candidateVersion,
 	);
+	const releaseVersionMatches =
+		expectedDistTag === "latest" &&
+		RELEASE_VERSION_PATTERN.test(evidence.candidateVersion ?? "");
+	const developmentVersionMatches =
+		expectedDistTag === "dev" &&
+		versionMatch?.[5] === evidence.sourceCommit?.slice(0, 12);
 	if (
 		evidence.packageName !== expectedPackageName ||
-		!versionMatch ||
+		(!developmentVersionMatches && !releaseVersionMatches) ||
 		!SOURCE_COMMIT_PATTERN.test(evidence.sourceCommit ?? "") ||
-		versionMatch[5] !== evidence.sourceCommit.slice(0, 12) ||
 		!SHA256_PATTERN.test(evidence.contractDigest ?? "") ||
 		!SHA256_PATTERN.test(evidence.artifactDigest ?? "") ||
 		!Array.isArray(evidence.inventory) ||

@@ -241,20 +241,17 @@ test("defaults and validates UI_COVERAGE_SHARD_TOTAL for merge mode", () => {
 });
 
 test("cleanCoverageArtifacts recreates coverage temp and blob report directories", () => {
-  const cwd = process.cwd();
   const tempDir = mkdtempSync(join(tmpdir(), "ui-coverage-clean-"));
 
   try {
-    process.chdir(tempDir);
-    mkdirSync("coverage/old", { recursive: true });
-    mkdirSync(".vitest-reports/old", { recursive: true });
+    mkdirSync(join(tempDir, "coverage/old"), { recursive: true });
+    mkdirSync(join(tempDir, ".vitest-reports/old"), { recursive: true });
 
-    cleanCoverageArtifacts();
+    cleanCoverageArtifacts(tempDir);
 
-    expect(existsSync("coverage/.tmp")).toBe(true);
-    expect(existsSync(".vitest-reports")).toBe(true);
+    expect(existsSync(join(tempDir, "coverage/.tmp"))).toBe(true);
+    expect(existsSync(join(tempDir, ".vitest-reports"))).toBe(true);
   } finally {
-    process.chdir(cwd);
     rmSync(tempDir, { force: true, recursive: true });
   }
 });

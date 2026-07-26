@@ -3,10 +3,19 @@ import { createHash } from "node:crypto";
 import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
+import {
+	assertPackedExportTargets,
+	assertPackedRequiredFiles,
+} from "./package-export-validation.mjs";
+
 const DIAGNOSTIC_PREFIX = "[packaged-factories-package-pack]";
+export const REQUIRED_COMPATIBILITY_FILES = Object.freeze([
+	"factories/goal/factory.json",
+]);
 const STATIC_PACK_FILES = Object.freeze([
 	"LICENSE.md",
 	"README.md",
+	...REQUIRED_COMPATIBILITY_FILES,
 	"generated/README.md",
 	"generated/manifest.json",
 	"package.json",
@@ -360,6 +369,16 @@ export async function packAndVerify({
 	await assertNoSymlinkFiles(packageRoot, expectedFiles);
 	const stdout = await npmPack(packageRoot, destination);
 	const report = parsePackReport(stdout);
+	const packageManifest = await readJSON(
+		join(packageRoot, "package.json"),
+		"package manifest",
+	);
+	assertPackedExportTargets(report.name, packageManifest.exports, report.files);
+	assertPackedRequiredFiles(
+		report.name,
+		REQUIRED_COMPATIBILITY_FILES,
+		report.files,
+	);
 	assertReviewedInventory(report.files, expectedFiles);
 	await assertRegularContainedFiles(packageRoot, expectedFiles);
 	const artifactFiles = expectedFiles.filter((path) =>

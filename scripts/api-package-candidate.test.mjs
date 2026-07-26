@@ -66,6 +66,29 @@ test("candidate identity rejects incomplete or non-canonical inputs", () => {
 	}
 });
 
+test("tagged release candidates use the requested stable release version", async (t) => {
+	const outputDirectory = await temporaryDirectory(t, "you-api-release-candidate-");
+	const result = await prepareCandidate({
+		packageDirectory,
+		outputDirectory,
+		runId: "42",
+		sourceCommit,
+		version: "1.2.3",
+	});
+
+	assert.equal(result.evidence.candidateVersion, "1.2.3");
+	await assert.rejects(
+		prepareCandidate({
+			packageDirectory,
+			outputDirectory: await temporaryDirectory(t, "you-api-invalid-release-"),
+			runId: "42",
+			sourceCommit,
+			version: "1.2.3-rc.1",
+		}),
+		/release version must be a stable semantic version/,
+	);
+});
+
 test("preparation packs one attributable candidate without mutating package sources", async (t) => {
 	const outputDirectory = await temporaryDirectory(t, "you-api-candidate-output-");
 	const packageManifestPath = join(packageDirectory, "package.json");

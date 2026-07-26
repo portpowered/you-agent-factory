@@ -236,9 +236,15 @@ var approvedApplicationGraphImporters = []string{
 // only contracts owned by the leaf packages that directly perform these
 // external effects. This is deliberately not a general service-subpackage
 // exception.
+//
+// Provider inference/process effects: the durable owner is the Providers
+// Execution leaf (providersLeafEffectContractImport). Workers
+// provider/inferencecontract entries remain only as migration debt until later
+// Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                        {},
 	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                          {},
+	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":                                         {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":                                  {},
@@ -259,7 +265,10 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // leaf adapter that crosses the process, network, filesystem, clock, or host
 // boundary. Tests may import these exact ports to supply edges.Edges values;
 // they are not permission to construct the owning service implementation.
+// Workers provider/inferencecontract remains migration debt; Providers leaf is
+// the durable public effect port.
 var publicExternalEffectContractImports = map[string]struct{}{
+	providersLeafEffectContractImport:                                                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
@@ -384,6 +393,7 @@ type scanResult struct {
 	petriPublicSurfaceFindings         []petriPublicSurfaceFinding
 	stalePetriPublicSurfaceEntries     []petriPublicSurfaceBaselineEntry
 	petriPublicSurfaceBaselineCount    int
+	providerEffectOwnershipFindings    []providerEffectOwnershipFinding
 }
 
 type retiredPackageRoot struct {
@@ -639,6 +649,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.staleTestBehaviorEntries)
 	blockingViolationCount += len(findings.petriPublicSurfaceFindings) +
 		len(findings.stalePetriPublicSurfaceEntries)
+	blockingViolationCount += len(findings.providerEffectOwnershipFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writePeerServiceBaselineSummary(stdout, findings.peerServiceBaselineCount)
@@ -697,6 +708,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writePetriPublicSurfaceFindings(stderr, findings.petriPublicSurfaceFindings)
 	writeStalePetriPublicSurfaceBaselineEntries(stderr, findings.stalePetriPublicSurfaceEntries)
 	writePetriPublicSurfaceBaselineSummary(stderr, findings.petriPublicSurfaceBaselineCount)
+	writeProviderEffectOwnershipFindings(stderr, findings.providerEffectOwnershipFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -931,6 +943,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	result.petriPublicSurfaceBaselineCount = len(petriPublicSurfaceBaseline.Entries)
+	result.providerEffectOwnershipFindings, err = scanProviderEffectOwnership(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
 
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)

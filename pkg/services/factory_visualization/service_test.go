@@ -12,6 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
+// FND-12 captured visualization-activation typed-failure baseline: activation
+// construct fails with an explicit missing-dependency error. Invoked by
+// `make fnd-12-visualization-behavior-baselines`.
 func TestNewRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -49,6 +52,9 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 	}
 }
 
+// FND-12 captured visualization-activation success baseline: Start against a
+// valid event source projects retained-then-live events and emits observable
+// Views. Invoked by `make fnd-12-visualization-behavior-baselines`.
 func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	t.Parallel()
 
