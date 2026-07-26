@@ -722,19 +722,6 @@ type nonCodexInferencePayloadTestCase struct {
 func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 	return []nonCodexInferencePayloadTestCase{
 		{
-			name: "Gemini",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				Model:         "gemini-2.5-flash",
-				UserMessage:   "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_GEMINI_ENV": "enabled",
-				},
-			},
-			wantArgs: []string{"--prompt", "run the tests", "--model", "gemini-2.5-flash"},
-			wantEnv:  "AGENT_FACTORY_GEMINI_ENV=enabled",
-		},
-		{
 			name: "Kiro",
 			req: workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderKiro),

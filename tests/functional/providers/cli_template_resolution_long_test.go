@@ -43,7 +43,7 @@ func TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates(t *test
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 	session := support.GetDefaultSession(t, server.URL())
-	assertSessionPlaces(t, session, map[string]int{
+	assertSessionPlaces(t, listed, map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 
@@ -81,10 +81,10 @@ func TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates(t *
 	})
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
 	wantPrompt := strings.Join([]string{
@@ -106,10 +106,10 @@ func TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWith
 	writeTwoInputResourceSeeds(t, dir)
 
 	runner := &templateCaptureCommandRunner{}
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ScriptCommandRunner: runner,
 	}, 10*time.Second)
-	assertSessionPlaces(t, session, map[string]int{
+	assertSessionPlaces(t, listed, map[string]int{
 		"zeta-resource:done":  1,
 		"alpha-resource:done": 1,
 		"zeta-resource:init":  0,
@@ -135,10 +135,10 @@ func TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithReso
 	writeTwoInputResourceSeeds(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertSessionPlaces(t, session, map[string]int{
+	assertSessionPlaces(t, listed, map[string]int{
 		"zeta-resource:done":  1,
 		"alpha-resource:done": 1,
 		"zeta-resource:init":  0,
@@ -166,10 +166,10 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	writeExecutionTemplateSeed(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
 	assertCommandArgs(t, req, append([]string{
@@ -192,10 +192,10 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	writeExecutionTemplateSeed(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
 	assertCommandArgs(t, req, []string{"exec", "--model", "test-codex-model", "-"})
@@ -213,10 +213,10 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 	writeExecutionTemplateSeed(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
-	assertCursorProviderCompleted(t, session)
+	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
 	if req.Command != string(modelprovider.ProviderCursor) {

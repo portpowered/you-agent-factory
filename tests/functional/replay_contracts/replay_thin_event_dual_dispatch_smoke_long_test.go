@@ -16,7 +16,7 @@ func TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t 
 	smoke := runThinEventDualDispatchSmoke(t)
 
 	replay := observeReplayThroughRoot(t, smoke.artifactPath, 10*time.Second)
-	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+	assertReplayPlaceCounts(t, replay.Work, map[string]int{
 		"task:complete": 1,
 		dualDispatchSmokeScriptWorkType + ":done": 1,
 		"task:failed": 0,

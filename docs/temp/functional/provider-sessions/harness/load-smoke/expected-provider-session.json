@@ -1,0 +1,6 @@
+{
+  "provider": "harness",
+  "providerSessionId": "session_fixture_load_smoke",
+  "fidelityClass": "partial-stream",
+  "status": "completed"
+}

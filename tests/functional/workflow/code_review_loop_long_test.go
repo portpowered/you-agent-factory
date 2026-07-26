@@ -9,6 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestCodeReviewLoop(t *testing.T) {
@@ -30,8 +32,8 @@ func TestCodeReviewLoop(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
 		"code-change:complete": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:failed": 0,
 	})
 

@@ -348,6 +348,18 @@ is allowed only when the text explicitly describes internal implementation
 details or `pkg/orchestrators/petri` ownership. It should not be the primary wording for
 customer-facing Factory Session, Work, or event-stream behavior.
 
+The architecture checker encodes a Petri-public-surface prohibition in
+`cmd/pkgboundarycheck/petri_public_surface.go`: raw nets, markings, tokens,
+transitions/enabled-transition engine shapes, and engine snapshots are rejected
+outside `pkg/services/factory_runtime/internal/`. Authored Factory Definition
+`orchestrator.kind = PETRI` remains allowed as configuration. Focused fixtures
+in `petri_public_surface_test.go` cover vocabulary shapes and the required
+public-surface categories (public API, transport, integration contract, and
+functional test). The prohibition runs on the `make lint` package-boundary path;
+pre-existing live-tree debt is inventory-only in
+`petri-public-surface-baseline.json` with an exact deletion gate pointing at
+Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
+
 ## Focused Verification
 
 For runtime-cleanup documentation changes, run a changed-docs vocabulary check
@@ -651,6 +663,63 @@ live-session registry, should publish their narrow contract from the owning
 atomic removal of the root's consolidated interface-count baseline; removing
 root interfaces one at a time replaces the exact deletion-only finding instead
 of reducing it.
+
+When promoting a Factory Definitions `Service` alias into a root-declared
+interface, move `SessionHost` with it when `AttachFactoryDefinitions` closes
+over `Service`, point the local `service.New` constructor at the root types
+(not `contracts.*`), and replace the exact `service-root-interface-count`
+baseline target for that package. Characterization proof for the seam belongs
+in a root-package external test that implements `Service` using only
+`pkg/services/factory_definitions` imports.
+
+When publishing additive CTR-DEF catalog (or later) slices on that root
+`Service`, declare plain request/result value types beside the interface,
+keep catalog methods on the singular `Service` rather than elevating
+`NamedFactoryCatalog` as a peer-facing authority, and extend the same
+external fake-peer characterization test with representative success and
+distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
+vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+singular `Service` with prepare/flatten/expand/create/replace request
+shapes that omit filesystem effects and mapping codecs; publish
+`ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
+(`ErrAtomicFactoryWriteFailed`, `PreviousPreserved`) instead of peer-facing
+`FactorySplitLayoutReplaceResult` restore callbacks. Compile slices stay on
+the singular `Service` via `CompileEffectiveFactorySource` returning a
+Definitions-owned `EffectiveFactorySource` value (not a separately published
+peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
+`ErrUnresolvedDefinitionReference`. Validate slices stay on the singular
+`Service` via `ValidateStructuralFactoryDefinition` and
+`ValidateEffectiveFactoryDefinition` returning Definitions-owned
+`ValidationResult` success shapes (not a peer-facing nested `Validator`
+interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
+`FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
+with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+slices stay on the singular `Service` via `CaptureFactorySnapshot`,
+`PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
+detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
+snapshotcapture or bundled-asset implementation types); publish distinct
+`ErrInvalidFactorySnapshotPayload` vs `ErrUnsafeFactorySnapshotMaterialize`.
+Distribute slices stay on the singular `Service` via
+`ListBuiltInPackagedFactories`, `InstallPackagedFactory`, and
+`CreateFactoryScaffold` returning shared
+`DistributedFactoryDefinitionFacts` for install and scaffold (not
+packagedinstallation/scaffold implementation types or peer-facing
+`PackagedFactoryInstaller` / `ScaffoldInitializer` authorities); publish
+distinct `ErrUnknownPackagedFactoryIdentity` vs
+`ErrFactoryDistributeFailed`. Request shapes omit filesystem effects,
+output streams, and `PackagedDefinition` payload bytes.
+Prefer growing `service_contract.go` / `service_contract_test.go` while
+under the 1000-line maint limit. When characterization coverage forces a
+split (as with distribute + six-slice seal proof), add a focused sibling
+such as `service_contract_distribute_test.go` and ratchet
+`backend-package-file-count.json` for that unavoidable growth.
+Keep assignability stubs for not-yet-wired CTR-DEF slices on root
+`UnimplementedService` (with focused root tests covering typed outcomes
+and `AtomicFactoryWriteFailure` / `FactoryDefinitionValidationFailure`
+`Error`/`Unwrap`/`Is` paths) and embed that type from
+`definition.Service` rather than duplicating stub bodies in the
+definition package—otherwise package-coverage minima regress on both
+unit and functional lanes.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root

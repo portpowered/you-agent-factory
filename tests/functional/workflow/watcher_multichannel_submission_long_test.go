@@ -10,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestMultiChannelFileWatcher_DefaultSubmission(t *testing.T) {
@@ -19,8 +21,8 @@ func TestMultiChannelFileWatcher_DefaultSubmission(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default item"}`))
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0})
 }
 
 func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
@@ -37,8 +39,8 @@ func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
 	}
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1})
 }
 
 func TestMultiChannelFileWatcher_DynamicExecDir(t *testing.T) {
@@ -60,6 +62,6 @@ func TestMultiChannelFileWatcher_DynamicExecDir(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 2, "task:init": 0, "task:processing": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 2, "task:init": 0, "task:processing": 0})
 }

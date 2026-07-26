@@ -2,15 +2,19 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
@@ -83,6 +87,28 @@ func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
 	}
 }
 
+func TestProductionDocsCompletionComesFromManifestTopicChoices(t *testing.T) {
+	docs, err := newProductionDocsCommand(&cliDiagnosticsOptions{})
+	if err != nil {
+		t.Fatalf("newProductionDocsCommand() error = %v", err)
+	}
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	record, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic, err := record.RequireArgumentAt(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(docs.ValidArgs, topic.Enum) {
+		t.Fatalf("docs completion = %#v, want manifest choices %#v", docs.ValidArgs, topic.Enum)
+	}
+}
+
 func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	var inspectJSON, pullJSON bool
 	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
@@ -107,6 +133,93 @@ func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	}
 	if !inspectJSON || !pullJSON {
 		t.Fatalf("json bindings = inspect %t pull %t, want true", inspectJSON, pullJSON)
+	}
+}
+
+func TestProductionModelsPullRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "pull"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "pull", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "pull", "--unknown"}, want: "unknown flag: --unknown"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				pull: func(modelscli.PullConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid pull input invoked Models service")
+			}
+		})
+	}
+}
+
+func TestProductionModelsInvokeRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "invoke"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "invoke", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "invoke", "model-a", "--unknown"}, want: "unknown flag: --unknown"},
+		{name: "invalid operation", args: []string{"models", "invoke", "model-a", "--operation", "INVALID"}, want: "not one of the declared choices"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				invoke: func(modelscli.InvokeConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid invoke input invoked Models service")
+			}
+		})
+	}
+}
+
+func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		pull: func(cfg modelscli.PullConfig) error {
+			if cfg.Context.Err() != context.Canceled {
+				t.Fatalf("pull context error = %v, want canceled", cfg.Context.Err())
+			}
+			return context.Canceled
+		},
+	}}).NewCommand(nil, nil, nil)
+	root.SetContext(ctx)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "pull", "model-a"})
+	if err := root.Execute(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("execute canceled models pull error = %v, want context.Canceled", err)
 	}
 }
 

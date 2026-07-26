@@ -40,6 +40,7 @@ const (
 	ruleMappingProcess                   = "mapping-process-behavior"
 	ruleMappingTimer                     = "mapping-timer-behavior"
 	ruleMappingGoroutine                 = "mapping-goroutine"
+	ruleHostedOwnershipAssignment        = "hosted-ownership-assignment"
 )
 
 var deletionGates = map[string]string{
@@ -52,6 +53,7 @@ var deletionGates = map[string]string{
 	ruleMappingProcess:                   "move process discovery or execution behind an injected service-owned port",
 	ruleMappingTimer:                     "move timer lifecycle behind an injected clock or owning service",
 	ruleMappingGoroutine:                 "move asynchronous lifecycle to an owning service or Initializer lifecycle component",
+	ruleHostedOwnershipAssignment:        "assign the responsibility to its durable owner named in the diagnostic; transitional hosted_logic location is not proof of ownership",
 }
 
 // These packages declare exact external-effect contracts at the leaf that
@@ -179,6 +181,11 @@ func scan(repoRoot string) ([]finding, error) {
 		return nil, err
 	}
 	var findings []finding
+	hostedFindings, err := scanHostedOwnershipClaims(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	findings = append(findings, hostedFindings...)
 	for _, scanRoot := range []string{initializerRoot, platformRoot, mappingRoot} {
 		path := filepath.Join(repoRoot, filepath.FromSlash(scanRoot))
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {

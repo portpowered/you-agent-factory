@@ -18,8 +18,8 @@ const (
 	SortByStateType = "state.type"
 )
 
-// ListOptions contains transport-independent filters, ordering, and pagination
-// controls for a Work list request.
+// ListOptions is the plain Work-owned state-access list request contract used by
+// Service.ListWork. Filters, ordering, and pagination stay transport-independent.
 type ListOptions struct {
 	StateName    string
 	StateType    string

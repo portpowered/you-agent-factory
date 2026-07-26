@@ -1,0 +1,19 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "PKT-A",
+      "exclusivePaths": [
+        "pkg/work/"
+      ],
+      "state": "active"
+    },
+    {
+      "packetId": "PKT-B",
+      "exclusivePaths": [
+        "pkg/workers/"
+      ],
+      "state": "review"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 package construction
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -132,6 +133,26 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	return &clone
 }
 
+// WithExecutionFactories returns a service copy that uses replacement provider
+// and script factories while preserving registry-backed runner selection and
+// provider-identity resolution wiring.
+func (s *Service) WithExecutionFactories(
+	providerFactory *workerprovider.Factory,
+	scriptFactory *workerexecutor.ScriptFactory,
+) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	if providerFactory != nil {
+		clone.providerFactory = providerFactory
+	}
+	if scriptFactory != nil {
+		clone.scriptFactory = scriptFactory
+	}
+	return &clone
+}
+
 // Build constructs one configured worker executor from direct collaborators.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *Service) Build(
@@ -169,18 +190,15 @@ func (s *Service) Build(
 	}
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
+		effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
 		runner, err := s.providerRunner(
-			runtimeConfig, def, logger, invocationSkipPermissionsOverride,
+			runtimeConfig, def, logger, effectiveSkipPermissions,
 			providerOverride, inferenceProgressPublisher, inferenceRecorder, clock,
 		)
 		if err != nil {
 			return Result{}, err
 		}
-		for _, decorate := range runnerDecorators {
-			if decorate != nil {
-				runner = decorate(runner, def)
-			}
-		}
+		runner = decorateProviderRunner(runner, def, runnerDecorators, effectiveSkipPermissions)
 		inference := workerexecutor.NewAgentExecutorWithRunner(
 			runtimeConfig,
 			runner,
@@ -272,7 +290,7 @@ func (s *Service) providerRunner(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	def *interfaces.FactoryWorkerConfig,
 	logger logging.Logger,
-	invocationSkipPermissionsOverride *bool,
+	effectiveSkipPermissions bool,
 	providerOverride providercontract.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
@@ -290,11 +308,7 @@ func (s *Service) providerRunner(
 			responseExecutor = providerstructured.NewExecutor()
 		}
 		built, err := s.providerFactory.New(
-			skippermissions.EffectiveSkipPermissions(
-				def.SkipPermissions,
-				def.Type,
-				invocationSkipPermissionsOverride,
-			),
+			effectiveSkipPermissions,
 			logger,
 			nil,
 			inferenceProgressPublisher,
@@ -321,6 +335,51 @@ func (s *Service) providerRunner(
 	return workerexecutor.RunnerFromProvider(workerprovider.NewRecordingProvider(
 		providerRunner, inferenceRecorder, clock,
 	)), nil
+}
+
+// effectiveSkipPermissionsRunner installs invocation-local policy outside all
+// execution decorators. This is intentionally the outermost runner so a
+// conductor route that does not call the retained native runner still receives
+// the same effective worker policy.
+type effectiveSkipPermissionsRunner struct {
+	next    workers.Runner
+	enabled bool
+}
+
+func effectiveWorkerSkipPermissions(
+	def *interfaces.FactoryWorkerConfig,
+	invocationOverride *bool,
+) bool {
+	return skippermissions.EffectiveSkipPermissions(
+		def.SkipPermissions,
+		def.Type,
+		invocationOverride,
+	)
+}
+
+func decorateProviderRunner(
+	runner workers.Runner,
+	def *interfaces.FactoryWorkerConfig,
+	decorators []RunnerDecorator,
+	effectiveSkipPermissions bool,
+) workers.Runner {
+	for _, decorate := range decorators {
+		if decorate != nil {
+			runner = decorate(runner, def)
+		}
+	}
+	return effectiveSkipPermissionsRunner{
+		next:    runner,
+		enabled: effectiveSkipPermissions,
+	}
+}
+
+func (r effectiveSkipPermissionsRunner) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	request.SkipPermissions = r.enabled
+	return r.next.Execute(ctx, request)
 }
 
 func workstationResult(

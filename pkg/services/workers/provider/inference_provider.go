@@ -25,7 +25,6 @@ import (
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 
@@ -673,11 +672,6 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 		})
 		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
-	case string(modelprovider.ProviderGemini):
-		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(modelprovider.ProviderCursor):
 		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -781,8 +775,6 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 		if codexError, ok := extractCodexErrorLine(result); ok {
 			message = codexError
 		}
-	case string(modelprovider.ProviderGemini):
-		message = geminipkg.TimeoutFailureMessage
 	case string(modelprovider.ProviderKiro):
 		message = kiropkg.TimeoutFailureMessage
 	}

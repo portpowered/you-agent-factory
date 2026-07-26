@@ -194,7 +194,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/platform/defaultpaths", canonicalOwner: "the defining service owner, or pkg/platform/internal/runtimeartifact for policy-free artifact mechanics"},
 	{packagePath: "pkg/wire/runtimeproviders", canonicalOwner: "focused provider files in pkg/wire"},
 	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
-	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/services/workers/hosted"},
+	{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
 	{packagePath: "pkg/internal/cursorstorage", canonicalOwner: "pkg/services/provider_sessions/cursor"},
 	{packagePath: "pkg/internal/metrics", canonicalOwner: "pkg/services/factory_runtime/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
 	{packagePath: "pkg/platform/runtimeinput", canonicalOwner: "bounded owner requests assembled by pkg/wire"},
@@ -341,6 +341,7 @@ type config struct {
 	writeTransportBehaviorBaseline    bool
 	writeProductionDefaultBaseline    bool
 	writeTestBehaviorBaseline         bool
+	writePetriPublicSurfaceBaseline   bool
 }
 
 type scanResult struct {
@@ -369,6 +370,7 @@ type scanResult struct {
 	staleTransportBehaviorEntries      []transportBehaviorBaselineEntry
 	transportBehaviorBaselineCount     int
 	functionalProcessEdgeFindings      []functionalProcessEdgeFinding
+	constructedServiceEdgesFindings    []constructedServiceEdgesFinding
 	testWorkNormalizationFindings      []testWorkNormalizationFinding
 	productionDefaultFindings          []productionDefaultFinding
 	staleProductionDefaultEntries      []productionDefaultBaselineEntry
@@ -379,6 +381,9 @@ type scanResult struct {
 	testBehaviorFindings               []testBehaviorFinding
 	staleTestBehaviorEntries           []testBehaviorBaselineEntry
 	testBehaviorBaselineCount          int
+	petriPublicSurfaceFindings         []petriPublicSurfaceFinding
+	stalePetriPublicSurfaceEntries     []petriPublicSurfaceBaselineEntry
+	petriPublicSurfaceBaselineCount    int
 }
 
 type retiredPackageRoot struct {
@@ -530,6 +535,13 @@ func main() {
 		}
 		return
 	}
+	if cfg.writePetriPublicSurfaceBaseline {
+		if err := createPetriPublicSurfaceBaseline(cfg); err != nil {
+			fmt.Fprintln(stderrWriter, err)
+			exitFunc(1)
+		}
+		return
+	}
 	if err := run(cfg, stdoutWriter, stderrWriter); err != nil {
 		fmt.Fprintln(stderrWriter, err)
 		exitFunc(1)
@@ -569,6 +581,12 @@ func parseConfig() config {
 		"create-test-behavior-boundary-baseline",
 		false,
 		"create the exact deletion-only test behavior baseline; fails when the file exists or no debt exists",
+	)
+	flag.BoolVar(
+		&cfg.writePetriPublicSurfaceBaseline,
+		"create-petri-public-surface-baseline",
+		false,
+		"create the exact deletion-only Petri public-surface baseline; fails when the file exists or no debt exists",
 	)
 	flag.Parse()
 	return cfg
@@ -611,6 +629,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.functionalProcessEdgeFindings) +
+		len(findings.constructedServiceEdgesFindings) +
 		len(findings.testWorkNormalizationFindings) +
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
@@ -618,6 +637,8 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.staleInitializerBehaviorEntries)
 	blockingViolationCount += len(findings.testBehaviorFindings) +
 		len(findings.staleTestBehaviorEntries)
+	blockingViolationCount += len(findings.petriPublicSurfaceFindings) +
+		len(findings.stalePetriPublicSurfaceEntries)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writePeerServiceBaselineSummary(stdout, findings.peerServiceBaselineCount)
@@ -628,6 +649,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		writeProductionDefaultBaselineSummary(stdout, findings.productionDefaultBaselineCount)
 		writeInitializerBehaviorBaselineSummary(stdout, findings.initializerBehaviorBaselineCount)
 		writeTestBehaviorBaselineSummary(stdout, findings.testBehaviorBaselineCount)
+		writePetriPublicSurfaceBaselineSummary(stdout, findings.petriPublicSurfaceBaselineCount)
 		writeGeneratedCodeExceptionSummary(stdout, policy)
 		return nil
 	}
@@ -660,6 +682,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeTransportBehaviorFindings(stderr, findings.transportBehaviorFindings)
 	writeStaleTransportBehaviorBaselineEntries(stderr, findings.staleTransportBehaviorEntries)
 	writeFunctionalProcessEdgeFindings(stderr, findings.functionalProcessEdgeFindings)
+	writeConstructedServiceEdgesFindings(stderr, findings.constructedServiceEdgesFindings)
 	writeTestWorkNormalizationFindings(stderr, findings.testWorkNormalizationFindings)
 	writeTransportBehaviorBaselineSummary(stderr, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultFindings(stderr, findings.productionDefaultFindings)
@@ -671,6 +694,9 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeTestBehaviorFindings(stderr, findings.testBehaviorFindings)
 	writeStaleTestBehaviorBaselineEntries(stderr, findings.staleTestBehaviorEntries)
 	writeTestBehaviorBaselineSummary(stderr, findings.testBehaviorBaselineCount)
+	writePetriPublicSurfaceFindings(stderr, findings.petriPublicSurfaceFindings)
+	writeStalePetriPublicSurfaceBaselineEntries(stderr, findings.stalePetriPublicSurfaceEntries)
+	writePetriPublicSurfaceBaselineSummary(stderr, findings.petriPublicSurfaceBaselineCount)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -841,6 +867,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.constructedServiceEdgesFindings, err = scanConstructedServiceEdges(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
 	result.testWorkNormalizationFindings, err = scanTestWorkNormalization(repoRoot)
 	if err != nil {
 		return scanResult{}, err
@@ -887,6 +917,20 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	result.initializerBehaviorBaselineCount = len(initializerBehaviorBaseline.Entries)
+	petriPublicSurfaceFindings, err := scanPetriPublicSurface(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	petriPublicSurfaceBaseline, err := loadPetriPublicSurfaceBaseline(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.petriPublicSurfaceFindings, result.stalePetriPublicSurfaceEntries, err =
+		partitionPetriPublicSurfaceFindings(petriPublicSurfaceFindings, petriPublicSurfaceBaseline)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.petriPublicSurfaceBaselineCount = len(petriPublicSurfaceBaseline.Entries)
 
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)

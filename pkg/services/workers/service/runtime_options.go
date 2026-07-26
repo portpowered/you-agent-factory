@@ -114,11 +114,20 @@ func (s *Service) BuildRuntimeExecutors(
 }
 
 func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLookup, factoryCfg *interfaces.FactoryConfig, recorder workers.ModelEventRecorder, now func() time.Time, useRegistryCapabilities bool) []workerconstruction.RunnerDecorator {
-	decorators := make([]workerconstruction.RunnerDecorator, 0, 3)
+	decorators := make([]workerconstruction.RunnerDecorator, 0, 4)
 	if useRegistryCapabilities && s.providerRegistry != nil {
 		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
 			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
 		})
+		if s.invocationConductor != nil {
+			decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
+				return conductorInvocationRunner{
+					next:      inner,
+					conductor: s.invocationConductor,
+					providers: s.providerRegistry,
+				}
+			})
+		}
 	}
 	return append(decorators,
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {

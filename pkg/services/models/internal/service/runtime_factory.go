@@ -132,6 +132,9 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if o == nil {
 		return nil, missingDependencyError("Models service")
 	}
+	if err := models.ValidateRuntimeBinding(binding); err != nil {
+		return nil, err
+	}
 	assets, err := localmodels.NewAssetPuller(
 		binding.CacheDirectory, o.assetPlatform, o.assetHTTP, o.assetEndpoints,
 		o.assetMkdirAll, o.assetStat, o.assetHome, o.assetWriteFile, o.assetRename,
@@ -154,6 +157,118 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	)
 }
 
+func (o *Root) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) ListCatalog(
+	context.Context,
+	models.ListModelsRequest,
+) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetCatalogModel(
+	context.Context,
+	models.GetModelRequest,
+) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetModelReadiness(
+	context.Context,
+	models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) EnsureModelHost(
+	context.Context,
+	models.EnsureModelHostRequest,
+) (models.EnsureModelHostResult, error) {
+	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) InspectModelHost(
+	context.Context,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) StopModelHost(
+	context.Context,
+	models.StopModelHostRequest,
+) (models.StopModelHostResult, error) {
+	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) AcquireModelLease(
+	context.Context,
+	models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetModelLease(
+	context.Context,
+	models.GetModelLeaseRequest,
+) (models.GetModelLeaseResult, error) {
+	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) ReleaseModelLease(
+	context.Context,
+	models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }
@@ -168,6 +283,14 @@ func (o *Root) PullModel(context.Context, string) (models.PullResult, error) {
 
 func (o *Root) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, missingDependencyError("Models runtime binding")
+}
+
+func (o *Root) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+	return models.HostLease{}, missingDependencyError("Models runtime binding")
+}
+
+func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+	return missingDependencyError("Models runtime binding")
 }
 
 func (o *Root) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
@@ -264,6 +387,44 @@ func (s *runtimeService) ForRuntime(models.RuntimeBinding) (models.Service, erro
 	return s, nil
 }
 
+func (s *runtimeService) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	if err := models.ValidateLocalInvocationRequest(request); err != nil {
+		return models.LocalInvocationResult{}, err
+	}
 	return s.local.InvokeLocal(ctx, request)
 }

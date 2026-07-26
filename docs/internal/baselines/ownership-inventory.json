@@ -1,0 +1,4289 @@
+{
+  "version": 1,
+  "stage": "pss-f01-ownership-inventory",
+  "sortKey": "packagePath ascending byte order (path slash-separated)",
+  "fnd01SeedPath": "docs/internal/baselines/package-target-manifest.json",
+  "destinations": {
+    "owners": [
+      "factory_definitions",
+      "factory_sessions",
+      "factory_runtime",
+      "work",
+      "workers",
+      "providers",
+      "provider_sessions",
+      "models",
+      "automations",
+      "recordings",
+      "factory_visualization",
+      "operator_settings",
+      "system_initialization"
+    ],
+    "families": [
+      "initializer",
+      "root",
+      "wire",
+      "platform",
+      "transports"
+    ],
+    "exception": [
+      "edges"
+    ]
+  },
+  "processEdgesException": {
+    "packagePath": "pkg/services/edges",
+    "destination": "edges",
+    "kind": "architecture_exception",
+    "note": "Process Edges is the sole broad external-effect architecture exception for Packaged Service Structure; it is construction input for root.BuildProcess and functional-test overrides, not a product service."
+  },
+  "seedServices": [
+    {
+      "name": "Factory Definition",
+      "source": "docs/architecture/structures.md",
+      "destination": "factory_definitions"
+    },
+    {
+      "name": "Factory Session",
+      "source": "docs/architecture/structures.md",
+      "destination": "factory_sessions"
+    },
+    {
+      "name": "Factory Runtime",
+      "source": "docs/architecture/structures.md",
+      "destination": "factory_runtime"
+    },
+    {
+      "name": "Work",
+      "source": "docs/architecture/structures.md",
+      "destination": "work"
+    },
+    {
+      "name": "Worker Execution",
+      "source": "docs/architecture/structures.md",
+      "destination": "workers"
+    },
+    {
+      "name": "Provider Session",
+      "source": "docs/architecture/structures.md",
+      "destination": "provider_sessions"
+    },
+    {
+      "name": "Model Runtime",
+      "source": "docs/architecture/structures.md",
+      "destination": "models"
+    },
+    {
+      "name": "Automation",
+      "source": "docs/architecture/structures.md",
+      "destination": "automations"
+    },
+    {
+      "name": "Session Ledger and Projection",
+      "source": "docs/architecture/structures.md",
+      "destination": "recordings"
+    }
+  ],
+  "additionalCurrentRoots": [
+    "pkg/initializer",
+    "pkg/root",
+    "pkg/wire",
+    "pkg/platform",
+    "pkg/transports",
+    "pkg/services/providers",
+    "pkg/services/operator_settings",
+    "pkg/services/system_initialization",
+    "pkg/services/factory_visualization",
+    "pkg/services/edges"
+  ],
+  "ownerRationales": [
+    {
+      "serviceId": "automations",
+      "owner": "automations",
+      "kind": "top_level",
+      "targetPath": "pkg/services/automations",
+      "authority": "Desired/observed trigger instances, cursors/checkpoints, and Work Request generation from clocks or external observations.",
+      "stateStore": "Automation definitions, instance status, and cursor/checkpoint store owned by Automations.",
+      "lifecycle": "Reconciles desired specs into long-running trigger instances with start/stop/join/restart policy.",
+      "consumers": "Factory Runtime (via Work commands), Work Admission, Operator Settings, transports commanding reconcile/list/control.",
+      "transactionBoundary": "Trigger instance and cursor mutations stay inside Automations; Work admission is a cross-owner command.",
+      "failureRecovery": "Missed triggers, duplicate emissions, cursor recovery, cancellation, and downstream Work rejection are typed Automations facts."
+    },
+    {
+      "serviceId": "automations/cron",
+      "owner": "automations",
+      "kind": "nested",
+      "parentServiceId": "automations",
+      "targetPath": "pkg/services/automations/internal/services/cron",
+      "authority": "Deterministic schedule ticks that command Work admission.",
+      "stateStore": "Schedule/jitter/expiry configuration and tick cursors under Automations store.",
+      "lifecycle": "Produces ticks under Reconciliation supervision; no independent daemon outside Automations.",
+      "consumers": "Automations Reconciliation and Work Admission via Automations root.",
+      "transactionBoundary": "Shares Automations instance/cursor transaction; does not own Work content.",
+      "failureRecovery": "Invalid schedules and missed ticks surface as Automations status/recovery facts."
+    },
+    {
+      "serviceId": "automations/filesystem_watchers",
+      "owner": "automations",
+      "kind": "nested",
+      "parentServiceId": "automations",
+      "targetPath": "pkg/services/automations/internal/services/filesystem_watchers",
+      "authority": "Watch configured paths, preseed, debounce/coalesce, persist cursor, and command Work.",
+      "stateStore": "Watcher cursors and configured path subscriptions in Automations store.",
+      "lifecycle": "Long-running watch instances supervised by Reconciliation.",
+      "consumers": "Automations root consumers and Work Admission; moves filesystem ingest off Factory Runtime.",
+      "transactionBoundary": "Cursor and subscription mutations are Automations-local; Work creation is a command.",
+      "failureRecovery": "Watcher restart and cursor recovery remain Automations failure/recovery policy."
+    },
+    {
+      "serviceId": "automations/hosted_sources",
+      "owner": "automations",
+      "kind": "nested",
+      "parentServiceId": "automations",
+      "targetPath": "pkg/services/automations/internal/services/hosted_sources",
+      "authority": "Observe hosted systems, poll/restart/checkpoint, normalize observations, and command Work.",
+      "stateStore": "Hosted-source cursors/checkpoints and secrets resolution handles under Automations.",
+      "lifecycle": "Polling/restart lifecycle owned by Automations, not Workers Hosted Runner.",
+      "consumers": "Automations root and Work Admission; Workers retains only hosted Work execution.",
+      "transactionBoundary": "Observation/cursor state is Automations-local; Work Requests cross the Work boundary.",
+      "failureRecovery": "Poll/restart and secret-resolution failures classify as Automations source faults."
+    },
+    {
+      "serviceId": "automations/reconciliation",
+      "owner": "automations",
+      "kind": "nested",
+      "parentServiceId": "automations",
+      "targetPath": "pkg/services/automations/internal/services/reconciliation",
+      "authority": "Apply desired automation specs, construct instances, track status, and supervise lifecycle.",
+      "stateStore": "Desired/observed automation instance registry and status in Automations store.",
+      "lifecycle": "Owns start/stop/join/restart orchestration for trigger subservices.",
+      "consumers": "Automations root command surface and trigger subservices.",
+      "transactionBoundary": "Desired-spec application and instance status mutations are one Automations aggregate.",
+      "failureRecovery": "Restart policy and reconcile conflicts remain Automations recovery behavior."
+    },
+    {
+      "serviceId": "automations/script_pollers",
+      "owner": "automations",
+      "kind": "nested",
+      "parentServiceId": "automations",
+      "targetPath": "pkg/services/automations/internal/services/script_pollers",
+      "authority": "Supervise polling commands/sources that emit canonical Work Requests.",
+      "stateStore": "Poller cursors/checkpoints under Automations store.",
+      "lifecycle": "Timeout/restart supervision under Reconciliation.",
+      "consumers": "Automations root and Work Admission.",
+      "transactionBoundary": "Cursor and poller status are Automations-local; emitted Work crosses owners by command.",
+      "failureRecovery": "Timeout and parse failures remain Automations poller recovery facts."
+    },
+    {
+      "serviceId": "factory_definitions",
+      "owner": "factory_definitions",
+      "kind": "top_level",
+      "targetPath": "pkg/services/factory_definitions",
+      "authority": "Authored Factory aggregate catalog: validation, persistence, versioning, activation, and packaged installation.",
+      "stateStore": "Named Factory roots, authored layouts, .current-factory pointer, snapshots, and packaged assets.",
+      "lifecycle": "No autonomous background daemon; activation is request-driven through Factory Sessions.",
+      "consumers": "Factory Sessions, System Bootstrap, Automations (trigger specs), transports, Wire construction.",
+      "transactionBoundary": "Catalog/authoring/compilation/validation/snapshot/distribution share one Definition aggregate transaction.",
+      "failureRecovery": "Malformed layouts, activation conflicts, and persistence failures remain Definition-owned typed facts."
+    },
+    {
+      "serviceId": "factory_definitions/authoring_layout",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "authority": "Parse/render split authored layouts and atomically create/replace/flatten/expand one Factory aggregate.",
+      "stateStore": "Authored layout files under Definition-owned filesystem datastore.",
+      "lifecycle": "Request-driven authoring operations; no independent daemon.",
+      "consumers": "Factory Definitions root and Definition-owned transports.",
+      "transactionBoundary": "Layout writes participate in the Definition aggregate transaction.",
+      "failureRecovery": "Parse/render and layout conflicts are Definition authoring failures."
+    },
+    {
+      "serviceId": "factory_definitions/catalog",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/catalog",
+      "authority": "List/delete/resolve named/project/global Factories and atomically manage the current pointer.",
+      "stateStore": "Named Factory catalog and .current-factory pointer.",
+      "lifecycle": "Catalog mutations are command-driven; no background reconciler.",
+      "consumers": "Factory Definitions root, System Bootstrap, Factory Sessions activation.",
+      "transactionBoundary": "Catalog and current-pointer updates are atomic within Definitions.",
+      "failureRecovery": "Missing/conflicting names and pointer races are Definition catalog failures."
+    },
+    {
+      "serviceId": "factory_definitions/compilation",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/compilation",
+      "authority": "Convert authored/canonical source into one normalized LoadedFactorySource without executing it.",
+      "stateStore": "Compiled effective definition artifacts derived from authored store.",
+      "lifecycle": "Compile on command; Runtime executes, Definitions does not.",
+      "consumers": "Factory Definitions root and Runtime semantic-validation callers via root.",
+      "transactionBoundary": "Compilation outputs are Definition-owned; Runtime does not mutate authored store.",
+      "failureRecovery": "Compile/reference-resolution failures stay on the Definition boundary."
+    },
+    {
+      "serviceId": "factory_definitions/distribution",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/distribution",
+      "authority": "Built-in package catalog, packaged installation, and scaffold creation producing Factory aggregates.",
+      "stateStore": "Packaged Factory assets and installation outputs in Definition store.",
+      "lifecycle": "Install/scaffold commands; no marketplace lifecycle in this program.",
+      "consumers": "System Bootstrap, CLI/HTTP Definition adapters, Factory Definitions root.",
+      "transactionBoundary": "Installation writes the same Definition aggregate transactionally.",
+      "failureRecovery": "Install/scaffold failures roll back or report Definition distribution faults."
+    },
+    {
+      "serviceId": "factory_definitions/snapshots_portability",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "authority": "Capture detached snapshots and prepare/materialize bundled assets for export/import/replay use.",
+      "stateStore": "Editable/version snapshots and bundled portable assets.",
+      "lifecycle": "Snapshot/export/import are request-driven operations.",
+      "consumers": "Recordings replay consumers via Definition compile/import root operations; Definition transports.",
+      "transactionBoundary": "Snapshot materialization stays inside Definitions; Recordings owns replay plans.",
+      "failureRecovery": "Portability validation and materialization failures are Definition-owned."
+    },
+    {
+      "serviceId": "factory_definitions/validation",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/validation",
+      "authority": "Structural, topology, pre-persist, tool, and workstation compatibility validation policy.",
+      "stateStore": "Validation policy and diagnostics over Definition aggregate; may query Runtime root for orchestration semantics.",
+      "lifecycle": "Validation runs on command before persist/activation.",
+      "consumers": "Factory Definitions root and authoring/activation callers.",
+      "transactionBoundary": "Validation does not mutate peer stores; persist remains Definition transaction.",
+      "failureRecovery": "Validation diagnostics are Definition rejection facts, not Runtime failures."
+    },
+    {
+      "serviceId": "factory_runtime",
+      "owner": "factory_runtime",
+      "kind": "top_level",
+      "targetPath": "pkg/services/factory_runtime",
+      "authority": "Per-session orchestration, execution state, instance mechanics, dispatch planning, and checkpoints.",
+      "stateStore": "Runtime checkpoints, submission/result/dispatch buffers, and live instance state.",
+      "lifecycle": "Owns run handle pause/resume/stop/replacement/recovery for one leased execution instance.",
+      "consumers": "Factory Sessions (lease/start), Workers (dispatch), Work, Recordings (event candidates), Visualization (sanitized observations).",
+      "transactionBoundary": "Runtime instance and checkpoint mutations are Runtime-local; peer Work/Workers/Recordings interactions are commands/events.",
+      "failureRecovery": "Crash recovery uses Runtime checkpoints plus Recordings history; orchestration failures normalize at Runtime root."
+    },
+    {
+      "serviceId": "factory_runtime/checkpoint_recovery",
+      "owner": "factory_runtime",
+      "kind": "nested",
+      "parentServiceId": "factory_runtime",
+      "targetPath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "authority": "Capture/load versioned execution checkpoints and restore orchestration state idempotently.",
+      "stateStore": "Runtime-owned checkpoint store coordinated with Recordings history ownership.",
+      "lifecycle": "Recovery commands after durability decision; not an independent deployable yet.",
+      "consumers": "Factory Runtime root and Instance Host.",
+      "transactionBoundary": "Checkpoint write/load is Runtime-local; canonical history remains Recordings.",
+      "failureRecovery": "Incompatible checkpoints and restore conflicts are Runtime recovery failures."
+    },
+    {
+      "serviceId": "factory_runtime/dispatch_planning",
+      "owner": "factory_runtime",
+      "kind": "nested",
+      "parentServiceId": "factory_runtime",
+      "targetPath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
+      "authority": "Convert enabled transitions into stable dispatch intents and accept correlated results.",
+      "stateStore": "In-flight dispatch intent/outbox buffers owned by Runtime.",
+      "lifecycle": "Publishes intents after Workers command/result contract lock.",
+      "consumers": "Workers execution and Factory Runtime Instance Host.",
+      "transactionBoundary": "Intent lifecycle is Runtime-local; Workers owns execution attempts.",
+      "failureRecovery": "Duplicate/correlated-result conflicts recover inside Runtime outbox policy."
+    },
+    {
+      "serviceId": "factory_runtime/instance_host",
+      "owner": "factory_runtime",
+      "kind": "nested",
+      "parentServiceId": "factory_runtime",
+      "targetPath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "authority": "Construct inert instances from lease/start data and manage run handle lifecycle.",
+      "stateStore": "Live instance handles and runtime-owned artifact closure metadata.",
+      "lifecycle": "Start/stop/pause/resume/replace/recover for one Runtime instance.",
+      "consumers": "Factory Sessions placement/lease commands and Orchestration.",
+      "transactionBoundary": "Instance handle mutations stay in Runtime; Session desired lifecycle stays in Sessions.",
+      "failureRecovery": "Replacement and recovery failures remain Runtime instance faults."
+    },
+    {
+      "serviceId": "factory_runtime/orchestration",
+      "owner": "factory_runtime",
+      "kind": "nested",
+      "parentServiceId": "factory_runtime",
+      "targetPath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "authority": "Select orchestration kind, compile/validate/preview/execute/resume strategy semantics, encode checkpoints.",
+      "stateStore": "Compiled orchestration strategy state for the active instance.",
+      "lifecycle": "Execute/resume under Instance Host; Petri/JavaScript are internal variants.",
+      "consumers": "Factory Runtime root, Definition semantic validation callers via Runtime root.",
+      "transactionBoundary": "Strategy execution shares Runtime instance transaction; authored Factory config remains Definitions.",
+      "failureRecovery": "Strategy validation and execution faults normalize through Runtime orchestration."
+    },
+    {
+      "serviceId": "factory_sessions",
+      "owner": "factory_sessions",
+      "kind": "top_level",
+      "targetPath": "pkg/services/factory_sessions",
+      "authority": "Session identity, desired lifecycle, placement, recovery, discovery, invocation coordination, and session response streams.",
+      "stateStore": "Live session registry, session control store, and session-owned persistence coordination (canonical history delegated to Recordings).",
+      "lifecycle": "Owns desired lifecycle reconcile, live selection/activation, and durable start/resume/control.",
+      "consumers": "Transports, Factory Runtime, Work, Workers, Provider Sessions, Models, Visualization, Recordings.",
+      "transactionBoundary": "Session aggregate mutations are Sessions-local; peer services are commanded through roots.",
+      "failureRecovery": "Placement/activation conflicts, durable control failures, and timeout/cancellation are Sessions recovery facts."
+    },
+    {
+      "serviceId": "factory_sessions/durable_execution",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/durable_execution",
+      "authority": "Durable start/resume/control/inspection and session-owned persistence coordination.",
+      "stateStore": "Session durable execution identity/persistence handles; delegates canonical history/artifacts to Recordings.",
+      "lifecycle": "Durable control lifecycle for a session.",
+      "consumers": "Factory Sessions root, Live Runtime, Recordings root.",
+      "transactionBoundary": "Session persistence coordination is Sessions-local; ledger append is Recordings command.",
+      "failureRecovery": "Durable control and resume conflicts recover in Durable Execution."
+    },
+    {
+      "serviceId": "factory_sessions/identity",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/identity",
+      "authority": "Normalize/discover targets, derive logical keys, resolve folders, registry-aware identity lookup.",
+      "stateStore": "Logical session keys and folder/identity resolution metadata.",
+      "lifecycle": "Identity resolution is request-driven under Sessions.",
+      "consumers": "Factory Sessions root and nested Live Runtime/Durable Execution.",
+      "transactionBoundary": "Identity derivation shares Sessions aggregate authority.",
+      "failureRecovery": "Ambiguous/missing identity targets are Sessions identity failures."
+    },
+    {
+      "serviceId": "factory_sessions/invocation",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/invocation",
+      "authority": "Resolve invocation input, command Work, observe completion, enforce timeout/cancellation, record telemetry.",
+      "stateStore": "Per-session invocation observation state.",
+      "lifecycle": "Timeout/cancellation lifecycle for one session invocation.",
+      "consumers": "Work root, Factory Sessions root, Recordings telemetry consumers.",
+      "transactionBoundary": "Invocation coordination is Sessions-local; Work admission/state are Work commands.",
+      "failureRecovery": "Timeouts and cancellations are Sessions invocation recovery facts."
+    },
+    {
+      "serviceId": "factory_sessions/live_runtime",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/live_runtime",
+      "authority": "Open/list/get/snapshot/pause/resume/close; sole owner of live registry, selection, activation lock, cleanup.",
+      "stateStore": "Live session registry and mutable live-runtime aggregate.",
+      "lifecycle": "Live activation lock and cleanup lifecycle.",
+      "consumers": "Factory Sessions root, Runtime Opening, Durable Execution, Response Stream.",
+      "transactionBoundary": "Live registry mutations are exclusive to Live Runtime inside Sessions.",
+      "failureRecovery": "Activation races and cleanup failures recover under Live Runtime."
+    },
+    {
+      "serviceId": "factory_sessions/response_stream",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/response_stream",
+      "authority": "Allocate session event stores, publish/complete, filter subscriptions, enforce retention/backpressure, track cursors.",
+      "stateStore": "Ephemeral session response-event stores and cursors.",
+      "lifecycle": "Publish/complete and subscription lifecycle for a session.",
+      "consumers": "Factory Sessions root, transports/Visualization presentation consumers.",
+      "transactionBoundary": "Response-store mutations are Sessions-local; canonical Factory events belong to Recordings.",
+      "failureRecovery": "Backpressure/drop and retention faults are Response Stream recovery policy."
+    },
+    {
+      "serviceId": "factory_sessions/runtime_opening",
+      "owner": "factory_sessions",
+      "kind": "nested",
+      "parentServiceId": "factory_sessions",
+      "targetPath": "pkg/services/factory_sessions/internal/services/runtime_opening",
+      "authority": "Coordinate peer root services and return a lifecycle plan without importing peer implementations.",
+      "stateStore": "No independent datastore; produces lifecycle plan over already-constructed roles.",
+      "lifecycle": "Opening/binding lifecycle after root binding contract stabilizes.",
+      "consumers": "Factory Sessions root and peer service roots (Definitions, Runtime, Workers, Models, Recordings).",
+      "transactionBoundary": "Does not own peer transactions; only plans Sessions-owned activation steps.",
+      "failureRecovery": "Binding/plan failures surface as Sessions opening faults without peer downcasts."
+    },
+    {
+      "serviceId": "factory_visualization",
+      "owner": "factory_visualization",
+      "kind": "top_level",
+      "targetPath": "pkg/services/factory_visualization",
+      "authority": "Request-activated visualization lifecycle, live projection, response/event presentation, queues, backpressure, final-write coordination.",
+      "stateStore": "Visualization cursors, output queues, and presentation state for an activated request.",
+      "lifecycle": "Inert by default; Start/Stop/Wait/cleanup only when request parameters activate it.",
+      "consumers": "Transports (parameters/codecs/sinks), Recordings query/subscription, sanitized Runtime observations.",
+      "transactionBoundary": "Activation and presentation mutations are Visualization-local; Recordings/Runtime remain peer roots.",
+      "failureRecovery": "Backpressure drops, activation failures, and drain errors are Visualization recovery facts."
+    },
+    {
+      "serviceId": "factory_visualization/activation_lifecycle",
+      "owner": "factory_visualization",
+      "kind": "nested",
+      "parentServiceId": "factory_visualization",
+      "targetPath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "authority": "Interpret approved request options, bind session/runtime, own Start/Stop/Wait/cleanup.",
+      "stateStore": "Activation binding state for the request.",
+      "lifecycle": "Request-driven visualization lifecycle.",
+      "consumers": "Factory Visualization root and transport adapters.",
+      "transactionBoundary": "Activation state is Visualization-local.",
+      "failureRecovery": "Failed binds and unclean shutdowns are activation recovery faults."
+    },
+    {
+      "serviceId": "factory_visualization/live_view_projection",
+      "owner": "factory_visualization",
+      "kind": "nested",
+      "parentServiceId": "factory_visualization",
+      "targetPath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "authority": "Retain cursor/events, subscribe retained-then-live, consume Runtime observations and Recordings queries, emit View.",
+      "stateStore": "Live view cursor/event retention owned by Visualization.",
+      "lifecycle": "Subscription lifecycle under activation.",
+      "consumers": "Recordings projection/query root and Runtime observation contract.",
+      "transactionBoundary": "View projection state is Visualization-local; canonical projections stay in Recordings.",
+      "failureRecovery": "Reconnect/gap handling follows Visualization cursor policy."
+    },
+    {
+      "serviceId": "factory_visualization/response_event_presentation",
+      "owner": "factory_visualization",
+      "kind": "nested",
+      "parentServiceId": "factory_visualization",
+      "targetPath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
+      "authority": "Best-effort/lossless queues, bounded drop/backpressure, exclusive final writes, drain.",
+      "stateStore": "Output queues and presentation buffers.",
+      "lifecycle": "Queue drain lifecycle tied to activation.",
+      "consumers": "Transport sinks/codecs and Visualization root.",
+      "transactionBoundary": "Queue mutations are Visualization-local.",
+      "failureRecovery": "Drop/backpressure and final-write conflicts are presentation recovery facts."
+    },
+    {
+      "serviceId": "models",
+      "owner": "models",
+      "kind": "top_level",
+      "targetPath": "pkg/services/models",
+      "authority": "Opaque runtime scopes, model catalog, assets, supervised hosting/readiness, nested leases, and inference.",
+      "stateStore": "Model catalog/readiness store, asset cache layout, supervised runtime slots and leases.",
+      "lifecycle": "Process-scoped service is inert until commanded; hosts manage unload/eviction/shutdown.",
+      "consumers": "Workers, Factory Sessions, Operator Settings, Models HTTP/CLI adapters.",
+      "transactionBoundary": "Catalog/assets/host/lease/inference share Models process scope; peers never see host internals.",
+      "failureRecovery": "Pull/host/lease/inference failures normalize at Models root with typed readiness/availability facts."
+    },
+    {
+      "serviceId": "models/assets",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models",
+      "targetPath": "pkg/services/models/internal/services/assets",
+      "authority": "Resolve source/cache layout, pull, verify, classify, remove, and report immutable asset readiness.",
+      "stateStore": "Asset cache and verification metadata.",
+      "lifecycle": "Pull/remove operations; no independent public lifecycle.",
+      "consumers": "Models Catalog/Inference via Models root.",
+      "transactionBoundary": "Asset mutations are Models-local.",
+      "failureRecovery": "Pull/verify failures classify as Models asset readiness faults."
+    },
+    {
+      "serviceId": "models/catalog",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models",
+      "targetPath": "pkg/services/models/internal/services/catalog",
+      "authority": "Canonical model identity, configured operation/binding discovery, source metadata, list/get, readiness projection.",
+      "stateStore": "Model catalog and configured binding metadata.",
+      "lifecycle": "Catalog queries/commands; readiness projection without hosting.",
+      "consumers": "Models root consumers including Workers and direct `you models` flows.",
+      "transactionBoundary": "Catalog identity is Models-local; Providers owns external provider IDs.",
+      "failureRecovery": "Unknown model/operation lookups are Catalog rejection facts."
+    },
+    {
+      "serviceId": "models/inference",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models",
+      "targetPath": "pkg/services/models/internal/services/inference",
+      "authority": "Resolve scoped model operation, acquire lease, load/reuse handle, invoke, release, normalize artifacts/failures.",
+      "stateStore": "Invocation-time handle/lease usage over Runtime Host slots.",
+      "lifecycle": "Acquire/release around one inference operation.",
+      "consumers": "Workers and Models transports via Models root.",
+      "transactionBoundary": "Inference does not own catalog/host stores; it uses Host leases transactionally for one call.",
+      "failureRecovery": "Invocation and artifact-export failures normalize through Inference."
+    },
+    {
+      "serviceId": "models/runtime_host",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models",
+      "targetPath": "pkg/services/models/internal/services/runtime_host",
+      "authority": "Own supervised runtime slots, health/readiness, handle reuse, idle unload, resource-pressure eviction, shutdown.",
+      "stateStore": "Supervised process/runtime slot registry.",
+      "lifecycle": "Host supervision lifecycle including idle unload and shutdown.",
+      "consumers": "Models Inference and Leases nested subservice.",
+      "transactionBoundary": "Slot mutations are exclusive to Runtime Host (+ nested Leases).",
+      "failureRecovery": "Eviction and supervision faults recover inside Runtime Host."
+    },
+    {
+      "serviceId": "models/runtime_host/leases",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models/runtime_host",
+      "targetPath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
+      "authority": "Capacity reservation, holder identity, acquisition/release/expiry, contention over Host-owned slots.",
+      "stateStore": "Lease records over Runtime Host slots.",
+      "lifecycle": "Lease acquire/release/expiry lifecycle nested under Host.",
+      "consumers": "Models Inference via Runtime Host.",
+      "transactionBoundary": "Leases share Host atomic capacity invariant; not a sibling top-level cut.",
+      "failureRecovery": "Contention/expiry failures are lease recovery facts under Host."
+    },
+    {
+      "serviceId": "models/runtime_scopes",
+      "owner": "models",
+      "kind": "nested",
+      "parentServiceId": "models",
+      "targetPath": "pkg/services/models/internal/services/runtime_scopes",
+      "authority": "Open/close opaque scopes for detached Factory-session model configuration without constructing another Service.",
+      "stateStore": "Scope binding registry rejecting stale/foreign references.",
+      "lifecycle": "Open/close scope lifecycle; does not construct hosts/pullers.",
+      "consumers": "Factory Sessions and Models root callers.",
+      "transactionBoundary": "Scope registry is Models-local and process-scoped.",
+      "failureRecovery": "Stale/foreign scope references are typed scope faults."
+    },
+    {
+      "serviceId": "operator_settings",
+      "owner": "operator_settings",
+      "kind": "top_level",
+      "targetPath": "pkg/services/operator_settings",
+      "authority": "Operator-owned configuration, backend identity, defaults, provider/worker presets, precedence, semantic updates, atomic persistence.",
+      "stateStore": "Authoritative operator settings document store.",
+      "lifecycle": "Load/update/persist on command; no autonomous reconciler.",
+      "consumers": "Factory Sessions, Workers, Models, System Bootstrap, CLI, Wire.",
+      "transactionBoundary": "Document and resolution share one atomic operator document aggregate.",
+      "failureRecovery": "Malformed/unsupported/conflict/persistence failures are Operator Settings typed facts."
+    },
+    {
+      "serviceId": "operator_settings/document",
+      "owner": "operator_settings",
+      "kind": "nested",
+      "parentServiceId": "operator_settings",
+      "targetPath": "pkg/services/operator_settings/internal/services/document",
+      "authority": "Load, decode, normalize, validate, identity/version, inventory, semantic update, and atomically persist the operator document.",
+      "stateStore": "Operator settings document files/store.",
+      "lifecycle": "Atomic persist lifecycle for document updates.",
+      "consumers": "Operator Settings Resolution and root consumers.",
+      "transactionBoundary": "Document writes are the Operator Settings transaction.",
+      "failureRecovery": "Decode/validation/persist failures stay on Document."
+    },
+    {
+      "serviceId": "operator_settings/resolution",
+      "owner": "operator_settings",
+      "kind": "nested",
+      "parentServiceId": "operator_settings",
+      "targetPath": "pkg/services/operator_settings/internal/services/resolution",
+      "authority": "Apply backend scope, environment, defaults, presets, and invocation overrides into an immutable effective selection.",
+      "stateStore": "No independent store; reads Document and environment/effect ports.",
+      "lifecycle": "Pure resolution on command.",
+      "consumers": "Workers/Models/Sessions via Operator Settings root; may query Providers for canonical IDs.",
+      "transactionBoundary": "Resolution does not mutate Document; callers persist via Document commands.",
+      "failureRecovery": "Conflict/unsupported override failures are Resolution facts."
+    },
+    {
+      "serviceId": "provider_sessions",
+      "owner": "provider_sessions",
+      "kind": "top_level",
+      "targetPath": "pkg/services/provider_sessions",
+      "authority": "Secure resolution and read-only inspection of provider-owned persisted session artifacts, transcripts, reasoning, tools, parse errors, and usage.",
+      "stateStore": "Resolved provider-session and transcript projections; no provider execution store.",
+      "lifecycle": "Read-only resolve/inspect lifecycle; no execution daemon.",
+      "consumers": "Factory Sessions, Workers (carry SessionRef), HTTP Provider Sessions adapters.",
+      "transactionBoundary": "Readers share Provider Sessions root transaction for one SessionRef resolve; Providers owns SessionRef minting.",
+      "failureRecovery": "Secure path/parse failures and unknown SessionRef errors are Provider Sessions facts."
+    },
+    {
+      "serviceId": "provider_sessions/codex_reader",
+      "owner": "provider_sessions",
+      "kind": "nested",
+      "parentServiceId": "provider_sessions",
+      "targetPath": "pkg/services/provider_sessions/internal/services/codex_reader",
+      "authority": "Secure JSONL rollout discovery, timestamped layouts, symlink containment, native parsing, normalized detail projection.",
+      "stateStore": "Codex transcript discovery/projection state for a resolve.",
+      "lifecycle": "Read-only resolve path for Codex SessionRefs.",
+      "consumers": "Provider Sessions root registry.",
+      "transactionBoundary": "Reader-local parse projection; no cross-owner writes.",
+      "failureRecovery": "Symlink/path and parse errors normalize through Codex Reader."
+    },
+    {
+      "serviceId": "provider_sessions/cursor_reader",
+      "owner": "provider_sessions",
+      "kind": "nested",
+      "parentServiceId": "provider_sessions",
+      "targetPath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "authority": "Cursor directory/store resolution, SQLite access, protobuf/blob decoding, transcript reconstruction, usage projection.",
+      "stateStore": "Cursor store resolution/projection state for a resolve.",
+      "lifecycle": "Read-only resolve path for Cursor SessionRefs.",
+      "consumers": "Provider Sessions root registry.",
+      "transactionBoundary": "Reader-local decode projection; no provider execution.",
+      "failureRecovery": "Store/decode failures normalize through Cursor Reader."
+    },
+    {
+      "serviceId": "providers",
+      "owner": "providers",
+      "kind": "top_level",
+      "targetPath": "pkg/services/providers",
+      "authority": "Provider catalog/enumeration, identity, availability, capabilities, one normalized execution attempt, native adapters, SessionRef extraction.",
+      "stateStore": "Provider catalog descriptors and availability/capability snapshots; execution is attempt-scoped.",
+      "lifecycle": "Catalog refresh and one-shot Execute attempts; no Work retry policy.",
+      "consumers": "Workers (selection/retry), Operator Settings (validation), transports (`you providers list`), Provider Sessions (SessionRef).",
+      "transactionBoundary": "Catalog identity and one Execute attempt are Providers-local; Workers owns dispatch retry/scheduling.",
+      "failureRecovery": "Availability/prerequisite and native execution failures classify at Providers; Workers decides retry."
+    },
+    {
+      "serviceId": "providers/catalog",
+      "owner": "providers",
+      "kind": "nested",
+      "parentServiceId": "providers",
+      "targetPath": "pkg/services/providers/internal/services/catalog",
+      "authority": "Canonical provider IDs/aliases, deterministic list/get, metadata, availability/prerequisite probes, capability snapshots.",
+      "stateStore": "Provider catalog and probe snapshots.",
+      "lifecycle": "List/get/refresh on command.",
+      "consumers": "Providers root, Operator Settings validation, Workers selection data.",
+      "transactionBoundary": "Catalog mutations/snapshots are Providers-local.",
+      "failureRecovery": "Probe and unknown-ID failures are Catalog facts."
+    },
+    {
+      "serviceId": "providers/execution",
+      "owner": "providers",
+      "kind": "nested",
+      "parentServiceId": "providers",
+      "targetPath": "pkg/services/providers/internal/services/execution",
+      "authority": "Select native adapter and perform one normalized provider attempt with stream decode, progress, diagnostics, optional SessionRef.",
+      "stateStore": "Attempt-scoped execution state; no durable Work store.",
+      "lifecycle": "One Execute attempt lifecycle.",
+      "consumers": "Workers via Providers root; Provider Sessions resolves emitted SessionRef.",
+      "transactionBoundary": "Attempt boundary is Providers-local; Workers owns multi-attempt policy.",
+      "failureRecovery": "Native adapter and failure-normalization faults are Execution facts."
+    },
+    {
+      "serviceId": "recordings",
+      "owner": "recordings",
+      "kind": "top_level",
+      "targetPath": "pkg/services/recordings",
+      "authority": "Canonical event acceptance, ordering, replay, recording lifecycle, artifacts/export, subscriptions, and query projections.",
+      "stateStore": "Canonical session event store, artifact store, and projection store.",
+      "lifecycle": "Recorder capture/flush lifecycle plus replay/delivery; projections reduce canonical facts.",
+      "consumers": "Factory Sessions, Factory Runtime, Workers, Visualization, HTTP/CLI dashboard/history consumers.",
+      "transactionBoundary": "Ledger append/projection rebuild share Recordings canonical identity; peers emit facts, they do not write the ledger.",
+      "failureRecovery": "Gap/cursor/retention, replay divergence, and recorder crash/finalization are Recordings recovery concerns."
+    },
+    {
+      "serviceId": "recordings/artifacts_export",
+      "owner": "recordings",
+      "kind": "nested",
+      "parentServiceId": "recordings",
+      "targetPath": "pkg/services/recordings/internal/services/artifacts_export",
+      "authority": "Persist replay artifacts and build/validate/decode/atomically export privacy-bounded portable recordings.",
+      "stateStore": "Artifact store and portable export packages.",
+      "lifecycle": "Export/materialize on command; atomic write policy.",
+      "consumers": "Recordings Replay and public export consumers.",
+      "transactionBoundary": "Artifact writes are Recordings-local and privacy-bounded.",
+      "failureRecovery": "Export validation and atomic-write failures are Artifacts/Export faults."
+    },
+    {
+      "serviceId": "recordings/canonical_ledger",
+      "owner": "recordings",
+      "kind": "nested",
+      "parentServiceId": "recordings",
+      "targetPath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "authority": "Validate, sequence, idempotently append, retain, and subscribe to canonical Factory events.",
+      "stateStore": "Canonical session event store with cursor/gap/retention policy.",
+      "lifecycle": "Append/subscribe lifecycle for canonical facts.",
+      "consumers": "Runtime/Workers/Sessions emitters and Projection/Replay consumers via Recordings root.",
+      "transactionBoundary": "Ledger append is the Recordings source-of-truth transaction.",
+      "failureRecovery": "Idempotency, gap, and retention conflicts recover in Canonical Ledger."
+    },
+    {
+      "serviceId": "recordings/projection_query",
+      "owner": "recordings",
+      "kind": "nested",
+      "parentServiceId": "recordings",
+      "targetPath": "pkg/services/recordings/internal/services/projection_query",
+      "authority": "Deterministically reduce canonical events into world-state and customer/dashboard views; validate reconnect projections.",
+      "stateStore": "Projection store derived from canonical ledger.",
+      "lifecycle": "Projection rebuild/query lifecycle private to Recordings.",
+      "consumers": "Visualization, Sessions, dashboard transports via Recordings root.",
+      "transactionBoundary": "Projection rebuild is Recordings-local; not a separate deployable in this program.",
+      "failureRecovery": "Reconnect/projection divergence faults are Projection/Query recovery facts."
+    },
+    {
+      "serviceId": "recordings/recording_lifecycle",
+      "owner": "recordings",
+      "kind": "nested",
+      "parentServiceId": "recordings",
+      "targetPath": "pkg/services/recordings/internal/services/recording_lifecycle",
+      "authority": "Select session recording target, capture events, periodic/final flush, error accumulation, crash/finalization.",
+      "stateStore": "Recorder target and flush state for a session recording.",
+      "lifecycle": "Capture/flush/finalization lifecycle.",
+      "consumers": "Factory Sessions/Runtime emitters via Recordings root.",
+      "transactionBoundary": "Recorder state is Recordings-local around canonical append.",
+      "failureRecovery": "Crash/final flush failures recover in Recording Lifecycle."
+    },
+    {
+      "serviceId": "recordings/replay",
+      "owner": "recordings",
+      "kind": "nested",
+      "parentServiceId": "recordings",
+      "targetPath": "pkg/services/recordings/internal/services/replay",
+      "authority": "Load/validate/hydrate historical recordings, deterministic clock, replay plans/hooks, delivery timing, divergence detection.",
+      "stateStore": "Historical recording loads and replay plan handles.",
+      "lifecycle": "Replay delivery lifecycle with deterministic timing.",
+      "consumers": "Dashboard/CLI replay consumers and Artifacts/Export.",
+      "transactionBoundary": "Replay plans are Recordings-owned; peers do not import replay implementations.",
+      "failureRecovery": "Divergence and hydrate failures are Replay recovery facts."
+    },
+    {
+      "serviceId": "system_initialization",
+      "owner": "system_initialization",
+      "kind": "top_level",
+      "targetPath": "pkg/services/system_initialization",
+      "authority": "Customer-invoked initialization workflow coordinating Operator Settings and Factory Definition without owning their stores.",
+      "stateStore": "No independent datastore; observes initialization outcome only.",
+      "lifecycle": "Single Initialize command with idempotent/partial-failure reporting.",
+      "consumers": "CLI/HTTP `you init` adapters; commands Operator Settings and Factory Definitions roots.",
+      "transactionBoundary": "Cross-owner ordering only; Settings and Definitions retain their own transactions/rollback.",
+      "failureRecovery": "Partial failure/rollback reporting is Bootstrap-owned without absorbing peer stores."
+    },
+    {
+      "serviceId": "work",
+      "owner": "work",
+      "kind": "top_level",
+      "targetPath": "pkg/services/work",
+      "authority": "Work Request admission, secure content staging/materialization, invocation/return policy, lineage, state commands, and detached queries.",
+      "stateStore": "Work and dispatch store plus staged content references.",
+      "lifecycle": "Admission and state commands; no scheduling daemon (Automations owns triggers).",
+      "consumers": "Automations, Factory Runtime, Factory Sessions, Workers, Recordings, Definitions, transports.",
+      "transactionBoundary": "Admission/content/state share Work identity and mutation invariants.",
+      "failureRecovery": "Acceptance/rejection, staging/materialization, and state-command failures are Work facts."
+    },
+    {
+      "serviceId": "work/admission",
+      "owner": "work",
+      "kind": "nested",
+      "parentServiceId": "work",
+      "targetPath": "pkg/services/work/internal/services/admission",
+      "authority": "Normalize, validate, deduplicate, authorize, and accept Work Requests; emit acceptance/rejection facts.",
+      "stateStore": "Accepted Work Request records in Work store.",
+      "lifecycle": "Admission is command-driven.",
+      "consumers": "Automations and public protocols via Work root; Runtime consumes admitted Work.",
+      "transactionBoundary": "Acceptance is the Work intake transaction.",
+      "failureRecovery": "Validation/authorization rejections are Admission facts."
+    },
+    {
+      "serviceId": "work/content_materialization",
+      "owner": "work",
+      "kind": "nested",
+      "parentServiceId": "work",
+      "targetPath": "pkg/services/work/internal/services/content_materialization",
+      "authority": "Resolve staged/local/remote/data-URL content with cache, SSRF, size, cleanup, and cancellation policy.",
+      "stateStore": "Materialization cache and resolved content handles.",
+      "lifecycle": "Resolve/cleanup lifecycle for content fetches.",
+      "consumers": "Workers and Work root consumers needing immutable content.",
+      "transactionBoundary": "Materialization policy is Work-local; Workers do not import Work modules.",
+      "failureRecovery": "SSRF/size/cancellation failures are Materialization facts."
+    },
+    {
+      "serviceId": "work/content_staging",
+      "owner": "work",
+      "kind": "nested",
+      "parentServiceId": "work",
+      "targetPath": "pkg/services/work/internal/services/content_staging",
+      "authority": "Securely persist submitted content, issue/verify opaque references, enforce expiry and owned-path policy.",
+      "stateStore": "Staged content reference store and owned paths.",
+      "lifecycle": "Stage/expire/cleanup lifecycle.",
+      "consumers": "Work Admission and Materialization via Work root.",
+      "transactionBoundary": "Staging writes share Work content transaction.",
+      "failureRecovery": "Expiry and path-policy violations are Staging facts."
+    },
+    {
+      "serviceId": "work/state_access",
+      "owner": "work",
+      "kind": "nested",
+      "parentServiceId": "work",
+      "targetPath": "pkg/services/work/internal/services/state_access",
+      "authority": "Adapt Factory Sessions root for submit/move/read snapshot operations and detached list/get/move results.",
+      "stateStore": "Detached Work query/projection results over Work store; never exposes Runtime/Petri state.",
+      "lifecycle": "Read/move commands without peer store access.",
+      "consumers": "Transports and peer services via Work root; may query Sessions/Recordings roots.",
+      "transactionBoundary": "State Access does not write Sessions/Recordings stores.",
+      "failureRecovery": "Not-found and move conflicts are State Access facts."
+    },
+    {
+      "serviceId": "workers",
+      "owner": "workers",
+      "kind": "top_level",
+      "targetPath": "pkg/services/workers",
+      "authority": "Runner selection/assembly, workstation behavior, capacity, dispatch execution policy, retry, and Work results.",
+      "stateStore": "Worker registry/execution store and immutable runtime assembly artifacts.",
+      "lifecycle": "Dispatch execution and runner lifecycles; Providers owns native provider attempts.",
+      "consumers": "Factory Runtime dispatch, Factory Sessions, Models, Providers, Work, Recordings.",
+      "transactionBoundary": "Execution/retry policy is Workers-local; Providers Execute is one attempt command.",
+      "failureRecovery": "Dispatch/retry/cancellation failures normalize as Workers execution facts."
+    },
+    {
+      "serviceId": "workers/runners",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers",
+      "targetPath": "pkg/services/workers/internal/services/runners",
+      "authority": "Common private Runner contract/registry implemented by agent/script/inference/hosted runners.",
+      "stateStore": "Runner registry identities/capabilities; execution state lives in runner implementations.",
+      "lifecycle": "Registry selection for one dispatch; runners own attempt execution.",
+      "consumers": "Runtime Assembly and Workstation Execution.",
+      "transactionBoundary": "Registry is Workers-private; provider adapters live under Providers.",
+      "failureRecovery": "Unknown runner/capability mismatches are registry rejection facts."
+    },
+    {
+      "serviceId": "workers/runners/agent",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers/runners",
+      "targetPath": "pkg/services/workers/internal/services/runners/internal/services/agent",
+      "authority": "Implement Runner for agent harness/tools, retries, stop tokens, decision envelopes, terminal results.",
+      "stateStore": "Agent attempt execution state under Workers.",
+      "lifecycle": "Agent runner attempt lifecycle.",
+      "consumers": "Workers Runner registry; may command Providers/Models through Workers policy.",
+      "transactionBoundary": "Agent attempt is Workers-local; Providers owns native provider attempt details.",
+      "failureRecovery": "Harness/retry/stop-token failures are Agent Runner facts."
+    },
+    {
+      "serviceId": "workers/runners/hosted",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers/runners",
+      "targetPath": "pkg/services/workers/internal/services/runners/internal/services/hosted",
+      "authority": "Implement Runner for hosted execution request/result, remote lifecycle observation, cancellation, normalized outcome.",
+      "stateStore": "Hosted execution attempt state under Workers.",
+      "lifecycle": "Hosted runner attempt lifecycle (not hosted polling).",
+      "consumers": "Workers Runner registry; Automations Hosted Sources remain separate.",
+      "transactionBoundary": "Hosted Work execution is Workers-local; source polling is Automations.",
+      "failureRecovery": "Remote lifecycle/cancellation failures are Hosted Runner facts."
+    },
+    {
+      "serviceId": "workers/runners/inference",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers/runners",
+      "targetPath": "pkg/services/workers/internal/services/runners/internal/services/inference",
+      "authority": "Implement Runner for model binding/readiness/invocation through Models and output mapping.",
+      "stateStore": "Inference runner attempt state under Workers.",
+      "lifecycle": "Inference attempt lifecycle coordinating Models root.",
+      "consumers": "Workers Runner registry and Models Inference.",
+      "transactionBoundary": "Workers owns when to infer; Models owns how inference runs.",
+      "failureRecovery": "Binding/readiness/output-mapping failures are Inference Runner facts."
+    },
+    {
+      "serviceId": "workers/runners/script",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers/runners",
+      "targetPath": "pkg/services/workers/internal/services/runners/internal/services/script",
+      "authority": "Implement Runner for script command policy, process execution, progress/events, timeout, and result.",
+      "stateStore": "Script attempt execution state under Workers.",
+      "lifecycle": "Script runner attempt lifecycle.",
+      "consumers": "Workers Runner registry.",
+      "transactionBoundary": "Script attempt is Workers-local.",
+      "failureRecovery": "Timeout/process failures are Script Runner facts."
+    },
+    {
+      "serviceId": "workers/runtime_assembly",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers",
+      "targetPath": "pkg/services/workers/internal/services/runtime_assembly",
+      "authority": "Produce immutable executor roles from a typed Workers-owned runtime build request.",
+      "stateStore": "Immutable assembled executor roles/config snapshots.",
+      "lifecycle": "Build/assembly on command; absorbs public clone/config inspection.",
+      "consumers": "Factory Sessions/Runtime consumers via Workers root.",
+      "transactionBoundary": "Assembly outputs are Workers-owned values, not peer constructors.",
+      "failureRecovery": "Invalid build requests are Runtime Assembly rejection facts."
+    },
+    {
+      "serviceId": "workers/workstations",
+      "owner": "workers",
+      "kind": "nested",
+      "parentServiceId": "workers",
+      "targetPath": "pkg/services/workers/internal/services/workstations",
+      "authority": "Context/environment, interpolation, prompting, optional worktree, behavior routing, dispatch, final output.",
+      "stateStore": "Workstation execution context for a dispatch.",
+      "lifecycle": "Dispatch execution path lifecycle under Workers.",
+      "consumers": "Runner registry and Factory Runtime dispatch consumers via Workers root.",
+      "transactionBoundary": "Workstation execution shares Workers dispatch transaction.",
+      "failureRecovery": "Routing/dispatch failures are Workstation Execution facts."
+    }
+  ],
+  "responsibilityClusters": [
+    {
+      "owner": "automations",
+      "clusterId": "time_work_retry_policy",
+      "name": "Time-work parsing and retry classification",
+      "note": "Plain internal modules for scheduling/value policy; not nested services."
+    },
+    {
+      "owner": "factory_definitions",
+      "clusterId": "policy_modules",
+      "name": "Decision-envelope and compatibility policy modules",
+      "note": "Stateless Definition policy derivations remain parent-internal modules."
+    },
+    {
+      "owner": "factory_runtime",
+      "clusterId": "engine_tick_subsystems",
+      "name": "Engine tick loop and ordered subsystems",
+      "note": "Plain private implementation sharing engine state; not independently addressable services."
+    },
+    {
+      "owner": "factory_runtime",
+      "clusterId": "orchestration_variants",
+      "name": "Petri and JavaScript orchestration variants",
+      "note": "Internal Orchestration variants sharing Runtime lifecycle/checkpoints; not top-level peers."
+    },
+    {
+      "owner": "factory_sessions",
+      "clusterId": "request_validation_modules",
+      "name": "Request preparation and validation modules",
+      "note": "Stateless normalization/validation remain plain modules under Sessions."
+    },
+    {
+      "owner": "factory_visualization",
+      "clusterId": "sink_codec_adapters",
+      "name": "Sink/codec/source adapters",
+      "note": "Protocol mechanics stay private modules or Visualization-owned transport adapters."
+    },
+    {
+      "owner": "models",
+      "clusterId": "effect_adapters",
+      "name": "Source/cache/process/HTTP effect adapters",
+      "note": "Construction-time effect ports without product authority or root interfaces."
+    },
+    {
+      "owner": "operator_settings",
+      "clusterId": "identity_input_modules",
+      "name": "Identity inventory and input-index parsing",
+      "note": "Pure document discovery/parsing modules without independent authority."
+    },
+    {
+      "owner": "provider_sessions",
+      "clusterId": "reader_support_modules",
+      "name": "Path/blob/token/transcript support modules",
+      "note": "Format implementation details beneath owning readers."
+    },
+    {
+      "owner": "providers",
+      "clusterId": "native_adapters",
+      "name": "Native provider adapters",
+      "note": "Codex/Claude/Cursor/OpenCode/Gemini/Kiro/Pi/Agy variants remain Execution-private modules."
+    },
+    {
+      "owner": "recordings",
+      "clusterId": "projection_policy",
+      "name": "Projection policy helpers",
+      "note": "Pure projection helpers stay under Recordings; Projection is not a top-level peer in this program."
+    },
+    {
+      "owner": "system_initialization",
+      "clusterId": "legacy_migration",
+      "name": "Legacy Factory migration module",
+      "note": "Deletion-only private module, not a nested subservice; removed when input inventory reaches zero."
+    },
+    {
+      "owner": "work",
+      "clusterId": "invocation_return_policy",
+      "name": "Invocation input and return-policy modules",
+      "note": "Deterministic parent-internal transformations exposed only through the Work root."
+    },
+    {
+      "owner": "work",
+      "clusterId": "lineage_graph_modules",
+      "name": "Lineage and dependency-graph modules",
+      "note": "Deterministic projections over Work contracts used by State Access; no separate store."
+    },
+    {
+      "owner": "workers",
+      "clusterId": "prompting_worktree",
+      "name": "Prompting and worktree preparation",
+      "note": "Supporting modules under Workstation Execution without independent lifecycle."
+    },
+    {
+      "owner": "workers",
+      "clusterId": "runner_registry",
+      "name": "Runner contract and registry mechanics",
+      "note": "Private Workers registry backing runner subservices; not a separate product owner."
+    }
+  ],
+  "crossServiceEdges": [
+    {
+      "fromOwner": "automations",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/automations -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "automations",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/automations -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "automations",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/automations/service -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "automations",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers/services/hosted_logic"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_definitions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_runtime",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "factory_sessions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "models",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "operator_settings",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/platform/browser"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "provider_sessions",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "providers",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "recordings",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "system_initialization",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "work",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "edges",
+      "toOwner": "workers",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_definitions/internal/testcomposition -\u003e pkg/platform/portablefiles"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/service -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/platform/logging"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/runtimeopening -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "factory_visualization",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/applicationopening -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/factory_sessions/internal/processlifecycle -\u003e pkg/initializer/lifecycle"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/factory_sessions/internal/runtimehosting -\u003e pkg/platform/httpserver"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "provider_sessions",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/execution -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_sessions/internal/controlplane -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/transports/cli/session -\u003e pkg/transports/cli/clidiag"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/internal/contracts -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "initializer",
+      "toOwner": "platform",
+      "class": "lifecycle",
+      "evidence": "pkg/initializer -\u003e pkg/platform/runtimeartifact"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/models/transports/http -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/initializer/process"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/models/internal/local -\u003e pkg/platform/process"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/transports/cli/clidiag"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/models -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "models",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/models/transports/cli -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "operator_settings",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/operator_settings -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "platform",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/platform/contentstaging -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/workers/agypty -\u003e pkg/platform/clock"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/workers/provider/adapter -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/recordings/artifacts -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/recordings/replay -\u003e pkg/platform/replay"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/recordings -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "edges",
+      "class": "construction",
+      "architectureException": true,
+      "evidence": "pkg/root -\u003e pkg/services/edges"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "initializer",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/initializer/application"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "wire",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/wire"
+    },
+    {
+      "fromOwner": "system_initialization",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/system_initialization -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "system_initialization",
+      "toOwner": "operator_settings",
+      "class": "command",
+      "evidence": "pkg/services/system_initialization -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_definitions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/commandregistry -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_runtime",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_sessions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/climanifestcobra -\u003e pkg/services/factory_sessions/transports/cli/session"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "factory_visualization",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/run -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/transports/cli/mcp -\u003e pkg/initializer/process"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "models",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli -\u003e pkg/services/models/transports/cli"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "operator_settings",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "platform",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/baseline -\u003e pkg/platform/generatedartifacts"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "provider_sessions",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/http -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "recordings",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "system_initialization",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/configinit -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "work",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/batchload -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "workers",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/dashboard -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "edges",
+      "class": "construction",
+      "architectureException": true,
+      "evidence": "pkg/wire -\u003e pkg/services/edges"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_definitions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_runtime",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_sessions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_sessions/transports/cli/session"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "factory_visualization",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "initializer",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/initializer"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "models",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/models/transports/cli"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "operator_settings",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/operator_settings"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "platform",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/platform/clock"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "provider_sessions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "providers",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "recordings",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "system_initialization",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/system_initialization"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "transports",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/transports/cli"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "work",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "workers",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/workers/service"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_runtime"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "automations",
+      "class": "command",
+      "evidence": "pkg/services/workers/service -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/workers/service -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "models",
+      "class": "command",
+      "evidence": "pkg/services/workers/execution/recording -\u003e pkg/services/models"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/platform/filesystem"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "provider_sessions",
+      "class": "command",
+      "evidence": "pkg/services/workers -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/workers/construction -\u003e pkg/services/workers/provider"
+    },
+    {
+      "fromOwner": "workers",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/workers -\u003e pkg/services/work"
+    }
+  ],
+  "namedOwnerConfirmations": [
+    {
+      "owner": "factory_visualization",
+      "displayName": "Factory Visualization",
+      "targetPath": "pkg/services/factory_visualization",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "factory_visualization/activation_lifecycle",
+        "factory_visualization/live_view_projection",
+        "factory_visualization/response_event_presentation"
+      ],
+      "note": "Retain top-level visualization; nested activation, live view, and presentation maps are committed. Sink/codec adapters stay as responsibility clusters, not alternate owners."
+    },
+    {
+      "owner": "operator_settings",
+      "displayName": "Operator Settings",
+      "targetPath": "pkg/services/operator_settings",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "operator_settings/document",
+        "operator_settings/resolution"
+      ],
+      "note": "Retain one Operator Settings owner; provider settings remain Document/Resolution content, not a competing top-level Provider Settings or Providers catalog service."
+    },
+    {
+      "owner": "provider_sessions",
+      "displayName": "Provider Sessions",
+      "targetPath": "pkg/services/provider_sessions",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "provider_sessions/codex_reader",
+        "provider_sessions/cursor_reader"
+      ],
+      "note": "Retain read-only Provider Sessions with Codex/Cursor reader nested maps. Does not enumerate or execute providers."
+    },
+    {
+      "owner": "providers",
+      "displayName": "Providers",
+      "targetPath": "pkg/services/providers",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "providers/catalog",
+        "providers/execution"
+      ],
+      "residualPackageRules": [
+        {
+          "packagePrefix": "pkg/services/workers/agypty",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/cliprovider",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "CLI provider registry/enumeration packages move into Providers Catalog; no CLI-specific competing registry remains."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/provider",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners."
+        },
+        {
+          "packagePrefix": "pkg/services/workers/provider_test",
+          "destination": "providers",
+          "disposition": "move",
+          "note": "Provider test/support packages follow the Providers extraction successor."
+        }
+      ],
+      "note": "Add Providers as the singular catalog+execution owner. Capabilities remain Catalog queries; native adapters remain responsibility clusters—not competing provider catalog/execution top-level abstractions."
+    },
+    {
+      "owner": "recordings",
+      "displayName": "Recordings",
+      "targetPath": "pkg/services/recordings",
+      "status": "confirmed",
+      "nestedSubservices": [
+        "recordings/artifacts_export",
+        "recordings/canonical_ledger",
+        "recordings/projection_query",
+        "recordings/recording_lifecycle",
+        "recordings/replay"
+      ],
+      "note": "Retain one Recordings family. Projection/Replay/Artifacts stay nested; they are not promoted to competing top-level owners in this program."
+    },
+    {
+      "owner": "system_initialization",
+      "displayName": "System Bootstrap",
+      "targetPath": "pkg/services/system_initialization",
+      "status": "confirmed",
+      "nestedSubservices": [],
+      "note": "Retain System Bootstrap with no nested subservice. Legacy migration remains a deletion-only responsibility cluster, not a discovery-open nested service."
+    }
+  ],
+  "misplacedGuards": [
+    {
+      "id": "allowlist:pkgboundary:inferencecontract-leaf-effect",
+      "kind": "allowlist",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Package-boundary leaf-effect allowlist still treats pkg/services/workers/provider/inferencecontract as the Workers-owned provider inference port."
+    },
+    {
+      "id": "baseline:architecture:workers-and-providers-row",
+      "kind": "baseline",
+      "surfacePath": "docs/architecture/architecture.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Architecture ownership table still places provider adapters and inference under the Workers family instead of Providers Execution."
+    },
+    {
+      "id": "baseline:architecture:workers-hosted-logic",
+      "kind": "baseline",
+      "surfacePath": "docs/architecture/architecture.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Architecture ownership table still places hosted logic under Workers; hosted polling/source reconciliation moves to Automation Hosted Sources."
+    },
+    {
+      "id": "diagnostic:pkgboundary:retired-hostedworkers",
+      "kind": "diagnostic",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Retired pkg/hostedworkers diagnostic still directs maintainers to a Workers hosted path instead of Automation Hosted Sources for polling/reconciliation."
+    },
+    {
+      "id": "package_guard:pkgboundary:converged-hosted-logic",
+      "kind": "package_guard",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "convergedServiceSubpackageRoots still assigns pkg/services/workers/services/hosted_logic to workers."
+    },
+    {
+      "id": "package_guard:pkgboundary:converged-workers-provider",
+      "kind": "package_guard",
+      "surfacePath": "cmd/pkgboundarycheck/main.go",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "convergedServiceSubpackageRoots still assigns pkg/services/workers/provider to workers."
+    },
+    {
+      "id": "standard:general-backend-standards:hosted-polling",
+      "kind": "standard",
+      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "hosted_polling",
+      "replacementOwner": "automations",
+      "note": "Normative backend standard still directs retired pkg/hostedworkers imports to pkg/services/workers/services/hosted_logic instead of Automation Hosted Sources."
+    },
+    {
+      "id": "standard:general-backend-standards:provider-inference",
+      "kind": "standard",
+      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
+      "currentOwnerClaim": "workers",
+      "misplacedConcern": "provider_inference",
+      "replacementOwner": "providers",
+      "note": "Normative backend standard still names pkg/services/workers/provider/inferencecontract as the provider inference leaf-effect owner."
+    }
+  ],
+  "publicSurfaces": [
+    {
+      "id": "behavior_test:provider-functionaltests",
+      "kind": "behavior_test",
+      "surfacePath": "pkg/services/workers/provider/functionaltests",
+      "replacementOwner": "providers",
+      "note": "Provider compatibility/behavior tests follow the Providers Execution successor after cutover."
+    },
+    {
+      "id": "behavior_test:workers-hosted-poller",
+      "kind": "behavior_test",
+      "surfacePath": "pkg/services/workers/services/hosted_logic",
+      "replacementOwner": "automations",
+      "note": "Hosted poller/source behavior coverage under Workers hosted_logic moves with Automation Hosted Sources; Workers retains hosted runner execution tests only."
+    },
+    {
+      "id": "cli:docs-workers-provider-topics",
+      "kind": "cli",
+      "surfacePath": "docs/reference/workers.md",
+      "replacementOwner": "providers",
+      "note": "Provider enumeration/modelProvider CLI docs burn down to Providers Catalog; Workers docs retain selection/retry/runner policy only."
+    },
+    {
+      "id": "cli:you-providers-list",
+      "kind": "cli",
+      "surfacePath": "pkg/transports/cli",
+      "replacementOwner": "providers",
+      "note": "you providers list and provider-facing CLI adapters consume Providers Catalog as the durable owner."
+    },
+    {
+      "id": "http:openapi-worker-provider-fields",
+      "kind": "http",
+      "surfacePath": "api/components",
+      "replacementOwner": "providers",
+      "note": "OpenAPI provider identity/capability fields stay transport-shaped but durable domain owner is Providers."
+    },
+    {
+      "id": "mcp:factory-session-tools",
+      "kind": "mcp",
+      "surfacePath": "pkg/transports/mcp",
+      "replacementOwner": "factory_sessions",
+      "note": "MCP Factory Session tools adapt Factory Sessions; they are not Workers-owned provider surfaces."
+    },
+    {
+      "id": "replay:recordings-replay",
+      "kind": "replay",
+      "surfacePath": "pkg/services/recordings/replay",
+      "replacementOwner": "recordings",
+      "note": "Replay and artifact reconstruction remain Recordings-owned public surfaces."
+    },
+    {
+      "id": "visualization:factory-visualization",
+      "kind": "visualization",
+      "surfacePath": "pkg/services/factory_visualization",
+      "replacementOwner": "factory_visualization",
+      "note": "Dashboard/live-view visualization remains Factory Visualization-owned."
+    }
+  ],
+  "ownedRoles": [
+    {
+      "id": "constructor:automations",
+      "kind": "constructor",
+      "name": "Automations service constructor",
+      "destination": "automations",
+      "note": "Wire constructs Automations at the Automations root."
+    },
+    {
+      "id": "constructor:factory_definitions",
+      "kind": "constructor",
+      "name": "Factory Definitions service constructor",
+      "destination": "factory_definitions",
+      "note": "Wire constructs Factory Definitions at the Definitions root."
+    },
+    {
+      "id": "constructor:factory_runtime",
+      "kind": "constructor",
+      "name": "Factory Runtime service constructor",
+      "destination": "factory_runtime",
+      "note": "Wire constructs Factory Runtime at the Runtime root."
+    },
+    {
+      "id": "constructor:factory_sessions",
+      "kind": "constructor",
+      "name": "Factory Sessions service constructor",
+      "destination": "factory_sessions",
+      "note": "Wire constructs Factory Sessions at the Sessions root."
+    },
+    {
+      "id": "constructor:factory_visualization",
+      "kind": "constructor",
+      "name": "Factory Visualization service constructor",
+      "destination": "factory_visualization",
+      "note": "Wire constructs Factory Visualization at the Visualization root."
+    },
+    {
+      "id": "constructor:models",
+      "kind": "constructor",
+      "name": "Models service constructor",
+      "destination": "models",
+      "note": "Wire constructs Models via models/wire only."
+    },
+    {
+      "id": "constructor:operator_settings",
+      "kind": "constructor",
+      "name": "Operator Settings service constructor",
+      "destination": "operator_settings",
+      "note": "Wire constructs Operator Settings at the Operator Settings root."
+    },
+    {
+      "id": "constructor:provider_sessions",
+      "kind": "constructor",
+      "name": "Provider Sessions service constructor",
+      "destination": "provider_sessions",
+      "note": "Wire constructs Provider Sessions at the Provider Sessions root."
+    },
+    {
+      "id": "constructor:providers",
+      "kind": "constructor",
+      "name": "Providers service constructor",
+      "destination": "providers",
+      "note": "Providers root constructor is the durable destination for Workers provider extraction."
+    },
+    {
+      "id": "constructor:recordings",
+      "kind": "constructor",
+      "name": "Recordings service constructor",
+      "destination": "recordings",
+      "note": "Wire constructs Recordings at the Recordings root."
+    },
+    {
+      "id": "constructor:system_initialization",
+      "kind": "constructor",
+      "name": "System Bootstrap service constructor",
+      "destination": "system_initialization",
+      "note": "Wire constructs System Bootstrap at the System Bootstrap root."
+    },
+    {
+      "id": "constructor:work",
+      "kind": "constructor",
+      "name": "Work service constructor",
+      "destination": "work",
+      "note": "Wire constructs Work at the Work root."
+    },
+    {
+      "id": "constructor:workers",
+      "kind": "constructor",
+      "name": "Workers service constructor",
+      "destination": "workers",
+      "note": "Wire constructs Workers at the Workers root for selection/retry/runners only."
+    },
+    {
+      "id": "datastore:automationStore",
+      "kind": "datastore",
+      "name": "automationStore",
+      "destination": "automations",
+      "note": "structures.md Automation datastore."
+    },
+    {
+      "id": "datastore:definitionStore",
+      "kind": "datastore",
+      "name": "definitionStore",
+      "destination": "factory_definitions",
+      "note": "structures.md Factory Definition datastore."
+    },
+    {
+      "id": "datastore:ledgerStore",
+      "kind": "datastore",
+      "name": "ledgerStore",
+      "destination": "recordings",
+      "note": "structures.md Session Ledger datastore."
+    },
+    {
+      "id": "datastore:modelStore",
+      "kind": "datastore",
+      "name": "modelStore",
+      "destination": "models",
+      "note": "structures.md Model Runtime datastore."
+    },
+    {
+      "id": "datastore:providerSessionStore",
+      "kind": "datastore",
+      "name": "providerSessionStore",
+      "destination": "provider_sessions",
+      "note": "structures.md Provider Session datastore."
+    },
+    {
+      "id": "datastore:runtimeStore",
+      "kind": "datastore",
+      "name": "runtimeStore",
+      "destination": "factory_runtime",
+      "note": "structures.md Factory Runtime datastore."
+    },
+    {
+      "id": "datastore:sessionStore",
+      "kind": "datastore",
+      "name": "sessionStore",
+      "destination": "factory_sessions",
+      "note": "structures.md Factory Session datastore."
+    },
+    {
+      "id": "datastore:workStore",
+      "kind": "datastore",
+      "name": "workStore",
+      "destination": "work",
+      "note": "structures.md Work datastore."
+    },
+    {
+      "id": "datastore:workerStore",
+      "kind": "datastore",
+      "name": "workerStore",
+      "destination": "workers",
+      "note": "structures.md Worker Execution datastore."
+    },
+    {
+      "id": "lifecycle_role:automations-hosted-sources",
+      "kind": "lifecycle_role",
+      "name": "Automation Hosted Sources lifecycle",
+      "destination": "automations",
+      "note": "Hosted polling/source reconciliation lifecycle moves to Automations."
+    },
+    {
+      "id": "lifecycle_role:factory-session",
+      "kind": "lifecycle_role",
+      "name": "Factory Session lifecycle",
+      "destination": "factory_sessions",
+      "note": "Desired/observed session lifecycle stays Factory Sessions-owned."
+    },
+    {
+      "id": "lifecycle_role:initializer",
+      "kind": "lifecycle_role",
+      "name": "Initializer process lifecycle",
+      "destination": "initializer",
+      "note": "Process start/stop/join remains Initializer-owned."
+    },
+    {
+      "id": "lifecycle_role:provider-session",
+      "kind": "lifecycle_role",
+      "name": "Provider Session lifecycle",
+      "destination": "provider_sessions",
+      "note": "Provider session transcript/lifecycle stays Provider Sessions-owned."
+    },
+    {
+      "id": "lifecycle_role:providers-execution",
+      "kind": "lifecycle_role",
+      "name": "Providers Execution attempt lifecycle",
+      "destination": "providers",
+      "note": "Normalized provider inference attempt lifecycle moves to Providers Execution."
+    },
+    {
+      "id": "lifecycle_role:recordings",
+      "kind": "lifecycle_role",
+      "name": "Recordings lifecycle",
+      "destination": "recordings",
+      "note": "Ledger/recording lifecycle stays Recordings-owned."
+    },
+    {
+      "id": "lifecycle_role:workers-runners",
+      "kind": "lifecycle_role",
+      "name": "Workers runner attempt lifecycle",
+      "destination": "workers",
+      "note": "Work selection/retry and runner attempts remain Workers-owned."
+    },
+    {
+      "id": "protocol_adapter:cli",
+      "kind": "protocol_adapter",
+      "name": "CLI transport adapter",
+      "destination": "transports",
+      "note": "CLI protocol adapter stays under transports; domain owners remain separate."
+    },
+    {
+      "id": "protocol_adapter:http",
+      "kind": "protocol_adapter",
+      "name": "HTTP/REST/SSE transport adapter",
+      "destination": "transports",
+      "note": "HTTP protocol adapter stays under transports."
+    },
+    {
+      "id": "protocol_adapter:mcp",
+      "kind": "protocol_adapter",
+      "name": "MCP transport adapter",
+      "destination": "transports",
+      "note": "MCP protocol adapter stays under transports."
+    },
+    {
+      "id": "protocol_adapter:visualization-sink",
+      "kind": "protocol_adapter",
+      "name": "Factory Visualization presentation adapter",
+      "destination": "factory_visualization",
+      "note": "Visualization presentation adapters remain Factory Visualization-owned."
+    }
+  ],
+  "packages": [
+    {
+      "packagePath": "pkg/initializer",
+      "disposition": "retain",
+      "destination": "initializer",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/initializer/application",
+      "disposition": "retain",
+      "destination": "initializer",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/initializer/lifecycle",
+      "disposition": "retain",
+      "destination": "initializer",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/initializer/process",
+      "disposition": "retain",
+      "destination": "initializer",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/initializer/runtimeapplication",
+      "disposition": "retain",
+      "destination": "initializer",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/browser",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/clock",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/contentstaging",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/directoryreplace",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/filesystem",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/generatedartifacts",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/httpserver",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/inboxgitkeep",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/internal/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/logging",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/metrics",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/portablefiles",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/process",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/pty",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/random",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/replay",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/stdio",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/root",
+      "disposition": "retain",
+      "destination": "root",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/services/automations",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/timework",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/edges",
+      "disposition": "retain",
+      "destination": "edges",
+      "destinationKind": "architecture_exception"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/authoredlayout",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/clonetests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/contracttests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/failuremetadatatests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/graphtopologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/namevalue",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/contracts/taxonomytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/definition",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/loadedsource",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/loading",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/loading/runtimetests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/goal",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/packageassets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/promptassets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/review",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/subagent",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/packages/tts",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/persistence/integrationtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/portableconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/portableconfig/integrationtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/quorumpolicy",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/replayconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/runtimeconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/scaffold",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/snapshotcapture",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/blockingloadtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/compatibilitytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/layouttests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/managedruntimetests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/profiletests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/taxonomycompattests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/validation/topologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workers",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workers/taxonomy",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workpropagation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/workstationexecution",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/build",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/checkpointstore",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/context",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/definitionmapping",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/definitionmapping/maptests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/exhaustiontests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/ingest",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/javascript",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestratorcontract",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/replayhooks",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/runtimecontract",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/scheduler",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/service/host",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/state",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/state/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems/circuitbreakertests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems/dispatchertests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems/goalroutingtests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/subsystems/terminationtests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/testkit",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/throttle",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/token",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/token_transformer",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/catalog",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/applicationopening",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/artifactprojection",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/controlplane",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/cursors",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/cursors/persistence",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/fixtures",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/livechild",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/recordingreplay",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution/runtimepersist",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/executionopening",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/fileeffects",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation/packagedtts",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/livesession",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/logicaltarget",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/processlifecycle",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/requestpreparation",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responseevents",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responseeventstore",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream/fragmentmap",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/roles",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtime",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimebinding",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimehosting",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/scopedlisting",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/durable_execution/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/identity/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/invocation/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/live_runtime/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream/internal/service",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/services/response_stream/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionprojection",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionregistry",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionvalidation",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/stream",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/session",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/session/smoke",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/sessionexecution",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/http",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/mcp/catalog",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/wire",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/wire/contracts",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/assets",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/catalog",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/host",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/inference",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/local",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/managedruntime",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_scopes/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/cli",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/identityinventory",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/codex",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/artifacts",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events/kinds",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/events/snapshot",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections/dashboard",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections/projectiontests",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/replay",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/replay/clocktests",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/replay/configtests",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/replay/fixturetests",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/materialize",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/agypty",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/cliprovider",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/construction",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/diagnostics",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/execution",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/execution/recording",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/executor",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/executor/agentrun",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/executor/workstation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/interface",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/invocation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/process",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/prompting",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter/opencode",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/adapter/testkit",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/agy",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/claude",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/claude/exitfailure",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex/exitfailure",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/codex/progress",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/commandenv",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/conductor",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/cursor",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/cursor/progress",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/functionaltests",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/gemini",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/inferencecontract",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/inferencecontract/testkit",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/kiro",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/paritytests",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/pi",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/registry",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/structured",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider_test",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/runner",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/agents",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/hosted_logic",
+      "disposition": "move",
+      "destination": "automations",
+      "destinationKind": "owner",
+      "successor": "pkg/services/automations/internal/services/hosted_sources",
+      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
+      "disposition": "move",
+      "destination": "automations",
+      "destinationKind": "owner",
+      "successor": "pkg/services/automations/internal/services/hosted_sources",
+      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/inference",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/scripts",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/services/testing",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/skippermissions",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/worktree",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/transports/cli",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/baseline",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/batchload",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clicontract",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clidiag",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/clihttp",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliinputs",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifest",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestcobra",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestgen",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliserver",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandidentity",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandregistry",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/config",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/configinit",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/dashboard",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/default",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/docs",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factory",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factoryload",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/factoryrun",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/mcp",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/observation",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/resolvedinput",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/run",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/runconfig",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/sessionpath",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/submit",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/terminalpolicy",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/timedisplay",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/work",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/workflow",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/apitypes",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/application",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/client",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/contracttests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/generated",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests/factorysessionsse",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests/taxonomyvalidationtests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/http/workstationprojection",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/composition",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/authored",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/diagnostics",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/mappingtests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryconfig/openapitests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factoryeventprojection",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysession",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysnapshot",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/globalconfig",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/optional",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/taxonomyvalidationtests",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/validationentry",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workcontent",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerdiagnostics",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/workerinference",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/discoverygen",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/generated",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/server",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/mcp/stdio",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/wire",
+      "disposition": "retain",
+      "destination": "wire",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/wire/factorydefinitions",
+      "disposition": "retain",
+      "destination": "wire",
+      "destinationKind": "family"
+    }
+  ]
+}

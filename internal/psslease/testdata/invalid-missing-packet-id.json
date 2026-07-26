@@ -1,0 +1,10 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "",
+      "exclusivePaths": ["docs/internal/projects/packaged-service-structure/"],
+      "state": "ready"
+    }
+  ]
+}

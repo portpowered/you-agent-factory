@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"go.uber.org/zap"
 )
@@ -17,17 +17,17 @@ import (
 type runtimeOpenerFunc func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	serviceedges.Edges,
+	runtimeopening.ExternalEffects,
 	*zap.Logger,
 ) (roles.OpenedApplicationRuntime, error)
 
 func (open runtimeOpenerFunc) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges serviceedges.Edges,
+	effects runtimeopening.ExternalEffects,
 	logger *zap.Logger,
 ) (roles.OpenedApplicationRuntime, error) {
-	return open(ctx, request, edges, logger)
+	return open(ctx, request, effects, logger)
 }
 
 func TestNewRequiresEveryInjectedOperation(t *testing.T) {
@@ -44,14 +44,14 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 	open := runtimeOpenerFunc(func(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		serviceedges.Edges,
+		runtimeopening.ExternalEffects,
 		*zap.Logger,
 	) (roles.OpenedApplicationRuntime, error) {
 		return roles.OpenedApplicationRuntime{}, nil
 	})
 	adapt := RuntimeAdapter(func(
 		roles.OpenedApplicationRuntime,
-		serviceedges.Edges,
+		runtimeopening.ExternalEffects,
 		factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
 		return factorysessions.BoundProcessComponents{}, nil
@@ -83,7 +83,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	resolvedRequest := &factorysessions.RuntimeOpeningRequest{}
 	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
 	invocationPorts := roles.ApplicationOpeningPorts{RuntimeHostObserver: observer}
-	resolvedEdges := serviceedges.Edges{}
+	resolvedEffects := runtimeopening.ExternalEffects{}
 	logger := zap.NewNop()
 	var order []string
 	service, err := New(
@@ -100,12 +100,12 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 			if gotPorts.RuntimeHostObserver == nil {
 				t.Fatal("resolver did not receive invocation-local ports")
 			}
-			return RuntimeInputs{Request: resolvedRequest, Edges: resolvedEdges, Logger: logger}, nil
+			return RuntimeInputs{Request: resolvedRequest, Effects: resolvedEffects, Logger: logger}, nil
 		},
 		runtimeOpenerFunc(func(
 			_ context.Context,
 			gotRequest *factorysessions.RuntimeOpeningRequest,
-			_ serviceedges.Edges,
+			_ runtimeopening.ExternalEffects,
 			gotLogger *zap.Logger,
 		) (roles.OpenedApplicationRuntime, error) {
 			order = append(order, "open")
@@ -116,7 +116,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 		}),
 		func(
 			roles.OpenedApplicationRuntime,
-			serviceedges.Edges,
+			runtimeopening.ExternalEffects,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			order = append(order, "bind")
@@ -163,7 +163,7 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			serviceedges.Edges,
+			runtimeopening.ExternalEffects,
 			*zap.Logger,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
@@ -173,7 +173,7 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 		}),
 		func(
 			roles.OpenedApplicationRuntime,
-			serviceedges.Edges,
+			runtimeopening.ExternalEffects,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			return factorysessions.BoundProcessComponents{}, bindErr
@@ -213,7 +213,7 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			serviceedges.Edges,
+			runtimeopening.ExternalEffects,
 			*zap.Logger,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
@@ -223,7 +223,7 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 		}),
 		func(
 			roles.OpenedApplicationRuntime,
-			serviceedges.Edges,
+			runtimeopening.ExternalEffects,
 			factoryvisualization.Sink,
 		) (factorysessions.BoundProcessComponents, error) {
 			return factorysessions.BoundProcessComponents{}, nil
@@ -281,7 +281,7 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 				runtimeOpenerFunc(func(
 					context.Context,
 					*factorysessions.RuntimeOpeningRequest,
-					serviceedges.Edges,
+					runtimeopening.ExternalEffects,
 					*zap.Logger,
 				) (roles.OpenedApplicationRuntime, error) {
 					opened++
@@ -289,7 +289,7 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 				}),
 				func(
 					roles.OpenedApplicationRuntime,
-					serviceedges.Edges,
+					runtimeopening.ExternalEffects,
 					factoryvisualization.Sink,
 				) (factorysessions.BoundProcessComponents, error) {
 					adapted++

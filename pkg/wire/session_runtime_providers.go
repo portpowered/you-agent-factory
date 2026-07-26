@@ -60,7 +60,13 @@ import (
 )
 
 func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Registry, error) {
-	builtIns, err := providerregistry.BuiltInRegistrations()
+	commandRunner, err := provideWorkersProviderCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+		CommandRunner: commandRunner,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +78,21 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 		)
 	}
 	return providerregistry.New(registrations...)
+}
+
+// provideWorkersProviderCommandRunner resolves the shared provider CLI runner
+// used by native executors and by migrated catalog Integrations on the
+// conductor path. Injected edges win; otherwise the platform process runner is
+// adapted once for both ownership boundaries.
+func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.CommandRunner, error) {
+	if edges.ProviderCommandRunner != nil {
+		return workerprocess.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+	}
+	defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	return workerprocess.AdaptCommandRunner(defaultCommandRunner), nil
 }
 
 func provideFactorySessionProviderIdentityResolver(
@@ -839,6 +860,28 @@ func provideSessionExecutionOpeningFactory(
 	)
 }
 
+func provideInvocationOperation(
+	openRuntime *factorysessionwire.RuntimeOpeningFactory,
+	edges serviceedges.Edges,
+	workingDirectory platformfilesystem.WorkingDirectory,
+	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
+	artifactExporter models.InvocationArtifactExporter,
+	modelTimeout factorysessions.ModelInvocationTimeout,
+	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
+	generateSessionID factorysessions.SessionIDGenerator,
+) (factorysessionwire.InvocationOperation, error) {
+	return factorysessionwire.NewInvocationOperation(
+		openRuntime,
+		projectRuntimeOpeningExternalEffects(edges),
+		workingDirectory,
+		resolveCurrentDir,
+		artifactExporter,
+		modelTimeout,
+		artifactRoots,
+		generateSessionID,
+	)
+}
+
 // projectRuntimeOpeningExternalEffects is the sole selection from the process
 // edge aggregate into the effects consumed by Factory Session runtime opening.
 func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
@@ -921,8 +964,12 @@ func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFile
 	return os.ReadFile
 }
 
-func provideWorkFactory(readFile work.SubmittedFileReader) factorysessionwire.WorkFactory {
+func provideWorkFactory(
+	readFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
-		return workservice.NewService(runtimes, readFile)
+		return workservice.NewService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }

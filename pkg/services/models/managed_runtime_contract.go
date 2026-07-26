@@ -8,13 +8,18 @@ import (
 var (
 	// ErrNotFound reports that a requested model is absent from configuration.
 	ErrNotFound = errors.New("model not found")
-	// ErrMissing reports that invocation requires uninstalled runtime assets.
+	// ErrMissing reports that infer/local invocation requires uninstalled
+	// runtime assets. Distinct from ErrLoading, ErrFailed, and ErrUnsupported.
 	ErrMissing = errors.New("managed runtime missing")
-	// ErrLoading reports that invocation must wait for runtime preparation.
+	// ErrLoading reports that infer/local invocation must wait for runtime
+	// preparation. Distinct from ErrMissing, ErrFailed, and ErrUnsupported.
 	ErrLoading = errors.New("managed runtime loading")
-	// ErrFailed reports that invocation is blocked by a failed runtime.
+	// ErrFailed reports that infer/local invocation is blocked by a failed
+	// runtime. Distinct from ErrMissing, ErrLoading, and ErrUnsupported.
 	ErrFailed = errors.New("managed runtime failed")
-	// ErrUnsupported reports that invocation targets an unsupported runtime.
+	// ErrUnsupported reports that infer/local invocation targets an unsupported
+	// runtime. Distinct from ErrMissing, ErrLoading, ErrFailed, and
+	// ErrUnsupportedResponseMode.
 	ErrUnsupported = errors.New("managed runtime unsupported")
 )
 
@@ -76,6 +81,29 @@ type OperationSlot struct {
 	Required     *bool
 }
 
+func cloneOperations(operations []Operation) []Operation {
+	cloned := make([]Operation, len(operations))
+	for i, operation := range operations {
+		cloned[i] = operation
+		cloned[i].Inputs = cloneOperationSlots(operation.Inputs)
+		cloned[i].Outputs = cloneOperationSlots(operation.Outputs)
+	}
+	return cloned
+}
+
+func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
+	cloned := make([]OperationSlot, len(slots))
+	for i, slot := range slots {
+		cloned[i] = slot
+		cloned[i].ContentTypes = append([]string(nil), slot.ContentTypes...)
+		if slot.Required != nil {
+			required := *slot.Required
+			cloned[i].Required = &required
+		}
+	}
+	return cloned
+}
+
 // Runtime is the model-owned readiness projection consumed by service and
 // transport adapters.
 type Runtime struct {
@@ -85,6 +113,13 @@ type Runtime struct {
 	Locality            Locality
 	SupportedOperations []Operation
 	Diagnostics         map[string]string
+}
+
+// Clone returns detached readiness facts safe for a peer to retain or mutate.
+func (runtime Runtime) Clone() Runtime {
+	runtime.SupportedOperations = cloneOperations(runtime.SupportedOperations)
+	runtime.Diagnostics = cloneStringMap(runtime.Diagnostics)
+	return runtime
 }
 
 // InvocationError carries managed-runtime readiness context without exposing a

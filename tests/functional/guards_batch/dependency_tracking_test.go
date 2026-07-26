@@ -7,6 +7,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestDependencyTracking_BlocksUntilSatisfied(t *testing.T) {
@@ -32,8 +34,8 @@ func TestDependencyTracking_BlocksUntilSatisfied(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 2})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 2})
 
 	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 2 {
 		t.Errorf("expected starter called 2 times, got %d", got)
@@ -45,6 +47,6 @@ func TestDependencyTracking_NoDepsPassThrough(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("no deps"))
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	session := support.RunFactoryToCompletion(t, dir, provider, 5*time.Second)
-	assertGuardSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 5*time.Second)
+	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0})
 }
