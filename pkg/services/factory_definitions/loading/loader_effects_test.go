@@ -24,9 +24,9 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 		readFile: func(string) ([]byte, error) { return nil, fs.ErrInvalid },
 	}
 	wantSource := filepath.Join("factory-dir", "factory.yaml")
-	loader := New(
-		fileSystem,
-		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+	loader := &Loader{
+		fileSystem: fileSystem,
+		loadAuthoredSource: func(path string) (factorydefinitions.AuthoredFactorySource, error) {
 			if path != "factory-dir" {
 				t.Fatalf("loaded path = %q, want factory-dir", path)
 			}
@@ -37,27 +37,7 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 				Data:   []byte(`{"name":"injected"}`),
 			}, nil
 		},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	}
 
 	source, factoryDir, split, err := loader.readFactoryConfigSource("factory-dir")
 	if err != nil {
@@ -83,6 +63,25 @@ func TestLoaderFailsClosedWithoutLoadingFileSystem(t *testing.T) {
 	_, _, _, err := (&Loader{}).readFactoryConfigSource("factory.json")
 	if err == nil || !strings.Contains(err.Error(), "loading filesystem is required") {
 		t.Fatalf("error = %v, want missing loading filesystem", err)
+	}
+}
+
+func TestLoadRuntimeSourcePreservesCurrentDirectoryResolutionFailure(t *testing.T) {
+	t.Parallel()
+
+	want := errors.New("resolve current Factory")
+	loader := &Loader{
+		resolveCurrentDir: func(string) (string, error) {
+			return "", want
+		},
+	}
+
+	source, err := loader.LoadRuntimeSource("requested-factory", nil)
+	if source != nil {
+		t.Fatalf("loaded source = %#v, want nil", source)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadRuntimeSource error = %v, want %v", err, want)
 	}
 }
 
