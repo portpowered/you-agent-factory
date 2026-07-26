@@ -31,10 +31,12 @@ if [ ! -x "$BINARY_PATH" ]; then
 fi
 
 "$BINARY_PATH" --help >/dev/null
+"$BINARY_PATH" --json factory list \
+  --dir "$TEMP_HOME/.you-agent-factory/factories" >/dev/null
 
 config_path="$TEMP_HOME/.you-agent-factory/config.json"
 if [ ! -f "$config_path" ]; then
-  echo "post-install config init did not create operator config at $config_path" >&2
+  echo "normal initializer did not create operator config at $config_path" >&2
   exit 1
 fi
 

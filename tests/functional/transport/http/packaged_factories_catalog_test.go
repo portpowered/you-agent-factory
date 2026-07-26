@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestPackagedFactoriesAPI_ReturnsPublishedCatalog proves the HTTP API exposes the published Factory catalog.
 func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 	dir := support.ScaffoldFactory(t, packagedFactoryCatalogTestConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

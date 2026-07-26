@@ -15,22 +15,6 @@
       "name": "TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort"
     },
     {
-      "file": "acceptance/install_outcomes_test.go",
-      "name": "TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome"
-    },
-    {
-      "file": "acceptance/install_outcomes_test.go",
-      "name": "TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite"
-    },
-    {
-      "file": "acceptance/install_outcomes_test.go",
-      "name": "TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes"
-    },
-    {
-      "file": "acceptance/install_outcomes_test.go",
-      "name": "TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption"
-    },
-    {
       "file": "acceptance/invalid_quiet_outcomes_test.go",
       "name": "TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError"
     },
@@ -113,10 +97,6 @@
     {
       "file": "bootstrap_portability/automat_portability_integration_test.go",
       "name": "TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBoundedReadiness"
-    },
-    {
-      "file": "bootstrap_portability/cli_init_factory_test.go",
-      "name": "TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker"
     },
     {
       "file": "bootstrap_portability/export_import_fixture_test.go",
@@ -377,38 +357,6 @@
     {
       "file": "cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_ConfigCreationFailureSurfacesActionableCLIError"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_DoubleRunJSONReportsSkippedOutcomes"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_DoubleRunReportsSkippedOutcomes"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_ExistingConfigReportsSkippedWithoutRewrite"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_FactoryMaterializationFailureSurfacesActionableCLIError"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_JSONEmitsStructuredSummary"
-    },
-    {
-      "file": "config_init/config_init_test.go",
-      "name": "TestInit_UsesProvidedHomeDirWithoutReadingProcessHome"
     },
     {
       "file": "guards_batch/cascading_failure_test.go",
@@ -832,10 +780,6 @@
     },
     {
       "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
       "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts"
     },
     {
@@ -849,10 +793,6 @@
     {
       "file": "runtime_api/api_generated_smoke_test.go",
       "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission"
     },
     {
       "file": "runtime_api/api_generated_smoke_test.go",
@@ -1597,14 +1537,6 @@
     {
       "file": "work/visualization/dependency_graph_test.go",
       "name": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart"
-    },
-    {
-      "file": "workflow/cli_ralph_init_smoke_test.go",
-      "name": "TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop"
-    },
-    {
-      "file": "workflow/cli_ralph_init_smoke_test.go",
-      "name": "TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop"
     },
     {
       "file": "workflow/code_review_loop_long_test.go",

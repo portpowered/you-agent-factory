@@ -1,8 +1,8 @@
 package climanifestcobra
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
@@ -19,368 +19,147 @@ type FactoryConfigInitFamilyComponents struct {
 	Init    *cobra.Command
 }
 
-// NewFactoryConfigInitFamilyComponents builds detached factory, system config, and
-// init commands from generated metadata and attaches handwritten handlers by ID.
+// NewFactoryConfigInitFamilyComponents builds the complete family through the
+// generic manifest constructor and attaches transport handlers by stable ID.
 func NewFactoryConfigInitFamilyComponents(
-	registry *commandregistry.Registry,
-	bindings FactoryConfigInitFlagBindings,
+	handler commandregistry.FactoryConfigInitHandler,
 ) (FactoryConfigInitFamilyComponents, error) {
 	manifest, err := generated.FactoryConfigInitFamilyManifest()
 	if err != nil {
 		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
 	}
-	return NewFactoryConfigInitFamilyComponentsFromManifest(manifest, registry, bindings)
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	return NewFactoryConfigInitFamilyComponentsFromManifest(manifest, handler)
 }
 
-// NewFactoryConfigInitFamilyComponentsFromManifest builds detached factory/config/init
-// commands from one generated manifest snapshot.
+// NewFactoryConfigInitFamilyComponentsFromManifest projects and detaches the
+// complete factory/config/init family from one canonical manifest snapshot.
 func NewFactoryConfigInitFamilyComponentsFromManifest(
 	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings FactoryConfigInitFlagBindings,
+	handler commandregistry.FactoryConfigInitHandler,
 ) (FactoryConfigInitFamilyComponents, error) {
-	if registry == nil {
-		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: registry is required")
+	if handler == nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: handler is required")
 	}
-	if err := validateFactoryConfigInitManifest(manifest); err != nil {
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
 		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
 	}
-	if err := registry.VerifyFactoryConfigInitRunnableCoverage(manifest); err != nil {
-		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
-	}
-
-	built, err := buildFactoryConfigInitCommandMap(manifest, registry, bindings)
+	resolvedHandlers, err := factoryConfigInitResolvedHandlers(manifest, handler)
 	if err != nil {
 		return FactoryConfigInitFamilyComponents{}, err
 	}
-
-	factory := built["you.factory"]
-	config := built["you.config"]
-	initCmd := built["you.init"]
-	if factory == nil || config == nil || initCmd == nil {
-		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: missing top-level command")
+	root, err := NewCommandTree(manifest, GenericBindings{
+		Handlers: HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers:   resolvedHandlers,
+		GuardUnknownSubcommands: true,
+	})
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: %w", err)
 	}
-	return FactoryConfigInitFamilyComponents{
-		Factory: factory,
-		Config:  config,
-		Init:    initCmd,
-	}, nil
+	components, err := detachFactoryConfigInitComponents(root)
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, err
+	}
+	if err := preserveFactoryConfigInitArgumentDiagnostics(components, manifest); err != nil {
+		return FactoryConfigInitFamilyComponents{}, err
+	}
+	return components, nil
 }
 
-func validateFactoryConfigInitManifest(manifest climanifest.Manifest) error {
-	if len(manifest.Commands) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
-		return fmt.Errorf(
-			"manifest command count = %d, want %d factory/config/init commands",
-			len(manifest.Commands),
-			len(climanifestgen.FactoryConfigInitFamilyCommandIDs),
-		)
-	}
-	for commandID := range manifest.Commands {
-		if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID(commandID); err != nil {
-			return err
-		}
-	}
-	for _, commandID := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
-		if _, ok := manifest.Commands[commandID]; !ok {
-			return fmt.Errorf("manifest missing factory/config/init command %q", commandID)
-		}
-	}
-	return nil
-}
-
-func buildFactoryConfigInitCommandMap(
+func factoryConfigInitResolvedHandlers(
 	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings FactoryConfigInitFlagBindings,
-) (map[string]*cobra.Command, error) {
-	built := make(map[string]*cobra.Command, len(manifest.Commands))
-	for commandID, record := range manifest.Commands {
-		cmd, err := buildFactoryConfigInitCommandFromRecord(record)
+	handler commandregistry.FactoryConfigInitHandler,
+) (ResolvedCobraHandlerRegistry, error) {
+	bindings := map[string]ResolvedCobraHandler{
+		"you.factory.query":           handler.FactoryQuery,
+		"you.factory.list":            handler.FactoryList,
+		"you.factory.create":          handler.FactoryCreate,
+		"you.factory.update":          handler.FactoryUpdate,
+		"you.factory.delete":          handler.FactoryDelete,
+		"you.factory.replace-current": handler.FactoryReplaceCurrent,
+		"you.factory.config.validate": handler.FactoryConfigValidate,
+		"you.factory.config.flatten":  handler.FactoryConfigFlatten,
+		"you.factory.config.expand":   handler.FactoryConfigExpand,
+		"you.init":                    handler.Init,
+	}
+	resolved := make(ResolvedCobraHandlerRegistry, len(bindings))
+	for commandID, binding := range bindings {
+		if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID(commandID); err != nil {
+			return nil, fmt.Errorf("build factory/config/init family commands: %w", err)
+		}
+		record, err := manifest.CommandByID(commandID)
 		if err != nil {
 			return nil, fmt.Errorf("build factory/config/init family commands: %w", err)
 		}
-		if err := finalizeFactoryConfigInitCommand(cmd, record, registry, bindings); err != nil {
-			return nil, fmt.Errorf("build factory/config/init family commands: %w", err)
+		if !record.Runnable || record.Handler.ID == "" {
+			return nil, fmt.Errorf("build factory/config/init family commands: command %q must declare a handler", commandID)
 		}
-		built[commandID] = cmd
+		resolved[record.Handler.ID] = binding
 	}
-
-	for commandID, cmd := range built {
-		parentID := factoryConfigInitParentID(commandID)
-		if parentID == "" {
-			continue
-		}
-		parent, ok := built[parentID]
-		if !ok {
-			return nil, fmt.Errorf("build factory/config/init family commands: missing parent %q for %q", parentID, commandID)
-		}
-		parent.AddCommand(cmd)
-	}
-	return built, nil
+	return resolved, nil
 }
 
-func buildFactoryConfigInitCommandFromRecord(record climanifest.Command) (*cobra.Command, error) {
-	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID(record.ID); err != nil {
-		return nil, err
-	}
-	cmd := &cobra.Command{
-		Use:     record.Usage.Line,
-		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
-		Long:    record.Documentation.Documentation.Description.CanonicalEnglish,
-		Example: record.Usage.Example,
-		Aliases: append([]string(nil), record.Aliases...),
-	}
-	if record.Visibility == "hidden" {
-		cmd.Hidden = true
-	}
-	return cmd, nil
-}
-
-func finalizeFactoryConfigInitCommand(
-	cmd *cobra.Command,
-	record climanifest.Command,
-	registry *commandregistry.Registry,
-	bindings FactoryConfigInitFlagBindings,
-) error {
-	if !record.Runnable {
-		return configureFactoryConfigInitGroupParent(cmd, record.ID)
-	}
-
-	if factoryConfigInitSilenceUsage(record.ID) {
-		cmd.SilenceUsage = true
-	}
-	cmd.Args = factoryConfigInitPositionalArgs(record)
-	if usesDeprecatedPortPreRun(record.ID) {
-		cmd.PreRunE = rejectDeprecatedPortFlag
-	}
-	if err := registerFactoryConfigInitLocalFlags(cmd, record, bindings); err != nil {
-		return err
-	}
-	return registry.AttachRunE(cmd, record.ID)
-}
-
-func configureFactoryConfigInitGroupParent(cmd *cobra.Command, commandID string) error {
-	switch commandID {
-	case "you.factory", "you.factory.config":
-		configureGroupCommandUnknownSubcommandGuard(cmd)
-		return nil
-	case "you.config":
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
-			}
-			return cmd.Help()
-		}
-		return nil
-	default:
-		return fmt.Errorf("non-runnable command %q must be a group parent", commandID)
-	}
-}
-
-func factoryConfigInitParentID(commandID string) string {
-	switch commandID {
-	case "you.factory", "you.config", "you.init":
-		return ""
-	default:
-		if idx := strings.LastIndex(commandID, "."); idx > 0 {
-			return commandID[:idx]
-		}
-		return ""
-	}
-}
-
-func factoryConfigInitSilenceUsage(commandID string) bool {
-	switch commandID {
-	case "you.factory.query",
-		"you.factory.list",
-		"you.factory.create",
-		"you.factory.update",
-		"you.factory.delete",
-		"you.factory.replace-current",
-		"you.factory.config.validate":
-		return true
-	default:
-		return false
-	}
-}
-
-func usesDeprecatedPortPreRun(commandID string) bool {
-	switch commandID {
-	case "you.factory.query", "you.factory.replace-current":
-		return true
-	default:
-		return false
-	}
-}
-
-func registerFactoryConfigInitLocalFlags(
-	cmd *cobra.Command,
-	record climanifest.Command,
-	bindings FactoryConfigInitFlagBindings,
-) error {
-	var deprecatedPort int
-	flags := sortedFlags(record.Flags)
-	for _, flag := range flags {
-		if flag.Scope != "local" {
-			continue
-		}
-		if flag.Long == "port" {
-			registerDeprecatedPortFlag(cmd, &deprecatedPort)
-			if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
-				return fmt.Errorf("apply port flag contract: %w", err)
-			}
-			continue
-		}
-		target, err := factoryConfigInitLocalBindingTarget(record.ID, flag, bindings)
+func detachFactoryConfigInitComponents(root *cobra.Command) (FactoryConfigInitFamilyComponents, error) {
+	findAndDetach := func(name string) (*cobra.Command, error) {
+		command, _, err := root.Find([]string{name})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usage := factoryConfigInitFlagUsage(record.ID, flag.Long, bindings)
-		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
-			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
+		root.RemoveCommand(command)
+		return command, nil
+	}
+	factory, err := findAndDetach("factory")
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: find factory: %w", err)
+	}
+	config, err := findAndDetach("config")
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: find config: %w", err)
+	}
+	initCommand, err := findAndDetach("init")
+	if err != nil {
+		return FactoryConfigInitFamilyComponents{}, fmt.Errorf("build factory/config/init family commands: find init: %w", err)
+	}
+	return FactoryConfigInitFamilyComponents{Factory: factory, Config: config, Init: initCommand}, nil
+}
+
+func preserveFactoryConfigInitArgumentDiagnostics(
+	components FactoryConfigInitFamilyComponents,
+	manifest climanifest.Manifest,
+) error {
+	commands := []struct {
+		id   string
+		root *cobra.Command
+		path []string
+	}{
+		{id: "you.factory.create", root: components.Factory, path: []string{"create"}},
+		{id: "you.factory.update", root: components.Factory, path: []string{"update"}},
+		{id: "you.factory.delete", root: components.Factory, path: []string{"delete"}},
+		{id: "you.factory.config.validate", root: components.Factory, path: []string{"config", "validate"}},
+		{id: "you.factory.config.flatten", root: components.Factory, path: []string{"config", "flatten"}},
+		{id: "you.factory.config.expand", root: components.Factory, path: []string{"config", "expand"}},
+	}
+	for _, item := range commands {
+		command, _, err := item.root.Find(item.path)
+		if err != nil {
+			return fmt.Errorf("build factory/config/init family commands: find %q: %w", item.id, err)
 		}
-		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
-			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
+		record, err := manifest.CommandByID(item.id)
+		if err != nil {
+			return fmt.Errorf("build factory/config/init family commands: %w", err)
 		}
-		if flag.Required {
-			_ = cmd.MarkFlagRequired(flag.Long)
-		}
+		preserveExactArgumentDiagnostic(command, record)
 	}
 	return nil
-}
-
-func factoryConfigInitPositionalArgs(record climanifest.Command) cobra.PositionalArgs {
-	if record.ID == "you.factory.replace-current" {
-		return cobra.NoArgs
-	}
-	return positionalArgsFromManifest(record)
-}
-
-func factoryConfigInitFlagUsage(commandID, longName string, bindings FactoryConfigInitFlagBindings) string {
-	switch commandID {
-	case "you.init":
-		switch longName {
-		case "dir":
-			return "base directory to create"
-		case "type":
-			return "scaffold type to generate (supported: default, ralph)"
-		}
-	}
-	if bindings.FlagUsages == nil {
-		return ""
-	}
-	return bindings.FlagUsages[longName]
-}
-
-func factoryConfigInitLocalBindingTarget(
-	commandID string,
-	flag climanifest.Flag,
-	bindings FactoryConfigInitFlagBindings,
-) (flagTarget, error) {
-	switch commandID {
-	case "you.factory.list":
-		return factoryConfigInitListLocalBinding(flag, bindings)
-	case "you.factory.create":
-		return factoryConfigInitCreateLocalBinding(flag, bindings)
-	case "you.factory.update":
-		return factoryConfigInitUpdateLocalBinding(flag, bindings)
-	case "you.factory.delete":
-		return factoryConfigInitDeleteLocalBinding(flag, bindings)
-	case "you.factory.replace-current":
-		return factoryConfigInitReplaceCurrentLocalBinding(flag, bindings)
-	case "you.init":
-		return factoryConfigInitInitLocalBinding(flag, bindings)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, commandID)
-	}
-}
-
-func factoryConfigInitListLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	if flag.Long == "dir" {
-		return requireStringBinding(flag.Long, bindings.FactoryListDir)
-	}
-	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.list")
-}
-
-func factoryConfigInitCreateLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	switch flag.Long {
-	case "dir":
-		return requireStringBinding(flag.Long, bindings.FactoryCreateDir)
-	case "from":
-		return requireStringBinding(flag.Long, bindings.FactoryCreateFrom)
-	case "set-current":
-		return requireBoolBinding(flag.Long, bindings.FactoryCreateSetCurrent)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.create")
-	}
-}
-
-func factoryConfigInitUpdateLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	switch flag.Long {
-	case "dir":
-		return requireStringBinding(flag.Long, bindings.FactoryUpdateDir)
-	case "from":
-		return requireStringBinding(flag.Long, bindings.FactoryUpdateFrom)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.update")
-	}
-}
-
-func factoryConfigInitDeleteLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	if flag.Long == "dir" {
-		return requireStringBinding(flag.Long, bindings.FactoryDeleteDir)
-	}
-	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.delete")
-}
-
-func factoryConfigInitReplaceCurrentLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	if flag.Long == "session" {
-		return requireStringBinding(flag.Long, bindings.FactoryReplaceSessionID)
-	}
-	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.replace-current")
-}
-
-func factoryConfigInitInitLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
-	switch flag.Long {
-	case "dir":
-		return requireStringBinding(flag.Long, bindings.InitDir)
-	case "type":
-		return requireStringBinding(flag.Long, bindings.InitType)
-	case "executor":
-		return requireStringBinding(flag.Long, bindings.InitExecutor)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.init")
-	}
-}
-
-func requireStringBinding(name string, target *string) (flagTarget, error) {
-	if target == nil {
-		return flagTarget{}, fmt.Errorf("bindings for local flag %q are required", name)
-	}
-	return flagTarget{stringValue: target}, nil
-}
-
-func requireBoolBinding(name string, target *bool) (flagTarget, error) {
-	if target == nil {
-		return flagTarget{}, fmt.Errorf("bindings for local flag %q are required", name)
-	}
-	return flagTarget{boolValue: target}, nil
-}
-
-func configureGroupCommandUnknownSubcommandGuard(cmd *cobra.Command) {
-	cmd.DisableFlagParsing = true
-	cmd.Args = rejectUnknownSubcommandArgs
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return rejectUnknownSubcommandArgs(cmd, args)
-	}
-}
-
-func rejectUnknownSubcommandArgs(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return nil
-	}
-	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
-		return cmd.Help()
-	}
-	return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 }

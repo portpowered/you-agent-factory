@@ -1,7 +1,7 @@
 {
   "exports": {
     "generated.cli.commands": {
-      "artifactHash": "413be988fd6881d89b61c595f3588907ccdfe60cf66ec62a8a1d4df84aa5cbd8",
+      "artifactHash": "8af85b7a5ce59b7254e08767fe2a1ab7f5c319bd9ca7f263c800464944728f10",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +18,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "413be988fd6881d89b61c595f3588907ccdfe60cf66ec62a8a1d4df84aa5cbd8",
+        "sourceHash": "8af85b7a5ce59b7254e08767fe2a1ab7f5c319bd9ca7f263c800464944728f10",
         "visibility": "public"
       },
       "family": "cli",
@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "591391cb2faf8e2a46fbb30cce3c1d894d323b30d870f70cb0f273bb7bcc6b9a",
+      "artifactHash": "bae8d044192899a2ac8fa75ba00ed736a046d430f96d58cce5aed7f38eeb3001",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "591391cb2faf8e2a46fbb30cce3c1d894d323b30d870f70cb0f273bb7bcc6b9a",
+        "sourceHash": "bae8d044192899a2ac8fa75ba00ed736a046d430f96d58cce5aed7f38eeb3001",
         "visibility": "public"
       },
       "family": "openapi",
@@ -331,7 +331,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+      "artifactHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +348,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+        "sourceHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
         "visibility": "public"
       },
       "family": "config",

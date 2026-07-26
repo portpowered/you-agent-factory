@@ -1,424 +1,369 @@
 package commandregistry_test
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
-func TestNewFactoryConfigInitRegistryRegistersContractedRunnableIDs(t *testing.T) {
-	registry, err := commandregistry.NewFactoryConfigInitRegistry(factoryConfigInitNoopHandlers())
-	if err != nil {
-		t.Fatalf("NewFactoryConfigInitRegistry() error = %v", err)
+type resolvedTestValue struct {
+	id     string
+	source resolvedinput.Source
+	value  resolvedinput.Value
+}
+
+func resolvedTestInputs(t *testing.T, values ...resolvedTestValue) resolvedinput.Inputs {
+	t.Helper()
+	definitions := make([]resolvedinput.Definition, 0, len(values))
+	candidates := make([]resolvedinput.Candidate, 0, len(values))
+	for _, item := range values {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: item.id, Kind: item.value.Kind(), Precedence: []resolvedinput.Source{item.source},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: item.id, Source: item.source, Value: item.value,
+		})
 	}
-	for _, commandID := range []string{
-		"you.factory.query",
-		"you.factory.list",
-		"you.factory.create",
-		"you.factory.update",
-		"you.factory.delete",
-		"you.factory.replace-current",
-		"you.factory.config.validate",
-		"you.factory.config.flatten",
-		"you.factory.config.expand",
-		"you.config.init",
-		"you.init",
-	} {
-		if _, lookupErr := registry.Lookup(commandID); lookupErr != nil {
-			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
-		}
+	inputs, err := resolvedinput.Resolve(definitions, candidates)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	return inputs
+}
+
+func resolvedFactoryGlobals(t *testing.T, jsonOutput, verbose, debug bool) resolvedinput.Inputs {
+	t.Helper()
+	return resolvedTestInputs(t,
+		resolvedTestValue{id: "you.flag.server", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("http://localhost:7437")},
+		resolvedTestValue{id: "you.flag.json", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(jsonOutput)},
+		resolvedTestValue{id: "you.flag.verbose", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(verbose)},
+		resolvedTestValue{id: "you.flag.debug", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(debug)},
+	)
+}
+
+func TestFactoryConfigInitCommandHandlerMapsCreateStableInputs(t *testing.T) {
+	var got factorycli.CreateFromFileConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			CreateFactoryFromFile: func(cfg factorycli.CreateFromFileConfig) error {
+				got = cfg
+				return nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.create.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")},
+		resolvedTestValue{id: "you.factory.create.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.factory.create.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")},
+		resolvedTestValue{id: "you.factory.create.flag.set-current", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	if err := handler.FactoryCreate(cmd, inputs, resolvedFactoryGlobals(t, true, false, false)); err != nil {
+		t.Fatalf("FactoryCreate() error = %v", err)
+	}
+	if got.Name != "staging" || got.Dir != "factories" || got.From != "factory.json" || !got.SetCurrent || !got.JSON {
+		t.Fatalf("create config = %#v, want stable-ID values", got)
 	}
 }
 
-func TestFactoryQueryRunEUsesHandwrittenServicePath(t *testing.T) {
-	var called bool
-	registry, err := commandregistry.NewFactoryConfigInitRegistry(commandregistry.FactoryConfigInitHandlers{
-		FactoryQueryRunE: commandregistry.FactoryQueryRunE(commandregistry.FactoryQueryBinding{
-			Query: func(factorycli.QueryConfig) error {
+func TestFactoryConfigInitCommandHandlerReportsEachMissingCreateInput(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
+		},
+	)
+	name := resolvedTestValue{id: "you.factory.create.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	dir := resolvedTestValue{id: "you.factory.create.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	from := resolvedTestValue{id: "you.factory.create.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")}
+	setCurrent := resolvedTestValue{id: "you.factory.create.flag.set-current", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)}
+	cases := []struct {
+		name      string
+		inputs    resolvedinput.Inputs
+		inherited resolvedinput.Inputs
+		wantID    string
+	}{
+		{name: "dir", inputs: resolvedTestInputs(t, name), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.dir"},
+		{name: "from", inputs: resolvedTestInputs(t, name, dir), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.from"},
+		{name: "set-current", inputs: resolvedTestInputs(t, name, dir, from), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.create.flag.set-current"},
+		{name: "globals", inputs: resolvedTestInputs(t, name, dir, from, setCurrent), inherited: resolvedinput.Inputs{}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := handler.FactoryCreate(&cobra.Command{}, test.inputs, test.inherited)
+			var accessErr *resolvedinput.AccessError
+			if !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("FactoryCreate() error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerMapsUpdateStableInputs(t *testing.T) {
+	var got factorycli.UpdateFromFileConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			UpdateFactoryFromFile: func(cfg factorycli.UpdateFromFileConfig) error {
+				got = cfg
+				return nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")},
+		resolvedTestValue{id: "you.factory.update.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.factory.update.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	if err := handler.FactoryUpdate(cmd, inputs, resolvedFactoryGlobals(t, true, false, false)); err != nil {
+		t.Fatalf("FactoryUpdate() error = %v", err)
+	}
+	if got.Name != "staging" || got.Dir != "factories" || got.From != "factory.json" || !got.JSON {
+		t.Fatalf("update config = %#v, want stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsEachMissingUpdateInput(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
+		},
+	)
+	name := resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	dir := resolvedTestValue{id: "you.factory.update.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	from := resolvedTestValue{id: "you.factory.update.flag.from", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory.json")}
+	cases := []struct {
+		name      string
+		inputs    resolvedinput.Inputs
+		inherited resolvedinput.Inputs
+		wantID    string
+	}{
+		{name: "dir", inputs: resolvedTestInputs(t, name), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.update.flag.dir"},
+		{name: "from", inputs: resolvedTestInputs(t, name, dir), inherited: resolvedFactoryGlobals(t, false, false, false), wantID: "you.factory.update.flag.from"},
+		{name: "globals", inputs: resolvedTestInputs(t, name, dir, from), inherited: resolvedinput.Inputs{}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := handler.FactoryUpdate(&cobra.Command{}, test.inputs, test.inherited)
+			var accessErr *resolvedinput.AccessError
+			if !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("FactoryUpdate() error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingTrailingInputs(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
+		DeleteFactory:        func(factorycli.DeleteConfig) error { return nil },
+		ValidateFactory:      func(factorycli.ValidateConfig) error { return nil },
+		FlattenFactoryConfig: func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		ExpandFactoryConfig:  func(configcli.FactoryConfigExpandConfig) error { return nil },
+	})
+	deleteName := resolvedTestValue{id: "you.factory.delete.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
+	deleteDir := resolvedTestValue{id: "you.factory.delete.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
+	validatePath := resolvedTestValue{id: "you.factory.config.validate.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	flattenPath := resolvedTestValue{id: "you.factory.config.flatten.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	expandPath := resolvedTestValue{id: "you.factory.config.expand.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
+	cases := []struct {
+		name   string
+		run    func() error
+		wantID string
+	}{
+		{name: "delete-dir", run: func() error {
+			return handler.FactoryDelete(&cobra.Command{}, resolvedTestInputs(t, deleteName), resolvedFactoryGlobals(t, false, false, false))
+		}, wantID: "you.factory.delete.flag.dir"},
+		{name: "delete-globals", run: func() error {
+			return handler.FactoryDelete(&cobra.Command{}, resolvedTestInputs(t, deleteName, deleteDir), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "validate-globals", run: func() error {
+			return handler.FactoryConfigValidate(&cobra.Command{}, resolvedTestInputs(t, validatePath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "flatten-globals", run: func() error {
+			return handler.FactoryConfigFlatten(&cobra.Command{}, resolvedTestInputs(t, flattenPath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+		{name: "expand-globals", run: func() error {
+			return handler.FactoryConfigExpand(&cobra.Command{}, resolvedTestInputs(t, expandPath), resolvedinput.Inputs{})
+		}, wantID: "you.flag.server"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var accessErr *resolvedinput.AccessError
+			if err := test.run(); !errors.As(err, &accessErr) || accessErr.InputID != test.wantID {
+				t.Fatalf("handler error = %v, want AccessError for %s", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingServices(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{})
+	cmd := &cobra.Command{}
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "query", run: func() error { return handler.FactoryQuery(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "delete", run: func() error { return handler.FactoryDelete(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "replace", run: func() error { return handler.FactoryReplaceCurrent(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "validate", run: func() error { return handler.FactoryConfigValidate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "flatten", run: func() error { return handler.FactoryConfigFlatten(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "expand", run: func() error { return handler.FactoryConfigExpand(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "init", run: func() error { return handler.Init(cmd, resolvedinput.Inputs{}, globals) }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.run(); err == nil || !strings.Contains(err.Error(), "service is required") {
+				t.Fatalf("missing service error = %v", err)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerReportsMissingRequiredInputs(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
+		QueryFactory:          func(factorycli.QueryConfig) error { return nil },
+		ListFactories:         func(factorycli.ListConfig) error { return nil },
+		CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
+		UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
+		DeleteFactory:         func(factorycli.DeleteConfig) error { return nil },
+		ReplaceFactoryCurrent: func(factorycli.ReplaceCurrentConfig) error { return nil },
+		ValidateFactory:       func(factorycli.ValidateConfig) error { return nil },
+		FlattenFactoryConfig:  func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		ExpandFactoryConfig:   func(configcli.FactoryConfigExpandConfig) error { return nil },
+		ConfigureInit:         func(initsetup.Config) error { return nil },
+		HomeDir:               func() (string, error) { return "operator-home", nil },
+	})
+	cmd := &cobra.Command{}
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "delete", run: func() error { return handler.FactoryDelete(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "replace", run: func() error { return handler.FactoryReplaceCurrent(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "validate", run: func() error { return handler.FactoryConfigValidate(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "flatten", run: func() error { return handler.FactoryConfigFlatten(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "expand", run: func() error { return handler.FactoryConfigExpand(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "init", run: func() error { return handler.Init(cmd, resolvedinput.Inputs{}, globals) }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var accessErr *resolvedinput.AccessError
+			if err := test.run(); !errors.As(err, &accessErr) {
+				t.Fatalf("missing input error = %v, want AccessError", err)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
+	var got initsetup.Config
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ConfigureInit: func(cfg initsetup.Config) error {
+				got = cfg
+				return nil
+			},
+			HomeDir: func() (string, error) { return "operator-home", nil },
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
+		resolvedTestValue{id: "you.init.flag.model", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("free-form/model")},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	ctx := startupcli.WithStdinTTY(context.Background(), true)
+	ctx = startupcli.WithStdoutTTY(ctx, true)
+	cmd.SetContext(ctx)
+	if err := handler.Init(cmd, inputs, resolvedFactoryGlobals(t, false, false, false)); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if got.HomeDir != "operator-home" || got.Provider != "codex" ||
+		got.Model == nil || *got.Model != "free-form/model" ||
+		got.Input == nil || !got.Interactive {
+		t.Fatalf("init setup config = %#v, want supplied stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerRejectsJSONBeforeSetup(t *testing.T) {
+	called := false
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ConfigureInit: func(initsetup.Config) error {
 				called = true
 				return nil
 			},
-		}),
-		FactoryListRunE:           noopRunE,
-		FactoryCreateRunE:         noopRunE,
-		FactoryUpdateRunE:         noopRunE,
-		FactoryDeleteRunE:         noopRunE,
-		FactoryReplaceCurrentRunE: noopRunE,
-		FactoryConfigValidateRunE: noopRunE,
-		FactoryConfigFlattenRunE:  noopRunE,
-		FactoryConfigExpandRunE:   noopRunE,
-		ConfigInitRunE:            noopRunE,
-		InitRunE:                  noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewFactoryConfigInitRegistry() error = %v", err)
-	}
-
-	cmd := &cobra.Command{Use: "query"}
-	cmd.SetArgs([]string{})
-	if err := registry.AttachRunE(cmd, "you.factory.query"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected factory query handler to invoke handwritten service path")
-	}
-}
-
-func TestConfigInitRunEUsesHandwrittenServicePath(t *testing.T) {
-	var called bool
-	runE := commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
-		JSON:    func() bool { return true },
-		HomeDir: func() (string, error) { return t.TempDir(), nil },
-		Init: func(configinitcmd.InitConfig) error {
-			called = true
-			return nil
 		},
-	})
-	cmd := &cobra.Command{Use: "init"}
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
+	)
+	inherited := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.flag.server", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("http://localhost:7437")},
+		resolvedTestValue{id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)},
+		resolvedTestValue{id: "you.flag.verbose", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+		resolvedTestValue{id: "you.flag.debug", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+	)
+	err := handler.Init(&cobra.Command{}, inputs, inherited)
+	if err == nil || !strings.Contains(err.Error(), "--json is not supported") {
+		t.Fatalf("Init() error = %v, want JSON rejection", err)
 	}
-	if !called {
-		t.Fatal("expected config init handler to invoke handwritten service path")
+	if called {
+		t.Fatal("setup service called after JSON rejection")
 	}
 }
 
-func TestInitRunEUsesHandwrittenServicePath(t *testing.T) {
-	var called bool
-	runE := commandregistry.InitRunE(commandregistry.InitBinding{
-		Init: func(factorydefinitions.ScaffoldConfig) error {
-			called = true
-			return nil
+func TestFactoryConfigInitCommandHandlerRejectsChangedDeprecatedPort(t *testing.T) {
+	called := false
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			QueryFactory: func(factorycli.QueryConfig) error {
+				called = true
+				return nil
+			},
 		},
-	})
-	cmd := &cobra.Command{Use: "init"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.query.flag.port", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(9090)},
+	)
+	err := handler.FactoryQuery(&cobra.Command{}, inputs, resolvedFactoryGlobals(t, false, false, false))
+	if err == nil || !strings.Contains(err.Error(), "--server") {
+		t.Fatalf("FactoryQuery() error = %v, want --server guidance", err)
 	}
-	if !called {
-		t.Fatal("expected init handler to invoke handwritten service path")
-	}
-}
-
-func TestNewFactoryConfigInitRegistryRejectsMissingHandlers(t *testing.T) {
-	handlers := factoryConfigInitNoopHandlers()
-	handlers.FactoryQueryRunE = nil
-	if _, err := commandregistry.NewFactoryConfigInitRegistry(handlers); err == nil {
-		t.Fatal("NewFactoryConfigInitRegistry() missing query handler = nil, want error")
+	if called {
+		t.Fatal("query service called after deprecated port rejection")
 	}
 }
 
-func factoryConfigInitNoopHandlers() commandregistry.FactoryConfigInitHandlers {
-	return commandregistry.FactoryConfigInitHandlers{
-		FactoryQueryRunE:          noopRunE,
-		FactoryListRunE:           noopRunE,
-		FactoryCreateRunE:         noopRunE,
-		FactoryUpdateRunE:         noopRunE,
-		FactoryDeleteRunE:         noopRunE,
-		FactoryReplaceCurrentRunE: noopRunE,
-		FactoryConfigValidateRunE: noopRunE,
-		FactoryConfigFlattenRunE:  noopRunE,
-		FactoryConfigExpandRunE:   noopRunE,
-		ConfigInitRunE:            noopRunE,
-		InitRunE:                  noopRunE,
-	}
-}
-
-func TestFactoryListRunEMapsBindings(t *testing.T) {
-	dir := "my-factory"
-	json := true
-	runE := commandregistry.FactoryListRunE(commandregistry.FactoryListBinding{
-		Dir:  &dir,
-		JSON: &json,
-		List: func(cfg factorycli.ListConfig) error {
-			if cfg.Dir != dir || !cfg.JSON {
-				t.Fatalf("list config = %+v, want dir=%q json=true", cfg, dir)
-			}
-			return nil
+func TestFactoryConfigInitCommandHandlerReportsMissingStableInput(t *testing.T) {
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ListFactories: func(factorycli.ListConfig) error { return nil },
 		},
-	})
-	cmd := &cobra.Command{Use: "list"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryCreateRunEMapsBindings(t *testing.T) {
-	dir := "factory"
-	from := "./factory.json"
-	setCurrent := true
-	json := true
-	runE := commandregistry.FactoryCreateRunE(commandregistry.FactoryCreateBinding{
-		Dir:        &dir,
-		From:       &from,
-		SetCurrent: &setCurrent,
-		JSON:       &json,
-		Create: func(cfg factorycli.CreateFromFileConfig) error {
-			if cfg.Name != "staging" || cfg.Dir != dir || cfg.From != from || !cfg.SetCurrent || !cfg.JSON {
-				t.Fatalf("create config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "create"}
-	if err := runE(cmd, []string{"staging"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryUpdateRunEMapsBindings(t *testing.T) {
-	dir := "factory"
-	from := "./factory.json"
-	runE := commandregistry.FactoryUpdateRunE(commandregistry.FactoryUpdateBinding{
-		Dir:  &dir,
-		From: &from,
-		Update: func(cfg factorycli.UpdateFromFileConfig) error {
-			if cfg.Name != "staging" || cfg.Dir != dir || cfg.From != from {
-				t.Fatalf("update config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "update"}
-	if err := runE(cmd, []string{"staging"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryDeleteRunEMapsBindings(t *testing.T) {
-	dir := "factory"
-	runE := commandregistry.FactoryDeleteRunE(commandregistry.FactoryDeleteBinding{
-		Dir: &dir,
-		Delete: func(cfg factorycli.DeleteConfig) error {
-			if cfg.Name != "staging" || cfg.Dir != dir {
-				t.Fatalf("delete config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "delete"}
-	if err := runE(cmd, []string{"staging"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryReplaceCurrentRunEMapsBindings(t *testing.T) {
-	server := "http://127.0.0.1:8080"
-	sessionID := "session-beta"
-	verbose := true
-	var diagnostic bytes.Buffer
-	runE := commandregistry.FactoryReplaceCurrentRunE(commandregistry.FactoryReplaceCurrentBinding{
-		Server:    &server,
-		SessionID: &sessionID,
-		Verbose:   func() bool { return verbose },
-		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
-			return &diagnostic
-		},
-		ReplaceCurrent: func(cfg factorycli.ReplaceCurrentConfig) error {
-			if cfg.Server != server || cfg.SessionID != sessionID || !cfg.Verbose || cfg.Diagnostics != &diagnostic {
-				t.Fatalf("replace-current config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "replace-current"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryConfigValidateRunEMapsBindings(t *testing.T) {
-	json := true
-	runE := commandregistry.FactoryConfigValidateRunE(commandregistry.FactoryConfigValidateBinding{
-		JSON: &json,
-		Validate: func(cfg factorycli.ValidateConfig) error {
-			if cfg.Path != "./factory.json" || !cfg.JSON {
-				t.Fatalf("validate config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "validate"}
-	if err := runE(cmd, []string{"./factory.json"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryConfigFlattenRunEMapsBindings(t *testing.T) {
-	debug := true
-	var diagnostic bytes.Buffer
-	runE := commandregistry.FactoryConfigFlattenRunE(commandregistry.FactoryConfigFlattenBinding{
-		Debug:   &debug,
-		Verbose: func() bool { return true },
-		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
-			return &diagnostic
-		},
-		Flatten: func(cfg configcli.FactoryConfigFlattenConfig) error {
-			if cfg.Path != "./factory" || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
-				t.Fatalf("flatten config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "flatten"}
-	if err := runE(cmd, []string{"./factory"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryConfigExpandRunEMapsBindings(t *testing.T) {
-	debug := true
-	runE := commandregistry.FactoryConfigExpandRunE(commandregistry.FactoryConfigExpandBinding{
-		Debug:   &debug,
-		Verbose: func() bool { return true },
-		Expand: func(cfg configcli.FactoryConfigExpandConfig) error {
-			if cfg.Path != "./factory.json" || !cfg.Verbose || !cfg.Debug {
-				t.Fatalf("expand config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "expand"}
-	if err := runE(cmd, []string{"./factory.json"}); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestConfigInitRunEPropagatesHomeDirError(t *testing.T) {
-	runE := commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
-		HomeDir: func() (string, error) {
-			return "", errors.New("home dir unavailable")
-		},
-		Init: func(configinitcmd.InitConfig) error {
-			t.Fatal("Init must not run when HomeDir fails")
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "init"}
-	if err := runE(cmd, nil); err == nil {
-		t.Fatal("RunE() error = nil, want home dir failure")
-	}
-}
-
-func TestInitRunEMapsBindings(t *testing.T) {
-	dir := "factory"
-	scaffoldType := "ralph"
-	executor := "codex"
-	debug := true
-	runE := commandregistry.InitRunE(commandregistry.InitBinding{
-		Dir:      &dir,
-		Type:     &scaffoldType,
-		Executor: &executor,
-		Debug:    &debug,
-		Verbose:  func() bool { return true },
-		Init: func(cfg factorydefinitions.ScaffoldConfig) error {
-			if cfg.Dir != dir || cfg.Type != scaffoldType || cfg.Executor != executor || !cfg.Debug || !cfg.Verbose {
-				t.Fatalf("init config = %+v", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "init"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestFactoryQueryRunEMapsVerboseAndDebugBindings(t *testing.T) {
-	verbose := true
-	debug := true
-	runE := commandregistry.FactoryQueryRunE(commandregistry.FactoryQueryBinding{
-		Verbose: func() bool { return verbose },
-		Debug:   &debug,
-		Query: func(cfg factorycli.QueryConfig) error {
-			if !cfg.Verbose || !cfg.Debug {
-				t.Fatalf("query config = %+v, want verbose and debug", cfg)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "query"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestRunnableFactoryConfigInitCommandIDsFromGeneratedManifest(t *testing.T) {
-	manifest, err := generated.FactoryConfigInitFamilyManifest()
-	if err != nil {
-		t.Fatalf("FactoryConfigInitFamilyManifest() error = %v", err)
-	}
-	ids, err := commandregistry.RunnableFactoryConfigInitCommandIDs(manifest)
-	if err != nil {
-		t.Fatalf("RunnableFactoryConfigInitCommandIDs() error = %v", err)
-	}
-	want := []string{
-		"you.config.init",
-		"you.factory.config.expand",
-		"you.factory.config.flatten",
-		"you.factory.config.validate",
-		"you.factory.create",
-		"you.factory.delete",
-		"you.factory.list",
-		"you.factory.query",
-		"you.factory.replace-current",
-		"you.factory.update",
-		"you.init",
-	}
-	if len(ids) != len(want) {
-		t.Fatalf("runnable IDs = %#v, want %#v", ids, want)
-	}
-	for i, id := range want {
-		if ids[i] != id {
-			t.Fatalf("runnable IDs[%d] = %q, want %q", i, ids[i], id)
-		}
-	}
-}
-
-func TestVerifyFactoryConfigInitRunnableCoverageRejectsMissingHandler(t *testing.T) {
-	manifest, err := generated.FactoryConfigInitFamilyManifest()
-	if err != nil {
-		t.Fatalf("FactoryConfigInitFamilyManifest() error = %v", err)
-	}
-	registry := commandregistry.NewRegistry()
-	if err := registry.Register("you.factory.query", noopRunE); err != nil {
-		t.Fatalf("Register() error = %v", err)
-	}
-	if err := registry.VerifyFactoryConfigInitRunnableCoverage(manifest); err == nil {
-		t.Fatal("VerifyFactoryConfigInitRunnableCoverage() missing handlers = nil, want error")
-	}
-}
-
-func TestVerifyFactoryConfigInitRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
-	manifest, err := generated.FactoryConfigInitFamilyManifest()
-	if err != nil {
-		t.Fatalf("FactoryConfigInitFamilyManifest() error = %v", err)
-	}
-	runnableIDs, err := commandregistry.RunnableFactoryConfigInitCommandIDs(manifest)
-	if err != nil {
-		t.Fatalf("RunnableFactoryConfigInitCommandIDs() error = %v", err)
-	}
-	registry := commandregistry.NewRegistry()
-	for _, commandID := range runnableIDs {
-		if err := registry.Register(commandID, noopRunE); err != nil {
-			t.Fatalf("Register(%q) error = %v", commandID, err)
-		}
-	}
-	if err := registry.VerifyFactoryConfigInitRunnableCoverage(manifest); err != nil {
-		t.Fatalf("VerifyFactoryConfigInitRunnableCoverage() error = %v", err)
+	)
+	err := handler.FactoryList(&cobra.Command{}, resolvedinput.Inputs{}, resolvedFactoryGlobals(t, false, false, false))
+	var accessErr *resolvedinput.AccessError
+	if !errors.As(err, &accessErr) || accessErr.InputID != "you.factory.list.flag.dir" {
+		t.Fatalf("FactoryList() error = %v, want missing stable dir input", err)
 	}
 }

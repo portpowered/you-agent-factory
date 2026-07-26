@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,6 +47,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
@@ -232,6 +234,32 @@ func provideOperatorSettingsCreateTemporaryFile(edges serviceedges.Edges) operat
 	}
 }
 
+func provideOperatorSettingsProviderCatalog(
+	providers *providerregistry.Registry,
+) operatorsettings.ProviderCatalog {
+	return func(value string) (string, bool) {
+		canonical, err := providers.CanonicalIdentity(value)
+		return canonical, err == nil
+	}
+}
+
+func provideOperatorConfigDocumentService(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	providers operatorsettings.ProviderCatalog,
+	decode operatorsettings.ConfigDecoder,
+	encode operatorsettings.ConfigEncoder,
+) operatorsettings.ConfigDocumentService {
+	return operatorsettings.ConfigDocumentService{
+		Files:           files,
+		CreateTemp:      createTemp,
+		Providers:       providers,
+		Decoder:         decode,
+		Encoder:         encode,
+		PersistenceLock: &sync.Mutex{},
+	}
+}
+
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {
 	if edges.OperatorSettingsIDGenerator != nil {
 		return edges.OperatorSettingsIDGenerator
@@ -314,6 +342,15 @@ func provideSystemInitializationService(
 		inspectPath,
 		migrationFiles,
 	)
+}
+
+func provideSystemInitializationOperation(
+	service systeminitialization.Service,
+) initializerapplication.SystemInitializationOperation {
+	return func(ctx context.Context, homeDir string) error {
+		_, err := service.Initialize(ctx, systeminitialization.Request{HomeDir: homeDir})
+		return err
+	}
 }
 
 func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {

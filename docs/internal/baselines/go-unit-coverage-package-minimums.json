@@ -255,10 +255,6 @@
       "minimum": 84.21
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
-      "minimum": 88.09
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
       "minimum": 0.00
     },
@@ -273,6 +269,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
       "minimum": 89.51
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
+      "minimum": 75.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",
@@ -1131,10 +1131,6 @@
       "minimum": 75.55
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/configinit",
-      "minimum": 89.06
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
       "minimum": 87.17
     },
@@ -1157,6 +1153,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
       "minimum": 88.46
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/initsetup",
+      "minimum": 81.08
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",

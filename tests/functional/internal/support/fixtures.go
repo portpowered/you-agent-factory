@@ -43,6 +43,30 @@ func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	return dir
 }
 
+func ScaffoldSingleStepFactory(t *testing.T, name string) string {
+	t.Helper()
+
+	return ScaffoldFactory(t, map[string]any{
+		"name": name,
+		"workTypes": []any{map[string]any{
+			"name": "task",
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{map[string]any{"name": "processor"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "processor",
+			"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
+			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+		}},
+	})
+}
+
 func ScaffoldFactoryFromExamplePNG(t *testing.T, relPath string) string {
 	t.Helper()
 

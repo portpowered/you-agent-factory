@@ -186,13 +186,13 @@ func buildResolvedModelsParent(
 		}
 		command.PreRunE = rejectDeprecatedPortFlag
 		if id != listRecord.ID {
-			preserveModelsExactArgumentDiagnostic(command, manifest.Commands[id])
+			preserveExactArgumentDiagnostic(command, manifest.Commands[id])
 		}
 	}
 	return parent, nil
 }
 
-func preserveModelsExactArgumentDiagnostic(
+func preserveExactArgumentDiagnostic(
 	command *cobra.Command,
 	record climanifest.Command,
 ) {

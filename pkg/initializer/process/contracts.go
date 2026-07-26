@@ -76,6 +76,7 @@ type StdioApplicationOpener interface {
 
 type Initializer interface {
 	ProcessContext(context.Context) (context.Context, func())
+	InitializeSystem(context.Context, string) error
 	Run(context.Context, RunIntent, RunSelection) error
 	Stdio(context.Context, MCPIntent) error
 }
@@ -96,9 +97,17 @@ type CommandFactory interface {
 }
 
 type Functions struct {
-	ProcessContextFunc func(context.Context) (context.Context, func())
-	RunFunc            RunHandler
-	StdioFunc          StdioHandler
+	ProcessContextFunc   func(context.Context) (context.Context, func())
+	InitializeSystemFunc func(context.Context, string) error
+	RunFunc              RunHandler
+	StdioFunc            StdioHandler
+}
+
+func (f Functions) InitializeSystem(ctx context.Context, homeDir string) error {
+	if f.InitializeSystemFunc == nil {
+		return nil
+	}
+	return f.InitializeSystemFunc(ctx, homeDir)
 }
 
 func (f Functions) ProcessContext(ctx context.Context) (context.Context, func()) {

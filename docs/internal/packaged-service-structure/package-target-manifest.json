@@ -96,11 +96,11 @@
     "pkg/services/factory_definitions/replayconfig",
     "pkg/services/factory_definitions/resource",
     "pkg/services/factory_definitions/runtimeconfig",
-    "pkg/services/factory_definitions/scaffold",
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
+    "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
     "pkg/services/factory_definitions/workers/taxonomy",
     "pkg/services/factory_definitions/workpropagation",
@@ -298,13 +298,13 @@
     "pkg/transports/cli/commandregistry",
     "pkg/transports/cli/completionprojection",
     "pkg/transports/cli/config",
-    "pkg/transports/cli/configinit",
     "pkg/transports/cli/dashboard",
     "pkg/transports/cli/default",
     "pkg/transports/cli/docs",
     "pkg/transports/cli/factory",
     "pkg/transports/cli/factoryload",
     "pkg/transports/cli/generated",
+    "pkg/transports/cli/initsetup",
     "pkg/transports/cli/mcp",
     "pkg/transports/cli/observation",
     "pkg/transports/cli/resolvedinput",
@@ -634,11 +634,6 @@
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/scaffold",
-      "disposition": "retain",
-      "destination": "factory_definitions"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/service",
       "disposition": "retain",
       "destination": "factory_definitions"
@@ -655,6 +650,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire/defaultscaffold",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1644,11 +1644,6 @@
       "destination": "transports"
     },
     {
-      "packagePath": "pkg/transports/cli/configinit",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
       "packagePath": "pkg/transports/cli/dashboard",
       "disposition": "retain",
       "destination": "transports"
@@ -1675,6 +1670,11 @@
     },
     {
       "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/initsetup",
       "disposition": "retain",
       "destination": "transports"
     },

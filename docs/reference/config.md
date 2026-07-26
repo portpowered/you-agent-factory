@@ -1,24 +1,35 @@
 # Config
 
-`you docs config` is the canonical packaged guide for initializing operator
+`you docs config` is the canonical packaged guide for configuring operator
 settings and validating or transforming an authored Factory. For ways to start
 or invoke a Factory, use `you docs run`.
 
-## Initialize Operator And System Configuration
+## Configure Provider And Model Defaults
 
-Run the initializer once for a new user home:
+Use the single setup command to configure the default provider and optional
+free-form model used by model-backed workers:
 
 ```bash
-you config init
+you init --provider codex
+you init --provider claude --model claude-sonnet-4-5
 ```
 
-It creates `~/.you-agent-factory/config.json` and materializes packaged defaults
-under `~/.you-agent-factory/factories`. Re-running it preserves an existing
-configuration and already-materialized packaged factories. During upgrade it
-moves valid factories from the retired `~/.you-agent-factory/you-agent-factories`
-root unless a same-named canonical factory already exists; conflicts preserve
-both copies and report the locations. Add global `--json` when automation needs
-the paths and per-file outcomes.
+The provider must be registered. The model, when supplied, may be any non-empty
+identifier and is not restricted to a local model catalog. A successful command
+reports the selected defaults and operator-config path. `you init` updates only
+the provider/model defaults and preserves all other operator settings. It does
+not support global `--json`; passing that flag fails without changing the file.
+
+Run `you init` without flags in a terminal for guided setup. The provider and
+model prompts show current defaults in brackets; press Enter to retain a
+displayed value. Enter `/cancel`, send EOF, or interrupt the command to abandon
+setup without changing the operator config. Outside a terminal, `--provider` is
+required.
+
+Normal runtime initialization creates the operator-config document when needed
+and materializes packaged/default Factories under
+`~/.you-agent-factory/factories`. This lifecycle is initializer-owned and does
+not require a separate setup or Factory-scaffolding command.
 
 The operator file can supply defaults for model-backed workers that omit their
 own provider or model:
@@ -38,6 +49,33 @@ file independently. Global `--default-worker-model-provider` and
 Authored worker values still win over operator defaults. Use `you docs workers`
 for worker fields and `you docs javascript-workflows` for reusable child-agent
 presets.
+
+The same document can set the rolling-file policy for runtime logs and metrics:
+
+```json
+{
+  "runtime": {
+    "logging": {
+      "directory": "/var/log/you/runtime",
+      "maxSizeMB": 100,
+      "maxBackups": 20,
+      "maxAgeDays": 30,
+      "compress": false
+    },
+    "metrics": {
+      "directory": "/var/log/you/metrics",
+      "maxSizeMB": 100,
+      "maxBackups": 20,
+      "maxAgeDays": 30,
+      "compress": false
+    }
+  }
+}
+```
+
+Both sections independently default to 100 MB files, 20 backups, 30 days of
+retention, and no compression. Omitting `directory` uses the runtime-owned
+location below `~/.you-agent-factory`.
 
 ## Validate Or Transform A Factory
 

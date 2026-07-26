@@ -2,7 +2,6 @@ package acceptance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -16,34 +15,32 @@ import (
 )
 
 type configInitOutcome struct {
-	HomeDir             string                             `json:"homeDir"`
-	ConfigPath          string                             `json:"configPath"`
-	SystemConfigOutcome string                             `json:"systemConfigOutcome"`
-	PackagedFactories   []configInitPackagedFactoryOutcome `json:"packagedFactories"`
-}
-
-type configInitPackagedFactoryOutcome struct {
-	Name       string `json:"name"`
-	FactoryDir string `json:"factoryDirectory"`
+	HomeDir             string
+	ConfigPath          string
+	NamedFactoriesRoot  string
+	SystemConfigOutcome string
 }
 
 func initializeConfig(t testing.TB, ctx context.Context, session *builtcliacceptance.Session, scenario string) (builtcliacceptance.RunResult, configInitOutcome) {
 	t.Helper()
 
-	result, err := session.Run(ctx, "config", "init", "--json")
+	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
+	namedFactoriesRoot := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
+	outcome := "skipped"
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		outcome = "created"
+	}
+	result, err := session.Run(ctx, "--json", "factory", "list", "--dir", namedFactoriesRoot)
 	session.RequireSuccess(t, scenario, result, err)
-
-	var outcome configInitOutcome
-	if err := json.Unmarshal([]byte(result.Stdout), &outcome); err != nil {
-		t.Fatalf("%s: decode config init JSON: %v\nstdout:\n%s", scenario, err, result.Stdout)
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}
-	if strings.TrimSpace(outcome.ConfigPath) == "" {
-		t.Fatalf("%s: config init JSON has empty configPath: %s", scenario, result.Stdout)
+	return result, configInitOutcome{
+		HomeDir:             session.HomeDir,
+		ConfigPath:          configPath,
+		NamedFactoriesRoot:  namedFactoriesRoot,
+		SystemConfigOutcome: outcome,
 	}
-	if outcome.HomeDir != session.HomeDir {
-		t.Fatalf("%s: config init homeDir = %q, want isolated session home %q", scenario, outcome.HomeDir, session.HomeDir)
-	}
-	return result, outcome
 }
 
 func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
@@ -129,6 +126,7 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	}
 }
 
+// TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully proves the built CLI exposes usable root help.
 func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 	t.Parallel()
 

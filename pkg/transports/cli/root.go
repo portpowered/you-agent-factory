@@ -26,10 +26,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -73,7 +73,7 @@ type OwnedExecutionService interface {
 type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
-type InitSystemConfigOperation func(configinitcmd.InitConfig) error
+type ConfigureInitOperation func(initsetup.Config) error
 type QueryFactoryOperation func(factorycli.QueryConfig) error
 type ListFactoriesOperation func(factorycli.ListConfig) error
 type ValidateFactoryOperation func(factorycli.ValidateConfig) error
@@ -120,7 +120,7 @@ type CommandOperations struct {
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
-	InitSystemConfig                  InitSystemConfigOperation
+	ConfigureInit                     ConfigureInitOperation
 	QueryFactory                      QueryFactoryOperation
 	ListFactories                     ListFactoriesOperation
 	ValidateFactory                   ValidateFactoryOperation
@@ -173,7 +173,7 @@ type CommandFactory struct {
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitFactory           interfaces.ScaffoldInitializer
-	InitSystemConfig      func(configinitcmd.InitConfig) error
+	ConfigureInit         func(initsetup.Config) error
 	QueryFactory          func(factorycli.QueryConfig) error
 	ListFactories         func(factorycli.ListConfig) error
 	ValidateFactory       func(factorycli.ValidateConfig) error
@@ -222,7 +222,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
-		InitSystemConfig:                  operations.InitSystemConfig,
+		ConfigureInit:                     operations.ConfigureInit,
 		QueryFactory:                      operations.QueryFactory,
 		ListFactories:                     operations.ListFactories,
 		ValidateFactory:                   operations.ValidateFactory,
@@ -294,10 +294,6 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 		return fmt.Errorf("observe CLI command: %w", err)
 	}
 	return parseErr
-}
-
-func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
-	return newRootCommandWithGeneratedRepresentativeFamily(options)
 }
 
 func buildWorkflowExecutionService(
@@ -630,7 +626,7 @@ func operatorConfigSourceValue(
 	if err != nil {
 		// A config path below a non-directory ancestor is unavailable in
 		// the same way as a missing optional config. Commands such as
-		// `you config init` still own the later, actionable creation error.
+		// initializer-owned startup still owns the later, actionable creation error.
 		if errors.Is(err, syscall.ENOTDIR) {
 			return resolvedinput.Value{}, false, nil
 		}

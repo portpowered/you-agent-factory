@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON proves list routing and JSON catalog output.
 func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models" {
@@ -39,6 +40,7 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 	}
 }
 
+// TestProcessModelsInspect_UsesResolvedModelNameArgument proves inspect forwards the resolved model identity.
 func TestProcessModelsInspect_UsesResolvedModelNameArgument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M" {

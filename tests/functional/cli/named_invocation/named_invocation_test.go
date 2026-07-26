@@ -105,6 +105,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 }
 
+// TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs proves both selection paths retain compatibility inputs.
 func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for no-signature Factory invocation compatibility")
@@ -117,14 +118,9 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory,
-		[]string{"you", "--json", "config", "init"},
+	factoryDir := initializePackagedFactory(
+		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	factoryDir := packagedFactoryDir(t, initStdout, packagedGoalFactoryName)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
@@ -169,6 +165,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 	}
 }
 
+// TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput proves selection does not change effective input.
 func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for named and explicit Factory invocation parity")
@@ -189,14 +186,9 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory,
-		[]string{"you", "--json", "config", "init"},
+	factoryDir := initializePackagedFactory(
+		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	factoryDir := packagedFactoryDir(t, initStdout, packagedGoalFactoryName)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	addEffectiveSignatureFixture(t, factoryPath)
 	documentPath := filepath.Join(workingDirectory, "story.md")
@@ -320,6 +312,7 @@ func assertEffectiveSignatureSubmission(t *testing.T, arguments *work.Invocation
 	}
 }
 
+// TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution proves schema preparation precedes execution.
 func TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for empty selected-Factory invocation preparation")
@@ -375,14 +368,10 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory,
-		[]string{"you", "--json", "config", "init"},
+	factoryDir := initializePackagedFactory(
+		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	factoryPath := filepath.Join(packagedFactoryDir(t, initStdout, packagedGoalFactoryName), "factory.json")
+	factoryPath := filepath.Join(factoryDir, "factory.json")
 	replaceInvocationSignatureFixture(t, factoryPath, map[string]any{
 		"parameters": []any{map[string]any{
 			"name": "mode", "defaultValue": "safe",
@@ -440,14 +429,10 @@ func runEmptyPreparationFailureCase(
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory,
-		[]string{"you", "--json", "config", "init"},
+	factoryDir := initializePackagedFactory(
+		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	factoryPath := filepath.Join(packagedFactoryDir(t, initStdout, packagedGoalFactoryName), "factory.json")
+	factoryPath := filepath.Join(factoryDir, "factory.json")
 	replaceInvocationSignatureFixture(t, factoryPath, signature)
 
 	var stdout bytes.Buffer
@@ -480,6 +465,7 @@ func emptyInvocationArguments(selection, factoryPath string) []string {
 
 const preparationFailureSensitiveValue = "credential-that-must-not-leak"
 
+// TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects proves preparation failure is side-effect free.
 func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t *testing.T) {
 	t.Parallel()
 
@@ -597,12 +583,17 @@ func runPreparationFailureCase(
 	var stderr bytes.Buffer
 	stdinIsTTY := true
 	stdoutIsTTY := false
+	homeDir := t.TempDir()
 	err = process.Execute(root.Input{
 		Args: append(
 			[]string{"you", "run", "--factory", factoryPath, "--no-record"},
 			arguments...,
 		),
-		Env:              os.Environ(),
+		Env: append(
+			os.Environ(),
+			"HOME="+homeDir,
+			"USERPROFILE="+homeDir,
+		),
 		Stdin:            strings.NewReader(""),
 		Stdout:           &stdout,
 		Stderr:           &stderr,
@@ -826,18 +817,6 @@ func runHermeticNamedInvocation(
 	}
 
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		[]string{"you", "--json", "config", "init"},
-	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	assertPackagedFactoryInstalled(t, initStdout, factoryName)
-
 	mockWorkersPath := writeMockWorkersConfig(t, mockWorkers)
 	args := []string{
 		"you", "run", "--named", factoryName,
@@ -911,33 +890,33 @@ func executeCustomerCommandWithStdin(
 	return stdout.String(), stderr.String()
 }
 
-func assertPackagedFactoryInstalled(t *testing.T, payload, name string) {
+func initializePackagedFactory(
+	t *testing.T,
+	process customerProcess,
+	environment []string,
+	workingDirectory string,
+	homeDir string,
+	name string,
+) string {
 	t.Helper()
-	_ = packagedFactoryDir(t, payload, name)
-}
-
-func packagedFactoryDir(t *testing.T, payload, name string) string {
-	t.Helper()
-	var result struct {
-		PackagedFactories []struct {
-			Name       string `json:"name"`
-			FactoryDir string `json:"factoryDirectory"`
-		} `json:"packagedFactories"`
+	factoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	stdout, stderr := executeCustomerCommand(
+		t,
+		process,
+		environment,
+		workingDirectory,
+		[]string{"you", "--json", "factory", "list", "--dir", factoriesRoot},
+	)
+	if stderr != "" {
+		t.Fatalf("factory list initialization stderr = %q, want empty; stdout=%s", stderr, stdout)
 	}
-	if err := json.Unmarshal([]byte(payload), &result); err != nil {
-		t.Fatalf("decode config init result: %v\nstdout:\n%s", err, payload)
+	factoryDir := filepath.Join(
+		append([]string{factoriesRoot}, strings.Split(name, "/")...)...,
+	)
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("installed packaged Factory %q: %v", name, err)
 	}
-	for _, factory := range result.PackagedFactories {
-		if factory.Name != name {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(factory.FactoryDir, "factory.json")); err != nil {
-			t.Fatalf("installed packaged Factory %q: %v", name, err)
-		}
-		return factory.FactoryDir
-	}
-	t.Fatalf("config init result omitted packaged Factory %q: %#v", name, result.PackagedFactories)
-	return ""
+	return factoryDir
 }
 
 func writeMockWorkersConfig(t *testing.T, config workers.MockWorkersConfig) string {

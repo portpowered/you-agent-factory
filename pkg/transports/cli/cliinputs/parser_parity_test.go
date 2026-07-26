@@ -102,22 +102,18 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			argumentPosition: -1,
 		},
 		{
-			name:        "factory retains local directory parsing",
-			commandPath: "you factory list",
-			argv:        []string{"factory", "list", "--dir", "factory"},
-			flagLong:    "dir",
+			name:             "factory retains local directory parsing",
+			commandPath:      "you factory list",
+			argv:             []string{"factory", "list", "--dir", "factory"},
+			flagLong:         "dir",
+			argumentPosition: -1,
 		},
 		{
-			name:             "config retains variadic init parsing",
-			commandPath:      "you config init",
-			argv:             []string{"config", "init", "operator"},
-			argumentPosition: 0,
-		},
-		{
-			name:        "init retains local executor parsing",
-			commandPath: "you init",
-			argv:        []string{"init", "--executor", "codex"},
-			flagLong:    "executor",
+			name:             "init retains local provider parsing",
+			commandPath:      "you init",
+			argv:             []string{"init", "--provider", "codex"},
+			flagLong:         "provider",
+			argumentPosition: -1,
 		},
 		{
 			name:        "work retains local state filtering",
@@ -126,10 +122,11 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			flagLong:    "state-name",
 		},
 		{
-			name:        "server global remains parseable after deep descendant",
-			commandPath: "you factory list",
-			argv:        []string{"factory", "list", "--server", "https://factory.example"},
-			flagLong:    "server",
+			name:             "server global remains parseable after deep descendant",
+			commandPath:      "you factory list",
+			argv:             []string{"factory", "list", "--server", "https://factory.example"},
+			flagLong:         "server",
+			argumentPosition: -1,
 			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you factory list", "server")

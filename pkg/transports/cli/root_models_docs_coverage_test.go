@@ -586,15 +586,15 @@ func TestFactoryDeleteCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 }
 
-func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
+func TestInitCommand_GlobalJSONIsRejectedBeforeInitService(t *testing.T) {
 	originalInitFactory := initFactory
 	defer func() {
 		initFactory = originalInitFactory
 	}()
 
-	var got factorydefinitions.ScaffoldConfig
-	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
-		got = cfg
+	called := false
+	initFactory = func(factorydefinitions.ScaffoldConfig) error {
+		called = true
 		return nil
 	}
 
@@ -603,11 +603,12 @@ func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "init"})
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute init with global --json: %v", err)
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--json is not supported by you init") {
+		t.Fatalf("execute init with global --json error = %v", err)
 	}
-	if !got.JSON {
-		t.Fatal("expected global --json to map to InitConfig.JSON")
+	if called {
+		t.Fatal("init service called after global --json rejection")
 	}
 }
 

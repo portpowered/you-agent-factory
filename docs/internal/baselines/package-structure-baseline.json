@@ -829,11 +829,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/acceptance/install_outcomes_test.go",
-      "target": "acceptance"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/acceptance/invalid_quiet_outcomes_test.go",
       "target": "acceptance"
     },
@@ -870,21 +865,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/automat_portability_integration_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_agent_slot_regression_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_factory_schema_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_init_factory_test.go",
       "target": "bootstrap_portability"
     },
     {
@@ -951,11 +931,6 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
       "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/config_init/config_init_test.go",
-      "target": "config_init"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1425,11 +1400,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/cli_ralph_init_smoke_test.go",
       "target": "workflow"
     },
     {

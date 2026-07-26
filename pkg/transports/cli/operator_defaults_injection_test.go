@@ -3,6 +3,7 @@ package cli
 import (
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -59,7 +60,7 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
-		nil,
+		startupcli.Functions{},
 	)
 	models, _, err := root.Find([]string{"models"})
 	if err != nil {
@@ -92,7 +93,7 @@ func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
-		nil,
+		startupcli.Functions{},
 	)
 	run, _, err := root.Find([]string{"run"})
 	if err != nil {

@@ -195,7 +195,11 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 	built := make(map[string]*cobra.Command, len(plan))
 	targets := make(map[string]*genericFlagValue)
 	for _, item := range plan {
-		built[item.record.Path] = projectCommand(item.record, item.arguments)
+		built[item.record.Path] = projectCommand(
+			item.record,
+			item.arguments,
+			bindings.GuardUnknownSubcommands,
+		)
 	}
 	for _, item := range plan {
 		if err := projectFlags(built[item.record.Path], item, targets, bindings); err != nil {
@@ -458,12 +462,16 @@ func commandParentPath(path string) string {
 	return path[:index]
 }
 
-func projectCommand(record climanifest.Command, arguments []climanifest.Argument) *cobra.Command {
+func projectCommand(
+	record climanifest.Command,
+	arguments []climanifest.Argument,
+	guardUnknownSubcommands bool,
+) *cobra.Command {
 	args := positionalArgsFromManifest(record)
 	if len(arguments) == 0 {
 		args = cobra.NoArgs
 	}
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:     projectedCommandUsage(record, arguments),
 		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
 		Long:    commandLong(record),
@@ -471,6 +479,29 @@ func projectCommand(record climanifest.Command, arguments []climanifest.Argument
 		Aliases: append([]string(nil), record.Aliases...),
 		Hidden:  record.Visibility == "hidden",
 		Args:    args,
+	}
+	if !record.Runnable && guardUnknownSubcommands {
+		configureGenericGroupCommand(command)
+	}
+	return command
+}
+
+func configureGenericGroupCommand(command *cobra.Command) {
+	command.DisableFlagParsing = true
+	command.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+			return cmd.Help()
+		}
+		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+	}
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := command.Args(cmd, args); err != nil {
+			return err
+		}
+		return cmd.Help()
 	}
 }
 

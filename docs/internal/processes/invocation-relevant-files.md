@@ -583,42 +583,52 @@ response-stream output.
   `pkg/services/operator_settings.ConfigDocumentService`: validate and encode the
   full candidate before filesystem side effects, publish through a uniquely
   created same-directory temporary file, and treat `Rename` as the single commit
-  boundary after write, sync, close, permission, and cancellation checks. Share
-  one explicit persistence lock between service copies and reads so concurrent
-  callers remain deterministic on platforms where overlapping replacement and
-  reads otherwise produce sharing violations; failed attempts remove only their
-  own temporary artifact and never rewrite the committed destination directly.
+  boundary after write, sync, close, permission, and cancellation checks. Hold
+  one explicit persistence lock across the complete read-merge-replace
+  transaction, and share that lock between service copies and standalone reads,
+  so concurrent partial updates preserve each other's fields and overlapping
+  replacements remain deterministic on platforms with sharing violations.
+  Failed attempts remove only their own temporary artifact and never rewrite
+  the committed destination directly.
   Prompted setup should use a write-free function contract that receives the
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
-- Canonical `you config init` system bootstrap belongs in
-  `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
-  `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in
-  `pkg/transports/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
-  Fresh homes create `~/.you-agent-factory/config.json` through
-  `pkg/services/operator_settings.EnsureLocalBackendScope`; existing config files are
-  validated with `operatorconfig.LoadFileConfig` and left byte-identical on
-  re-run. `pkg/initializer/configinit` receives the Factory Definitions packaged
-  catalog and root persistence capability from Wire and persists only missing
-  catalog entries through that capability;
-  valid installed directories are loaded and skipped without rewriting
-  customer-owned files. Isolated-home rerun coverage lives in
-  `pkg/initializer/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
-  `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
-  `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
-  `pkg/transports/cli/configinit/init_test.go` / `pkg/transports/cli/root_config_init_test.go`. Keep
-  `you factory config` factory.json tooling separate from this top-level
-  operator/system initializer. Post-install bootstrap is invoked from
-  `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
-  `config init` subcommand; installer smoke coverage lives in
-  `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
-  / `scripts/release/smoke-install.ps1`.
+- Public provider/model setup enters through the manifest-derived `you init`
+  handler in `pkg/transports/cli/commandregistry`, which translates stable
+  `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
+  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
+  home-to-config-path translation, prompt rendering, and human output. Enable
+  prompts only from the invocation-local stdin/stdout TTY classifications on
+  the process context, pass Cobra's invocation-local input/output streams, and
+  preserve cancellation from that same context; do not inspect host streams in
+  the transport. The prompt must collect every value without writing before it
+  delegates to the prompted settings operation, while
+  `ConfigDocumentService` retains provider-catalog validation, semantic merge,
+  unrelated-field preservation, and the atomic commit.
+- Normal executable commands run the exact
+  `application.SystemInitializationOperation` through `pkg/initializer` before
+  their handler or lifecycle opens. Wire adapts
+  `pkg/services/system_initialization.Service` to that role; fresh homes create
+  operator config and materialize packaged/default Factories, while reruns
+  validate and preserve customer-owned files. Bare root/help, invalid commands,
+  and `you init` do not activate system initialization: `you init` owns only the
+  atomic provider/model settings update. The retired `you config init` command,
+  its CLI renderer, and installer invocation must remain absent. Root-built
+  replacement/retirement evidence lives in
+  `tests/functional/product/init_setup/init_setup_test.go`; installer behavior
+  lives in `tests/release/install_script_test.go` and
+  `scripts/release/smoke-install.{sh,ps1}`.
+- Root-built functional fixtures that execute initializer-owned commands must
+  use an invocation-local HOME/USERPROFILE and explicit Factory test data.
+  Environment overrides follow last-value-wins process semantics. Do not
+  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through
   `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
-  corresponding materialized `scripts/...` path, which `you config init`
-  installs as editable factory files.
+  corresponding materialized `scripts/...` path, which normal initializer
+  startup installs as editable factory files.
 - Package-owned execution selections belong in the invocation signature and
   JavaScript args schema. Mirror their defaults in the workflow and constrain
   selectable model and reasoning values with the package `defaultPolicy`
@@ -683,6 +693,13 @@ response-stream output.
   registry. This preserves inherited root resolution after production root
   composition without forcing later behavioral slices into the current change;
   remove each legacy entry as its leaf gains a resolved handler.
+  The fully migrated factory/config/init family follows the same detached-tree
+  pattern in `factory_config_init_constructor.go`, with every local input
+  consumed through `ResolvedCobraHandlers` and no mutable flag-binding table.
+  Families whose established parent commands reject arbitrary trailing tokens
+  should opt into `GenericBindings.GuardUnknownSubcommands`; keep that
+  compatibility behavior in the generic projector instead of reintroducing
+  family-owned flag parsing or public-name dispatch.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.
@@ -1340,8 +1357,8 @@ response-stream output.
   the generated manifest registers it for every package consumer. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
-  `you config init` installs `@you/subagent` under the global named-factory root
-  before named invocation can resolve it.
+  normal initializer startup installs `@you/subagent` under the global
+  named-factory root before named invocation can resolve it.
 - `pkg/services/factory_definitions/packages/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
@@ -1471,7 +1488,7 @@ response-stream output.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
   invocation, stdout primary-result, and response-stream guidance.
 - `pkg/config/defaultpaths/default_paths.go` owns the canonical shared named-factory
-  root for both `you config init` materialization and `you run --named` lookup;
+  root for both initializer-owned materialization and `you run --named` lookup;
   use `defaultpaths.NamedFactoriesRoot` instead of duplicating the home-relative
   directory in runtime code or tests. `configinit.Init` inventories legacy
   factory identities from their hierarchical directories and migrates them from
@@ -1505,7 +1522,7 @@ response-stream output.
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
 - `packages/packaged-factories/generated/manifest.json` is the single
   registration point for shipped named Factories. Regeneration derives it from
-  authored Factory directories, and `you config init` materializes every
+  authored Factory directories, and normal initializer startup materializes every
   validated manifest entry without separate Go registration. Customer-facing
   packaged invocation guidance belongs in `docs/reference/run.md`.
 - Website Packaged Factory discovery belongs behind

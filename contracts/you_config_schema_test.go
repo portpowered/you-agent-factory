@@ -3,6 +3,7 @@ package contracts_test
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -33,6 +34,41 @@ func youConfigSchema(t *testing.T) *jsonschema.Schema {
 			id:   sensitivitySchemaID,
 		},
 	)
+}
+
+func TestYouConfigSchemaRuntimeObservabilitySettings(t *testing.T) {
+	t.Parallel()
+	schema := youConfigSchema(t)
+
+	tests := []struct {
+		name       string
+		document   string
+		wantAccept bool
+	}{
+		{name: "partial", document: `{"runtime":{"logging":{"compress":true}}}`, wantAccept: true},
+		{name: "complete", document: `{"runtime":{"logging":{"directory":"logs","maxSizeMB":1,"maxBackups":2,"maxAgeDays":3,"compress":true},"metrics":{"directory":"metrics","maxSizeMB":4,"maxBackups":5,"maxAgeDays":6,"compress":false}}}`, wantAccept: true},
+		{name: "unknown setting", document: `{"runtime":{"logging":{"unknown":true}}}`},
+		{name: "empty directory", document: `{"runtime":{"metrics":{"directory":" "}}}`},
+		{name: "non-positive size", document: `{"runtime":{"logging":{"maxSizeMB":0}}}`},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			instance, err := jsonschema.UnmarshalJSON(strings.NewReader(test.document))
+			if err != nil {
+				t.Fatalf("parse fixture: %v", err)
+			}
+			err = schema.Validate(instance)
+			if test.wantAccept && err != nil {
+				t.Fatalf("schema rejected runtime settings: %v", err)
+			}
+			if !test.wantAccept && err == nil {
+				t.Fatal("schema accepted invalid runtime settings")
+			}
+		})
+	}
 }
 
 func TestYouConfigSchemaValidFixtures(t *testing.T) {

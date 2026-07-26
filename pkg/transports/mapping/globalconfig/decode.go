@@ -30,7 +30,11 @@ func Decode(data []byte) (operatorsettings.Config, error) {
 		return operatorsettings.Config{}, err
 	}
 
-	return mapConfig(*generated).Normalize()
+	config, err := mapConfig(*generated)
+	if err != nil {
+		return operatorsettings.Config{}, err
+	}
+	return config.Normalize()
 }
 
 func requireEOF(decoder *json.Decoder) error {
@@ -44,16 +48,38 @@ func requireEOF(decoder *json.Decoder) error {
 	return fmt.Errorf("decode generated global config: unexpected trailing JSON")
 }
 
-func mapConfig(generated factoryapi.GlobalConfig) operatorsettings.Config {
-	config := operatorsettings.Config{BackendScopeID: optionalString(generated.BackendScopeID)}
+func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, error) {
+	config := operatorsettings.Config{
+		BackendScopeID: optionalString(generated.BackendScopeID),
+		Runtime:        defaultRuntimeSettings(),
+	}
 	if generated.Defaults != nil {
 		config.Defaults = operatorsettings.Defaults{
 			WorkerModelProvider: optionalString(generated.Defaults.WorkerModelProvider),
 			WorkerModel:         optionalString(generated.Defaults.WorkerModel),
 		}
 	}
+	if generated.Runtime != nil {
+		var err error
+		config.Runtime.Logging, err = mapRuntimeArtifactSettings(
+			"runtime.logging",
+			generated.Runtime.Logging,
+			config.Runtime.Logging,
+		)
+		if err != nil {
+			return operatorsettings.Config{}, err
+		}
+		config.Runtime.Metrics, err = mapRuntimeArtifactSettings(
+			"runtime.metrics",
+			generated.Runtime.Metrics,
+			config.Runtime.Metrics,
+		)
+		if err != nil {
+			return operatorsettings.Config{}, err
+		}
+	}
 	if generated.WorkerPresets == nil {
-		return config
+		return config, nil
 	}
 
 	config.WorkerPresets = make([]operatorsettings.WorkerPreset, len(*generated.WorkerPresets))
@@ -65,12 +91,65 @@ func mapConfig(generated factoryapi.GlobalConfig) operatorsettings.Config {
 			ReasoningEffort: optionalEnum(preset.ReasoningEffort),
 		}
 	}
-	return config
+	return config, nil
+}
+
+func defaultRuntimeSettings() operatorsettings.RuntimeSettings {
+	defaults := operatorsettings.RuntimeArtifactSettings{
+		MaxSizeMB:  operatorsettings.DefaultRuntimeArtifactMaxSizeMB,
+		MaxBackups: operatorsettings.DefaultRuntimeArtifactBackups,
+		MaxAgeDays: operatorsettings.DefaultRuntimeArtifactMaxAge,
+	}
+	return operatorsettings.RuntimeSettings{Logging: defaults, Metrics: defaults}
+}
+
+func mapRuntimeArtifactSettings(
+	fieldPath string,
+	generated *factoryapi.GlobalConfigRuntimeArtifactSettings,
+	defaults operatorsettings.RuntimeArtifactSettings,
+) (operatorsettings.RuntimeArtifactSettings, error) {
+	if generated == nil {
+		return defaults, nil
+	}
+	settings := defaults
+	if generated.Directory != nil {
+		settings.Directory = strings.TrimSpace(*generated.Directory)
+		if settings.Directory == "" {
+			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.directory must be non-empty", fieldPath)
+		}
+	}
+	if generated.MaxSizeMB != nil {
+		if *generated.MaxSizeMB < 1 {
+			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxSizeMB must be at least 1", fieldPath)
+		}
+		settings.MaxSizeMB = *generated.MaxSizeMB
+	}
+	if generated.MaxBackups != nil {
+		if *generated.MaxBackups < 1 {
+			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxBackups must be at least 1", fieldPath)
+		}
+		settings.MaxBackups = *generated.MaxBackups
+	}
+	if generated.MaxAgeDays != nil {
+		if *generated.MaxAgeDays < 1 {
+			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxAgeDays must be at least 1", fieldPath)
+		}
+		settings.MaxAgeDays = *generated.MaxAgeDays
+	}
+	if generated.Compress != nil {
+		settings.Compress = *generated.Compress
+	}
+	return settings, nil
 }
 
 // Encode maps normalized Operator Settings values into the generated
 // GlobalConfig model and serializes one canonical filesystem document.
 func Encode(config operatorsettings.Config) ([]byte, error) {
+	normalized, err := config.Normalize()
+	if err != nil {
+		return nil, fmt.Errorf("encode generated global config: %w", err)
+	}
+	config = normalized
 	generated := factoryapi.GlobalConfig{}
 	if scopeID := strings.TrimSpace(config.BackendScopeID); scopeID != "" {
 		generated.BackendScopeID = &scopeID
@@ -80,6 +159,10 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 			WorkerModelProvider: optionalStringPointer(config.Defaults.WorkerModelProvider),
 			WorkerModel:         optionalStringPointer(config.Defaults.WorkerModel),
 		}
+	}
+	generated.Runtime = &factoryapi.GlobalConfigRuntime{
+		Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
+		Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
 	}
 	if config.WorkerPresets != nil {
 		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))
@@ -102,6 +185,18 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 		return nil, fmt.Errorf("encode generated global config: %w", err)
 	}
 	return append(payload, '\n'), nil
+}
+
+func mapRuntimeArtifactSettingsToAPI(
+	settings operatorsettings.RuntimeArtifactSettings,
+) *factoryapi.GlobalConfigRuntimeArtifactSettings {
+	return &factoryapi.GlobalConfigRuntimeArtifactSettings{
+		Directory:  optionalStringPointer(settings.Directory),
+		MaxSizeMB:  &settings.MaxSizeMB,
+		MaxBackups: &settings.MaxBackups,
+		MaxAgeDays: &settings.MaxAgeDays,
+		Compress:   &settings.Compress,
+	}
 }
 
 func optionalStringPointer(value string) *string {

@@ -107,3 +107,41 @@ func TestMergeRequiresRuntimeDefinitions(t *testing.T) {
 		t.Fatalf("Merge error = %v", err)
 	}
 }
+
+func TestMergeNilFactoryReturnsNoEffectiveDefinition(t *testing.T) {
+	t.Parallel()
+
+	effective, err := runtimeconfig.Merge(nil, definitions{})
+	if err != nil {
+		t.Fatalf("Merge nil Factory: %v", err)
+	}
+	if effective != nil {
+		t.Fatalf("effective Factory = %#v, want nil", effective)
+	}
+}
+
+func TestNormalizeCanonicalWorkstationRuntimeAppliesPublicDefaults(t *testing.T) {
+	t.Parallel()
+
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
+		Type:    factorydefinitions.WorkstationTypePoller,
+		Body:    "poll the queue",
+		Timeout: "2m",
+	}
+
+	runtimeconfig.NormalizeCanonicalWorkstationRuntime(workstation)
+
+	if workstation.Kind != factorydefinitions.WorkstationKindPoller {
+		t.Fatalf("kind = %q, want poller", workstation.Kind)
+	}
+	if workstation.PromptTemplate != "poll the queue" {
+		t.Fatalf("prompt template = %q, want body fallback", workstation.PromptTemplate)
+	}
+	if workstation.Limits.MaxExecutionTime != "2m" || workstation.Timeout != "" {
+		t.Fatalf(
+			"execution limits = (%q, legacy %q), want canonical 2m only",
+			workstation.Limits.MaxExecutionTime,
+			workstation.Timeout,
+		)
+	}
+}
