@@ -12,6 +12,9 @@ import (
 // InspectRuntime returns invocation readiness for one model through the Models
 // service boundary.
 func (s *Service) InspectRuntime(ctx context.Context, modelName string) (models.Runtime, error) {
+	if err := models.ValidateInspectRuntimeRequest(models.InspectRuntimeRequest{Name: modelName}); err != nil {
+		return models.Runtime{}, err
+	}
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
 		return models.Runtime{}, fmt.Errorf("factory service runtime is not available")

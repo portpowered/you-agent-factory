@@ -535,6 +535,24 @@ func TestCommandManifestSchemaProductionDocsFamily(t *testing.T) {
 			t.Fatalf("you.docs topic enum missing %q", want)
 		}
 	}
+	if got, _ := arg["scope"].(string); got != "local" {
+		t.Fatalf("you.docs topic scope = %q, want local", got)
+	}
+	if _, exists := arg["channels"]; exists {
+		t.Fatal("you.docs topic retains compatibility channels")
+	}
+	if got, _ := arg["handlerBindingId"].(string); got != "you.docs.binding.topic" {
+		t.Fatalf("you.docs topic handlerBindingId = %q", got)
+	}
+	sources, _ := arg["acceptedSources"].([]any)
+	if len(sources) != 1 || sources[0] != "cli" {
+		t.Fatalf("you.docs topic acceptedSources = %#v, want [cli]", sources)
+	}
+	bindings, _ := docs["handlerBindings"].(map[string]any)
+	binding, _ := bindings["you.docs.binding.topic"].(map[string]any)
+	if got, _ := binding["inputId"].(string); got != "you.docs.arg.0" {
+		t.Fatalf("you.docs topic binding inputId = %q", got)
+	}
 
 	flags, ok := docs["flags"].(map[string]any)
 	if !ok {

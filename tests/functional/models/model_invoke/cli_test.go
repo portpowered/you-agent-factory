@@ -23,10 +23,6 @@ import (
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for the customer models-invoke process")
-	}
-
 	audio := []byte("RIFF....WAVE")
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {

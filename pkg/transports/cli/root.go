@@ -362,12 +362,15 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
-func newMCPCommand(options CommandFactory) *cobra.Command {
+func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	var initializeStdio startupcli.StdioHandler
 	if options.initializer != nil {
 		initializeStdio = options.initializer.Stdio
 	}
-	return mcpcli.NewCommandWithStdioInitializer(initializeStdio, options.homeDir)
+	return climanifestcobra.NewMCPCommand(mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
+		HomeDir:         options.homeDir,
+		InitializeStdio: initializeStdio,
+	}))
 }
 
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
@@ -928,16 +931,12 @@ func runCommandInputIsTTY(ctx context.Context) bool {
 func newProductionDocsCommand(
 	diagnostics *cliDiagnosticsOptions,
 ) (*cobra.Command, error) {
-	registry, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{
-		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
+	return climanifestcobra.NewDocsCommand(commandregistry.DocsResolvedRunE(
+		commandregistry.DocsBinding{
 			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
 			Verbose: diagnostics.verboseEnabled,
-		}),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewDocsCommand(registry)
+		},
+	))
 }
 
 func newProductionModelsCommand(
@@ -951,10 +950,6 @@ func newProductionModelsCommand(
 	}
 	handler := modelscli.NewCommandHandler(
 		rootOptions.ModelsCLI,
-		&globals.server,
-		&globals.json,
-		diagnostics.verboseEnabled,
-		&diagnostics.debug,
 		diagnostics.writer,
 		rootOptions.homeDir,
 		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -965,9 +960,5 @@ func newProductionModelsCommand(
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
 	)
-	registry, err := commandregistry.NewModelsRegistry(handler)
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewModelsCommand(registry)
+	return climanifestcobra.NewModelsCommand(handler)
 }

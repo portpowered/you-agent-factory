@@ -434,6 +434,14 @@ func (workerModelService) InvokeLocal(context.Context, modelinference.LocalInvoc
 	return modelinference.LocalInvocationResult{}, nil
 }
 
+func (workerModelService) AcquireLease(context.Context, modelinference.AcquireLeaseRequest) (modelinference.HostLease, error) {
+	return modelinference.HostLease{}, nil
+}
+
+func (workerModelService) ReleaseLease(context.Context, modelinference.ReleaseLeaseRequest) error {
+	return nil
+}
+
 func (s workerModelService) InspectRuntime(ctx context.Context, modelName string) (modelinference.Runtime, error) {
 	if s.runtimeConfig == nil || s.runtimeConfig() == nil {
 		return modelinference.Runtime{}, fmt.Errorf("factory service runtime is not available")

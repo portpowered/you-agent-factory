@@ -1,8 +1,17 @@
 package models
 
-import "github.com/portpowered/infinite-you/pkg/services/work"
+import (
+	"fmt"
+	"strings"
 
-// LocalInvocationRequest describes one possible local-model invocation.
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
+
+// LocalInvocationRequest is the plain infer request on the Models root.
+// Peers supply Worker/dispatch/bindings vocabulary without importing nested
+// inference or local-execution implementation types. Validate with
+// ValidateLocalInvocationRequest before InvokeLocal when failing closed on
+// managed-runtime inputs.
 type LocalInvocationRequest struct {
 	Holder           string
 	Worker           LocalWorker
@@ -39,9 +48,24 @@ type LocalResource struct {
 	Provider   string
 }
 
-// LocalInvocationResult reports whether Models owned the invocation.
-// When Handled is false, Workers should continue with its normal runner.
+// LocalInvocationResult is the plain infer result on the Models root. Handled
+// true means Models owned the invocation and Content carries the Models-owned
+// outcome; Handled false means Models declined and Workers continue with its
+// normal runner. Readiness-blocked and unsupported-response-mode failures are
+// distinct typed errors (ErrMissing, ErrLoading, ErrFailed, ErrUnsupported,
+// ErrUnsupportedResponseMode), not Handled=false.
 type LocalInvocationResult struct {
 	Handled bool
 	Content string
+}
+
+// ValidateLocalInvocationRequest checks the plain infer/local-invocation
+// request. Managed-runtime workers with an empty Model fail closed as
+// ErrNotFound without touching nested inference or local-execution packages.
+// Non-managed workers remain valid so InvokeLocal can return Handled=false.
+func ValidateLocalInvocationRequest(request LocalInvocationRequest) error {
+	if request.Worker.UsesManagedRuntime() && strings.TrimSpace(request.Worker.Model) == "" {
+		return fmt.Errorf("%w: empty managed runtime model name", ErrNotFound)
+	}
+	return nil
 }

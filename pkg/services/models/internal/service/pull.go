@@ -27,6 +27,9 @@ func (s *Service) PullModel(ctx context.Context, modelName string) (modelassets.
 	if s == nil {
 		return modelassets.PullResult{}, fmt.Errorf("factory service runtime is not available")
 	}
+	if err := models.ValidatePullModelRequest(models.PullModelRequest{Name: modelName}); err != nil {
+		return modelassets.PullResult{}, err
+	}
 	started := s.now()
 	host := s.modelHost()
 	if host == nil {

@@ -19,6 +19,8 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
@@ -103,11 +105,40 @@ func executeGeneratedMCPServe(
 		}
 		return session.Run(ctx)
 	}
-	root := mcpcli.NewCommandWithStdioInitializer(initializeStdio, nil)
+	manifest, err := generated.MCPFamilyManifest()
+	if err != nil {
+		return err
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return err
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		return err
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	if err != nil {
+		return err
+	}
+	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
+		Handlers: climanifestcobra.HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
+			serveRecord.Handler.ID: mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
+				InitializeStdio: initializeStdio,
+			}),
+		},
+	})
+	if err != nil {
+		return err
+	}
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
-	args := []string{"serve"}
+	args := []string{"mcp", "serve"}
 	if wantRuntime {
 		args = append(args, "--runtime")
 		if wantProjectRoot != "" {

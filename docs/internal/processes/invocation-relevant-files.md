@@ -49,6 +49,11 @@ primary-result behavior.
 - Generic relationship presence must inspect every registered flag spelling.
   Cobra marks the canonical flag when a shorthand is used, but aliases are
   separate `pflag.Flag` records even when they share typed storage.
+- Manifest-owned relationship validation may retain a legacy customer
+  diagnostic through a narrow constructor presentation mapping after the
+  generic validator rejects the invocation. Keep the relationship as the sole
+  validation authority and prove the resolved handler or operation is not
+  invoked for the conflicting input.
 - An inherited generic flag reuses its ancestor's persistent Cobra record, so
   its projected metadata must match the declaration after normalizing only the
   stable input ID, scope, inheritance reference, and lifecycle item ID.
@@ -597,6 +602,18 @@ response-stream output.
   `pkg/transports/cli/climanifestcobra/constructor.go`, while its invocation-local
   typed flag values and stable-ID `InputValues` access live with the package's
   other binding state in `pkg/transports/cli/climanifestcobra/options.go`.
+  Canonical command adapters that still need Cobra-owned streams use
+  `GenericBindings.ResolvedCobraHandlers`: local arguments and flags are
+  resolved into `resolvedinput.Inputs` with explicit CLI/default provenance in
+  `pkg/transports/cli/climanifestcobra/bindings.go`, and inherited root inputs
+  arrive as a separate resolved snapshot. Keep raw argument slices and public
+  spellings out of these adapters.
+  For an incremental family migration, project the canonical root, family
+  parent, and completed leaves as one temporary generic tree, detach the family
+  parent, and attach only still-unmigrated leaves through their narrow legacy
+  registry. This preserves inherited root resolution after production root
+  composition without forcing later behavioral slices into the current change;
+  remove each legacy entry as its leaf gains a resolved handler.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.
@@ -628,6 +645,12 @@ response-stream output.
   command-name/alias collisions before creating Cobra commands; Cobra otherwise
   resolves the first matching sibling and can silently dispatch the wrong stable
   handler.
+  The detached docs/models family wrappers live in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go`; `you docs`
+  projects a root/docs subset through the generic constructor and then detaches
+  the docs command for composition into the production root. Its static topic
+  completion must use the authored argument enum, while the packaged docs
+  operation retains its established unsupported-topic diagnostic.
   Treat argument `doubleDash: terminates-flags` as the Cobra-compatible mode and
   fail construction for missing, unknown, or currently unrepresentable modes
   instead of accepting changed parsing semantics. Hidden positional inputs
@@ -652,6 +675,12 @@ response-stream output.
   projection, reject duplicate handler ownership, and invoke the selected
   stable-ID handler with a detached normalized `InputValues` snapshot. Public
   command paths and aliases must not participate in executable lookup.
+  The detached Models family projection in
+  `pkg/transports/cli/climanifestcobra/models_constructor.go` uses this resolved
+  handler boundary for every leaf. Model-name positionals and invoke-local
+  operation, text, output, and compatibility-port flags are canonical inputs;
+  adapters consume their typed local snapshot plus the inherited root snapshot
+  and must not fall back to Cobra arguments or mutable flag targets.
   `GenericConstructor.Construct` is the strict stateless transport role for
   functional projection evidence; keep `NewCommandTree` as the convenience
   constructor while later family migrations remain outside this foundation
@@ -1510,6 +1539,22 @@ response-stream output.
 - Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
 - When a shared merge introduces a backend package-coverage floor that the reviewed head no longer reaches, use the failing CI profile's exact reported value to make the smallest manifest adjustment; do not run the manifest updater against the whole repository because it can ratchet unrelated package floors.
 - Functional event-leak assertions must target the injected sensitive fixture, not generic temporary-directory fragments: root-process event payloads legitimately include the harness's factory source and working-directory paths.
+- After a canonical CLI-family cutover shrinks a package (for example
+  `pkg/transports/cli/mcp` or Models
+  `pkg/services/models/transports/cli` command handlers), restore unit-coverage
+  floors with behavioral tests of resolved-input adapter error paths: missing
+  stable-ID local/inherited inputs, missing injected dependencies, and
+  initializer/home failures that must not invoke the operation. Do not weaken
+  `go-unit-coverage-package-minimums.json` for migration-owned packages.
+- Functional coverage does not inherit unit-test hits. After the same cutover,
+  restore `go-functional-coverage-package-minimums.json` floors with short
+  `tests/functional/...` evidence that exercises the migrated packages under the
+  functional profile: docs topic inventory accessors
+  (`TopicIndexEntries` / `SupportedTopicCommands`) plus alias `you docs` paths,
+  MCP `ResolvedServeHandler` fixture/runtime/error paths (and production
+  `you mcp serve --runtime` missing-home), and process-level
+  `you models list` / `inspect` against an injected `--server`. Do not weaken
+  the functional package floors for migration-owned packages.
 - `pkg/workers/mockworker/runner.go` preserves the original provider command, args,
   and worker identity in `YOU_MOCK_WORKER_*` script environment variables before a
   script mock replaces the command. Functional CLI tests can capture those values
@@ -1518,6 +1563,39 @@ response-stream output.
   replace workflow-result coverage.
 - A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
 - Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.
+- Canonical CLI-family cutovers must extend the production `clicontract` check
+  beyond command identity: compare the constructed positional arguments,
+  effective local/inherited flags, completion choices, normalization, and input
+  relationships against the authored manifest. Generated commands with no
+  declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
+  grouped commands appear variadic to the observable input inventory.
+- When a migrated command starts projecting authored Examples into Cobra help,
+  refresh the matching intentional help fixture under
+  `pkg/transports/cli/baseline/testdata/` (for docs:
+  `docs_help.txt` / `TestDocsHelpBaseline_MatchesFixture`) to the normalized
+  production `--help` output. That ledger path is separate from
+  `intentional_changes.json`, which only tracks planned removals and moves.
+- When migrated construction intentionally changes observable command identity
+  (Examples, Long text, or related inventory fields), refresh
+  `contracts/testdata/baseline/cli-commands.json` with
+  `UPDATE_CLI_BASELINES=1 go test ./pkg/transports/cli/commandidentity -run TestWriteProductionInventoryBaseline`,
+  then restage the packaged projection with `make contracts-generate` /
+  `make contracts-check` so `packages/api/generated/cli/commands.json` and the
+  package manifest stay byte-aligned. Prove with
+  `TestWalk_ProductionInventoryMatchesCommittedBaseline`. Do not hand-edit the
+  staged package copy out of band.
+- After residual baseline/coverage fixes on a completed docs/models/mcp
+  cutover, re-prove preserved public behavior with
+  `make cli-manifest-check`, `make cli-contract-smoke`, focused
+  docs/models/mcp unit + `tests/functional/transport/docs`,
+  `tests/functional/transport/mcp_serve`, `tests/functional/models/model_list`, and
+  `tests/functional/smoke -run TestDocsCommandSmoke_` evidence, then the
+  `make verify-fast` constituents (`make typecheck`, `make mcp-contract-check`,
+  `make ui-test`, `make test`) plus `make lint`. New residual functional sources
+  must use an allowed product-domain noun such as `transport` or `models`
+  (`tests/functional/<domain>/<subsection>/...`); do not add files under the
+  deletion-only `tests/functional/cli` catch-all. Do not remigrate families or
+  expand into out-of-scope CLI commands during that re-proof.
 - Dashboard feature routes must account for the production `/dashboard/ui/` SPA
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;

@@ -3,15 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"go.uber.org/zap"
 	"strings"
 	"testing"
 	"time"
-
-	models "github.com/portpowered/infinite-you/pkg/services/models"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
-	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	"go.uber.org/zap"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
@@ -203,4 +202,33 @@ func (constructionModelHost) ReleaseLease(context.Context, string) error { retur
 
 func (constructionModelHost) Unload(context.Context, *modelRuntimeConfig, string) error {
 	return nil
+}
+
+func TestService_AcquireLease_ReturnsRuntimeNotReadyWhenHostMissing(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		runtimeConfigLookup: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		clock:               time.Now,
+	}
+
+	_, err := svc.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "local-model"})
+	if !errors.Is(err, models.ErrHostRuntimeNotReady) {
+		t.Fatalf("AcquireLease nil host = %v, want ErrHostRuntimeNotReady", err)
+	}
+}
+
+func TestService_ReleaseLease_ReturnsLeaseNotFoundWhenHostMissing(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		runtimeConfigLookup: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		loggerValue:         zap.NewNop(),
+		clock:               time.Now,
+	}
+
+	err := svc.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "lease-1"})
+	if !errors.Is(err, models.ErrHostLeaseNotFound) {
+		t.Fatalf("ReleaseLease nil host = %v, want ErrHostLeaseNotFound", err)
+	}
 }
