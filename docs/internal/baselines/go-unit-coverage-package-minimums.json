@@ -1159,6 +1159,10 @@
       "minimum": 87.86
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion",
+      "minimum": 73.10
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection",
       "minimum": 84.93
     },

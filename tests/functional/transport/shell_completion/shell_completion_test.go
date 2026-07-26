@@ -65,6 +65,20 @@ func testBashCompletion(
 		t, binaryPath, workingDirectory, environment, "bash",
 	)
 	script := fmt.Sprintf(`
+for bash_completion in \
+    /usr/share/bash-completion/bash_completion \
+    /etc/bash_completion \
+    /opt/homebrew/etc/profile.d/bash_completion.sh \
+    /usr/local/etc/profile.d/bash_completion.sh; do
+    if [[ -r "$bash_completion" ]]; then
+        source "$bash_completion"
+        break
+    fi
+done
+if ! declare -F _get_comp_words_by_ref >/dev/null; then
+    printf 'bash-completion runtime is unavailable\n' >&2
+    exit 1
+fi
 source %s
 function you { %s "$@"; }
 
