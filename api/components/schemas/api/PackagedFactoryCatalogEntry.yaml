@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - project
+  - slug
+  - json
+  - yaml
+properties:
+  name:
+    type: string
+    description: Public built-in Factory name, such as '@you/goal'.
+  project:
+    type: string
+    description: Stable Factory project identifier.
+  slug:
+    type: string
+    description: URL-safe Factory catalog identity.
+  json:
+    type: object
+    additionalProperties: true
+    description: Canonical Factory JSON artifact.
+  yaml:
+    type: string
+    description: Equivalent Factory YAML artifact.

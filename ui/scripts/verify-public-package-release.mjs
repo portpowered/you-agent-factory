@@ -24,13 +24,6 @@ const workspaceLinkStep = {
   args: ["run", "link:public-package-dependencies"],
 };
 
-const packagedFactoriesInstallStep = {
-  packageName: "@you-agent-factory/packaged-factories consumer",
-  packageDirectory: uiRoot,
-  stepName: "install physical package candidate",
-  args: ["run", "prepare:packaged-factories"],
-};
-
 const replayRetainedMemoryStep = {
   packageName: "@you-agent-factory/factory-replay consumer",
   packageDirectory: uiRoot,
@@ -84,7 +77,6 @@ export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
     stepName: "install locked UI prerequisites",
     args: ["install", "--frozen-lockfile"],
   },
-  packagedFactoriesInstallStep,
   {
     packageName: "Public package family",
     packageDirectory: uiRoot,
