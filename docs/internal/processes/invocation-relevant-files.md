@@ -407,6 +407,11 @@ response-stream output.
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+  Compare transport parity through canonical values and semantic provenance
+  (explicit versus default) because physical CLI and structured API source
+  labels intentionally differ. Validation diagnostics for sensitive parameters
+  must retain the stable error code and parameter identity while replacing the
+  rejected value with the Work-owned redaction marker.
 - JavaScript named-factory lookup carries the authored `argsSchema` and `defaultPolicy` through `pkg/orchestrators/javascript/source/` into `pkg/factory/sessions/execution/PrepareStart`. Validate resolved arguments before runtime execution and resolve policy with that default; `workflowruntime.Request.ArgsSchema` preserves the same no-side-effect guard for direct runtime callers.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch

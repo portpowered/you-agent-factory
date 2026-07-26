@@ -646,7 +646,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 	if len(def.choices) > 0 && !slices.Contains(def.choices, value) {
 		return &ArgumentError{
 			Code:      ArgumentErrorCodeStringValidationMismatch,
-			Message:   fmt.Sprintf("parameter %q value %q is not one of the declared choices", def.name, value),
+			Message:   fmt.Sprintf("parameter %q value %s is not one of the declared choices", def.name, argumentValueDiagnostic(def, value)),
 			Parameter: def.name,
 		}
 	}
@@ -657,7 +657,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		if _, err := strconv.ParseBool(strings.TrimSpace(value)); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
-				Message:   fmt.Sprintf("parameter %q value %q is not a valid BOOLEAN_STRING", def.name, value),
+				Message:   fmt.Sprintf("parameter %q value %s is not a valid BOOLEAN_STRING", def.name, argumentValueDiagnostic(def, value)),
 				Parameter: def.name,
 			}
 		}
@@ -665,7 +665,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
-				Message:   fmt.Sprintf("parameter %q value %q is not a valid NUMBER_STRING", def.name, value),
+				Message:   fmt.Sprintf("parameter %q value %s is not a valid NUMBER_STRING", def.name, argumentValueDiagnostic(def, value)),
 				Parameter: def.name,
 			}
 		}
@@ -673,6 +673,13 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, fmt.Sprintf("parameter %q uses unsupported typeHint %q", def.name, def.typeHint), def.name, "")
 	}
 	return nil
+}
+
+func argumentValueDiagnostic(def parameterDefinition, value string) string {
+	if def.sensitive {
+		return "<redacted>"
+	}
+	return strconv.Quote(value)
 }
 
 func newArgumentError(code ArgumentErrorCode, message, parameter, argument string) *ArgumentError {
