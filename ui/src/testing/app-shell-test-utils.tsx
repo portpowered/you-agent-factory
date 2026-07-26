@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, expect, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardTopology,
@@ -11,12 +11,7 @@ import type {
 import type { FactoryEvent } from "../api/events";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
-import {
-  buildDashboardSnapshotFixture,
-  mediumBranchingDashboardTopology,
-} from "../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
-import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import {
@@ -28,7 +23,6 @@ import { resetSelectionHistoryStore } from "../features/current-selection/base/s
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useDashboardStreamStore } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
-import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import {
   chainRenderAppFetchMock,
@@ -61,7 +55,6 @@ export {
   type FetchMock,
   fetchCallPaths,
   jsonResponse,
-  lastFetchCallBody,
   nonPromptTemplateFetchPaths,
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
@@ -163,96 +156,10 @@ function wrapAppForDashboardSession(
 
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
-export const baselineSnapshot = buildDashboardSnapshotFixture(
-  mediumBranchingDashboardTopology,
-);
-export const terminalSnapshot = {
-  ...semanticWorkflowDashboardSnapshot,
-  tick_count: 4,
-  runtime: {
-    ...semanticWorkflowDashboardSnapshot.runtime,
-    place_occupancy_work_items_by_place_id: {
-      ...(semanticWorkflowDashboardSnapshot.runtime
-        .place_occupancy_work_items_by_place_id ?? {}),
-      "story:blocked": [
-        {
-          display_name: "Failed Story",
-          trace_id: "trace-failed-story",
-          work_id: "work-failed-story",
-          work_type_id: "story",
-        },
-      ],
-      "story:complete": [
-        {
-          display_name: "Done Story",
-          trace_id: "trace-done-story",
-          work_id: "work-complete",
-          work_type_id: "story",
-        },
-      ],
-    },
-    place_token_counts: {
-      ...(semanticWorkflowDashboardSnapshot.runtime.place_token_counts ?? {}),
-      "story:blocked": 1,
-      "story:complete": 1,
-    },
-    session: {
-      ...semanticWorkflowDashboardSnapshot.runtime.session,
-      completed_count: 1,
-      completed_work_labels: ["Done Story"],
-      provider_sessions: [
-        ...(semanticWorkflowDashboardSnapshot.runtime.session
-          .provider_sessions ?? []),
-        {
-          dispatch_id: "dispatch-complete",
-          outcome: "ACCEPTED",
-          provider_session: {
-            id: "sess-done-story",
-            kind: "session_id",
-            provider: "codex",
-          },
-          transition_id: "complete",
-          workstation_name: "Complete",
-          work_items: [
-            {
-              display_name: "Done Story",
-              trace_id: "trace-done-story",
-              work_id: "work-complete",
-              work_type_id: "story",
-            },
-          ],
-        },
-      ],
-    },
-  },
-} satisfies DashboardSnapshot;
-
-export const importedFactorySnapshot = (() => {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-
-  snapshot.factory_state = "Imported factory active";
-  snapshot.tick_count = semanticWorkflowDashboardSnapshot.tick_count + 1;
-
-  return snapshot;
-})();
-
 export async function settleAppShellDashboardEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
-}
-
-export async function waitForAppShellWorkGraphReady(): Promise<void> {
-  const graphViewport = await screen.findByRole("region", {
-    name: "Work graph viewport",
-  });
-  await waitFor(
-    () => {
-      expect(graphViewport.querySelector(".react-flow__node")).toBeTruthy();
-    },
-    { timeout: 15_000 },
-  );
-  await settleAppShellDashboardEffects();
 }
 
 export async function waitForDashboardShell(): Promise<void> {
@@ -403,36 +310,6 @@ export async function renderAppWithDashboardShell(
   const result = renderApp(options);
   await waitForDashboardShell();
   return result;
-}
-
-export function createFactoryImportValue(): FactoryPngImportValue {
-  return {
-    factory: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    },
-    previewImageSrc: "blob:factory-preview",
-    revokePreviewImageSrc: vi.fn(),
-    schemaVersion: "portos.agent-factory.png.v1",
-  };
-}
-
-export function createFileDropTransfer(files: File[]): {
-  dataTransfer: {
-    dropEffect: string;
-    files: File[];
-    types: string[];
-  };
-} {
-  return {
-    dataTransfer: {
-      dropEffect: "none",
-      files,
-      types: ["Files"],
-    },
-  };
 }
 
 export function resetCurrentFactoryDocumentMock(): void {
