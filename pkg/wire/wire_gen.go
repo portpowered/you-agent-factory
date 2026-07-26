@@ -202,7 +202,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v37 := provideFactoryDefinitionsFactory(v35, loader, v4, v5, namedPathResolver, clock, versionFileSystem, effectiveFactoryCatalogOperation)
+	v37 := provideFactoryDefinitionsFactory(v35, loader, v4, v5, namedPathResolver, namedFactoryCatalogFileSystem, clock, versionFileSystem, effectiveFactoryCatalogOperation)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v38, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
