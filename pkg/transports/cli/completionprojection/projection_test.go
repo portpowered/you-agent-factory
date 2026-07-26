@@ -2,9 +2,11 @@ package completionprojection_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -317,11 +319,119 @@ func TestProjectNoSignatureReturnsNoSignatureCompletionFacts(t *testing.T) {
 	}
 }
 
+func TestProjectRejectsInvalidSchemaAtomicallyWithoutConfidentialErrorText(t *testing.T) {
+	const (
+		prefixSentinel     = "entered-prefix-sentinel"
+		sensitiveSentinel  = "sensitive-value-sentinel"
+		diagnosticSentinel = "sensitive-diagnostic-sentinel"
+	)
+	schema := effectiveSchema(
+		namedParameter("valid", "valid", nil),
+		climanifest.EffectiveFactoryParameter{
+			BindingID:     "invalid",
+			CanonicalName: "invalid",
+			Sensitive:     true,
+			Choices:       []string{sensitiveSentinel},
+			Bindings: []work.InvocationParameterBindingConfig{{
+				Kind: diagnosticSentinel,
+			}},
+		},
+	)
+
+	got, err := completionprojection.Project(
+		context.Background(),
+		schema,
+		completionprojection.Context{
+			Target:        completionprojection.TargetFlags,
+			EnteredPrefix: prefixSentinel,
+		},
+	)
+	if !errors.Is(err, completionprojection.ErrInvalidSchema) {
+		t.Fatalf("Project() error = %v, want ErrInvalidSchema", err)
+	}
+	if !reflect.DeepEqual(got, completionprojection.Projection{}) {
+		t.Fatalf("Project() = %#v, want atomic empty failure", got)
+	}
+	assertErrorOmitsText(t, err, prefixSentinel, sensitiveSentinel, diagnosticSentinel)
+}
+
+func TestProjectRejectsStaticDynamicAndDynamicAliasCollisionsAtomically(t *testing.T) {
+	tests := map[string]climanifest.EffectiveInputSchema{
+		"static dynamic": func() climanifest.EffectiveInputSchema {
+			schema := effectiveSchema(
+				namedParameter("first", "first", nil),
+				namedParameter("second", "reserved", nil),
+			)
+			schema.StaticInputs = []climanifest.EffectiveStaticInput{{
+				ID:              "you.run.flag.reserved",
+				Kind:            "flag",
+				PublicSpellings: []string{"reserved"},
+			}}
+			return schema
+		}(),
+		"dynamic alias": effectiveSchema(
+			namedParameter("first", "first", []string{"shared"}),
+			namedParameter("second", "second", []string{"shared"}),
+		),
+	}
+
+	for name, schema := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := completionprojection.Project(
+				context.Background(),
+				schema,
+				completionprojection.Context{Target: completionprojection.TargetFlags},
+			)
+			if !errors.Is(err, completionprojection.ErrSchemaCollision) {
+				t.Fatalf("Project() error = %v, want ErrSchemaCollision", err)
+			}
+			if !reflect.DeepEqual(got, completionprojection.Projection{}) {
+				t.Fatalf("Project() = %#v, want atomic empty failure", got)
+			}
+		})
+	}
+}
+
+func TestProjectCancellationBeforeAndDuringProjectionIsAtomic(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for name, ctx := range map[string]context.Context{
+		"before": cancelled,
+		"during": newCancelAfterErrContext(5),
+	} {
+		t.Run(name, func(t *testing.T) {
+			schema := effectiveSchema(
+				namedParameter("first", "first", nil),
+				namedParameter("second", "second", nil),
+			)
+			got, err := completionprojection.Project(
+				ctx,
+				schema,
+				completionprojection.Context{Target: completionprojection.TargetFlags},
+			)
+			if !errors.Is(err, completionprojection.ErrCancelled) ||
+				!errors.Is(err, context.Canceled) {
+				t.Fatalf("Project() error = %v, want documented cancellation error", err)
+			}
+			if !reflect.DeepEqual(got, completionprojection.Projection{}) {
+				t.Fatalf("Project() = %#v, want atomic empty cancellation", got)
+			}
+		})
+	}
+}
+
 func effectiveSchema(parameters ...climanifest.EffectiveFactoryParameter) climanifest.EffectiveInputSchema {
+	for index := range parameters {
+		if parameters[index].CanonicalName == "" {
+			parameters[index].CanonicalName = parameters[index].BindingID
+		}
+	}
 	return climanifest.EffectiveInputSchema{
-		CommandID:         "you.run",
-		FactoryInputMode:  climanifest.EffectiveFactoryInputModeSignature,
-		FactoryParameters: parameters,
+		CommandID:                  "you.run",
+		FactoryInputMode:           climanifest.EffectiveFactoryInputModeSignature,
+		UnknownNamedArgumentPolicy: work.InvocationUnknownNamedArgumentPolicyReject,
+		FactoryParameters:          parameters,
 	}
 }
 
@@ -413,4 +523,51 @@ func assertProjectionOmitsText(
 			}
 		}
 	}
+}
+
+func assertErrorOmitsText(t *testing.T, err error, omitted ...string) {
+	t.Helper()
+	for _, text := range omitted {
+		if strings.Contains(err.Error(), text) {
+			t.Fatal("projection error retained confidential input text")
+		}
+	}
+}
+
+type cancelAfterErrContext struct {
+	remainingChecks int
+	done            chan struct{}
+	cancelled       bool
+}
+
+func newCancelAfterErrContext(remainingChecks int) *cancelAfterErrContext {
+	return &cancelAfterErrContext{
+		remainingChecks: remainingChecks,
+		done:            make(chan struct{}),
+	}
+}
+
+func (ctx *cancelAfterErrContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (ctx *cancelAfterErrContext) Done() <-chan struct{} {
+	return ctx.done
+}
+
+func (ctx *cancelAfterErrContext) Err() error {
+	if ctx.cancelled {
+		return context.Canceled
+	}
+	ctx.remainingChecks--
+	if ctx.remainingChecks <= 0 {
+		close(ctx.done)
+		ctx.cancelled = true
+		return context.Canceled
+	}
+	return nil
+}
+
+func (ctx *cancelAfterErrContext) Value(any) any {
+	return nil
 }

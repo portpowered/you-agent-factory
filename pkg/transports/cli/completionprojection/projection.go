@@ -56,48 +56,67 @@ type Projection struct {
 // completion facts. It consumes detached values only and performs no selection,
 // runtime, shell, filesystem, or process-global work.
 func Project(
-	_ context.Context,
+	ctx context.Context,
 	schema climanifest.EffectiveInputSchema,
 	completionContext Context,
 ) (Projection, error) {
+	if err := cancellationError(ctx); err != nil {
+		return Projection{}, err
+	}
+	if err := validateSchema(ctx, schema); err != nil {
+		return Projection{}, err
+	}
 	if schema.FactoryInputMode != climanifest.EffectiveFactoryInputModeSignature {
 		return Projection{}, nil
 	}
 
 	switch completionContext.Target {
 	case TargetFlags:
-		return projectFlags(schema), nil
+		return projectFlags(ctx, schema)
 	case TargetValues:
-		return projectValues(schema, completionContext.ParameterBindingID), nil
+		return projectValues(ctx, schema, completionContext.ParameterBindingID)
 	default:
 		return Projection{}, nil
 	}
 }
 
-func projectFlags(schema climanifest.EffectiveInputSchema) Projection {
+func projectFlags(ctx context.Context, schema climanifest.EffectiveInputSchema) (Projection, error) {
 	var candidates []Candidate
 	for _, parameter := range schema.FactoryParameters {
+		if err := cancellationError(ctx); err != nil {
+			return Projection{}, err
+		}
 		if !hasNamedBinding(parameter.Bindings) {
 			continue
 		}
 		candidates = append(candidates, flagCandidates(parameter)...)
 	}
-	return Projection{Candidates: candidates}
+	return Projection{Candidates: candidates}, nil
 }
 
-func projectValues(schema climanifest.EffectiveInputSchema, bindingID string) Projection {
+func projectValues(
+	ctx context.Context,
+	schema climanifest.EffectiveInputSchema,
+	bindingID string,
+) (Projection, error) {
 	for _, parameter := range schema.FactoryParameters {
+		if err := cancellationError(ctx); err != nil {
+			return Projection{}, err
+		}
 		if parameter.BindingID != bindingID {
 			continue
 		}
-		return parameterValues(parameter)
+		return parameterValues(ctx, parameter)
 	}
-	return Projection{}
+	return Projection{}, nil
 }
 
-func parameterValues(parameter climanifest.EffectiveFactoryParameter) Projection {
+func parameterValues(
+	ctx context.Context,
+	parameter climanifest.EffectiveFactoryParameter,
+) (Projection, error) {
 	if parameter.Sensitive {
-		return Projection{}
+		return Projection{}, nil
 	}
 
 	values := parameter.Choices
@@ -105,16 +124,18 @@ func parameterValues(parameter climanifest.EffectiveFactoryParameter) Projection
 		values = []string{documentedBooleanTrue, documentedBooleanFalse}
 	}
 
-	projection := Projection{
-		Candidates: valueCandidates(parameter, values),
+	candidates, err := valueCandidates(ctx, parameter, values)
+	if err != nil {
+		return Projection{}, err
 	}
+	projection := Projection{Candidates: candidates}
 	if parameter.TypeHint == work.InvocationParameterTypeHintFilePath {
 		projection.Directives = []Directive{{
 			Kind:               DirectiveKindFilesystemDelegation,
 			ParameterBindingID: parameter.BindingID,
 		}}
 	}
-	return projection
+	return projection, nil
 }
 
 func hasNamedBinding(bindings []work.InvocationParameterBindingConfig) bool {
@@ -145,13 +166,20 @@ func flagCandidates(parameter climanifest.EffectiveFactoryParameter) []Candidate
 	return candidates
 }
 
-func valueCandidates(parameter climanifest.EffectiveFactoryParameter, values []string) []Candidate {
+func valueCandidates(
+	ctx context.Context,
+	parameter climanifest.EffectiveFactoryParameter,
+	values []string,
+) ([]Candidate, error) {
 	if len(values) == 0 {
-		return nil
+		return nil, nil
 	}
 	description := valueDescription(parameter)
 	candidates := make([]Candidate, 0, len(values))
 	for _, value := range values {
+		if err := cancellationError(ctx); err != nil {
+			return nil, err
+		}
 		candidates = append(candidates, Candidate{
 			Kind:               CandidateKindValue,
 			ParameterBindingID: parameter.BindingID,
@@ -159,7 +187,7 @@ func valueCandidates(parameter climanifest.EffectiveFactoryParameter, values []s
 			Description:        description,
 		})
 	}
-	return candidates
+	return candidates, nil
 }
 
 func valueDescription(parameter climanifest.EffectiveFactoryParameter) string {
