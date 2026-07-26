@@ -8,13 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// RunnerResolver resolves one explicit runner identity without consulting
-// Factory Session state. The bool reports whether the identity is recognized.
-type RunnerResolver func(
-	context.Context,
-	string,
-) (workers.ResolvedRunnerSelection, bool, error)
-
 // BindingAssembler constructs one inert binding from a snapshotted request.
 // It must not start execution or retain mutable opening options.
 type BindingAssembler func(

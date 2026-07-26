@@ -7,8 +7,17 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 )
+
+type registryFunc func(runners.ResolutionRequest) (runners.Binding, error)
+
+func (resolve registryFunc) Resolve(
+	request runners.ResolutionRequest,
+) (runners.Binding, error) {
+	return resolve(request)
+}
 
 func TestBuildReturnsDetachedBindingsInRequestOrder(t *testing.T) {
 	request := detachmentRequest()
@@ -101,10 +110,10 @@ func TestBuildRejectsInvalidRequestsBeforeCallingCollaborators(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
 			assembler := New(
-				func(context.Context, string) (workers.ResolvedRunnerSelection, bool, error) {
+				registryFunc(func(runners.ResolutionRequest) (runners.Binding, error) {
 					calls++
-					return workers.ResolvedRunnerSelection{}, false, nil
-				},
+					return runners.Binding{}, nil
+				}),
 				func(
 					context.Context,
 					workers.RuntimeBuildRoleRequest,
@@ -134,7 +143,7 @@ func TestBuildReturnsTypedResolutionAndAssemblyFailuresAtomically(t *testing.T) 
 	cases := append(resolutionFailureCases(rejection), bindingFailureCases(rejection)...)
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			assembler := New(test.resolver, test.assembler)
+			assembler := New(test.registry, test.assembler)
 			result, err := assembler.Build(context.Background(), detachmentRequest())
 			if !errors.Is(err, test.want) {
 				t.Fatalf("Build() error = %v, want %v", err, test.want)
@@ -229,7 +238,7 @@ func invalidOpeningRequest() workers.RuntimeBuildRequest {
 
 type assemblyFailureCase struct {
 	name      string
-	resolver  runtimeassembly.RunnerResolver
+	registry  runners.Service
 	assembler runtimeassembly.BindingAssembler
 	want      error
 }
@@ -242,34 +251,31 @@ func resolutionFailureCases(rejection error) []assemblyFailureCase {
 		},
 		{
 			name: "unknown runner",
-			resolver: func(
-				context.Context,
-				string,
-			) (workers.ResolvedRunnerSelection, bool, error) {
-				return workers.ResolvedRunnerSelection{}, false, nil
-			},
+			registry: registryFunc(func(
+				runners.ResolutionRequest,
+			) (runners.Binding, error) {
+				return runners.Binding{}, workers.ErrUnknownRunnerSelection
+			}),
 			assembler: successfulAssembler,
 			want:      workers.ErrUnknownRunnerSelection,
 		},
 		{
-			name: "resolver rejection",
-			resolver: func(
-				context.Context,
-				string,
-			) (workers.ResolvedRunnerSelection, bool, error) {
-				return workers.ResolvedRunnerSelection{}, false, rejection
-			},
+			name: "registry rejection",
+			registry: registryFunc(func(
+				runners.ResolutionRequest,
+			) (runners.Binding, error) {
+				return runners.Binding{}, rejection
+			}),
 			assembler: successfulAssembler,
-			want:      workers.ErrRuntimeAssemblyRejected,
+			want:      rejection,
 		},
 		{
 			name: "incomplete runner",
-			resolver: func(
-				context.Context,
-				string,
-			) (workers.ResolvedRunnerSelection, bool, error) {
-				return workers.ResolvedRunnerSelection{RunnerID: workers.RunnerIDCodex}, true, nil
-			},
+			registry: registryFunc(func(
+				runners.ResolutionRequest,
+			) (runners.Binding, error) {
+				return runners.Binding{}, nil
+			}),
 			assembler: successfulAssembler,
 			want:      workers.ErrIncompleteRuntimeAssembly,
 		},
@@ -312,19 +318,19 @@ func bindingFailureCases(rejection error) []assemblyFailureCase {
 	return []assemblyFailureCase{
 		{
 			name:      "second binding rejected",
-			resolver:  recognizedRunner(workers.RunnerIDCodex),
+			registry:  recognizedRunner(workers.RunnerIDCodex),
 			assembler: rejectSecond,
 			want:      workers.ErrRuntimeAssemblyRejected,
 		},
 		{
 			name:      "incomplete second binding",
-			resolver:  recognizedRunner(workers.RunnerIDCodex),
+			registry:  recognizedRunner(workers.RunnerIDCodex),
 			assembler: incompleteSecond,
 			want:      workers.ErrIncompleteRuntimeAssembly,
 		},
 		{
 			name:      "conflicting binding",
-			resolver:  recognizedRunner(workers.RunnerIDCodex),
+			registry:  recognizedRunner(workers.RunnerIDCodex),
 			assembler: conflicting,
 			want:      workers.ErrRuntimeAssemblyRejected,
 		},
@@ -364,19 +370,15 @@ func runtimeRequest(
 	return workers.RuntimeBuildRequest{RunnerID: runnerID, Roles: roles}
 }
 
-func recognizedRunner(identity string) runtimeassembly.RunnerResolver {
-	return func(
-		_ context.Context,
-		requested string,
-	) (workers.ResolvedRunnerSelection, bool, error) {
-		if requested != identity {
-			return workers.ResolvedRunnerSelection{}, false, nil
+func recognizedRunner(identity string) runners.Service {
+	return registryFunc(func(
+		request runners.ResolutionRequest,
+	) (runners.Binding, error) {
+		if request.Identity != identity {
+			return runners.Binding{}, workers.ErrUnknownRunnerSelection
 		}
-		return workers.ResolvedRunnerSelection{
-			RunnerID: identity,
-			Source:   workers.RunnerSelectionSourceFactory,
-		}, true, nil
-	}
+		return runners.Binding{Identity: identity}, nil
+	})
 }
 
 func successfulAssembler(

@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
@@ -42,9 +43,10 @@ type RuntimeBuildRoleRequest struct {
 // RuntimeBuildRequest is the plain Workers-owned runtime-build input covering
 // execution selection and role-assembly facts peers need.
 type RuntimeBuildRequest struct {
-	RunnerID string
-	Opening  RuntimeBuildOpeningOptions
-	Roles    []RuntimeBuildRoleRequest
+	RunnerID                   string
+	RequiredRunnerCapabilities []RunnerOptionalCapability
+	Opening                    RuntimeBuildOpeningOptions
+	Roles                      []RuntimeBuildRoleRequest
 }
 
 // AssembledRuntimeBinding is one detached immutable role/binding fact peers
@@ -73,6 +75,48 @@ var ErrMissingRunnerSelection = errors.New("Workers runtime-build missing runner
 // ErrUnknownRunnerSelection reports that a runtime-build request named a runner
 // identity Workers does not recognize.
 var ErrUnknownRunnerSelection = errors.New("Workers runtime-build unknown runner selection")
+
+// ErrUnsupportedRunnerCapability reports that a selected runner cannot satisfy
+// one explicitly required optional capability.
+var ErrUnsupportedRunnerCapability = errors.New("Workers runner capability unsupported")
+
+// UnsupportedRunnerCapabilityError carries detached, customer-safe selection
+// context for one unsupported required capability.
+type UnsupportedRunnerCapabilityError struct {
+	RunnerID   string
+	Capability RunnerOptionalCapability
+}
+
+func (e *UnsupportedRunnerCapabilityError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		"runner %q does not support capability %q",
+		e.RunnerID,
+		e.Capability,
+	)
+}
+
+func (e *UnsupportedRunnerCapabilityError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return ErrUnsupportedRunnerCapability
+}
+
+// ErrInvalidRunnerRegistration reports that a private Workers runner
+// registration contains malformed identity, metadata, capabilities, or a nil
+// implementation.
+var ErrInvalidRunnerRegistration = errors.New("invalid Workers runner registration")
+
+// ErrConflictingRunnerRegistration reports that a registration's explicit
+// identity disagrees with its metadata identity.
+var ErrConflictingRunnerRegistration = errors.New("conflicting Workers runner registration")
+
+// ErrDuplicateRunnerRegistration reports that registry construction received
+// more than one registration for the same canonical runner identity.
+var ErrDuplicateRunnerRegistration = errors.New("duplicate Workers runner registration")
 
 // ErrRuntimeAssemblyRejected reports that Workers rejected the supplied
 // assembly-shaped input.
