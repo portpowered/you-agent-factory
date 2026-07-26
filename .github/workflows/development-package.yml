@@ -74,6 +74,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: make ui-deps
+
       - name: Run validation lane
         run: make contracts-smoke api-smoke api-package-verify
 
@@ -101,6 +107,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
       - run: make model-provider-package-verify
 
   api-candidate:
