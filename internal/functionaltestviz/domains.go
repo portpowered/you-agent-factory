@@ -52,6 +52,7 @@ var leafDomainToSummaryBucket = map[string]string{
 	"work":              DomainBucketWork,
 	"sessions":          DomainBucketSessions,
 	"factory":           DomainBucketFactory,
+	"providers":         DomainBucketWorkers,
 	"provider_sessions": DomainBucketProviderSessions,
 	"events":            DomainBucketEvents,
 	"models":            DomainBucketModels,

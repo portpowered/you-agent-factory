@@ -166,7 +166,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional/internal/support` is the only shared harness exception;
   other `tests/functional/internal/*` roots (for example `restclient`) are
   unclassified deletion-only debt, and new `runtime_api` files or top-level
-  `Test*` scenarios fail immediately. Prove accept/reject outcomes with
+  `Test*` scenarios fail immediately. `tests/functional/providers/<provider>`
+  is an approved provider-specific domain path, while aggregate Go files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt guarded by both package-structure and functional-boundary checks. Prove
+  accept/reject outcomes with
   focused `cmd/pkgstructurecheck` tests (see
   `TestDomainLayoutEnforcementProof`) plus `make pkg-structure` and
   `make verify-fast`. When enabling a new layout rule, baseline the current

@@ -38,7 +38,7 @@ func TestAllowedFunctionalDomainsMatchExpansionPlan(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"transport", "workers", "orchestration", "workstations", "work", "sessions",
-		"factory", "provider_sessions", "events", "models", "guards", "resources",
+		"factory", "providers", "provider_sessions", "events", "models", "guards", "resources",
 		"observability", "product", "resilience",
 	}
 	if len(allowedFunctionalDomains) != len(want) {
@@ -58,6 +58,7 @@ func TestScanAcceptsApprovedDomainSubsectionWithoutDebt(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
 	writeTestFile(t, repoRoot, "tests/functional/workers/script/create_test.go", "package script_test\nfunc TestCreate() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/providers/gemini/invoke_test.go", "package gemini_test\nfunc TestInvoke() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/transport/cli/flag_parsing_test.go", "package cli_test\nfunc TestFlagParsing() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/work/visualization/graph_test.go", "package visualization_test\nfunc TestGraph() {}\n")
 
@@ -90,7 +91,6 @@ func TestScanRejectsNewShallowCatchAllAndUnclassifiedPackages(t *testing.T) {
 	writeTestFile(t, repoRoot, "tests/functional/smoke/new_smoke_test.go", "package smoke_test\nfunc TestNewSmoke() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/workflow/new_workflow_test.go", "package workflow_test\nfunc TestNewWorkflow() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/cli/session/new_cli_test.go", "package session_test\nfunc TestNewCLI() {}\n")
-	writeTestFile(t, repoRoot, "tests/functional/providers/contract/new_provider_test.go", "package contract_test\nfunc TestNewProvider() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/legacy_bucket/orphan_test.go", "package legacy_bucket_test\nfunc TestOrphan() {}\n")
 
 	findings, err := scan(repoRoot)
@@ -102,7 +102,6 @@ func TestScanRejectsNewShallowCatchAllAndUnclassifiedPackages(t *testing.T) {
 		ruleFunctionalShallowFile + "|tests/functional/smoke/new_smoke_test.go|smoke",
 		ruleFunctionalShallowFile + "|tests/functional/workflow/new_workflow_test.go|workflow",
 		ruleFunctionalUnclassifiedDomain + "|tests/functional/cli/session/new_cli_test.go|cli",
-		ruleFunctionalUnclassifiedDomain + "|tests/functional/providers/contract/new_provider_test.go|providers",
 	})
 	for _, item := range findings {
 		remediation := deletionGates[item.Rule]

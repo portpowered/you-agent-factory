@@ -23,15 +23,15 @@ const (
 	baselineVersion = 1
 	baselineStage   = "packaged-structure"
 
-	ruleServiceInterfaceCount   = "service-root-interface-count"
-	ruleServiceExportedFunction = "service-root-exported-function"
-	ruleServiceUnexpectedDir    = "service-root-unexpected-directory"
-	ruleServiceMissingInternal  = "service-root-missing-internal"
-	ruleServiceContainerGoFile  = "service-container-go-file"
-	ruleFunctionalShallowFile         = "functional-test-missing-subsection"
-	ruleFunctionalUnclassifiedDomain  = "functional-test-unclassified-domain"
-	ruleRuntimeAPIFile                = "deprecated-runtime-api-file"
-	ruleRuntimeAPITest                = "deprecated-runtime-api-test"
+	ruleServiceInterfaceCount        = "service-root-interface-count"
+	ruleServiceExportedFunction      = "service-root-exported-function"
+	ruleServiceUnexpectedDir         = "service-root-unexpected-directory"
+	ruleServiceMissingInternal       = "service-root-missing-internal"
+	ruleServiceContainerGoFile       = "service-container-go-file"
+	ruleFunctionalShallowFile        = "functional-test-missing-subsection"
+	ruleFunctionalUnclassifiedDomain = "functional-test-unclassified-domain"
+	ruleRuntimeAPIFile               = "deprecated-runtime-api-file"
+	ruleRuntimeAPITest               = "deprecated-runtime-api-test"
 )
 
 var deletionGates = map[string]string{
@@ -62,6 +62,7 @@ var allowedFunctionalDomains = map[string]struct{}{
 	"work":              {},
 	"sessions":          {},
 	"factory":           {},
+	"providers":         {},
 	"provider_sessions": {},
 	"events":            {},
 	"models":            {},

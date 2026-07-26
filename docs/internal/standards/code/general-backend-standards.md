@@ -256,8 +256,12 @@ Rules:
 - Functional test sources **MUST** live under
   `tests/functional/<domain>/<subsection>/...`, where `<domain>` is a durable
   product-domain noun such as `transport`, `workers`, `orchestration`,
-  `workstations`, `work`, `sessions`, `factory`, `provider_sessions`, `events`,
-  `models`, `guards`, `resources`, `observability`, `product`, or `resilience`.
+  `workstations`, `work`, `sessions`, `factory`, `providers`,
+  `provider_sessions`, `events`, `models`, `guards`, `resources`,
+  `observability`, `product`, or
+  `resilience`. Provider-specific root-process scenarios live under
+  `tests/functional/providers/<provider>/...`; broader worker execution
+  behavior remains under `tests/functional/workers/<subsection>/...`.
   There is no durable `features/` wrapper and no transport-first ownership for
   domain behavior: `transport` owns transport mechanics only, and domain proofs
   live under their domain nouns even when the scenario enters through CLI,

@@ -401,7 +401,7 @@
       "stderr": "Error: HTTP 429 too many requests",
       "expected_type": "permanent_bad_request",
       "expected_family": "terminal",
-      "expected_message": "The selected response schema is invalid.",
+      "expected_message": "Gemini rejected the request.",
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true
@@ -449,7 +449,7 @@
       "stderr": "Error: selected region is unsupported",
       "expected_type": "unknown",
       "expected_family": "terminal",
-      "expected_message": "Error: selected region is unsupported",
+      "expected_message": "Gemini invocation failed.",
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true
@@ -465,7 +465,7 @@
       "stderr": "[debug] Error report written to .gemini/tmp/private-report.json\ncleanup failed for /private/customer/path",
       "expected_type": "unknown",
       "expected_family": "terminal",
-      "expected_message": "gemini exited with code 17",
+      "expected_message": "Gemini invocation failed.",
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
