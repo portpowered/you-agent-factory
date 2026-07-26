@@ -78,11 +78,10 @@ func TestCompareArtifactsOrdersMissingAndUnexpectedPaths(t *testing.T) {
 	}
 }
 
-func TestVerifyManifestMetadataRejectsMissingSourceCommit(t *testing.T) {
+func TestVerifyManifestMetadataRejectsMissingStableField(t *testing.T) {
 	manifest := map[string]any{
 		"formatVersion":        "1.0.0",
 		"packageId":            "you-agent-factory.api",
-		"packageVersion":       "0.0.0",
 		"familyFormatVersions": map[string]any{"cli": "1.0.0"},
 		"exports":              map[string]any{},
 	}
@@ -92,9 +91,9 @@ func TestVerifyManifestMetadataRejectsMissingSourceCommit(t *testing.T) {
 	}
 	err = verifyManifestMetadata(map[string][]byte{manifestTarget: payload})
 	if err == nil {
-		t.Fatal("expected missing sourceCommit to fail")
+		t.Fatal("expected missing packageVersion to fail")
 	}
-	if !strings.Contains(err.Error(), "sourceCommit") {
+	if !strings.Contains(err.Error(), "packageVersion") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -104,7 +103,6 @@ func TestManifestMetadataAcceptsCanonicalFields(t *testing.T) {
 		"formatVersion":        "1.0.0",
 		"packageId":            "you-agent-factory.api",
 		"packageVersion":       "0.0.0",
-		"sourceCommit":         filepath.Base(t.TempDir()),
 		"familyFormatVersions": map[string]any{"cli": "1.0.0"},
 		"exports":              map[string]any{},
 	}

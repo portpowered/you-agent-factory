@@ -12,7 +12,7 @@ or other runtime initialization.
 | `@you-agent-factory/model-providers/catalog` | Sorted Provider Catalog JSON |
 | `@you-agent-factory/model-providers/schemas/provider-manifest` | Provider Manifest JSON Schema |
 | `@you-agent-factory/model-providers/schemas/provider-catalog` | Provider Catalog JSON Schema |
-| `@you-agent-factory/model-providers/manifest` | Publication provenance and artifact SHA-256 hashes |
+| `@you-agent-factory/model-providers/manifest` | Commit-independent development metadata and artifact SHA-256 hashes; publication may add source provenance |
 | `@you-agent-factory/model-providers/types` | `ProviderCatalog`, `ProviderManifest`, and supporting TypeScript types |
 
 The JSON exports provide TypeScript declarations through their package export
