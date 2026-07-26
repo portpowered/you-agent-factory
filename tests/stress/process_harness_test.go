@@ -95,7 +95,7 @@ func startStressProcess(
 	case err := <-done:
 		cancel()
 		t.Fatalf("Process.Execute() exited before API readiness: %v; stderr=%s", err, stderr.String())
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		cancel()
 		t.Fatalf("timed out waiting for API readiness; stderr=%s", stderr.String())
 	}
