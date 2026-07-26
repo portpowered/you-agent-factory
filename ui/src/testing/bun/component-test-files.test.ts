@@ -12,8 +12,21 @@ describe("classifyComponentTestSource", () => {
     ).toMatchObject({ runner: "bun" });
   });
 
+  it("assigns vi.fn and vi.mocked tests to Bun", () => {
+    expect(
+      classifyComponentTestSource(
+        "src/features/example/example-card.test.tsx",
+        "const callback = vi.fn(); vi.mocked(callback);",
+      ),
+    ).toMatchObject({ runner: "bun" });
+  });
+
   it.each([
-    ["vi.useFakeTimers();", "uses Vitest mocking or timer APIs"],
+    ["vi.useFakeTimers();", "uses unsupported Vitest APIs: useFakeTimers"],
+    [
+      "vi.stubGlobal('fetch', vi.fn()); vi.unstubAllGlobals();",
+      "uses unsupported Vitest APIs: stubGlobal, unstubAllGlobals",
+    ],
   ])("keeps %s in Vitest", (source, reason) => {
     expect(
       classifyComponentTestSource(
