@@ -1504,6 +1504,11 @@ response-stream output.
   invocation stdout that suppresses operator chatter, and named-goal batch
   stdout that stays primary-result-only. Reuse helpers from
   `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
+- `cmd/factory` owns the operating-system interrupt boundary for the CLI.
+  Derive the reusable process context with `signal.NotifyContext`, stop the
+  signal subscription on return, and classify wrapped `context.Canceled` as the
+  manifest-declared exit 130. This lets continuous runs unwind through the
+  canonical Initializer lifecycle instead of being terminated outside it.
 - `pkg/factory/packages/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
