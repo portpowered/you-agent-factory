@@ -56,7 +56,14 @@ func ResolveFactoryInvocationInputSchema(
 	if err != nil {
 		return climanifest.EffectiveInputSchema{}, nil, err
 	}
-	return climanifest.ComposeRunInputs(manifest, commandID, signature)
+	schema, diagnostics, err := climanifest.ComposeRunInputs(manifest, commandID, signature)
+	if err != nil {
+		return climanifest.EffectiveInputSchema{}, nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return climanifest.EffectiveInputSchema{}, nil, err
+	}
+	return schema, diagnostics, nil
 }
 
 type factoryInvocationHelpData struct {

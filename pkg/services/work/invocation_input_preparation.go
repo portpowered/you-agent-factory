@@ -99,6 +99,9 @@ func (invocationInputPreparation) PrepareInvocationInput(
 	if err != nil {
 		return PreparedInvocationInput{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return PreparedInvocationInput{}, err
+	}
 
 	if request.Signature == nil && len(positional) == 0 && request.StdinText == nil {
 		return PreparedInvocationInput{}, nil
@@ -111,6 +114,9 @@ func (invocationInputPreparation) PrepareInvocationInput(
 	input.StdinText = request.StdinText
 	result, err := NormalizeArguments(input)
 	if err != nil {
+		return PreparedInvocationInput{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return PreparedInvocationInput{}, err
 	}
 	prepared := PreparedInvocationInput{NormalizedArguments: cloneNormalizedArguments(&result)}

@@ -114,6 +114,31 @@ func TestResolveRunFactoryPromptSensitiveConstraintFailureIsStableAndDetached(t 
 	}
 }
 
+func TestResolveRunFactoryPromptCancellationReturnsNoPartialInput(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, completeInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd.SetContext(ctx)
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	preparation := rootInvocationInputScript{prepare: func(
+		_ context.Context,
+		_ work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		cancel()
+		return work.PreparedInvocationInput{}, ctx.Err()
+	}}
+
+	err := resolveRunFactoryPrompt(cmd, &cfg, []string{"draft"}, preparation)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+	if cfg.PreparedInvocationInput != nil || cfg.InvocationNormalizedArguments != nil {
+		t.Fatalf("canceled normalization left partial input: %#v", cfg)
+	}
+}
+
 func newEffectiveSignatureCommand(t *testing.T, factoryPath, stdin string) *cobra.Command {
 	t.Helper()
 

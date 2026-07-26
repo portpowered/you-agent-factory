@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,10 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 )
 
 const (
@@ -157,6 +162,213 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
 		t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
 	}
+}
+
+const preparationFailureSensitiveValue = "credential-that-must-not-leak"
+
+func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		factory           string
+		arguments         []string
+		wantCode          string
+		cancelDuringLoad  bool
+		wantContextCancel bool
+	}{
+		{
+			name: "reserved static collision",
+			factory: `{
+  "name": "collision",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "credential",
+        "sensitive": true,
+        "bindings": [{"kind": "POSITIONAL", "position": 1}]
+      },
+      {
+        "name": "reserved",
+        "externalName": "quiet",
+        "bindings": [{"kind": "NAMED"}]
+      }
+    ]
+  }
+}`,
+			arguments: []string{preparationFailureSensitiveValue},
+			wantCode:  climanifest.CompositionCollisionLongName,
+		},
+		{
+			name: "sensitive normalization failure",
+			factory: `{
+  "name": "sensitive",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "token",
+      "sensitive": true,
+      "required": true,
+      "choices": ["allowed"],
+      "bindings": [{"kind": "POSITIONAL", "position": 1}]
+    }]
+  }
+}`,
+			arguments: []string{preparationFailureSensitiveValue},
+			wantCode:  string(work.ArgumentErrorCodeStringValidationMismatch),
+		},
+		{
+			name: "cancellation during explicit file lookup",
+			factory: `{
+  "name": "canceled",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "input",
+      "bindings": [{"kind": "POSITIONAL", "position": 1}]
+    }]
+  }
+}`,
+			arguments:         []string{"draft"},
+			cancelDuringLoad:  true,
+			wantContextCancel: true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runPreparationFailureCase(t, test.factory, test.arguments, test.wantCode, test.cancelDuringLoad, test.wantContextCancel)
+		})
+	}
+}
+
+func runPreparationFailureCase(
+	t *testing.T,
+	factory string,
+	arguments []string,
+	wantCode string,
+	cancelDuringLoad bool,
+	wantContextCancel bool,
+) {
+	t.Helper()
+
+	workingDirectory := t.TempDir()
+	factoryPath := filepath.Join(workingDirectory, "factory.json")
+	if err := os.WriteFile(factoryPath, []byte(factory), 0o600); err != nil {
+		t.Fatalf("write Factory fixture: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	observation := &preparationSideEffectObservation{}
+	provider := testutil.NewProviderCommandRunner()
+	edges := serviceedges.Edges{
+		FactorySessionIDGenerator: observation.nextSessionID,
+		RuntimeHostObserver:       observation.observeRuntimeHost,
+		WorkRequestIDGenerator:    observation.nextWorkRequestID,
+		ProviderCommandRunner:     provider,
+	}
+	if cancelDuringLoad {
+		edges.FactoryDefinitionAuthoredReaderFileSystem = cancelingLoadingFileSystem{
+			target: factoryPath,
+			cancel: cancel,
+		}
+	}
+	process, err := root.BuildProcess(t.Context(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	stdinIsTTY := true
+	stdoutIsTTY := false
+	err = process.Execute(root.Input{
+		Args: append(
+			[]string{"you", "run", "--factory", factoryPath, "--no-record"},
+			arguments...,
+		),
+		Env:              os.Environ(),
+		Stdin:            strings.NewReader(""),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          ctx,
+		WorkingDirectory: workingDirectory,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	if wantContextCancel {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
+		}
+	} else if err == nil || !strings.Contains(err.Error(), wantCode) {
+		t.Fatalf("Process.Execute() error = %v, want stable code %s", err, wantCode)
+	}
+	observable := errText(err) + stdout.String() + stderr.String()
+	if strings.Contains(observable, preparationFailureSensitiveValue) {
+		t.Fatalf("preparation failure leaked sensitive input: %s", observable)
+	}
+	observation.assertNoExecution(t, provider.CallCount())
+}
+
+type preparationSideEffectObservation struct {
+	sessionIDs   atomic.Int32
+	runtimeHosts atomic.Int32
+	workIDs      atomic.Int32
+}
+
+func (observation *preparationSideEffectObservation) nextSessionID() string {
+	observation.sessionIDs.Add(1)
+	return "unexpected-session"
+}
+
+func (observation *preparationSideEffectObservation) observeRuntimeHost(factorysessions.RuntimeHostBinding) {
+	observation.runtimeHosts.Add(1)
+}
+
+func (observation *preparationSideEffectObservation) nextWorkRequestID() string {
+	observation.workIDs.Add(1)
+	return "unexpected-work"
+}
+
+func (observation *preparationSideEffectObservation) assertNoExecution(t *testing.T, providerCalls int) {
+	t.Helper()
+	if sessionIDs := observation.sessionIDs.Load(); sessionIDs != 0 {
+		t.Fatalf("Factory Session ID calls = %d, want 0", sessionIDs)
+	}
+	if runtimeHosts := observation.runtimeHosts.Load(); runtimeHosts != 0 {
+		t.Fatalf("runtime host observations = %d, want 0", runtimeHosts)
+	}
+	if workIDs := observation.workIDs.Load(); workIDs != 0 {
+		t.Fatalf("Work request ID calls = %d, want 0", workIDs)
+	}
+	if providerCalls != 0 {
+		t.Fatalf("provider command calls = %d, want 0", providerCalls)
+	}
+}
+
+type cancelingLoadingFileSystem struct {
+	target string
+	cancel context.CancelFunc
+}
+
+func (filesystem cancelingLoadingFileSystem) Stat(path string) (fs.FileInfo, error) {
+	return os.Stat(path)
+}
+
+func (filesystem cancelingLoadingFileSystem) ReadFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err == nil && filepath.Clean(path) == filepath.Clean(filesystem.target) {
+		filesystem.cancel()
+	}
+	return data, err
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func addEffectiveSignatureFixture(t *testing.T, factoryPath string) {

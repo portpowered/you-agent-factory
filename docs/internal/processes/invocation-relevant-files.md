@@ -11,6 +11,14 @@ primary-result behavior.
   catalog provenance, and filesystem location out of the effective schema so
   equivalent definitions produce the same downstream facts without
   materialization, sessions, provider startup, or runtime probing.
+- Selected-Factory request preparation must recheck cancellation after pure
+  schema composition and after Work normalization before publishing any
+  prepared result. CLI adapters should recover Work's typed stable failures
+  with `errors.As`, because the real service boundary wraps domain errors.
+  Prove failure ordering through `root.BuildProcess` using Factory Session ID,
+  runtime-host, Work request ID, and provider-command edges; all must remain
+  untouched for composition, sensitive normalization, and cancellation
+  failures.
 - For a selected Factory with an active invocation signature, effective-schema
   composition replaces the static positional/stdin compatibility carrier while
   retaining run-level flags and other static inputs as reserved namespaces.

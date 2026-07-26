@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,8 +83,8 @@ func MapCompositionDiagnostics(diagnostics []climanifest.CompositionDiagnostic) 
 // MapInvocationInputError represents Work-owned preparation failures using the
 // stable CLI error vocabulary.
 func MapInvocationInputError(err error) error {
-	inputErr, ok := err.(*work.InputError)
-	if ok {
+	var inputErr *work.InputError
+	if errors.As(err, &inputErr) {
 		switch inputErr.Code {
 		case work.InputErrorCodeSourceConflict:
 			return ambiguousInvocationInputError(inputErr)
@@ -91,8 +92,8 @@ func MapInvocationInputError(err error) error {
 			return &InvocationError{Code: string(inputErr.Code), Message: inputErr.Message}
 		}
 	}
-	argumentErr, ok := err.(*work.ArgumentError)
-	if ok {
+	var argumentErr *work.ArgumentError
+	if errors.As(err, &argumentErr) {
 		return &InvocationError{Code: string(argumentErr.Code), Message: argumentErr.Message}
 	}
 	return err
