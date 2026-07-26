@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 )
 
 type service struct {
-	resolveRunner   runtimeassembly.RunnerResolver
+	runners         runners.Service
 	assembleBinding runtimeassembly.BindingAssembler
 }
 
@@ -18,11 +19,11 @@ var _ runtimeassembly.Service = (*service)(nil)
 // New constructs an inert runtime assembler from process-scoped Workers
 // collaborators.
 func New(
-	resolveRunner runtimeassembly.RunnerResolver,
+	runnerRegistry runners.Service,
 	assembleBinding runtimeassembly.BindingAssembler,
 ) runtimeassembly.Service {
 	return &service{
-		resolveRunner:   resolveRunner,
+		runners:         runnerRegistry,
 		assembleBinding: assembleBinding,
 	}
 }
@@ -37,28 +38,23 @@ func (s *service) Build(
 	if err != nil {
 		return workers.RuntimeBuildResult{}, err
 	}
-	if s == nil || s.resolveRunner == nil || s.assembleBinding == nil {
+	if s == nil || s.runners == nil || s.assembleBinding == nil {
 		return workers.RuntimeBuildResult{}, fmt.Errorf(
 			"%w: runtime-assembly collaborators are required",
 			workers.ErrIncompleteRuntimeAssembly,
 		)
 	}
 
-	selection, recognized, err := s.resolveRunner(ctx, snapshot.RunnerID)
+	runnerBinding, err := s.runners.Resolve(runners.ResolutionRequest{
+		Identity:             snapshot.RunnerID,
+		RequiredCapabilities: snapshot.RequiredRunnerCapabilities,
+	})
 	if err != nil {
-		return workers.RuntimeBuildResult{}, fmt.Errorf(
-			"%w: resolve runner %q: %w",
-			workers.ErrRuntimeAssemblyRejected,
-			snapshot.RunnerID,
-			err,
-		)
+		return workers.RuntimeBuildResult{}, err
 	}
-	if !recognized {
-		return workers.RuntimeBuildResult{}, fmt.Errorf(
-			"%w: %q",
-			workers.ErrUnknownRunnerSelection,
-			snapshot.RunnerID,
-		)
+	selection := workers.ResolvedRunnerSelection{
+		RunnerID: runnerBinding.Identity,
+		Source:   workers.RunnerSelectionSourceFactory,
 	}
 	if !completeSelection(selection) {
 		return workers.RuntimeBuildResult{}, fmt.Errorf(

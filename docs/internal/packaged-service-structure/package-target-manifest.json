@@ -253,6 +253,10 @@
     "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
+    "pkg/services/workers/internal/services/runners",
+    "pkg/services/workers/internal/services/runners/internal/service",
+    "pkg/services/workers/internal/services/runners/internal/testkit",
+    "pkg/services/workers/internal/services/runners/wire",
     "pkg/services/workers/internal/services/runtime_assembly",
     "pkg/services/workers/internal/services/runtime_assembly/internal/service",
     "pkg/services/workers/internal/services/runtime_assembly/wire",
@@ -1423,6 +1427,26 @@
       "packagePath": "pkg/services/workers/interface",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/service",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/testkit",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/wire",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runtime_assembly",

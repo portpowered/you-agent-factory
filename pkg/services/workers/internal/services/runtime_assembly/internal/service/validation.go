@@ -29,6 +29,10 @@ func snapshotAndValidate(
 	snapshot := request
 	snapshot.Opening = cloneOpeningOptions(request.Opening)
 	snapshot.Roles = append([]workers.RuntimeBuildRoleRequest(nil), request.Roles...)
+	snapshot.RequiredRunnerCapabilities = append(
+		[]workers.RunnerOptionalCapability(nil),
+		request.RequiredRunnerCapabilities...,
+	)
 	if snapshot.Opening.MockWorkers != nil {
 		if err := snapshot.Opening.MockWorkers.Validate(); err != nil {
 			return workers.RuntimeBuildRequest{}, fmt.Errorf(
