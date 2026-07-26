@@ -9,11 +9,24 @@ import "context"
 // local-runtime implementation interfaces. Workers decide when to ask Models to
 // handle an invocation; Models owns the local runtime lifecycle when it does.
 type Service interface {
+	// OpenRuntimeScope registers detached Models configuration and returns an
+	// opaque reference. Implementations must not construct or return another
+	// Service, host, runtime, puller, limiter, process, or storage handle while
+	// opening the scope.
+	OpenRuntimeScope(context.Context, OpenRuntimeScopeRequest) (OpenRuntimeScopeResult, error)
+	// CloseRuntimeScope closes one previously opened scope. Invalid, stale,
+	// already-closed, and foreign references return distinct Models-owned
+	// failures.
+	CloseRuntimeScope(context.Context, CloseRuntimeScopeRequest) (CloseRuntimeScopeResult, error)
 	// ForRuntime binds this already-constructed service to one Factory Session's
 	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
 	// Construction and process-launcher ports remain owned by the injected
 	// service; Factory Sessions supplies only plain runtime-scope data.
 	// Invalid or missing binding inputs fail closed with ErrInvalidRuntimeBinding.
+	//
+	// Deprecated: target peers should use OpenRuntimeScope and carry its opaque
+	// RuntimeScopeRef. ForRuntime remains during the separate consumer-migration
+	// and implementation packets.
 	ForRuntime(RuntimeBinding) (Service, error)
 	// ListModels returns detached Models-owned catalog summaries (Status,
 	// LoadState, ManagedRuntime readiness) without exposing nested catalog

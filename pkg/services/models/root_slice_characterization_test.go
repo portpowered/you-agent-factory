@@ -6,137 +6,227 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"strings"
+	"sync"
 	"testing"
 )
 
 // runtimeScopePeerService is a fake peer implementer of Models root Service
-// that validates plain runtime-scope binding inputs and returns a usable bound
-// Service view without starting host processes.
+// that registers detached configuration without importing implementation or
+// construction packages.
 type runtimeScopePeerService struct {
-	bound bool
+	mu     sync.Mutex
+	owner  string
+	next   int
+	open   map[models.RuntimeScopeRef]models.RuntimeScopeConfig
+	closed map[models.RuntimeScopeRef]struct{}
 }
 
-func (s runtimeScopePeerService) ForRuntime(binding models.RuntimeBinding) (models.Service, error) {
-	if err := models.ValidateRuntimeBinding(binding); err != nil {
-		return nil, err
+func newRuntimeScopePeerService(owner string) *runtimeScopePeerService {
+	return &runtimeScopePeerService{
+		owner:  owner,
+		open:   make(map[models.RuntimeScopeRef]models.RuntimeScopeConfig),
+		closed: make(map[models.RuntimeScopeRef]struct{}),
 	}
-	return runtimeScopePeerService{bound: true}, nil
 }
 
-func (s runtimeScopePeerService) ListModels(context.Context) (models.List, error) {
-	if !s.bound {
-		return models.List{}, models.ErrInvalidRuntimeBinding
+func (s *runtimeScopePeerService) OpenRuntimeScope(
+	_ context.Context,
+	request models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.next++
+	scope, err := (models.RuntimeScopeRef{}).Parse(fmt.Sprintf("%s:%d", s.owner, s.next))
+	if err != nil {
+		return models.OpenRuntimeScopeResult{}, err
 	}
+	s.open[scope] = request.Config.Clone()
+	return models.OpenRuntimeScopeResult{Scope: scope}, nil
+}
+
+func (s *runtimeScopePeerService) CloseRuntimeScope(
+	_ context.Context,
+	request models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if request.Scope.IsZero() {
+		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeInvalid
+	}
+	if !strings.HasPrefix(request.Scope.String(), s.owner+":") {
+		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeForeign
+	}
+	if _, ok := s.closed[request.Scope]; ok {
+		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeClosed
+	}
+	if _, ok := s.open[request.Scope]; !ok {
+		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeStale
+	}
+	delete(s.open, request.Scope)
+	s.closed[request.Scope] = struct{}{}
+	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+}
+
+func (s *runtimeScopePeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
+	return s, nil
+}
+
+func (*runtimeScopePeerService) ListModels(context.Context) (models.List, error) {
 	return models.List{Results: []models.Summary{}}, nil
 }
 
-func (runtimeScopePeerService) GetModel(context.Context, string) (models.Detail, error) {
+func (*runtimeScopePeerService) GetModel(context.Context, string) (models.Detail, error) {
 	return models.Detail{}, models.ErrNotFound
 }
 
-func (runtimeScopePeerService) PullModel(context.Context, string) (models.PullResult, error) {
+func (*runtimeScopePeerService) PullModel(context.Context, string) (models.PullResult, error) {
 	return models.PullResult{}, models.ErrUnsupportedOperation
 }
 
-func (runtimeScopePeerService) InspectRuntime(context.Context, string) (models.Runtime, error) {
+func (*runtimeScopePeerService) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, models.ErrUnsupported
 }
 
-func (runtimeScopePeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
+func (*runtimeScopePeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
 	return models.HostLease{}, models.ErrHostRuntimeNotReady
 }
 
-func (runtimeScopePeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
+func (*runtimeScopePeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
 	return models.ErrHostLeaseNotFound
 }
 
-func (runtimeScopePeerService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+func (*runtimeScopePeerService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{Handled: false}, nil
 }
 
-func TestRuntimeScope_ValidBindingReturnsUsableServiceViewWithoutHostProcesses(t *testing.T) {
+func TestRuntimeScope_OpenRegistersDetachedConfigAndReturnsOpaqueRef(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = runtimeScopePeerService{}
-	binding := models.RuntimeBinding{
+	fake := newRuntimeScopePeerService("factory-session-a")
+	var service models.Service = fake
+	request := models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{
 		CacheDirectory: "cache",
-		RuntimeConfig: func() *models.RuntimeConfig {
-			return &models.RuntimeConfig{
-				FactoryDirectory: "factory",
-				Workers: []models.RuntimeWorker{{
-					Name:          "writer",
-					Type:          models.RuntimeWorkerTypeInference,
-					Model:         "local-model",
-					ModelLocality: models.RuntimeModelLocalityLocal,
-				}},
-			}
+		Runtime: models.RuntimeConfig{
+			FactoryDirectory: "factory",
+			Workers: []models.RuntimeWorker{{
+				Name:          "writer",
+				Type:          models.RuntimeWorkerTypeInference,
+				Model:         "local-model",
+				ModelLocality: models.RuntimeModelLocalityLocal,
+				Args:          []string{"--detached"},
+			}},
 		},
+	}}
+
+	result, err := service.OpenRuntimeScope(context.Background(), request)
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	if result.Scope.IsZero() {
+		t.Fatal("OpenRuntimeScope Scope is zero")
 	}
 
-	bound, err := service.ForRuntime(binding)
-	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
-	}
-	if bound == nil {
-		t.Fatal("ForRuntime returned nil Service view")
-	}
-
-	list, err := bound.ListModels(context.Background())
-	if err != nil {
-		t.Fatalf("bound ListModels: %v", err)
-	}
-	if list.Results == nil {
-		t.Fatal("bound ListModels Results = nil, want empty Models-owned slice")
+	request.Config.Runtime.Workers[0].Model = "mutated"
+	request.Config.Runtime.Workers[0].Args[0] = "--mutated"
+	stored := fake.open[result.Scope]
+	if stored.Runtime.Workers[0].Model != "local-model" ||
+		stored.Runtime.Workers[0].Args[0] != "--detached" {
+		t.Fatalf("registered config = %#v, want detached original values", stored)
 	}
 }
 
-func TestRuntimeScope_MissingRequiredInputsFailWithTypedBindingError(t *testing.T) {
+func TestRuntimeScope_CloseClassifiesInvalidStaleClosedAndForeignRefs(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = runtimeScopePeerService{}
+	fake := newRuntimeScopePeerService("factory-session-a")
+	var service models.Service = fake
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	stale, _ := (models.RuntimeScopeRef{}).Parse("factory-session-a:missing")
+	foreign, _ := (models.RuntimeScopeRef{}).Parse("factory-session-b:1")
 
-	t.Run("missing runtime config loader", func(t *testing.T) {
-		t.Parallel()
-		_, err := service.ForRuntime(models.RuntimeBinding{CacheDirectory: "cache"})
-		if err == nil {
-			t.Fatal("ForRuntime error = nil, want ErrInvalidRuntimeBinding")
-		}
-		if !errors.Is(err, models.ErrInvalidRuntimeBinding) {
-			t.Fatalf("ForRuntime error = %v, want ErrInvalidRuntimeBinding", err)
-		}
-		if !strings.Contains(err.Error(), "runtime configuration") {
-			t.Fatalf("ForRuntime error = %v, want runtime configuration detail", err)
-		}
-	})
+	assertCloseErrorIs(t, service, models.RuntimeScopeRef{}, models.ErrRuntimeScopeInvalid)
+	assertCloseErrorIs(t, service, stale, models.ErrRuntimeScopeStale)
+	assertCloseErrorIs(t, service, foreign, models.ErrRuntimeScopeForeign)
+
+	closed, err := service.CloseRuntimeScope(
+		context.Background(),
+		models.CloseRuntimeScopeRequest{Scope: opened.Scope},
+	)
+	if err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+	if !closed.Closed || closed.Scope != opened.Scope {
+		t.Fatalf("CloseRuntimeScope result = %#v, want closed issued scope", closed)
+	}
+	assertCloseErrorIs(t, service, opened.Scope, models.ErrRuntimeScopeClosed)
 }
 
-func TestRuntimeScope_RemainsOnSingularServiceWithoutConstructionPorts(t *testing.T) {
+func assertCloseErrorIs(
+	t *testing.T,
+	service models.Service,
+	scope models.RuntimeScopeRef,
+	want error,
+) {
+	t.Helper()
+	_, err := service.CloseRuntimeScope(
+		context.Background(),
+		models.CloseRuntimeScopeRequest{Scope: scope},
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("CloseRuntimeScope(%q) error = %v, want %v", scope.String(), err, want)
+	}
+}
+
+func TestRuntimeScope_ReferenceCarriesAcrossScopeBoundRequests(t *testing.T) {
 	t.Parallel()
 
-	// Compiling this fake peer against only root package types proves peers can
-	// bind runtime scope without HostProcessLauncher or local-runtime ports.
-	var service models.Service = runtimeScopePeerService{}
-	binding := models.RuntimeBinding{
-		CacheDirectory: "cache",
-		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	}
-	bound, err := service.ForRuntime(binding)
+	var service models.Service = newRuntimeScopePeerService("factory-session-a")
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{})
 	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
+		t.Fatalf("OpenRuntimeScope: %v", err)
 	}
-	if _, ok := bound.(models.Service); !ok {
-		t.Fatal("ForRuntime result does not satisfy singular root Service")
+	scope := opened.Scope
+	requestScopes := []models.RuntimeScopeRef{
+		(models.ListModelsRequest{Scope: scope}).Scope,
+		(models.GetModelRequest{Scope: scope}).Scope,
+		(models.PullModelRequest{Scope: scope}).Scope,
+		(models.InspectRuntimeRequest{Scope: scope}).Scope,
+		(models.AcquireLeaseRequest{Scope: scope}).Scope,
+		(models.ReleaseLeaseRequest{Scope: scope}).Scope,
+		(models.LocalInvocationRequest{Scope: scope}).Scope,
 	}
+	for i, got := range requestScopes {
+		if got != scope {
+			t.Fatalf("request scope %d = %q, want %q", i, got.String(), scope.String())
+		}
+	}
+}
 
-	opening := models.RuntimeOpeningRequest{CacheDirectory: binding.CacheDirectory}
-	if opening.CacheDirectory != binding.CacheDirectory {
-		t.Fatalf("RuntimeOpeningRequest CacheDirectory = %q, want %q", opening.CacheDirectory, binding.CacheDirectory)
-	}
+type unsupportedRuntimeScopePeer struct{}
+
+func (unsupportedRuntimeScopePeer) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (unsupportedRuntimeScopePeer) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
 }
 
 // catalogPeerService is a fake peer implementer of Models root Service that
 // exercises plain catalog list/get contracts using only root-package types.
 type catalogPeerService struct {
+	unsupportedRuntimeScopePeer
 	unavailable bool
 	entries     map[string]models.Detail
 }
@@ -310,6 +400,7 @@ func TestCatalog_PeerCompilesWithoutInternalCatalogImports(t *testing.T) {
 // assetsPeerService is a fake peer implementer of Models root Service that
 // exercises plain asset-pull contracts using only root-package types.
 type assetsPeerService struct {
+	unsupportedRuntimeScopePeer
 	results map[string]models.PullResult
 	fails   map[string]error
 }
@@ -473,6 +564,7 @@ func TestAssets_PeerCompilesWithoutNestedAssetGateway(t *testing.T) {
 // hostLeasePeerService is a fake peer implementer of Models root Service that
 // exercises plain host/lease contracts using only root-package types.
 type hostLeasePeerService struct {
+	unsupportedRuntimeScopePeer
 	runtimes map[string]models.Runtime
 	leases   map[string]models.HostLease
 	acquire  map[string]error
@@ -693,6 +785,7 @@ func TestHostLease_PeerCompilesWithoutNestedHostImport(t *testing.T) {
 // inferPeerService is a fake peer implementer of Models root Service that
 // exercises plain infer/local-invocation contracts using only root-package types.
 type inferPeerService struct {
+	unsupportedRuntimeScopePeer
 	results map[string]models.LocalInvocationResult
 	fails   map[string]error
 }

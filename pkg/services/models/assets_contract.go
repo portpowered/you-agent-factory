@@ -25,7 +25,8 @@ var ErrSourceFetchFailed = errors.New("managed runtime source fetch failed")
 // PullModelRequest is the plain assets pull request. Peers identify a model by
 // Name without importing models/internal/assets or nested puller/cache types.
 type PullModelRequest struct {
-	Name string
+	Scope RuntimeScopeRef
+	Name  string
 }
 
 // ValidatePullModelRequest checks the plain pull-model request. Empty names

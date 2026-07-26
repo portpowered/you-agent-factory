@@ -190,7 +190,25 @@ func (inertCurrentRuntimeResolver) CurrentRuntime() *factorysessions.LiveRuntime
 	return nil
 }
 
-type testModelsService struct{}
+type testModelsService struct {
+	testRuntimeScopeUnsupported
+}
+
+type testRuntimeScopeUnsupported struct{}
+
+func (testRuntimeScopeUnsupported) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (testRuntimeScopeUnsupported) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
 
 func (s testModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return s, nil

@@ -414,6 +414,20 @@ type workerModelService struct {
 	runtime       modelinference.Runtime
 }
 
+func (workerModelService) OpenRuntimeScope(
+	context.Context,
+	modelinference.OpenRuntimeScopeRequest,
+) (modelinference.OpenRuntimeScopeResult, error) {
+	return modelinference.OpenRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) CloseRuntimeScope(
+	context.Context,
+	modelinference.CloseRuntimeScopeRequest,
+) (modelinference.CloseRuntimeScopeResult, error) {
+	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }

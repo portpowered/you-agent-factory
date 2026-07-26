@@ -11,7 +11,9 @@ import (
 // peerModelsService is a fake peer implementer of the singular Models root
 // Service. It compiles against only the published root package and does not
 // import models/internal.
-type peerModelsService struct{}
+type peerModelsService struct {
+	unsupportedRuntimeScopePeer
+}
 
 func (peerModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return peerModelsService{}, nil
@@ -101,6 +103,7 @@ func TestRootServiceAuthority_AggregateSurfaceRemainsOnSingularService(t *testin
 // root-package types — no models/internal, HostProcessLauncher, CatalogHost,
 // or nested host-supervisor imports.
 type sealedPeerService struct {
+	unsupportedRuntimeScopePeer
 	bound bool
 
 	list    models.List
@@ -316,8 +319,8 @@ func TestRootContractSeal_AllSlicesReachableThroughSingularService(t *testing.T)
 	t.Parallel()
 
 	want := sealedSuccessExpectations{
-		list:    models.List{Results: []models.Summary{{Name: "local-model", Status: models.StatusReady}}},
-		detail:  models.Detail{Summary: models.Summary{Name: "local-model", Status: models.StatusReady}},
+		list:   models.List{Results: []models.Summary{{Name: "local-model", Status: models.StatusReady}}},
+		detail: models.Detail{Summary: models.Summary{Name: "local-model", Status: models.StatusReady}},
 		pull: models.PullResult{
 			ModelName:          "local-model",
 			ManagedPullOutcome: string(models.PullOutcomeAlreadyPresent),

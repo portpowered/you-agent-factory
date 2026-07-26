@@ -126,7 +126,8 @@ type LocalRuntimeHooks struct {
 // InspectRuntimeRequest is the plain host readiness-inspect request. Peers
 // identify a model by Name without importing models/internal/host.
 type InspectRuntimeRequest struct {
-	Name string
+	Scope RuntimeScopeRef
+	Name  string
 }
 
 // ValidateInspectRuntimeRequest checks the plain readiness-inspect request.
@@ -142,6 +143,7 @@ func ValidateInspectRuntimeRequest(request InspectRuntimeRequest) error {
 // model and optional holder without importing nested host supervisor or
 // lease-manager implementation types.
 type AcquireLeaseRequest struct {
+	Scope     RuntimeScopeRef
 	ModelName string
 	Holder    string
 }
@@ -158,6 +160,7 @@ func ValidateAcquireLeaseRequest(request AcquireLeaseRequest) error {
 // ReleaseLeaseRequest is the plain host/lease release request. Peers identify a
 // lease by LeaseID without importing nested host supervisor types.
 type ReleaseLeaseRequest struct {
+	Scope   RuntimeScopeRef
 	LeaseID string
 }
 

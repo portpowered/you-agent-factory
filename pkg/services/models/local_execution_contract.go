@@ -13,6 +13,7 @@ import (
 // ValidateLocalInvocationRequest before InvokeLocal when failing closed on
 // managed-runtime inputs.
 type LocalInvocationRequest struct {
+	Scope            RuntimeScopeRef
 	Holder           string
 	Worker           LocalWorker
 	Resources        []LocalResource

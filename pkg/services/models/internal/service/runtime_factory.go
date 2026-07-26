@@ -157,6 +157,20 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	)
 }
 
+func (o *Root) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }
@@ -273,6 +287,20 @@ var _ models.Service = (*runtimeService)(nil)
 
 func (s *runtimeService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
 	return s, nil
+}
+
+func (s *runtimeService) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
 }
 
 func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

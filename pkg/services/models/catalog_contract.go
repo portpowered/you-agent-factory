@@ -33,12 +33,15 @@ const (
 
 // ListModelsRequest is the plain catalog list request vocabulary. List currently
 // takes no filters; peers use this type without nested catalog assemblers.
-type ListModelsRequest struct{}
+type ListModelsRequest struct {
+	Scope RuntimeScopeRef
+}
 
 // GetModelRequest is the plain catalog get request. Peers identify a model by
 // Name without importing models/internal/catalog.
 type GetModelRequest struct {
-	Name string
+	Scope RuntimeScopeRef
+	Name  string
 }
 
 // ValidateGetModelRequest checks the plain get-model request. Empty names fail
