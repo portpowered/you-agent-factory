@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -148,13 +149,10 @@ func executeSubmitBatchCommand(
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	remainder := make([]string, 0, len(args))
 	flagsByToken := indexRunCommandFlags(cmd)
+	flagArgs, positional, _ := runcli.SplitFlagTerminator(args)
 
-	for index := 0; index < len(args); index++ {
-		token := args[index]
-		if token == "--" {
-			remainder = append(remainder, args[index+1:]...)
-			break
-		}
+	for index := 0; index < len(flagArgs); index++ {
+		token := flagArgs[index]
 		if token == "-" || !strings.HasPrefix(token, "-") {
 			remainder = append(remainder, token)
 			continue
@@ -180,7 +178,7 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 			return nil, fmt.Errorf("flag %s is unavailable", lookupToken)
 		}
 
-		value, consumedNext, err := resolveRunFlagValue(flag, args, index, hasInlineValue, inlineValue)
+		value, consumedNext, err := resolveRunFlagValue(flag, flagArgs, index, hasInlineValue, inlineValue)
 		if err != nil {
 			return nil, err
 		}
@@ -193,6 +191,7 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 		}
 	}
 
+	remainder = append(remainder, positional...)
 	return remainder, nil
 }
 

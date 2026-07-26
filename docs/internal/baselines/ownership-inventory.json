@@ -1466,7 +1466,7 @@
       "fromOwner": "transports",
       "toOwner": "factory_definitions",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/config -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/transports/cli/cobracompletion -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "transports",
@@ -3999,6 +3999,12 @@
     },
     {
       "packagePath": "pkg/transports/cli/cliserver",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cobracompletion",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

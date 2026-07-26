@@ -263,6 +263,8 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideQueryFactoryOperation,
 	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
+	provideFactoryNameCompletionOperation,
+	provideSelectedFactorySignatureCompletionOperation,
 	provideValidateFactoryOperation,
 	provideCreateFactoryFromFileOperation,
 	provideReplaceFactoryCurrentOperation,

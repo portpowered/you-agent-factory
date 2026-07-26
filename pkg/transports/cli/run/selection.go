@@ -37,6 +37,17 @@ type SessionInvoker interface {
 // already selected by Wire. It does not construct services or lifecycle state.
 type SelectionFactory func(RunConfig) processcontract.RunSelection
 
+// SplitFlagTerminator separates tokens parsed as run selectors and flags from
+// positional input protected by the canonical "--" terminator.
+func SplitFlagTerminator(args []string) (flagArgs []string, positional []string, terminated bool) {
+	for index, token := range args {
+		if token == "--" {
+			return args[:index], args[index+1:], true
+		}
+	}
+	return args, nil, false
+}
+
 func NewSelectionFactory(
 	open Opener,
 	buildRunner RuntimeRunnerBuilder,

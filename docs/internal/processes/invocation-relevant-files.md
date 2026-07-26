@@ -822,6 +822,16 @@ response-stream output.
   do not limit reserved-spelling checks to parameters with named CLI bindings.
   Named and explicit-file selectors must not enter this composition
   policy; equivalent selected signatures produce equivalent results.
+  Shell-completion adapters must check invocation cancellation before and
+  after effective-catalog discovery and after schema composition so a
+  dependency that returns partial data after cancellation cannot expose
+  candidates or accidentally select compatibility fallback.
+  Cobra's generated PowerShell completer does not delegate an empty default
+  result to native file completion. Keep `FILE_PATH` projection detached and
+  candidate-free, then patch the generated PowerShell boundary to enumerate
+  the entered local path in the shell; prove separate and inline named-value
+  forms against a built executable so a raw default directive cannot mask a
+  null `CompletionResult`.
   Preserve a nil selected signature as explicit compatibility mode rather than
   replacing it with an empty active signature: compatibility mode exposes only
   static inputs and delegates positional text, stdin, and API content to the

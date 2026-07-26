@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -87,11 +88,12 @@ type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
-// CommandOperations is the complete inert CLI operation graph assembled by
-// Wire. No transport constructor selects implementations for missing fields.
+// CommandOperations is the complete inert CLI operation graph assembled by Wire.
 type CommandOperations struct {
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
+	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
+	CompleteSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
 	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -135,15 +137,16 @@ type CommandOperations struct {
 	OpenRunSelection                  runcli.SelectionFactory
 }
 
-// CommandFactory constructs a fresh Cobra tree for each process invocation.
-// Its fields are immutable command entrypoints supplied by Wire, not a second
-// service graph. NewCommand adds only invocation-local process edges.
+// CommandFactory constructs a fresh Cobra tree for each invocation from
+// immutable Wire-supplied entrypoints and invocation-local process edges.
 type CommandFactory struct {
 	observeCLI                        platformprocess.CLIObserver
 	homeDir                           func() (string, error)
 	lookupEnv                         func(string) (string, bool)
 	initializer                       startupcli.Initializer
 	namedFactoryCatalog               interfaces.NamedFactoryCatalog
+	completeFactoryNames              cobracompletion.FactoryNamesOperation
+	completeSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	resolveNamedFactoryRoots          NamedFactoryRootsResolver
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	resolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -188,12 +191,13 @@ type CommandFactory struct {
 	openRunSelection      runcli.SelectionFactory
 }
 
-// NewCommandFactory copies the complete Wire-built operation graph without
-// selecting implementations or installing defaults.
+// NewCommandFactory copies the Wire-built graph without installing defaults.
 func NewCommandFactory(operations CommandOperations) CommandFactory {
 	return CommandFactory{
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
+		completeFactoryNames:              operations.CompleteFactoryNames,
+		completeSelectedFactorySignature:  operations.CompleteSelectedFactorySignature,
 		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
 		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
 		resolveCurrentFactoryDir:          operations.ResolveCurrentFactoryDir,
@@ -268,7 +272,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SetErr(input.Stderr)
 	root.SetContext(input.Context)
 	if factory.observeCLI == nil {
-		return root.Execute()
+		return cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root)
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {

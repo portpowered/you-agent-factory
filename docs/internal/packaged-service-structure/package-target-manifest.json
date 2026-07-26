@@ -304,6 +304,7 @@
     "pkg/transports/cli/climanifestcobra",
     "pkg/transports/cli/climanifestgen",
     "pkg/transports/cli/cliserver",
+    "pkg/transports/cli/cobracompletion",
     "pkg/transports/cli/commandidentity",
     "pkg/transports/cli/commandregistry",
     "pkg/transports/cli/completionprojection",
@@ -1680,6 +1681,11 @@
     },
     {
       "packagePath": "pkg/transports/cli/cliserver",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/cobracompletion",
       "disposition": "retain",
       "destination": "transports"
     },

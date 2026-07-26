@@ -19,8 +19,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -210,6 +212,25 @@ func provideListFactoriesOperation(
 	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
 	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
+}
+
+func provideFactoryNameCompletionOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+) cobracompletion.FactoryNamesOperation {
+	return cobracompletion.NewFactoryNames(definitions.ListEffectiveFactories)
+}
+
+func provideSelectedFactorySignatureCompletionOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+) (cobracompletion.SelectedFactorySignatureOperation, error) {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return nil, err
+	}
+	return cobracompletion.NewSelectedFactorySignature(
+		definitions.ListEffectiveFactories,
+		manifest,
+	), nil
 }
 
 func provideValidateFactoryOperation(
