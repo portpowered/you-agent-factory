@@ -7,18 +7,9 @@ import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
-type ScaffoldType = contracts.ScaffoldType
-
-const (
-	DefaultScaffoldType     = contracts.DefaultScaffoldType
-	RalphScaffoldType       = contracts.RalphScaffoldType
-	DefaultFactoryInputType = contracts.DefaultFactoryInputType
-	RalphFactoryInputType   = contracts.RalphFactoryInputType
-	DefaultStarterExecutor  = contracts.DefaultStarterExecutor
-)
+const DefaultFactoryInputType = contracts.DefaultFactoryInputType
 
 type ScaffoldConfig = contracts.ScaffoldConfig
-type ScaffoldResult = contracts.ScaffoldResult
 type ScaffoldInitializer = contracts.ScaffoldInitializer
 
 // ScaffoldFileSystem is the exact filesystem effect required to materialize a
@@ -36,7 +27,3 @@ type ScaffoldFileSystem interface {
 type ScaffoldOutput interface {
 	io.Writer
 }
-
-// SupportedStarterExecutors returns the stable executor names accepted by the
-// scaffold operation.
-var SupportedStarterExecutors = contracts.SupportedStarterExecutors

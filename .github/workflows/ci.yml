@@ -3,10 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - "docs/internal/**"
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,971 +13,178 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Keep this pinned version aligned with ui/package.json's packageManager value.
   BUN_VERSION: 1.3.12
-  # Keep CI on an explicit Node LTS major so setup-node does not need to resolve
-  # the floating lts/* alias through the GitHub-hosted manifest API.
   NODE_VERSION: 22
   # Keep this aligned with go.mod's toolchain directive. Using only the lower
   # go directive can make setup-go download the newer toolchain into GOMODCACHE
   # before cache restore, which causes cache extraction collisions on CI.
   GO_VERSION: 1.25.0
 
-# Contract staging lanes require full git history so manifest sourceCommit
-# resolution can find the last change to package source identity paths.
 jobs:
-  classify-pr-impact:
-    name: Classify PR Impact
+  classify:
+    name: Classify Verification
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      classification: ${{ steps.classify.outputs.classification || steps.classify_push.outputs.classification }}
-      docs_only: ${{ steps.classify.outputs.docs_only || steps.classify_push.outputs.docs_only }}
-      ui_only: ${{ steps.classify.outputs.ui_only || steps.classify_push.outputs.ui_only }}
-      backend_only: ${{ steps.classify.outputs.backend_only || steps.classify_push.outputs.backend_only }}
-      shared_risk: ${{ steps.classify.outputs.shared_risk || steps.classify_push.outputs.shared_risk }}
-      full_run_required: ${{ steps.classify.outputs.full_run_required || steps.classify_push.outputs.full_run_required }}
-      areas: ${{ steps.classify.outputs.areas || steps.classify_push.outputs.areas }}
-      changed_files_count: ${{ steps.classify.outputs.changed_files_count || steps.classify_push.outputs.changed_files_count }}
-      reason: ${{ steps.classify.outputs.reason || steps.classify_push.outputs.reason }}
-      full_run_command: ${{ steps.classify.outputs.full_run_command || steps.classify_push.outputs.full_run_command }}
-      run_ui_coverage: ${{ steps.classify.outputs.run_ui_coverage || steps.classify_push.outputs.run_ui_coverage }}
-      ui_coverage_reason: ${{ steps.classify.outputs.ui_coverage_reason || steps.classify_push.outputs.ui_coverage_reason }}
-      ui_coverage_command: ${{ steps.classify.outputs.ui_coverage_command || steps.classify_push.outputs.ui_coverage_command }}
-      run_ui_browser_integration: ${{ steps.classify.outputs.run_ui_browser_integration || steps.classify_push.outputs.run_ui_browser_integration }}
-      ui_browser_integration_reason: ${{ steps.classify.outputs.ui_browser_integration_reason || steps.classify_push.outputs.ui_browser_integration_reason }}
-      ui_browser_integration_command: ${{ steps.classify.outputs.ui_browser_integration_command || steps.classify_push.outputs.ui_browser_integration_command }}
-      run_backend_verification: ${{ steps.classify.outputs.run_backend_verification || steps.classify_push.outputs.run_backend_verification }}
-      backend_verification_reason: ${{ steps.classify.outputs.backend_verification_reason || steps.classify_push.outputs.backend_verification_reason }}
-      backend_verification_command: ${{ steps.classify.outputs.backend_verification_command || steps.classify_push.outputs.backend_verification_command }}
+      classification: ${{ steps.classify.outputs.classification || 'full' }}
+      areas: ${{ steps.classify.outputs.areas || 'ci-tooling' }}
+      run_docs_reference: ${{ steps.classify.outputs.run_docs_reference || 'true' }}
+      run_readme: ${{ steps.classify.outputs.run_readme || 'true' }}
+      run_frontend: ${{ steps.classify.outputs.run_frontend || 'true' }}
+      run_backend: ${{ steps.classify.outputs.run_backend || 'true' }}
+      run_ui_backend_integration: ${{ steps.classify.outputs.run_ui_backend_integration || 'true' }}
+      run_api_package: ${{ steps.classify.outputs.run_api_package || 'true' }}
+      run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
+      run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
+      run_local_inference: ${{ steps.classify.outputs.run_local_inference || 'true' }}
+      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || 'Conservative full verification.' }}
+      readme_reason: ${{ steps.classify.outputs.readme_reason || 'Conservative full verification.' }}
+      frontend_reason: ${{ steps.classify.outputs.frontend_reason || 'Conservative full verification.' }}
+      backend_reason: ${{ steps.classify.outputs.backend_reason || 'Conservative full verification.' }}
+      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || 'Conservative full verification.' }}
+      api_package_reason: ${{ steps.classify.outputs.api_package_reason || 'Conservative full verification.' }}
+      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || 'Conservative full verification.' }}
+      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || 'Conservative full verification.' }}
+      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || 'Conservative full verification.' }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-          cache-dependency-path: go.sum
-
-      - name: Classify change impact
-        id: classify
+      - id: classify
         if: github.event_name == 'pull_request'
         run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
-
-      - name: Default push events to full verification
-        id: classify_push
-        if: github.event_name != 'pull_request'
+      - if: github.event_name != 'pull_request'
         run: |
-          {
-            echo "classification=shared-risk"
-            echo "docs_only=false"
-            echo "ui_only=false"
-            echo "backend_only=false"
-            echo "shared_risk=true"
-            echo "full_run_required=true"
-            echo "full_run_command=make verify-pr"
-            echo "areas=shared-risk"
-            echo "changed_files_count=0"
-            echo "reason=Push events stay on the full shared-risk verification path."
-            echo "run_ui_coverage=true"
-            echo "ui_coverage_reason=Runs because shared-risk changes stay on the full verification safety path."
-            echo "ui_coverage_command=make run-sharded-ui-coverage"
-            echo "run_ui_browser_integration=true"
-            echo "ui_browser_integration_reason=Runs because shared-risk changes stay on the full verification safety path."
-            echo "ui_browser_integration_command=make ui-integration-test"
-            echo "run_backend_verification=true"
-            echo "backend_verification_reason=Runs because shared-risk changes stay on the full verification safety path."
-            echo "backend_verification_command=make test-backend-verification"
-          } >> "$GITHUB_OUTPUT"
-          {
-            echo "## Pull request impact classification"
-            echo
-            echo "- Classification: \`shared-risk\`"
-            echo "- Areas touched: \`shared-risk\`"
-            echo "- Changed files: \`0\`"
-            echo "- Reason: Push events stay on the full shared-risk verification path."
-            echo "- Full required rerun: \`make verify-pr\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package local_inference; do
+            echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
+          done
+          echo "classification=full" >> "$GITHUB_OUTPUT"
+          echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
 
-  typecheck:
-    name: Typecheck
+  docs-reference:
+    name: Docs Reference
+    needs: classify
+    if: always() && needs.classify.outputs.run_docs_reference == 'true'
     runs-on: ubuntu-latest
-    needs: classify-pr-impact
-    timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
+      - run: make docs-reference-smoke
 
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Run dashboard typecheck
-        run: make typecheck
-
-  windows-go-tests:
-    name: Windows Go ${{ matrix.label }}
-    runs-on: windows-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Unit
-            command: make test-unit
-          - label: Functional
-            command: make test-functional
-          - label: Stress
-            command: make test-stress
-          - label: Release
-            command: make test-release
+  readme:
+    name: README
+    needs: classify
+    if: always() && needs.classify.outputs.run_readme == 'true'
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Normalize git line endings for contract staging
-        shell: pwsh
-        run: git config --local core.autocrlf false
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
+      - run: make readme-check
 
-      - name: Install Windows test prerequisites
-        shell: pwsh
-        run: choco install make --no-progress -y
-
-      - name: Report local rerun command
-        shell: pwsh
-        run: |
-          "## Windows Go ${{ matrix.label }}" >> $env:GITHUB_STEP_SUMMARY
-          "" >> $env:GITHUB_STEP_SUMMARY
-          "- Local rerun: ${{ matrix.command }}" >> $env:GITHUB_STEP_SUMMARY
-
-      - name: Run Windows Go ${{ matrix.label }} suite
-        shell: pwsh
-        run: ${{ matrix.command }}
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Build production artifacts
-        run: make verify-build
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Install Playwright browser for component distribution verification
-        timeout-minutes: 10
-        run: make ui-install-playwright
-
-      - name: Run lint verification
-        timeout-minutes: 30
-        run: make verify-lint
-
-  api:
-    name: API
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up Node for API contract commands
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Run API contract verification
-        timeout-minutes: 30
-        run: make verify-api
-
-  build-lint-api-compatibility:
-    name: Build, Lint, and API
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs:
-      - build
-      - lint
-      - api
-    if: ${{ always() }}
-    steps:
-      - name: Reconcile legacy required status
-        env:
-          BUILD_RESULT: ${{ needs.build.result }}
-          LINT_RESULT: ${{ needs.lint.result }}
-          API_RESULT: ${{ needs.api.result }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo "## Build, Lint, and API compatibility status"
-            echo
-            echo "- Build: ${BUILD_RESULT}"
-            echo "- Lint: ${LINT_RESULT}"
-            echo "- API: ${API_RESULT}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ "$BUILD_RESULT" != "success" || "$LINT_RESULT" != "success" || "$API_RESULT" != "success" ]]; then
-            echo "Build, Lint, and API must all succeed; got Build=${BUILD_RESULT}, Lint=${LINT_RESULT}, API=${API_RESULT}." >&2
-            exit 1
-          fi
-
-          echo "Independent Build, Lint, and API checks succeeded."
-
-  long-local-inference:
-    name: Long Local Inference
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/long-local-inference.yml
-
-  release-surface-smoke:
-    name: Release Surface Smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        timeout-minutes: 10
-        run: make ui-deps
-
-      # The short Go release test covers harness plumbing with a stubbed browser
-      # verifier. This lane runs the real embedded dashboard through Playwright so
-      # release-only dashboard smoke regressions fail on normal PR/push CI.
-      - name: Run release surface smoke
-        timeout-minutes: 10
-        run: make release-surface-smoke
-
-      - name: Run built-CLI S24 acceptance
-        timeout-minutes: 15
-        run: make test-built-cli-acceptance
-
-  pr-inference-approval:
-    name: PR Inference Approval
+  frontend:
+    name: Frontend
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    env:
-      INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS: "1"
-      INFINITE_YOU_OMNIVOICE_CACHE_DIR: ${{ github.workspace }}/.cache/managed-models
-      OMNIVOICE_COMMAND_INSTALL_DIR: ${{ github.workspace }}/.cache/omnivoice-command/bin
-      OMNIVOICE_COMMAND_EXTRACT_DIR: ${{ github.workspace }}/.cache/omnivoice-command/extract
-      OMNIVOICE_COMMAND_NAME: omnivoice-llamacpp
-      OMNIVOICE_COMMAND_URL: ${{ vars.OMNIVOICE_COMMAND_URL_LINUX_AMD64 }}
-      SEGMENT_DOWNLOAD_TIMEOUT_MINS: "5"
     steps:
-      - name: Report lane routing
-        run: |
-          {
-            echo "## PR Inference Approval"
-            echo
-            echo "- Decision: \`run\`"
-            echo "- CI lane: \`PR Inference Approval\` (required on every pull request and main push; not folded into Backend Verification)"
-            echo "- Local command: \`make verify-pr-inference\`"
-            echo "- Narrow regression rerun: \`make pr-inference-approval\`"
-            echo "- Broader specialty sweep: \`make long-tests\` via \`.github/workflows/long-local-inference.yml\`"
-            echo "- Required env: \`INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1\`"
-            echo "- Runtime: \`omnivoice-llamacpp\` on PATH or \`INFINITE_YOU_OMNIVOICE_COMMAND\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-          cache-dependency-path: go.sum
-
-      - name: Restore managed model cache
-        timeout-minutes: 10
-        uses: actions/cache@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          path: |
-            .cache/managed-models
-            .cache/omnivoice-command
-          key: pr-inference-approval-linux-amd64-${{ vars.OMNIVOICE_COMMAND_URL_LINUX_AMD64 }}-${{ hashFiles('.github/workflows/ci.yml', 'scripts/ci/install-omnivoice-command.sh') }}
-          restore-keys: |
-            pr-inference-approval-linux-amd64-${{ vars.OMNIVOICE_COMMAND_URL_LINUX_AMD64 }}-
-
-      - name: Install OMNIVOICE runtime
-        id: install-omnivoice
-        timeout-minutes: 10
-        shell: bash
-        run: ./scripts/ci/install-omnivoice-command.sh
-
-      - name: Run PR inference approval lane
-        id: run_pr_inference_approval
-        continue-on-error: true
-        shell: bash
-        timeout-minutes: 25
-        env:
-          INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-omnivoice.outputs.command_path }}
-        run: |
-          set -o pipefail
-          artifact_root=".artifacts/pr-inference-approval"
-          mkdir -p "$artifact_root"
-          printf 'platform=linux\nbackend=%s\ncache_path=%s\n' \
-            "$INFINITE_YOU_OMNIVOICE_COMMAND" \
-            "$INFINITE_YOU_OMNIVOICE_CACHE_DIR" | tee "$artifact_root/runtime-setup.log"
-          make verify-pr-inference 2>&1 | tee "$artifact_root/command.log"
-
-      - name: Report lane execution
-        if: always()
-        shell: bash
-        run: |
-          artifact_name="pr-inference-approval-failure-artifacts"
-          artifact_root=".artifacts/pr-inference-approval"
-          if [[ "${{ steps.run_pr_inference_approval.outcome }}" == "success" ]]; then
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: PR-gated inference approval through \`make verify-pr-inference\`."
-              echo "- Result: \`passed\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          {
-            echo "### Execution result"
-            echo
-            echo "- Verified: PR-gated inference approval through \`make verify-pr-inference\`."
-            echo "- Result: \`failed\`"
-            echo "- Retained artifact: \`$artifact_name\` for 14 days"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo "- Runtime setup log: \`$artifact_root/runtime-setup.log\`"
-            echo "- Local rerun: \`make verify-pr-inference\`"
-            echo "- Narrow regression rerun: \`make pr-inference-approval\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Print PR inference diagnostics on failure
-        if: failure()
-        shell: bash
-        env:
-          INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-omnivoice.outputs.command_path }}
-        run: |
-          set +e
-          printf 'platform=linux\nbackend=%s\ncache_path=%s\n' \
-            "${INFINITE_YOU_OMNIVOICE_COMMAND:-missing}" \
-            "$INFINITE_YOU_OMNIVOICE_CACHE_DIR"
-          if [ -d "$INFINITE_YOU_OMNIVOICE_CACHE_DIR" ]; then
-            find "$INFINITE_YOU_OMNIVOICE_CACHE_DIR" -maxdepth 3 -type f | sort
-          else
-            echo "managed model cache directory does not exist"
-          fi
-
-      - name: Upload PR inference approval failure artifacts
-        if: always() && steps.run_pr_inference_approval.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-inference-approval-failure-artifacts
-          path: .artifacts/pr-inference-approval/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Fail for PR inference approval lane errors
-        if: always() && steps.run_pr_inference_approval.outcome == 'failure'
-        run: exit 1
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
+      - run: make typecheck ui-lint
 
   ui-coverage-shard:
-    name: UI Coverage Shard (${{ matrix.shard }}/${{ matrix.shard-total }})
+    name: Frontend Coverage Shard (${{ matrix.shard }}/10)
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
-    needs:
-      - classify-pr-impact
-    if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        shard-total: [10]
     steps:
-      - name: Report shard routing
-        run: |
-          {
-            echo "## UI Coverage Shard (${{ matrix.shard }}/${{ matrix.shard-total }})"
-            echo
-            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
-            echo "- Decision: \`run\`"
-            echo "- CI lane: \`ui-coverage-shard\` matrix + \`ui-coverage-merge\` (not monolithic \`make test-ui-coverage\` on one runner)"
-            echo "- Shard: \`${{ matrix.shard }}/${{ matrix.shard-total }}\`"
-            echo "- Local shard rerun: \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`"
-            echo "- Full local lane: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
-            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up Node for dashboard runtime
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        timeout-minutes: 10
-        run: make ui-deps
-
-      - name: Run dashboard coverage shard
-        id: run_ui_coverage_shard
-        continue-on-error: true
-        shell: bash
-        timeout-minutes: 25
+      - run: make ui-deps
+      - name: Run coverage shard
         env:
-          UI_COVERAGE_SHARD: ${{ matrix.shard }}/${{ matrix.shard-total }}
+          UI_COVERAGE_SHARD: ${{ matrix.shard }}/10
           UI_COVERAGE_MAIN_MAX_WORKERS: "2"
-        run: |
-          set -o pipefail
-          artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
-          mkdir -p "$artifact_root"
-          make ui-test-coverage 2>&1 | tee "$artifact_root/command.log"
-          exit_code=$?
-          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
-          exit "$exit_code"
-
-      - name: Report shard execution
-        if: always()
-        shell: bash
-        run: |
-          artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
-          if [[ "${{ steps.run_ui_coverage_shard.outcome }}" == "success" ]]; then
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: main covered Vitest shard \`${{ matrix.shard }}/${{ matrix.shard-total }}\` through \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`."
-              echo "- Result: \`passed\`"
-              echo "- Blob: \`ui/.vitest-reports/main-shard-${{ matrix.shard }}.json\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          {
-            echo "### Execution result"
-            echo
-            echo "- Verified: main covered Vitest shard \`${{ matrix.shard }}/${{ matrix.shard-total }}\` through \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`."
-            echo "- Shard: \`${{ matrix.shard }}/${{ matrix.shard-total }}\`"
-            echo "- Exit code: \`${{ steps.run_ui_coverage_shard.outputs.exit_code }}\`"
-            echo "- Result: \`failed\`"
-            echo "- Retained artifact: \`ui-coverage-shard-${{ matrix.shard }}\` for 14 days"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload UI coverage shard artifacts
-        if: steps.run_ui_coverage_shard.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        run: make ui-test-coverage
+      - uses: actions/upload-artifact@v4
         with:
           name: ui-coverage-shard-${{ matrix.shard }}
           include-hidden-files: true
-          path: |
-            ui/.vitest-reports/
-            .artifacts/ui-coverage-shard-${{ matrix.shard }}/
+          path: ui/.vitest-reports/main-shard-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload UI coverage shard failure artifacts
-        if: steps.run_ui_coverage_shard.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-coverage-shard-${{ matrix.shard }}
-          include-hidden-files: true
-          path: |
-            .artifacts/ui-coverage-shard-${{ matrix.shard }}/
-            ui/.vitest-reports/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Fail for UI coverage shard errors
-        if: steps.run_ui_coverage_shard.outcome == 'failure'
-        run: exit 1
-
   ui-coverage-merge:
-    name: UI Coverage
+    name: Frontend Coverage
+    needs: [classify, ui-coverage-shard]
+    if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
-    needs:
-      - classify-pr-impact
-      - ui-coverage-shard
-    if: >-
-      always() &&
-      needs.classify-pr-impact.outputs.run_ui_coverage == 'true' &&
-      needs.classify-pr-impact.result == 'success' &&
-      needs.ui-coverage-shard.result != 'skipped'
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
-      - name: Report merge routing
-        run: |
-          {
-            echo "## UI Coverage"
-            echo
-            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
-            echo "- Decision: \`run\`"
-            echo "- CI execution: ten \`ui-coverage-shard\` matrix jobs plus this \`ui-coverage-merge\` job"
-            echo "- Shard total: \`10\`"
-            echo "- Local merge rerun: \`make test-ui-coverage-merge\` (after shard blobs are in \`ui/.vitest-reports/\`)"
-            echo "- Full local lane: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
-            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up Node for dashboard runtime
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Restore Bun package cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        timeout-minutes: 10
-        run: make ui-deps
-
-      - name: Download UI coverage shard artifacts
-        uses: actions/download-artifact@v4
+      - run: make ui-deps
+      - uses: actions/download-artifact@v4
         with:
           pattern: ui-coverage-shard-*
-          path: .
+          path: ui/.vitest-reports
           merge-multiple: true
-
-      - name: Verify downloaded shard blobs
-        id: verify_shard_blobs
+      - name: Verify coverage shards
         shell: bash
         run: |
           set -euo pipefail
-          reports_dir="ui/.vitest-reports"
-          mkdir -p "$reports_dir"
-          # merge-multiple can leave blobs under per-artifact folders; normalize to ui/.vitest-reports/.
-          for index in $(seq 1 10); do
-            target="$reports_dir/main-shard-${index}.json"
-            if [[ ! -f "$target" ]]; then
-              found="$(find . -type f -name "main-shard-${index}.json" ! -path "./${target}" 2>/dev/null | head -1 || true)"
-              if [[ -n "$found" ]]; then
-                cp "$found" "$target"
-              fi
-            fi
+          for shard in 1 2 3 4 5 6 7 8 9 10; do
+            test -f "ui/.vitest-reports/main-shard-${shard}.json"
           done
-          missing=()
-          for index in $(seq 1 10); do
-            if [[ ! -f "$reports_dir/main-shard-${index}.json" ]]; then
-              missing+=("$index")
-            fi
-          done
-          if ((${#missing[@]} > 0)); then
-            echo "missing_shards=${missing[*]}" >> "$GITHUB_OUTPUT"
-            echo "shard_blobs_ready=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "shard_blobs_ready=true" >> "$GITHUB_OUTPUT"
+      - run: make test-ui-coverage-merge
 
-      - name: Run dashboard coverage merge lane
-        id: run_ui_coverage_merge
-        if: steps.verify_shard_blobs.outputs.shard_blobs_ready == 'true'
-        continue-on-error: true
-        shell: bash
-        timeout-minutes: 20
-        run: |
-          set -o pipefail
-          artifact_root=".artifacts/ui-coverage-merge"
-          mkdir -p "$artifact_root"
-          make test-ui-coverage-merge 2>&1 | tee "$artifact_root/command.log"
-
-      - name: Report merge execution
-        if: always()
-        shell: bash
-        run: |
-          artifact_name="ui-coverage-merge-failure-artifacts"
-          artifact_root=".artifacts/ui-coverage-merge"
-          missing_shards="${{ steps.verify_shard_blobs.outputs.missing_shards }}"
-          if [[ -n "$missing_shards" ]]; then
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: UI coverage shard blob merge and follow-on phases through \`make test-ui-coverage-merge\`."
-              echo "- Result: \`blocked\`"
-              echo "- Missing shard indices: \`${missing_shards// /, }\` / 10"
-              echo "- Expected blobs: \`ui/.vitest-reports/main-shard-<index>.json\` for each missing index"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          if [[ "${{ steps.run_ui_coverage_merge.outcome }}" == "success" ]]; then
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: isolated React Flow pass, \`vitest --mergeReports\` with \`ui/vite.config.ts\` thresholds, standalone script-style test, and replay coverage check through \`make test-ui-coverage-merge\`."
-              echo "- Result: \`passed\`"
-              echo "- Merged coverage thresholds: \`passed\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          threshold_result="failed"
-          if [[ -f "$artifact_root/command.log" ]] && rg -q "ERROR.*Coverage for" "$artifact_root/command.log"; then
-            threshold_result="failed (merged coverage thresholds)"
-          fi
-
-          {
-            echo "### Execution result"
-            echo
-            echo "- Verified: isolated React Flow pass, \`vitest --mergeReports\` with \`ui/vite.config.ts\` thresholds, standalone script-style test, and replay coverage check through \`make test-ui-coverage-merge\`."
-            echo "- Result: \`failed\`"
-            echo "- Merged coverage thresholds: \`$threshold_result\`"
-            echo "- Retained artifact: \`$artifact_name\` for 14 days"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload UI coverage merge failure artifacts
-        if: always() && (steps.run_ui_coverage_merge.outcome == 'failure' || steps.verify_shard_blobs.outputs.shard_blobs_ready != 'true')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-coverage-merge-failure-artifacts
-          path: .artifacts/ui-coverage-merge/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Fail for missing shard blobs
-        if: steps.verify_shard_blobs.outputs.shard_blobs_ready != 'true'
-        run: exit 1
-
-      - name: Fail for UI coverage merge errors
-        if: steps.verify_shard_blobs.outputs.shard_blobs_ready == 'true' && steps.run_ui_coverage_merge.outcome == 'failure'
-        run: exit 1
-
-  ui-browser-integration:
-    name: UI Browser Integration
+  frontend-browser:
+    name: Frontend Browser
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
-    needs:
-      - classify-pr-impact
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
-      - name: Report lane routing
-        run: |
-          {
-            echo "## UI Browser Integration"
-            echo
-            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
-            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && 'run' || 'skip' }}\`"
-            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`"
-            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_browser_integration_reason }}"
-            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check out repository
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Bun for the dashboard workspace
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up Node for dashboard runtime
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Restore Bun package cache
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dashboard dependencies
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        timeout-minutes: 10
-        run: make ui-deps
-
-      # Playwright recommends against caching browser binaries in CI because restore
-      # time is usually comparable to a fresh download on hosted runners.
-      - name: Install Playwright browser for dashboard integration tests
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        timeout-minutes: 10
-        run: make ui-install-playwright
-
-      - name: Run dashboard browser integration suite
-        id: run_ui_browser_integration
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        continue-on-error: true
-        env:
-          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ../.artifacts/ui-browser-integration/browser
-        shell: bash
-        timeout-minutes: 25
-        run: |
-          set -o pipefail
-          artifact_root=".artifacts/ui-browser-integration"
-          mkdir -p "$artifact_root"
-          make ui-integration-test 2>&1 | tee "$artifact_root/command.log"
-
-      - name: Report lane execution
-        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        shell: bash
-        run: |
-          artifact_name="ui-browser-integration-failure-artifacts"
-          artifact_root=".artifacts/ui-browser-integration"
-          if [[ "${{ steps.run_ui_browser_integration.outcome }}" == "success" ]]; then
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
-              echo "- Result: \`passed\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          {
-            echo "### Execution result"
-            echo
-            echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
-            echo "- Result: \`failed\`"
-            echo "- Retained artifact: \`$artifact_name\` for 14 days"
-            echo "- Evidence: Playwright trace, final screenshot, page HTML snapshot, diagnostics JSON, and the lane command log"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload UI browser integration failure artifacts
-        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-browser-integration-failure-artifacts
-          path: .artifacts/ui-browser-integration/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Fail for UI browser integration lane errors
-        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
-        run: exit 1
+      - run: make ui-deps ui-install-playwright ui-integration-test
 
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
-    needs:
-      - classify-pr-impact
-    if: always()
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -988,137 +192,210 @@ jobs:
         include:
           - suite: unit
             label: Unit
-            command: make test-unit-coverage
           - suite: functional
             label: Functional
-            # functional-test-viz composes boundary → one coverage run (profile +
-            # JSON) → Markdown catalog. Required CI uploads those plus command.log.
-            command: make functional-test-viz
     steps:
-      - name: Report lane routing
-        run: |
-          classification="${{ needs.classify-pr-impact.outputs.classification }}"
-          areas="${{ needs.classify-pr-impact.outputs.areas }}"
-          command="${{ matrix.command }}"
-          full_rerun="${{ needs.classify-pr-impact.outputs.full_run_command }}"
-          decision="${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}"
-          reason="${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
-          if [[ -z "$classification" ]]; then
-            classification="unavailable"
-          fi
-          if [[ -z "$areas" ]]; then
-            areas="unavailable"
-          fi
-          if [[ -z "$command" ]]; then
-            command="${{ matrix.command }}"
-          fi
-          if [[ -z "$full_rerun" ]]; then
-            full_rerun="make verify-pr"
-          fi
-          if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
-            decision="blocked-upstream"
-            reason="Not executed because Classify PR Impact did not complete successfully."
-          fi
-          {
-            echo "## Backend ${{ matrix.label }} Coverage"
-            echo
-            echo "- Classification: \`$classification\`"
-            echo "- Areas touched: \`$areas\`"
-            echo "- Decision: \`$decision\`"
-            echo "- Local command: \`$command\`"
-            echo "- Reason: $reason"
-            echo "- Full required rerun: \`$full_rerun\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check out repository
-        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-          cache-dependency-path: go.sum
+      - name: Build backend
+        if: matrix.suite == 'unit'
+        run: make build
+      - name: Run backend coverage
+        if: matrix.suite == 'unit'
+        run: make test-unit-coverage
+      - name: Run backend functional coverage and visualization
+        if: matrix.suite == 'functional'
+        run: make functional-test-viz
 
-      - name: Run backend ${{ matrix.suite }} coverage
-        id: run_backend_coverage
-        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
-        continue-on-error: true
-        shell: bash
-        timeout-minutes: 15
-        run: |
-          set -o pipefail
-          artifact_root=".artifacts/backend-${{ matrix.suite }}-coverage"
-          mkdir -p "$artifact_root"
-          if [[ "${{ matrix.suite }}" == "unit" ]]; then
-            GO_UNIT_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-unit-coverage 2>&1 | tee "$artifact_root/command.log"
-          else
-            # Required Backend Functional Coverage runs make functional-test-viz so
-            # one suite execution yields coverage.out, coverage-summary.json, and
-            # functional-tests.md. Override FUNCTIONAL_TEST_VIZ_DIR to keep the
-            # established CI upload root (.artifacts/backend-functional-coverage/).
-            # Do not replace this with a bare gocoveragecheck invocation that would
-            # skip the boundary gate or omit the viz artifact set.
-            FUNCTIONAL_TEST_VIZ_DIR="$artifact_root" make functional-test-viz 2>&1 | tee "$artifact_root/command.log"
-          fi
-          # Profile may be absent when an early gate fails (for example boundary);
-          # keep already-written diagnostics and still upload command.log.
-          if [[ -f "$artifact_root/coverage.out" ]]; then
-            go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
-          fi
-
-      - name: Report lane execution
-        if: always() && needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
-        shell: bash
-        run: |
-          artifact_name="backend-${{ matrix.suite }}-coverage-report"
-          artifact_root=".artifacts/backend-${{ matrix.suite }}-coverage"
-          if [[ "${{ steps.run_backend_coverage.outcome }}" == "success" ]]; then
-            total="$(grep -E '^total: \(statements\) [0-9.]+%$' "$artifact_root/command.log" | tail -n 1 || true)"
-            {
-              echo "### Execution result"
-              echo
-              echo "- Verified: Independent backend ${{ matrix.suite }} coverage through \`${{ matrix.command }}\`."
-              echo "- Coverage: \`${total:-unavailable}\`"
-              echo "- Report artifact: \`$artifact_name\`"
-              if [[ "${{ matrix.suite }}" == "functional" ]]; then
-                echo "- Functional viz artifacts (when present): \`functional-tests.md\`, \`coverage-summary.json\`, \`coverage.out\`, \`command.log\`"
-              fi
-              echo "- Result: \`passed\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          {
-            go run ./cmd/backendverificationsummary \
-              -log "$artifact_root/command.log" \
-              -command "${{ matrix.command }}" \
-              -artifact-name "$artifact_name" \
-              -primary-log "$artifact_root/command.log"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ matrix.suite }}" == "functional" ]]; then
-            {
-              echo
-              echo "- Functional viz artifacts uploaded when present under \`$artifact_root/\`: \`functional-tests.md\`, \`coverage-summary.json\`, \`coverage.out\`, \`command.log\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload backend ${{ matrix.suite }} coverage report
-        # Upload on success and failure so functional Markdown/JSON/profile/log
-        # (and unit profile/log) remain inspectable when the lane fails.
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_coverage.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+  ui-backend-integration:
+    name: UI Backend Integration
+    needs: classify
+    if: always() && needs.classify.outputs.run_ui_backend_integration == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          name: backend-${{ matrix.suite }}-coverage-report
-          path: .artifacts/backend-${{ matrix.suite }}-coverage/
-          if-no-files-found: error
-          retention-days: 14
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps ui-install-playwright ui-durable-session-real-backend-integration-test
 
-      - name: Fail for backend ${{ matrix.suite }} coverage errors
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_coverage.outcome == 'failure'
-        run: exit 1
+  api-package:
+    name: API Contract And Package
+    needs: classify
+    if: always() && needs.classify.outputs.run_api_package == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make ui-deps contracts-smoke api-smoke api-package-verify
+
+  packaged-factories-package:
+    name: Packaged Factories Package
+    needs: classify
+    if: always() && needs.classify.outputs.run_packaged_factories_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make packaged-factory-package-verify
+
+  model-providers-package:
+    name: Model Providers Package
+    needs: classify
+    if: always() && needs.classify.outputs.run_model_providers_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: make ui-deps
+      - run: make model-provider-package-verify
+
+  api-candidate:
+    name: Build API Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/api-package-development-command.mjs --action dry-run
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/api-development-candidate/package
+          --package-directory packages/api
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
+
+  packaged-factories-candidate:
+    name: Build Packaged Factories Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_packaged_factories_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/packaged-factories-package-pr-dry-run.mjs
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/packaged-factories-development-candidate/package
+          --package-directory packages/packaged-factories
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
+
+  local-inference:
+    name: Local Inference
+    needs: classify
+    if: always() && needs.classify.outputs.run_local_inference == 'true'
+    uses: ./.github/workflows/long-local-inference.yml
+
+  verification-policy:
+    name: Verification Policy
+    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify selected lanes
+        env:
+          CLASSIFICATION: ${{ needs.classify.outputs.classification }}
+          AREAS: ${{ needs.classify.outputs.areas }}
+          RUN_DOCS: ${{ needs.classify.outputs.run_docs_reference }}
+          RUN_README: ${{ needs.classify.outputs.run_readme }}
+          RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
+          RUN_BACKEND: ${{ needs.classify.outputs.run_backend }}
+          RUN_UI_BACKEND: ${{ needs.classify.outputs.run_ui_backend_integration }}
+          RUN_API: ${{ needs.classify.outputs.run_api_package }}
+          RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
+          RUN_PROVIDERS: ${{ needs.classify.outputs.run_model_providers_package }}
+          RUN_INFERENCE: ${{ needs.classify.outputs.run_local_inference }}
+          DOCS_REASON: ${{ needs.classify.outputs.docs_reference_reason }}
+          README_REASON: ${{ needs.classify.outputs.readme_reason }}
+          FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
+          BACKEND_REASON: ${{ needs.classify.outputs.backend_reason }}
+          UI_BACKEND_REASON: ${{ needs.classify.outputs.ui_backend_integration_reason }}
+          API_REASON: ${{ needs.classify.outputs.api_package_reason }}
+          PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
+          PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
+          INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
+          RESULTS: >-
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "## Verification policy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Classification: \`$CLASSIFICATION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Areas: \`$AREAS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Results: \`$RESULTS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "### Lane decisions" >> "$GITHUB_STEP_SUMMARY"
+          for lane in \
+            "Docs Reference|$RUN_DOCS|${{ needs.docs-reference.result }}|$DOCS_REASON" \
+            "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
+            "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
+            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage-merge.result }}|$FRONTEND_REASON" \
+            "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
+            "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
+            "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
+            "API Contract And Package|$RUN_API|${{ needs.api-package.result }}|$API_REASON" \
+            "Packaged Factories Package|$RUN_PACKAGED|${{ needs.packaged-factories-package.result }}|$PACKAGED_REASON" \
+            "Model Providers Package|$RUN_PROVIDERS|${{ needs.model-providers-package.result }}|$PROVIDERS_REASON" \
+            "Local Inference|$RUN_INFERENCE|${{ needs.local-inference.result }}|$INFERENCE_REASON"; do
+            IFS='|' read -r name selected result reason <<< "$lane"
+            decision=skip
+            [[ "$selected" == "true" ]] && decision=run
+            echo "- \`$name\`: \`$decision\` (result: \`$result\`) - $reason" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [[ "$RESULTS" == *"failure"* || "$RESULTS" == *"cancelled"* ]]; then
+            exit 1
+          fi

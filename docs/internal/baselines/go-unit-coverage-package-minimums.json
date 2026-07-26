@@ -255,10 +255,6 @@
       "minimum": 84.21
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
-      "minimum": 88.09
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
       "minimum": 0.00
     },
@@ -273,6 +269,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
       "minimum": 89.51
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
+      "minimum": 75.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",

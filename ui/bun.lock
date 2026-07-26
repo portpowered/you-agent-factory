@@ -15,7 +15,6 @@
         "@tanstack/react-query": "^5.90.2",
         "@xyflow/react": "^12.10.2",
         "@you-agent-factory/components": "file:./packages/components",
-        "@you-agent-factory/packaged-factories": "file:../packages/packaged-factories",
         "cron-parser": "4.9.0",
         "d3": "^7.9.0",
         "elkjs": "^0.11.1",
@@ -681,8 +680,6 @@
     "@xyflow/system": ["@xyflow/system@0.0.76", "", { "dependencies": { "@types/d3-drag": "^3.0.7", "@types/d3-interpolate": "^3.0.4", "@types/d3-selection": "^3.0.10", "@types/d3-transition": "^3.0.8", "@types/d3-zoom": "^3.0.8", "d3-drag": "^3.0.0", "d3-interpolate": "^3.0.1", "d3-selection": "^3.0.0", "d3-zoom": "^3.0.0" } }, "sha512-hvwvnRS1B3REwVDlWexsq7YQaPZeG3/mKo1jv38UmnpWmxihp14bW6VtEOuHEwJX2FvzFw8k77LyKSk/wiZVNA=="],
 
     "@you-agent-factory/components": ["@you-agent-factory/components@file:packages/components", { "dependencies": { "@xyflow/react": "^12.10.2", "recharts": "^3.8.1" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
-
-    "@you-agent-factory/packaged-factories": ["@you-agent-factory/packaged-factories@file:../packages/packaged-factories", {}],
 
     "acorn": ["acorn@8.16.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw=="],
 

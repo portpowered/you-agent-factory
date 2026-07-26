@@ -178,13 +178,15 @@ func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
 
 func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing.T) {
 	fixture := newInitFixture(t)
+	if err := os.Remove(fixture.configPath); err != nil {
+		t.Fatalf("remove seeded operator config: %v", err)
+	}
 	var stdout bytes.Buffer
-	err := fixture.execute(
-		serviceedges.Edges{},
-		&stdout,
+	args := []string{
 		"you", "--json", "factory", "list", "--dir",
 		filepath.Join(fixture.homeDir, ".you-agent-factory", "factories"),
-	)
+	}
+	err := fixture.execute(serviceedges.Edges{}, &stdout, args...)
 	if err != nil {
 		t.Fatalf("Process.Execute(factory list) error = %v; stdout=%q", err, stdout.String())
 	}
@@ -201,6 +203,14 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 	}
 	if _, statErr := os.Stat(filepath.Join(fixture.workingDir, "factory")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("normal initialization wrote a legacy working-directory scaffold: %v", statErr)
+	}
+
+	firstConfig := fixture.readConfig()
+	if err := fixture.execute(serviceedges.Edges{}, io.Discard, args...); err != nil {
+		t.Fatalf("Process.Execute(factory list repeat) error = %v", err)
+	}
+	if got := fixture.readConfig(); got != firstConfig {
+		t.Fatalf("repeat initialization rewrote operator config:\nfirst:\n%s\nsecond:\n%s", firstConfig, got)
 	}
 }
 

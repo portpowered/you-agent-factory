@@ -778,6 +778,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/listPackagedFactories",
+      "name": "listPackagedFactories",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/listWorkBySessionId",
       "name": "listWorkBySessionId",
       "interface": "rest",
