@@ -5,6 +5,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +47,31 @@ func requiresSystemInitialization(commandPath string, args []string) bool {
 	default:
 		return false
 	}
+}
+
+func executeServerCommand(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions CommandFactory,
+) error {
+	cfg := defaultcmd.ServerRunConfig(rootOptions.runDefaults)
+	if err := selectCurrentFactoryFromWorkingDirectory(cmd, &cfg); err != nil {
+		mapped := runcli.MapCurrentFactoryFailure(err)
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
+		return mapped
+	}
+	policy := diagnostics.resolvePolicy(false)
+	err := runFactoryWithOptions(
+		cmd, cfg, nil, globals, operatorDefaults, policy, rootOptions, true,
+	)
+	if err == nil {
+		return nil
+	}
+	mapped := runcli.MapCurrentFactoryFailure(factoryload.MaybeFormatOperatorError(err, cfg.Dir))
+	_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
+	return mapped
 }
 
 type factoryConfigInitProductionCommands struct {

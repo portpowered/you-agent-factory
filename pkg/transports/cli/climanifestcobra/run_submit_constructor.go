@@ -78,6 +78,7 @@ func NewRunSubmitFamilyComponentsFromManifest(
 	if err != nil {
 		return RunSubmitFamilyComponents{}, err
 	}
+	server.SilenceErrors = true
 	submit, err := buildRunnableRunSubmitCommand(submitRecord, registry, bindings)
 	if err != nil {
 		return RunSubmitFamilyComponents{}, err

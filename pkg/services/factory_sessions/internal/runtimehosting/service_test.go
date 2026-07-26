@@ -105,7 +105,10 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 			Port:        8123,
 			AutoPort:    true,
 		},
-		func(binding factorysessions.RuntimeHostBinding) { observedBinding <- binding },
+		func(binding factorysessions.RuntimeHostBinding) {
+			runtime.record("observe")
+			observedBinding <- binding
+		},
 	)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -120,11 +123,42 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 	default:
 		t.Fatal("Run returned before the API host joined")
 	}
-	if got := runtime.recordedEvents(); strings.Join(got, ",") != "complete,wait" {
-		t.Fatalf("runtime events = %v, want [complete wait]", got)
+	if got := runtime.recordedEvents(); strings.Join(got, ",") != "complete,observe,wait" {
+		t.Fatalf("runtime events = %v, want [complete observe wait]", got)
 	}
 	if got := <-observedBinding; got.Port != 8123 {
 		t.Fatalf("observed binding = %+v, want port 8123", got)
+	}
+}
+
+func TestServiceRunDoesNotReportReadinessWhenRuntimeStartupFails(t *testing.T) {
+	t.Parallel()
+
+	completeErr := errors.New("runtime startup failed")
+	observed := false
+	host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		request.OnBound(platformhttpserver.Binding{Port: request.Port})
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	runtime := &lifecycleRuntime{completeErr: completeErr}
+
+	err := host.Run(
+		context.Background(),
+		http.NewServeMux(),
+		runtime,
+		zap.NewNop(),
+		factorysessions.RuntimeHostRequest{Port: 8123},
+		func(factorysessions.RuntimeHostBinding) { observed = true },
+	)
+	if !errors.Is(err, completeErr) {
+		t.Fatalf("Run() error = %v, want %v", err, completeErr)
+	}
+	if observed {
+		t.Fatal("runtime host reported readiness after startup failure")
+	}
+	if got := runtime.recordedEvents(); strings.Join(got, ",") != "complete" {
+		t.Fatalf("runtime events = %v, want [complete]", got)
 	}
 }
 
@@ -133,6 +167,7 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 
 	apiErr := errors.New("listener failed")
 	failErr := errors.New("startup transition recorded")
+	observed := false
 	host := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
 	})
@@ -148,7 +183,7 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 			WorkFile:    "work.json",
 			Port:        8123,
 		},
-		nil,
+		func(factorysessions.RuntimeHostBinding) { observed = true },
 	)
 	if !errors.Is(err, failErr) {
 		t.Fatalf("Run() error = %v, want %v", err, failErr)
@@ -158,6 +193,9 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 	}
 	if got := runtime.recordedEvents(); strings.Join(got, ",") != "fail" {
 		t.Fatalf("runtime events = %v, want [fail]", got)
+	}
+	if observed {
+		t.Fatal("runtime host reported readiness after listener startup failure")
 	}
 }
 

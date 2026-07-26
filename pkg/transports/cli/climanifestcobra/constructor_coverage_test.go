@@ -831,6 +831,9 @@ func TestNewRunSubmitFamilyComponentsBuildsDetachedContractedTree(t *testing.T) 
 	if !components.Run.DisableFlagParsing || !components.Run.SilenceErrors {
 		t.Fatal("generated run must preserve custom parser and silence-errors metadata")
 	}
+	if !components.Server.SilenceErrors {
+		t.Fatal("generated server must preserve its single-error response contract")
+	}
 	if !strings.Contains(components.Run.Example, "you run --work") || strings.Contains(components.Run.Example, "session pause") {
 		t.Fatalf("generated run examples do not describe run behavior:\n%s", components.Run.Example)
 	}

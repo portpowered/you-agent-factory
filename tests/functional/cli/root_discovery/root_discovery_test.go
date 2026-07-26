@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -97,8 +100,47 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	}
 }
 
+func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	tests := []struct {
+		name     string
+		prepare  func(*testing.T, string)
+		wantCode factoryapi.ErrorResponseCode
+	}{
+		{
+			name:     "missing exact factory json",
+			prepare:  func(*testing.T, string) {},
+			wantCode: "CURRENT_FACTORY_NOT_FOUND",
+		},
+		{
+			name: "invalid exact factory json",
+			prepare: func(t *testing.T, factoryDir string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{"name":`), 0o600); err != nil {
+					t.Fatalf("write invalid Current Factory: %v", err)
+				}
+			},
+			wantCode: "CURRENT_FACTORY_INVALID",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			runCurrentFactoryFailureCaseForCommand(t, "server", test.prepare, test.wantCode)
+		})
+	}
+}
+
 func runCurrentFactoryFailureCase(
 	t *testing.T,
+	prepare func(*testing.T, string),
+	wantCode factoryapi.ErrorResponseCode,
+) {
+	runCurrentFactoryFailureCaseForCommand(t, "run", prepare, wantCode)
+}
+
+func runCurrentFactoryFailureCaseForCommand(
+	t *testing.T,
+	command string,
 	prepare func(*testing.T, string),
 	wantCode factoryapi.ErrorResponseCode,
 ) {
@@ -133,7 +175,7 @@ func runCurrentFactoryFailureCase(
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 
-	stdout, stderr, executeErr := executeCurrentFactory(t, process, workingDirectory)
+	stdout, stderr, executeErr := executeFactoryCommand(t, process, workingDirectory, command, false)
 	if executeErr == nil {
 		t.Fatalf("Process.Execute(Current Factory) succeeded; stdout=%q stderr=%q", stdout, stderr)
 	}
@@ -149,6 +191,84 @@ func runCurrentFactoryFailureCase(
 	}
 	if effects.Load() != 0 {
 		t.Fatalf("Current Factory failure product effects = %d, want 0", effects.Load())
+	}
+}
+
+func TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
+	for iteration := 0; iteration < 3; iteration++ {
+		t.Run(fmt.Sprintf("iteration-%d", iteration), func(t *testing.T) {
+			runServerLifecycleCase(t)
+		})
+	}
+}
+
+func runServerLifecycleCase(t *testing.T) {
+	t.Helper()
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Current Factory directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(idleCurrentFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write Current Factory: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serverStopped := make(chan struct{})
+	var bound, browserCalls, providerCalls atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
+			if request.Handler == nil || request.OnBound == nil {
+				return errors.New("incomplete server start request")
+			}
+			bound.Store(1)
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			<-serverCtx.Done()
+			close(serverStopped)
+			return serverCtx.Err()
+		},
+		BrowserOpener: func(_ context.Context, target string) error {
+			if bound.Load() == 0 {
+				return errors.New("browser opened before listener readiness")
+			}
+			if !strings.Contains(target, "/dashboard/ui") {
+				return fmt.Errorf("browser target = %q, want dashboard URL", target)
+			}
+			browserCalls.Add(1)
+			cancel()
+			return nil
+		},
+		ProviderOverride: countingProvider{calls: &providerCalls},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryCommandWithContext(
+		t, process, workingDirectory, "server", true, ctx,
+	)
+	if executeErr != nil && !errors.Is(executeErr, context.Canceled) {
+		t.Fatalf("Process.Execute(server) error = %v; stdout=%q stderr=%q", executeErr, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("server stderr = %q, want empty", stderr)
+	}
+	if browserCalls.Load() != 1 {
+		t.Fatalf("browser calls = %d, want 1", browserCalls.Load())
+	}
+	if providerCalls.Load() != 0 {
+		t.Fatalf("provider calls = %d, want 0", providerCalls.Load())
+	}
+	select {
+	case <-serverStopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server cancellation did not join the owned listener")
+	}
+	for _, expected := range []string{"Factory initiated: " + factoryDir, "Dashboard URL:"} {
+		if !strings.Contains(stdout, expected) {
+			t.Fatalf("server stdout omitted %q:\n%s", expected, stdout)
+		}
 	}
 }
 
@@ -214,18 +334,42 @@ func executeCurrentFactory(
 	process interface{ Execute(root.Input) error },
 	workingDirectory string,
 ) (string, string, error) {
+	return executeFactoryCommand(t, process, workingDirectory, "run", false)
+}
+
+func executeFactoryCommand(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	workingDirectory string,
+	command string,
+	stdoutIsTTY bool,
+) (string, string, error) {
+	return executeFactoryCommandWithContext(t, process, workingDirectory, command, stdoutIsTTY, t.Context())
+}
+
+func executeFactoryCommandWithContext(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	workingDirectory string,
+	command string,
+	stdoutIsTTY bool,
+	ctx context.Context,
+) (string, string, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	stdinIsTTY := true
-	stdoutIsTTY := false
 	home := t.TempDir()
+	args := []string{"you", command}
+	if command == "run" {
+		args = append(args, "--no-record")
+	}
 	err := process.Execute(root.Input{
-		Args:             []string{"you", "run", "--no-record"},
+		Args:             args,
 		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
 		Stdin:            strings.NewReader(""),
 		Stdout:           &stdout,
 		Stderr:           &stderr,
-		Context:          t.Context(),
+		Context:          ctx,
 		WorkingDirectory: workingDirectory,
 		StdinIsTTY:       &stdinIsTTY,
 		StdoutIsTTY:      &stdoutIsTTY,

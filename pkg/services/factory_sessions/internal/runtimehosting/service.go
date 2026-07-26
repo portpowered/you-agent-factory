@@ -57,7 +57,7 @@ func (service *Service) Run(
 	}()
 
 	bound := make(chan platformhttpserver.Binding, 1)
-	apiExit := service.startAPI(transportCtx, &transport, handler, request, observer, logger, bound)
+	apiExit := service.startAPI(transportCtx, &transport, handler, request, logger, bound)
 	serviceMode := factoryruntime.RuntimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
 	binding, err := service.waitForStartupReadability(
 		ctx, serviceMode, request.WorkFile, apiExit, request.Port, bound,
@@ -71,6 +71,9 @@ func (service *Service) Run(
 	if err := runtime.CompleteStartup(ctx); err != nil {
 		return err
 	}
+	if binding.Port > 0 && observer != nil {
+		observer(factorysessions.RuntimeHostBinding{Port: binding.Port})
+	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
 	if err := runtime.WaitForRuntime(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
@@ -83,7 +86,6 @@ func (service *Service) startAPI(
 	sidecars *sync.WaitGroup,
 	handler http.Handler,
 	request factorysessions.RuntimeHostRequest,
-	observer factorysessions.RuntimeHostObserver,
 	logger *zap.Logger,
 	bound chan<- platformhttpserver.Binding,
 ) <-chan error {
@@ -97,9 +99,6 @@ func (service *Service) startAPI(
 		err := service.start(ctx, platformhttpserver.StartRequest{
 			Handler: handler, Port: request.Port, AutoPort: request.AutoPort, Logger: logger,
 			OnBound: func(binding platformhttpserver.Binding) {
-				if observer != nil {
-					observer(factorysessions.RuntimeHostBinding{Port: binding.Port})
-				}
 				bound <- binding
 			},
 		})

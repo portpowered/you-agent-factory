@@ -91,6 +91,13 @@ primary-result behavior.
   redirect through `.current-factory`. Keep API/dashboard activation separate
   from terminal presentation so a server-disabled batch run can still emit its
   canonical final view.
+- Current Factory server activation uses that same exact source selection but
+  a distinct non-bootstrapping continuous configuration. Treat the HTTP
+  starter's bound callback as an internal synchronization signal: publish the
+  runtime-host binding to CLI presentation and browser effects only after
+  `CompleteStartup` succeeds, so startup failure cannot report false readiness
+  or open a browser. Cancellation must join the starter before reverse-order
+  Factory Session cleanup returns.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
   records into Cobra and resolved inputs; `make cli-manifest-check` compares

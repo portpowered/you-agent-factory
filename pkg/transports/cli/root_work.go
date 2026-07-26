@@ -616,10 +616,8 @@ func newRunSubmitHandlerRegistry(
 		Server: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
 			RunE: func(cmd *cobra.Command, _ []string) error {
-				policy := diagnostics.resolvePolicy(false)
-				return runFactoryWithOptions(
-					cmd, defaultcmd.OOTBRunConfig(rootOptions.runDefaults), nil,
-					globals, operatorDefaults, policy, rootOptions, true,
+				return executeServerCommand(
+					cmd, globals, diagnostics, operatorDefaults, rootOptions,
 				)
 			},
 		},
