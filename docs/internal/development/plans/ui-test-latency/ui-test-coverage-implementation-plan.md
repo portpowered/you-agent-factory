@@ -439,9 +439,12 @@ The whole-App decomposition is implemented locally:
   ownership:
   - `dashboard-screen.selected-tick.component.test.tsx`
   - `dashboard-replay-wiring.component.test.tsx`
-  - `dashboard-session-timeline-isolation.component.test.tsx`
-  - `use-dashboard-snapshot-checkpoint-lifecycle.component.test.tsx`
+  - `useDashboardSnapshot.isolated.bun.component.test.tsx`
+  - `usePersistedTimelineCheckpoint.bun.component.test.tsx`
   - `dashboard-trace-wiring.component.test.tsx`
+- The former dashboard session/timeline isolation shell was removed after its
+  three contracts were reconciled with the focused timeline-entry,
+  dashboard-session-store/provider, header-tab, and dashboard-snapshot tests.
 - The original 64 full-App helper mounts were reconciled to 12 dashboard-only
   composition mounts. Widget, hook, projection, routing, formatting, import,
   export, submit, graph layout, and request-detail duplicates were deleted only
@@ -695,6 +698,28 @@ Native Bun is worth adopting for focused component tests that use Testing
 Library, ordinary mock functions, and DOM APIs supported by Happy DOM. Do not
 move app-style files that depend on Vitest-hoisted `vi.mock`, jsdom-specific
 request behavior, or full dashboard composition until they are decomposed.
+
+### Current component latency inventory
+
+The post-PR #1316 local profile groups the remaining dominant component cost by
+cause rather than runner alone:
+
+| Category | Representative file | Profiled source time | Reconciliation |
+| --- | --- | ---: | --- |
+| Dashboard app-shell lifecycle | `use-dashboard-snapshot-checkpoint-lifecycle.component.test.tsx` | 1,344ms | Replaced by the feature-owned `usePersistedTimelineCheckpoint` Bun contract; focused execution is about 203ms. |
+| Dashboard app-shell session wiring | `dashboard-session-timeline-isolation.component.test.tsx` | 1,089ms | Removed as duplicate coverage of timeline entries, dashboard session state, header tabs, and the snapshot hook. |
+| Module-mocked async hook | `use-dashboard-checkpoint-preflight.test.tsx` | 778ms | Next target: inject the resolver and mutation effects, remove hoisted provider mocks, then run under Bun. |
+| Omnibus widget rendering | `current-selection-widget.provider-session-selection.test.tsx` | 720ms | Extract the provider-session selector contract from the complete current-selection widget. |
+| Graph/editor host composition | `react-flow-current-activity-card-host-contract.test.tsx` | 700ms | Retain the small host boundary; continue replacing aggregate imports with owner modules. |
+| Cross-owner dashboard wiring | `dashboard-replay-wiring.component.test.tsx` | 697ms | Keep one wiring proof and move projection cases to timeline/dashboard owners. |
+| Graph validation and charts | workflow editor validation and work chart tests | 675–691ms | Split pure validation/projection from rendered controls before Bun migration. |
+| Current-selection editing | prompt-edit save-enablement tests | 670ms | Test the save state machine and focused editor control independently. |
+| Cross-owner trace wiring | `dashboard-trace-wiring.component.test.tsx` | 616ms | Keep only the dashboard-to-trace handoff; move trace rendering cases to the trace feature. |
+
+The dominant categories remain production import fan-out, complete dashboard or
+widget mounts, and process-global module mocks. Assertion execution is not the
+primary cost. Migration therefore starts by narrowing ownership and dependency
+seams; changing only the runner for an app-sized test preserves most latency.
 
 Keep the taxonomy as unit, component, and browser tests. Native Bun is an
 execution sublane of component tests, not a fourth test type:

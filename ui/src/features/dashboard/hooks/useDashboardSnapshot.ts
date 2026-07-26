@@ -3,19 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FactoryEvent } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
-  clearTimelineCheckpoint,
-  persistTimelineCheckpoint,
-  type TimelineCheckpointStreamIdentity,
-} from "../../timeline/public/checkpoint-persistence";
-import { reconnectCursorFromCheckpoint } from "../../timeline/public/checkpoint-reconnect";
-import {
   type FactoryTimelineCheckpoint,
   useFactoryTimelineStore,
-} from "../../timeline/public/store";
-import { normalizeStreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
-import { readFactoryTimelineDebugOptions } from "../../timeline/public/debug";
+} from "../../timeline/state/factoryTimelineStore";
+import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
+import {
+  clearTimelineCheckpoint,
+  type TimelineCheckpointStreamIdentity,
+} from "../../timeline/state/timelineCheckpointPersistence";
+import { reconnectCursorFromCheckpoint } from "../../timeline/state/timelineCheckpointReconnect";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+import { usePersistedTimelineCheckpoint } from "./checkpoint-lifecycle/usePersistedTimelineCheckpoint";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
@@ -40,161 +39,6 @@ export interface DashboardSnapshotResult {
 }
 
 type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
-
-interface PendingTimelineCheckpoint {
-  checkpoint: FactoryTimelineCheckpoint;
-  indexedDB: IDBFactory;
-  streamIdentity: TimelineCheckpointStreamIdentity;
-  streamKey: string;
-}
-
-function timelineCheckpointStreamKey(
-  identity: TimelineCheckpointStreamIdentity,
-): string {
-  return JSON.stringify([
-    identity.backendScopeID,
-    identity.factorySessionID,
-    identity.logicalSessionKeyID,
-    identity.streamGenerationID,
-  ]);
-}
-
-function usePersistedTimelineCheckpoint({
-  checkpoint,
-  checkpointsDisabled,
-  streamIdentity,
-  syncIdentity,
-}: {
-  checkpoint: FactoryTimelineCheckpoint | undefined;
-  checkpointsDisabled: boolean;
-  streamIdentity: TimelineCheckpointStreamIdentity | null;
-  syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
-}) {
-  const pendingCheckpointRef = useRef<PendingTimelineCheckpoint | null>(null);
-  const persistHandleRef = useRef<number | null>(null);
-  const backendScopeID = streamIdentity?.backendScopeID;
-  const factorySessionID = streamIdentity?.factorySessionID;
-  const logicalSessionKeyID = streamIdentity?.logicalSessionKeyID;
-  const streamGenerationID = streamIdentity?.streamGenerationID;
-  const normalizedStreamIdentity = useMemo(
-    () =>
-      normalizeStreamDerivedCacheIdentity({
-        backendScopeID,
-        factorySessionID,
-        logicalSessionKeyID,
-        streamGenerationID,
-      }),
-    [backendScopeID, factorySessionID, logicalSessionKeyID, streamGenerationID],
-  );
-  const streamKey = normalizedStreamIdentity
-    ? timelineCheckpointStreamKey(normalizedStreamIdentity)
-    : null;
-
-  const detachPendingCheckpoint = useCallback(
-    (expectedStreamKey?: string): PendingTimelineCheckpoint | null => {
-      const pending = pendingCheckpointRef.current;
-      if (
-        !pending ||
-        (expectedStreamKey && pending.streamKey !== expectedStreamKey)
-      ) {
-        return null;
-      }
-      pendingCheckpointRef.current = null;
-      if (persistHandleRef.current !== null) {
-        window.clearTimeout(persistHandleRef.current);
-        persistHandleRef.current = null;
-      }
-      return pending;
-    },
-    [],
-  );
-
-  const flushPendingCheckpoint = useCallback(
-    (expectedStreamKey?: string) => {
-      const pending = detachPendingCheckpoint(expectedStreamKey);
-      if (!pending) {
-        return;
-      }
-      void persistTimelineCheckpoint(
-        pending.indexedDB,
-        pending.checkpoint,
-        pending.streamIdentity,
-      );
-    },
-    [detachPendingCheckpoint],
-  );
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      checkpointsDisabled ||
-      !checkpoint ||
-      !normalizedStreamIdentity ||
-      !streamKey
-    ) {
-      detachPendingCheckpoint();
-      return;
-    }
-
-    detachPendingCheckpoint();
-    const pending = {
-      checkpoint: {
-        ...checkpoint,
-        ...(syncIdentity ? { syncIdentity } : {}),
-      },
-      indexedDB: window.indexedDB,
-      streamIdentity: normalizedStreamIdentity,
-      streamKey,
-    } satisfies PendingTimelineCheckpoint;
-    pendingCheckpointRef.current = pending;
-    persistHandleRef.current = window.setTimeout(() => {
-      if (pendingCheckpointRef.current !== pending) {
-        return;
-      }
-      flushPendingCheckpoint(pending.streamKey);
-    }, 750);
-  }, [
-    checkpoint,
-    checkpointsDisabled,
-    detachPendingCheckpoint,
-    flushPendingCheckpoint,
-    normalizedStreamIdentity,
-    streamKey,
-    syncIdentity,
-  ]);
-
-  useEffect(() => {
-    if (!streamKey) {
-      return;
-    }
-    return () => {
-      flushPendingCheckpoint(streamKey);
-    };
-  }, [flushPendingCheckpoint, streamKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      return;
-    }
-
-    const handlePageHide = () => {
-      flushPendingCheckpoint();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        flushPendingCheckpoint();
-      }
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      flushPendingCheckpoint();
-    };
-  }, [flushPendingCheckpoint]);
-}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
 export function useDashboardSnapshot({
