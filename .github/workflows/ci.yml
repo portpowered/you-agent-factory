@@ -180,23 +180,38 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-deps ui-install-playwright ui-integration-test
 
-  backend:
-    name: Backend
+  backend-coverage:
+    name: Backend ${{ matrix.label }} Coverage
     needs: classify
     if: always() && needs.classify.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            label: Unit
+          - suite: functional
+            label: Functional
     steps:
       - uses: actions/checkout@v4
         with:
-          # Unit contract checks derive source provenance from repository history.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - run: make build
-      - run: make test-unit-coverage functional-test-viz
+      - name: Build backend
+        if: matrix.suite == 'unit'
+        run: make build
+      - name: Run backend coverage
+        if: matrix.suite == 'unit'
+        run: make test-unit-coverage
+      - name: Run backend functional coverage and visualization
+        if: matrix.suite == 'functional'
+        run: make functional-test-viz
 
   ui-backend-integration:
     name: UI Backend Integration
@@ -327,7 +342,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
+    needs: [classify, docs-reference, readme, frontend, ui-coverage-merge, frontend-browser, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -354,7 +369,7 @@ jobs:
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -370,7 +385,7 @@ jobs:
             "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
             "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage-merge.result }}|$FRONTEND_REASON" \
             "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
-            "Backend|$RUN_BACKEND|${{ needs.backend.result }}|$BACKEND_REASON" \
+            "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
             "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
             "API Contract And Package|$RUN_API|${{ needs.api-package.result }}|$API_REASON" \
             "Packaged Factories Package|$RUN_PACKAGED|${{ needs.packaged-factories-package.result }}|$PACKAGED_REASON" \
