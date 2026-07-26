@@ -1269,6 +1269,10 @@
       "minimum": 65.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion",
+      "minimum": 7.70
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry",
       "minimum": 59.14
     },
