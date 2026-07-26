@@ -65,15 +65,3 @@ export const defaultFactorySessionSummary: FactorySessionSummary = {
     kind: "default",
   },
 };
-
-export function fetchRequestPath(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input.startsWith("http") ? new URL(input).pathname : input;
-  }
-
-  if (input instanceof URL) {
-    return `${input.pathname}${input.search}`;
-  }
-
-  return input.url.startsWith("http") ? new URL(input.url).pathname : input.url;
-}
