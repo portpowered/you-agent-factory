@@ -3,6 +3,13 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Parent-private Runner implementations that expose subprocess progress should
+  consume an injected streaming command capability, serialize publication only
+  within each invocation, and build terminal diagnostics from the command
+  edge's complete stdout/stderr result. Use
+  `workers.ProjectCommandEnvForDiagnostics` for the shared allowlist,
+  metadata-only, and sensitive-value redaction policy; never publish effective
+  environment values directly.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation

@@ -7,7 +7,9 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -34,12 +36,12 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 			"relative/value",
 			"C:/absolute/tool",
 		},
-	}, commandEdge, func(directory string) (map[string]string, error) {
+	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
 		if directory != factoryDirectory {
 			t.Fatalf("Factory docs directory = %q, want %q", directory, factoryDirectory)
 		}
 		return map[string]string{"guide.md": "factory guidance"}, nil
-	})
+	}))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -87,6 +89,203 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 		captured.ProjectID != "request-project" ||
 		captured.Execution.RequestID != "request-1" {
 		t.Fatalf("command execution metadata = %#v", captured)
+	}
+}
+
+func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
+	observations := &observationLog{}
+	commandEdge := &streamingCommandEdge{
+		observations: observations,
+		chunks: []outputChunk{
+			{stream: platformprocess.OutputStreamStdout, payload: "first"},
+			{stream: platformprocess.OutputStreamStderr, payload: "warn-1"},
+			{stream: platformprocess.OutputStreamStdout, payload: "second\n"},
+			{stream: platformprocess.OutputStreamStderr, payload: "warn-2"},
+		},
+		result: workers.CommandResult{
+			Stdout:   []byte("firstsecond\n"),
+			Stderr:   []byte("warn-1warn-2"),
+			ExitCode: 0,
+		},
+	}
+	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.UTC)
+	clock := &sequenceClock{times: []time.Time{started, started.Add(1500 * time.Millisecond)}}
+	dependencies := Dependencies{
+		CommandRunner: commandEdge,
+		FactoryDocs:   emptyDocs,
+		Now:           clock.Now,
+		Publish: func(fragment workers.ProgressFragment) {
+			observations.Append(fragment.Type + ":" + fragment.Payload)
+			fragment.Metadata["stream"] = "mutated"
+		},
+		Record: func(event workers.ScriptEvent) {
+			switch event.Kind {
+			case workers.ScriptEventKindRequest:
+				observations.Append("request")
+				event.Request.Args[0] = "mutated"
+			case workers.ScriptEventKindResponse:
+				observations.Append("terminal")
+				observations.SetTerminal(*event.Response)
+				event.Response.Stdout = "mutated"
+			}
+		},
+	}
+	scriptRunner, err := New(Config{Command: "echo", Args: []string{"safe-arg"}}, dependencies)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := validRequest()
+	request.ProcessEnvironment = append(
+		request.ProcessEnvironment,
+		"CI=true",
+		"SCRIPT_API_TOKEN=fixture-secret",
+	)
+
+	result, err := scriptRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "firstsecond" {
+		t.Fatalf("result content = %q, want trimmed stdout", result.Content)
+	}
+	wantOrder := []string{
+		"request",
+		"command",
+		"stdout:first",
+		"stderr:warn-1",
+		"stdout:second\n",
+		"stderr:warn-2",
+		"terminal",
+	}
+	if got := observations.Values(); !reflect.DeepEqual(got, wantOrder) {
+		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
+	}
+	assertSuccessfulDiagnostics(t, result, 1500*time.Millisecond)
+	terminal := observations.Terminal()
+	if terminal.Stdout != "firstsecond\n" || terminal.Stderr != "warn-1warn-2" {
+		t.Fatalf("terminal output = stdout %q stderr %q", terminal.Stdout, terminal.Stderr)
+	}
+	if terminal.ExitCode == nil || *terminal.ExitCode != 0 ||
+		terminal.Outcome != workers.ScriptExecutionOutcomeSucceeded ||
+		terminal.DurationMillis != 1500 {
+		t.Fatalf("terminal response = %#v", terminal)
+	}
+	if captured := commandEdge.Request(); !reflect.DeepEqual(captured.Args, []string{"safe-arg"}) {
+		t.Fatalf("command args = %#v, want recorder mutation isolated", captured.Args)
+	}
+}
+
+func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t *testing.T) {
+	commandEdge := &streamingCommandEdge{
+		result: workers.CommandResult{Stdout: []byte("stable"), Stderr: []byte("note")},
+	}
+	scriptRunner, err := New(Config{Command: "echo", Args: []string{"one"}}, Dependencies{
+		CommandRunner: commandEdge,
+		FactoryDocs:   emptyDocs,
+		Now:           func() time.Time { return time.Unix(100, 0) },
+		Publish: func(fragment workers.ProgressFragment) {
+			fragment.Metadata["stream"] = "mutated"
+		},
+		Record: func(event workers.ScriptEvent) {
+			if event.Request != nil {
+				event.Request.Args[0] = "mutated"
+			}
+			if event.Response != nil {
+				event.Response.Stdout = "mutated"
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	first, err := scriptRunner.Execute(t.Context(), validRequest())
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	first.Diagnostics.Command.Args[0] = "mutated"
+	first.Diagnostics.Command.Env["BASE"] = "mutated"
+	first.Diagnostics.Metadata["dispatch_id"] = "mutated"
+
+	const executions = 16
+	errs := make(chan error, executions)
+	var wait sync.WaitGroup
+	for range executions {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			result, executeErr := scriptRunner.Execute(context.Background(), validRequest())
+			if executeErr != nil {
+				errs <- executeErr
+				return
+			}
+			if result.Content != "stable" ||
+				result.Diagnostics.Command.Args[0] != "one" ||
+				result.Diagnostics.Metadata["dispatch_id"] != "dispatch-1" {
+				errs <- errors.New("concurrent result was not detached")
+			}
+		}()
+	}
+	wait.Wait()
+	close(errs)
+	for executeErr := range errs {
+		t.Fatal(executeErr)
+	}
+}
+
+func assertSuccessfulDiagnostics(
+	t *testing.T,
+	result workers.RunnerExecutionResult,
+	wantDuration time.Duration,
+) {
+	t.Helper()
+	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
+		t.Fatalf("result diagnostics = %#v, want command diagnostics", result.Diagnostics)
+	}
+	command := result.Diagnostics.Command
+	assertCommandDiagnosticFields(t, command, wantDuration)
+	assertCommandEnvironmentDiagnostics(t, command.Env)
+	assertCommandLineageDiagnostics(t, result.Diagnostics.Metadata)
+}
+
+func assertCommandDiagnosticFields(
+	t *testing.T,
+	command *workers.CommandDiagnostic,
+	wantDuration time.Duration,
+) {
+	t.Helper()
+	if command.Command != "echo" ||
+		!reflect.DeepEqual(command.Args, []string{"safe-arg"}) ||
+		command.WorkingDir != "explicit-work-dir" ||
+		command.ExitCode != 0 ||
+		command.Duration != wantDuration ||
+		command.Stdout != "firstsecond\n" ||
+		command.Stderr != "warn-1warn-2" {
+		t.Fatalf("command diagnostics = %#v", command)
+	}
+}
+
+func assertCommandEnvironmentDiagnostics(t *testing.T, env map[string]string) {
+	t.Helper()
+	if got := env["SCRIPT_API_TOKEN"]; got != workers.RedactedCommandEnvValue {
+		t.Fatalf("sensitive env diagnostic = %q, want redacted", got)
+	}
+	if got := env["CI"]; got != "true" {
+		t.Fatalf("allowlisted env diagnostic = %q, want true", got)
+	}
+	if got := env["RUNTIME"]; got != workers.MetadataOnlyCommandEnvValue {
+		t.Fatalf("metadata-only env diagnostic = %q", got)
+	}
+}
+
+func assertCommandLineageDiagnostics(t *testing.T, metadata map[string]string) {
+	t.Helper()
+	if metadata["dispatch_id"] != "dispatch-1" ||
+		metadata["transition_id"] != "transition-1" ||
+		metadata["current_chaining_trace_id"] != "trace-current" ||
+		metadata["previous_chaining_trace_ids"] != "trace-previous" ||
+		metadata["request_id"] != "request-1" {
+		t.Fatalf("diagnostic lineage = %#v", metadata)
 	}
 }
 
@@ -193,16 +392,35 @@ func TestNewRejectsMissingConfigurationAndEffects(t *testing.T) {
 	tests := []struct {
 		name   string
 		config Config
-		runner workers.CommandRunner
-		docs   workers.FactoryDocsLoader
+		mutate func(*Dependencies)
 	}{
-		{name: "command", runner: &captureCommandRunner{}, docs: emptyDocs},
-		{name: "command runner", config: Config{Command: "echo"}, docs: emptyDocs},
-		{name: "Factory docs loader", config: Config{Command: "echo"}, runner: &captureCommandRunner{}},
+		{name: "command"},
+		{name: "command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.CommandRunner = nil
+		}},
+		{name: "streaming command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.CommandRunner = nonStreamingCommandRunner{}
+		}},
+		{name: "Factory docs loader", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.FactoryDocs = nil
+		}},
+		{name: "clock", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.Now = nil
+		}},
+		{name: "progress publisher", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.Publish = nil
+		}},
+		{name: "event recorder", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
+			deps.Record = nil
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New(test.config, test.runner, test.docs)
+			dependencies := testDependencies(&captureCommandRunner{}, emptyDocs)
+			if test.mutate != nil {
+				test.mutate(&dependencies)
+			}
+			_, err := New(test.config, dependencies)
 			assertFailureType(t, err, workers.WorkFailureTypeMisconfigured)
 		})
 	}
@@ -221,11 +439,11 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 			`{{ .Context.Env.RUNTIME }}`,
 		},
 	}
-	scriptRunner, err := New(config, commandEdge, func(string) (map[string]string, error) {
+	scriptRunner, err := New(config, testDependencies(commandEdge, func(string) (map[string]string, error) {
 		close(docsEntered)
 		<-releaseDocs
 		return map[string]string{}, nil
-	})
+	}))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -268,11 +486,10 @@ func TestRunnerPreservesPreCanceledContextWithoutCallingEffects(t *testing.T) {
 	docsCalls := 0
 	scriptRunner, err := New(
 		Config{Command: "echo"},
-		commandEdge,
-		func(string) (map[string]string, error) {
+		testDependencies(commandEdge, func(string) (map[string]string, error) {
 			docsCalls++
 			return nil, nil
-		},
+		}),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -350,7 +567,7 @@ func newTestRunner(
 	commandRunner workers.CommandRunner,
 ) workers.Runner {
 	t.Helper()
-	scriptRunner, err := New(config, commandRunner, emptyDocs)
+	scriptRunner, err := New(config, testDependencies(commandRunner, emptyDocs))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -359,6 +576,132 @@ func newTestRunner(
 
 func emptyDocs(string) (map[string]string, error) {
 	return map[string]string{}, nil
+}
+
+func testDependencies(
+	commandRunner workers.CommandRunner,
+	factoryDocs workers.FactoryDocsLoader,
+) Dependencies {
+	return Dependencies{
+		CommandRunner: commandRunner,
+		FactoryDocs:   factoryDocs,
+		Now:           func() time.Time { return time.Unix(0, 0) },
+		Publish:       func(workers.ProgressFragment) {},
+		Record:        func(workers.ScriptEvent) {},
+	}
+}
+
+type outputChunk struct {
+	stream  string
+	payload string
+}
+
+type streamingCommandEdge struct {
+	mu           sync.Mutex
+	observations *observationLog
+	request      workers.CommandRequest
+	chunks       []outputChunk
+	result       workers.CommandResult
+}
+
+func (edge *streamingCommandEdge) Run(
+	ctx context.Context,
+	request workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return edge.RunStreaming(ctx, request, nil)
+}
+
+func (edge *streamingCommandEdge) RunStreaming(
+	_ context.Context,
+	request workers.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	edge.mu.Lock()
+	edge.request = workers.CloneSubprocessExecutionRequest(request)
+	edge.mu.Unlock()
+	if edge.observations != nil {
+		edge.observations.Append("command")
+	}
+	for _, chunk := range edge.chunks {
+		if observer != nil {
+			observer(chunk.stream, []byte(chunk.payload))
+		}
+	}
+	return workers.CommandResult{
+		Stdout:   append([]byte(nil), edge.result.Stdout...),
+		Stderr:   append([]byte(nil), edge.result.Stderr...),
+		ExitCode: edge.result.ExitCode,
+	}, nil
+}
+
+func (edge *streamingCommandEdge) Request() workers.CommandRequest {
+	edge.mu.Lock()
+	defer edge.mu.Unlock()
+	return workers.CloneSubprocessExecutionRequest(edge.request)
+}
+
+type observationLog struct {
+	mu       sync.Mutex
+	values   []string
+	terminal workers.ScriptResponseEventPayload
+}
+
+func (log *observationLog) Append(value string) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	log.values = append(log.values, value)
+}
+
+func (log *observationLog) Values() []string {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	return append([]string(nil), log.values...)
+}
+
+func (log *observationLog) SetTerminal(terminal workers.ScriptResponseEventPayload) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	log.terminal = terminal
+	if terminal.ExitCode != nil {
+		exitCode := *terminal.ExitCode
+		log.terminal.ExitCode = &exitCode
+	}
+}
+
+func (log *observationLog) Terminal() workers.ScriptResponseEventPayload {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	terminal := log.terminal
+	if log.terminal.ExitCode != nil {
+		exitCode := *log.terminal.ExitCode
+		terminal.ExitCode = &exitCode
+	}
+	return terminal
+}
+
+type sequenceClock struct {
+	mu    sync.Mutex
+	times []time.Time
+}
+
+func (clock *sequenceClock) Now() time.Time {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	if len(clock.times) == 0 {
+		return time.Time{}
+	}
+	value := clock.times[0]
+	clock.times = clock.times[1:]
+	return value
+}
+
+type nonStreamingCommandRunner struct{}
+
+func (nonStreamingCommandRunner) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
 }
 
 type captureCommandRunner struct {
@@ -371,6 +714,14 @@ type captureCommandRunner struct {
 func (runner *captureCommandRunner) Run(
 	_ context.Context,
 	request workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return runner.RunStreaming(context.Background(), request, nil)
+}
+
+func (runner *captureCommandRunner) RunStreaming(
+	_ context.Context,
+	request workers.CommandRequest,
+	_ platformprocess.OutputChunkObserver,
 ) (workers.CommandResult, error) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -18,6 +19,12 @@ import (
 
 const Identity = "script"
 
+const (
+	scriptAttempt               = 1
+	scriptRequestEventIDPrefix  = "factory-event/script-request"
+	scriptResponseEventIDPrefix = "factory-event/script-response"
+)
+
 // Config is the immutable script definition captured by one Runner.
 type Config struct {
 	Command          string
@@ -25,37 +32,69 @@ type Config struct {
 	FactoryDirectory string
 }
 
+// Dependencies are the exact effects used by one Script Runner.
+type Dependencies struct {
+	CommandRunner workers.CommandRunner
+	FactoryDocs   workers.FactoryDocsLoader
+	Now           func() time.Time
+	Publish       workers.ProgressPublisher
+	Record        workers.ScriptEventRecorder
+}
+
 type runner struct {
 	command          string
 	args             []string
 	factoryDirectory string
-	commandRunner    workers.CommandRunner
+	commandRunner    streamingCommandRunner
 	factoryDocs      workers.FactoryDocsLoader
+	now              func() time.Time
+	publish          workers.ProgressPublisher
+	record           workers.ScriptEventRecorder
+}
+
+type streamingCommandRunner interface {
+	RunStreaming(
+		context.Context,
+		workers.CommandRequest,
+		platformprocess.OutputChunkObserver,
+	) (workers.CommandResult, error)
 }
 
 var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots a Script Runner and its exact execution edges.
-func New(
-	config Config,
-	commandRunner workers.CommandRunner,
-	factoryDocs workers.FactoryDocsLoader,
-) (workers.Runner, error) {
+func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 	if strings.TrimSpace(config.Command) == "" {
 		return nil, misconfigured("script command is required", nil)
 	}
-	if commandRunner == nil {
+	if dependencies.CommandRunner == nil {
 		return nil, misconfigured("script command runner is required", nil)
 	}
-	if factoryDocs == nil {
+	commandRunner, ok := dependencies.CommandRunner.(streamingCommandRunner)
+	if !ok {
+		return nil, misconfigured("script command runner must support streaming", nil)
+	}
+	if dependencies.FactoryDocs == nil {
 		return nil, misconfigured("script Factory docs loader is required", nil)
+	}
+	if dependencies.Now == nil {
+		return nil, misconfigured("script clock is required", nil)
+	}
+	if dependencies.Publish == nil {
+		return nil, misconfigured("script progress publisher is required", nil)
+	}
+	if dependencies.Record == nil {
+		return nil, misconfigured("script event recorder is required", nil)
 	}
 	return &runner{
 		command:          config.Command,
 		args:             append([]string(nil), config.Args...),
 		factoryDirectory: strings.TrimSpace(config.FactoryDirectory),
 		commandRunner:    commandRunner,
-		factoryDocs:      factoryDocs,
+		factoryDocs:      dependencies.FactoryDocs,
+		now:              dependencies.Now,
+		publish:          dependencies.Publish,
+		record:           dependencies.Record,
 	}, nil
 }
 
@@ -78,7 +117,17 @@ func (r *runner) Execute(
 	if err != nil {
 		return workers.RunnerExecutionResult{}, badRequest("script command template is invalid", err)
 	}
-	result, err := r.commandRunner.Run(ctx, workers.CloneSubprocessExecutionRequest(commandRequest))
+	started := r.now()
+	requestID := scriptRequestID(commandRequest.DispatchID)
+	r.record(scriptRequestEvent(commandRequest, requestID, started))
+	observer := r.outputObserver(commandRequest.DispatchID)
+	result, err := r.commandRunner.RunStreaming(
+		ctx,
+		workers.CloneSubprocessExecutionRequest(commandRequest),
+		observer,
+	)
+	finished := r.now()
+	duration := finished.Sub(started)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return workers.RunnerExecutionResult{}, ctxErr
@@ -89,7 +138,12 @@ func (r *runner) Execute(
 			err,
 		)
 	}
-	return workers.RunnerExecutionResult{Content: strings.TrimSpace(string(result.Stdout))}, nil
+	diagnostics := commandDiagnostics(commandRequest, result, duration)
+	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished))
+	return workers.RunnerExecutionResult{
+		Content:     strings.TrimSpace(string(result.Stdout)),
+		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
+	}, nil
 }
 
 func (r *runner) resolveCommandRequest(
