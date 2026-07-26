@@ -39,9 +39,17 @@ const (
 )
 
 type eventHistorySubscription struct {
-	events chan interfaces.FactoryEvent
-	inbox  chan interfaces.FactoryEvent
-	done   <-chan struct{}
+	events       chan interfaces.FactoryEvent
+	inbox        chan interfaces.FactoryEvent
+	done         <-chan struct{}
+	overflow     chan struct{}
+	overflowOnce sync.Once
+}
+
+func (subscription *eventHistorySubscription) signalOverflow() {
+	subscription.overflowOnce.Do(func() {
+		close(subscription.overflow)
+	})
 }
 
 // FactoryEventHistory stores the current-process canonical event history.
@@ -160,28 +168,32 @@ func (h *FactoryEventHistory) Subscribe(
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
-		events: make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
-		inbox:  make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
-		done:   ctx.Done(),
+		events:   make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:    make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
+		done:     ctx.Done(),
+		overflow: make(chan struct{}),
 	}
 	h.streams[id] = subscription
 	h.mu.Unlock()
 
 	go func() {
 		defer close(subscription.events)
+		defer func() {
+			h.mu.Lock()
+			delete(h.streams, id)
+			h.mu.Unlock()
+		}()
 		for {
 			select {
 			case <-subscription.done:
-				h.mu.Lock()
-				delete(h.streams, id)
-				h.mu.Unlock()
+				return
+			case <-subscription.overflow:
 				return
 			case event := <-subscription.inbox:
 				select {
 				case <-subscription.done:
-					h.mu.Lock()
-					delete(h.streams, id)
-					h.mu.Unlock()
+					return
+				case <-subscription.overflow:
 					return
 				case subscription.events <- event.Clone():
 				}
@@ -658,11 +670,14 @@ func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 		select {
 		case <-stream.done:
 			continue
+		case <-stream.overflow:
+			continue
 		default:
 		}
 		select {
 		case stream.inbox <- event.Clone():
 		default:
+			stream.signalOverflow()
 		}
 	}
 }

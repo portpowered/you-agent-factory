@@ -2,92 +2,78 @@ package recordings_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type peerRecordingSession struct {
-	recordPath  string
-	started     bool
-	finished    bool
-	stopped     bool
-	flushFail   bool
-	events      []interfaces.FactoryEvent
-	retainedErr error
+	artifact       recordings.RecordingArtifactReference
+	scope          recordings.CanonicalEventScope
+	events         []recordings.CanonicalEvent
+	flushedThrough *recordings.CanonicalEventCursor
+	failures       []recordings.RecordingFailure
+	finalizedAt    *time.Time
 }
 
-// peerRootServiceFake is a peer-shaped Recordings root Service that uses only
-// the published Recordings root package (plus approved peer-root vocabulary
-// already present in root signatures). It never imports recordings nested
-// implementation packages (events/, projections/, replay/, artifacts/, service/).
+type peerReplayPlan struct {
+	facts           recordings.ReplayPlanFacts
+	events          []recordings.CanonicalEvent
+	expectedThrough *recordings.CanonicalEventCursor
+	selectedTick    int
+	processed       int
+}
+
+// peerRootServiceFake is a peer-shaped Recordings root Service that imports
+// only the published Recordings root package. It never imports another service
+// contract or Recordings implementation packages.
 type peerRootServiceFake struct {
-	events              []interfaces.FactoryEvent
+	events              []recordings.CanonicalEvent
 	streamGenerationID  string
 	subscribeErr        error
-	subscribeStream     recordings.EventStream
-	reconstructState    interfaces.FactoryWorldState
 	reconstructErr      error
 	dashboardData       recordings.SimpleDashboardRenderData
-	throttlePauses      []interfaces.FactoryWorldThrottlePause
 	workstationRequests recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
 	validateReplayErr   error
 	recordings          map[string]*peerRecordingSession
 	nextRecordingID     int
-	replayByKey         map[string]*interfaces.ReplayArtifact
-	replayCorruptKeys   map[string]bool
-	replayBindingHooks  []recordings.ReplayHook
+	replayPlans         map[recordings.ReplayPlanHandle]*peerReplayPlan
+	nextReplayPlan      int
 }
 
 var _ recordings.Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) CanonicalEvents() []interfaces.FactoryEvent {
-	if fake.events == nil {
-		return nil
-	}
-	out := make([]interfaces.FactoryEvent, len(fake.events))
-	copy(out, fake.events)
-	return out
-}
-
-func (fake *peerRootServiceFake) Subscribe(
-	_ context.Context,
-	cursor *interfaces.FactoryEventReconnectCursor,
-	_ interfaces.FactoryEventReconnectScope,
-) (interfaces.FactoryEventStream, error) {
-	if fake.subscribeErr != nil {
-		return interfaces.FactoryEventStream{}, fake.subscribeErr
-	}
-	if cursor != nil && cursor.AfterEventID != "" && len(fake.events) == 0 {
-		return interfaces.FactoryEventStream{}, recordings.ErrReconnectCursorNotFound
-	}
-	return fake.subscribeStream, nil
-}
-
-func (fake *peerRootServiceFake) StreamGenerationID() string {
-	return fake.streamGenerationID
-}
-
-func (fake *peerRootServiceFake) AddEventRecorder(func(interfaces.FactoryEvent)) {}
-
-func (fake *peerRootServiceFake) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {}
-
-func (fake *peerRootServiceFake) AppendRecordedEvent(event interfaces.FactoryEvent) {
-	fake.events = append(fake.events, event)
-}
-
 func (fake *peerRootServiceFake) Append(
 	request recordings.AppendRecordedEventRequest,
-) recordings.AppendRecordedEventResult {
-	fake.AppendRecordedEvent(request.Event)
-	return recordings.AppendRecordedEventResult{}
+) (recordings.AppendRecordedEventResult, error) {
+	if !validPeerAppendEvent(request.Event) {
+		return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
+	}
+	request.Event.Sequence = recordings.CanonicalEventSequence(len(fake.events))
+	request.Event.Cursor = recordings.CanonicalEventCursor{
+		StreamGenerationID: fake.streamGenerationID,
+		Sequence:           request.Event.Sequence,
+	}
+	fake.events = append(fake.events, request.Event)
+	return recordings.AppendRecordedEventResult{Event: request.Event}, nil
+}
+
+func validPeerAppendEvent(event recordings.CanonicalEvent) bool {
+	return strings.TrimSpace(string(event.ID)) != "" &&
+		strings.TrimSpace(string(event.Kind)) != "" &&
+		!event.RecordedAt.IsZero() &&
+		(event.Scope.FactorySessionID == "" ||
+			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&
+		json.Valid([]byte(event.Payload))
 }
 
 func (fake *peerRootServiceFake) SubscribeFrom(
-	ctx context.Context,
+	_ context.Context,
 	request recordings.SubscribeRequest,
 ) (recordings.SubscribeResult, error) {
 	if err := invalidSubscribeScope(request.Scope); err != nil {
@@ -96,71 +82,49 @@ func (fake *peerRootServiceFake) SubscribeFrom(
 	if fake.subscribeErr != nil {
 		return recordings.SubscribeResult{}, fake.subscribeErr
 	}
-	if request.Cursor != nil && strings.TrimSpace(request.Cursor.AfterEventID) != "" {
-		ackIndex := -1
-		for index, event := range fake.events {
-			if event.Id == request.Cursor.AfterEventID {
-				ackIndex = index
-				break
-			}
+	start := 0
+	if request.Cursor != nil {
+		if request.Cursor.StreamGenerationID == "" || request.Cursor.Sequence < 0 {
+			return recordings.SubscribeResult{}, recordings.ErrInvalidReconnectCursor
 		}
-		if ackIndex < 0 {
-			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorNotFound
+		if request.Cursor.StreamGenerationID != fake.streamGenerationID {
+			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorUnavailable
 		}
-		newer := append([]interfaces.FactoryEvent(nil), fake.events[ackIndex+1:]...)
-		return recordings.SubscribeResult{
-			Stream: recordings.EventStream{
-				StreamGenerationID: fake.streamGenerationID,
-				History:            newer,
-			},
-		}, nil
+		start = int(request.Cursor.Sequence) + 1
+		if start > len(fake.events) {
+			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorExpired
+		}
 	}
-	stream, err := fake.Subscribe(ctx, request.Cursor, interfaces.FactoryEventReconnectScope(request.Scope))
-	if err != nil {
-		return recordings.SubscribeResult{}, err
+	outcomes := make([]recordings.SubscriptionOutcome, 0, len(fake.events)-start)
+	for _, event := range fake.events[start:] {
+		outcomes = append(outcomes, recordings.SubscriptionOutcome{
+			Kind:  recordings.SubscriptionEvent,
+			Event: event,
+		})
 	}
-	return recordings.SubscribeResult{Stream: stream}, nil
+	return recordings.SubscribeResult{
+		Subscription: (&peerEventSubscription{outcomes: outcomes}).Next,
+	}, nil
 }
 
-func invalidSubscribeScope(scope recordings.EventReconnectScope) error {
-	if scope.SessionID != "" && strings.TrimSpace(scope.SessionID) == "" {
+func invalidSubscribeScope(scope recordings.CanonicalEventScope) error {
+	if scope.FactorySessionID != "" && strings.TrimSpace(scope.FactorySessionID) == "" {
 		return recordings.ErrInvalidSubscribeScope
 	}
 	return nil
 }
 
-func (fake *peerRootServiceFake) ReconstructFactoryWorldState(
-	_ []interfaces.FactoryEvent,
-	_ int,
-) (interfaces.FactoryWorldState, error) {
-	return fake.reconstructState, fake.reconstructErr
+type peerEventSubscription struct {
+	outcomes []recordings.SubscriptionOutcome
 }
 
-func (fake *peerRootServiceFake) SimpleDashboardRenderData(
-	_ interfaces.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return fake.dashboardData
-}
-
-func (fake *peerRootServiceFake) ProjectActiveThrottlePauses(
-	_ interfaces.InitialStructurePayload,
-	_ []interfaces.ActiveThrottlePause,
-) []interfaces.FactoryWorldThrottlePause {
-	return fake.throttlePauses
-}
-
-func (fake *peerRootServiceFake) ProjectWorkstationRequests(
-	_ interfaces.FactoryWorldState,
-) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
-	return fake.workstationRequests
-}
-
-func (fake *peerRootServiceFake) ValidateReconnectReplay(
-	_ []interfaces.FactoryEvent,
-	_ interfaces.FactoryEventReconnectCursor,
-	_ interfaces.FactoryEventReconnectScope,
-) error {
-	return fake.validateReplayErr
+func (subscription *peerEventSubscription) Next(context.Context) recordings.SubscriptionOutcome {
+	if len(subscription.outcomes) == 0 {
+		return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+	}
+	outcome := subscription.outcomes[0]
+	subscription.outcomes = subscription.outcomes[1:]
+	return outcome
 }
 
 func (fake *peerRootServiceFake) ReconstructWorldState(
@@ -169,37 +133,61 @@ func (fake *peerRootServiceFake) ReconstructWorldState(
 	if request.SelectedTick < 0 {
 		return recordings.ReconstructWorldStateResult{}, recordings.ErrInvalidProjectionInput
 	}
-	state, err := fake.ReconstructFactoryWorldState(request.Events, request.SelectedTick)
+	if fake.reconstructErr != nil {
+		return recordings.ReconstructWorldStateResult{}, fake.reconstructErr
+	}
+	payload, err := json.Marshal(struct {
+		SelectedTick int `json:"selectedTick"`
+		EventCount   int `json:"eventCount"`
+	}{
+		SelectedTick: request.SelectedTick,
+		EventCount:   len(request.Events),
+	})
 	if err != nil {
 		return recordings.ReconstructWorldStateResult{}, err
 	}
-	return recordings.ReconstructWorldStateResult{WorldState: state}, nil
+	through := recordings.CanonicalEventCursor{}
+	if request.After != nil {
+		through = *request.After
+	}
+	if len(request.Events) > 0 {
+		through = request.Events[len(request.Events)-1].Cursor
+	}
+	return recordings.ReconstructWorldStateResult{WorldState: recordings.WorldStateView{
+		SchemaVersion: recordings.WorldStateViewSchemaV1,
+		Scope:         request.Scope,
+		Through:       through,
+		SelectedTick:  request.SelectedTick,
+		Payload:       string(payload),
+	}}, nil
 }
 
 func (fake *peerRootServiceFake) QuerySimpleDashboard(
 	request recordings.SimpleDashboardQueryRequest,
-) recordings.SimpleDashboardQueryResult {
-	return recordings.SimpleDashboardQueryResult{
-		Data: fake.SimpleDashboardRenderData(request.WorldState),
+) (recordings.SimpleDashboardQueryResult, error) {
+	if request.WorldState.SchemaVersion != recordings.WorldStateViewSchemaV1 {
+		return recordings.SimpleDashboardQueryResult{}, recordings.ErrUnsupportedProjectionView
 	}
+	return recordings.SimpleDashboardQueryResult{
+		Data: fake.dashboardData,
+	}, nil
 }
 
 func (fake *peerRootServiceFake) QueryWorkstationRequests(
 	request recordings.WorkstationRequestsQueryRequest,
-) recordings.WorkstationRequestsQueryResult {
-	return recordings.WorkstationRequestsQueryResult{
-		Projection: fake.ProjectWorkstationRequests(request.WorldState),
+) (recordings.WorkstationRequestsQueryResult, error) {
+	if request.WorldState.SchemaVersion != recordings.WorldStateViewSchemaV1 {
+		return recordings.WorkstationRequestsQueryResult{}, recordings.ErrUnsupportedProjectionView
 	}
+	return recordings.WorkstationRequestsQueryResult{
+		Projection: fake.workstationRequests,
+	}, nil
 }
 
 func (fake *peerRootServiceFake) ValidateReconnectReplayFrom(
-	request recordings.ValidateReconnectReplayRequest,
+	_ recordings.ValidateReconnectReplayRequest,
 ) error {
-	return fake.ValidateReconnectReplay(
-		request.Events,
-		interfaces.FactoryEventReconnectCursor(request.Cursor),
-		interfaces.FactoryEventReconnectScope(request.Scope),
-	)
+	return fake.validateReplayErr
 }
 
 func (fake *peerRootServiceFake) ensureRecordings() {
@@ -208,12 +196,14 @@ func (fake *peerRootServiceFake) ensureRecordings() {
 	}
 }
 
-func (fake *peerRootServiceFake) recordingSession(id string) (*peerRecordingSession, error) {
+func (fake *peerRootServiceFake) recordingSession(
+	id recordings.RecordingID,
+) (*peerRecordingSession, error) {
 	fake.ensureRecordings()
-	if strings.TrimSpace(id) == "" {
+	if strings.TrimSpace(string(id)) == "" {
 		return nil, recordings.ErrMissingRecordingTarget
 	}
-	session, ok := fake.recordings[id]
+	session, ok := fake.recordings[string(id)]
 	if !ok {
 		return nil, recordings.ErrMissingRecordingTarget
 	}
@@ -223,30 +213,39 @@ func (fake *peerRootServiceFake) recordingSession(id string) (*peerRecordingSess
 func (fake *peerRootServiceFake) BindRecording(
 	request recordings.BindRecordingRequest,
 ) (recordings.BindRecordingResult, error) {
-	if strings.TrimSpace(request.RecordPath) == "" {
+	if strings.TrimSpace(string(request.Artifact)) == "" {
 		return recordings.BindRecordingResult{}, recordings.ErrMissingRecordingTarget
 	}
+	if request.Scope.FactorySessionID != "" &&
+		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
+		return recordings.BindRecordingResult{}, recordings.ErrInvalidRecordingScope
+	}
 	fake.ensureRecordings()
-	id := strings.TrimSpace(request.RecordingID)
+	id := strings.TrimSpace(string(request.RecordingID))
 	if id == "" {
-		fake.nextRecordingID++
-		id = "recording-" + strconv.Itoa(fake.nextRecordingID)
+		for {
+			fake.nextRecordingID++
+			id = "recording-" + strconv.Itoa(fake.nextRecordingID)
+			if _, exists := fake.recordings[id]; !exists {
+				break
+			}
+		}
+	} else if existing, exists := fake.recordings[id]; exists {
+		if existing.artifact != request.Artifact || existing.scope != request.Scope {
+			return recordings.BindRecordingResult{}, recordings.ErrRecordingBindingConflict
+		}
+		return recordings.BindRecordingResult{
+			Status: peerRecordingStatus(recordings.RecordingID(id), existing),
+		}, nil
 	}
-	fake.recordings[id] = &peerRecordingSession{recordPath: request.RecordPath}
-	return recordings.BindRecordingResult{RecordingID: id}, nil
-}
-
-func (fake *peerRootServiceFake) StartRecording(
-	_ context.Context,
-	request recordings.StartRecordingRequest,
-) (recordings.StartRecordingResult, error) {
-	session, err := fake.recordingSession(request.RecordingID)
-	if err != nil {
-		return recordings.StartRecordingResult{}, err
+	session := &peerRecordingSession{
+		artifact: request.Artifact,
+		scope:    request.Scope,
 	}
-	session.started = true
-	session.stopped = false
-	return recordings.StartRecordingResult{}, nil
+	fake.recordings[id] = session
+	return recordings.BindRecordingResult{
+		Status: peerRecordingStatus(recordings.RecordingID(id), session),
+	}, nil
 }
 
 func (fake *peerRootServiceFake) RecordRecordingEvent(
@@ -256,11 +255,16 @@ func (fake *peerRootServiceFake) RecordRecordingEvent(
 	if err != nil {
 		return recordings.RecordRecordingEventResult{}, err
 	}
-	if session.finished {
+	if session.finalizedAt != nil {
 		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
 	}
+	if !validPeerRecordingEvent(session, request.Event) {
+		return recordings.RecordRecordingEventResult{}, recordings.ErrInvalidRecordingEvent
+	}
 	session.events = append(session.events, request.Event)
-	return recordings.RecordRecordingEventResult{}, nil
+	return recordings.RecordRecordingEventResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
 }
 
 func (fake *peerRootServiceFake) RecordRecordingError(
@@ -270,14 +274,17 @@ func (fake *peerRootServiceFake) RecordRecordingError(
 	if err != nil {
 		return recordings.RecordRecordingErrorResult{}, err
 	}
-	if session.finished {
+	if session.finalizedAt != nil {
 		return recordings.RecordRecordingErrorResult{}, recordings.ErrRecordingWriteRejected
 	}
-	if request.Err != nil {
-		session.retainedErr = request.Err
-		session.flushFail = true
+	if strings.TrimSpace(request.Failure.Code) == "" ||
+		strings.TrimSpace(request.Failure.Message) == "" {
+		return recordings.RecordRecordingErrorResult{}, recordings.ErrInvalidRecordingFailure
 	}
-	return recordings.RecordRecordingErrorResult{}, nil
+	session.failures = append(session.failures, request.Failure)
+	return recordings.RecordRecordingErrorResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
 }
 
 func (fake *peerRootServiceFake) FlushRecording(
@@ -287,13 +294,13 @@ func (fake *peerRootServiceFake) FlushRecording(
 	if err != nil {
 		return recordings.FlushRecordingResult{}, err
 	}
-	if session.flushFail {
-		if session.retainedErr == nil {
-			session.retainedErr = recordings.ErrRecordingFlushFailed
-		}
-		return recordings.FlushRecordingResult{}, recordings.ErrRecordingFlushFailed
+	if len(session.events) > 0 {
+		cursor := session.events[len(session.events)-1].Cursor
+		session.flushedThrough = &cursor
 	}
-	return recordings.FlushRecordingResult{}, nil
+	return recordings.FlushRecordingResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
 }
 
 func (fake *peerRootServiceFake) FinishRecording(
@@ -303,21 +310,13 @@ func (fake *peerRootServiceFake) FinishRecording(
 	if err != nil {
 		return recordings.FinishRecordingResult{}, err
 	}
-	_ = request.FinishedAt
-	session.finished = true
-	return recordings.FinishRecordingResult{}, nil
-}
-
-func (fake *peerRootServiceFake) StopRecording(
-	request recordings.StopRecordingRequest,
-) (recordings.StopRecordingResult, error) {
-	session, err := fake.recordingSession(request.RecordingID)
-	if err != nil {
-		return recordings.StopRecordingResult{}, err
+	if session.finalizedAt == nil {
+		finishedAt := request.FinishedAt.UTC()
+		session.finalizedAt = &finishedAt
 	}
-	session.stopped = true
-	session.started = false
-	return recordings.StopRecordingResult{}, nil
+	return recordings.FinishRecordingResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
 }
 
 func (fake *peerRootServiceFake) QueryRecordingStatus(
@@ -328,184 +327,329 @@ func (fake *peerRootServiceFake) QueryRecordingStatus(
 		return recordings.RecordingStatusResult{}, err
 	}
 	return recordings.RecordingStatusResult{
-		Started:  session.started,
-		Finished: session.finished,
-		Stopped:  session.stopped,
-		Err:      session.retainedErr,
+		Status: peerRecordingStatus(request.RecordingID, session),
 	}, nil
 }
 
-func (fake *peerRootServiceFake) replayKey(request recordings.LoadReplayArtifactRequest) string {
-	if id := strings.TrimSpace(request.ArtifactID); id != "" {
-		return id
+func validPeerRecordingEvent(
+	session *peerRecordingSession,
+	event recordings.CanonicalEvent,
+) bool {
+	if !validPeerAppendEvent(event) || event.Scope != session.scope ||
+		event.Sequence < 0 || event.Cursor.StreamGenerationID == "" ||
+		event.Cursor.Sequence != event.Sequence {
+		return false
 	}
-	return strings.TrimSpace(request.Path)
+	if len(session.events) == 0 {
+		return true
+	}
+	previous := session.events[len(session.events)-1]
+	return event.Cursor.StreamGenerationID == previous.Cursor.StreamGenerationID &&
+		event.Sequence > previous.Sequence
 }
 
-func (fake *peerRootServiceFake) LoadReplayArtifact(
-	request recordings.LoadReplayArtifactRequest,
-) (recordings.LoadReplayArtifactResult, error) {
-	key := fake.replayKey(request)
-	if key == "" {
-		return recordings.LoadReplayArtifactResult{}, recordings.ErrMissingReplayArtifact
+func peerRecordingStatus(
+	id recordings.RecordingID,
+	session *peerRecordingSession,
+) recordings.RecordingStatusFacts {
+	state := recordings.RecordingActive
+	if len(session.failures) > 0 {
+		state = recordings.RecordingFailed
+	} else if session.finalizedAt != nil {
+		state = recordings.RecordingFinalized
 	}
-	if fake.replayCorruptKeys[key] {
-		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	status := recordings.RecordingStatusFacts{
+		RecordingID:    id,
+		Artifact:       session.artifact,
+		Scope:          session.scope,
+		State:          state,
+		AcceptedEvents: len(session.events),
+		Failures:       append([]recordings.RecordingFailure(nil), session.failures...),
 	}
-	artifact, ok := fake.replayByKey[key]
-	if !ok || artifact == nil {
-		return recordings.LoadReplayArtifactResult{}, recordings.ErrInvalidReplayArtifact
+	if len(session.events) > 0 {
+		cursor := session.events[len(session.events)-1].Cursor
+		status.LastEvent = &cursor
 	}
-	detached := *artifact
-	return recordings.LoadReplayArtifactResult{Artifact: &detached}, nil
+	if session.flushedThrough != nil {
+		cursor := *session.flushedThrough
+		status.FlushedThrough = &cursor
+	}
+	if session.finalizedAt != nil {
+		finalizedAt := *session.finalizedAt
+		status.FinalizedAt = &finalizedAt
+	}
+	return status
 }
 
-func (fake *peerRootServiceFake) BindReplayExecution(
-	request recordings.BindReplayExecutionRequest,
-) (recordings.BindReplayExecutionResult, error) {
-	if request.Artifact == nil {
-		return recordings.BindReplayExecutionResult{}, recordings.ErrUnsupportedReplayBinding
+func (fake *peerRootServiceFake) LoadReplayRecording(
+	request recordings.LoadReplayRecordingRequest,
+) (recordings.LoadReplayRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFound
 	}
-	if strings.TrimSpace(request.Artifact.SchemaVersion) == "" {
-		return recordings.BindReplayExecutionResult{}, recordings.ErrUnsupportedReplayBinding
+	if session.finalizedAt == nil {
+		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFinalized
 	}
-	hooks := append([]recordings.ReplayHook{}, fake.replayBindingHooks...)
-	return recordings.BindReplayExecutionResult{
-		Provider:           nil,
-		CommandRunner:      nil,
-		Hooks:              hooks,
-		CompletionDelivery: nil,
+	return recordings.LoadReplayRecordingResult{
+		Recording: recordings.ReplayRecordingFacts{
+			RecordingID: request.RecordingID,
+			Scope:       session.scope,
+			Events:      append([]recordings.CanonicalEvent(nil), session.events...),
+		},
 	}, nil
 }
 
-func peerArtifactDigestOK(value string) bool {
-	const prefix = "sha256:"
-	if !strings.HasPrefix(value, prefix) {
-		return false
+func validPeerReplayPlan(request recordings.CreateReplayPlanRequest) error {
+	if request.SchemaVersion != recordings.ReplayPlanSchemaV1 ||
+		request.Timing != recordings.ReplayTimingOrderOnly ||
+		request.SelectedTick < 0 {
+		return recordings.ErrUnsupportedReplayPlan
 	}
-	hexPart := value[len(prefix):]
-	if len(hexPart) != 64 {
-		return false
+	if strings.TrimSpace(string(request.Recording.RecordingID)) == "" {
+		return recordings.ErrCorruptReplayInput
 	}
-	for _, r := range hexPart {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
-			return false
+	previous := recordings.CanonicalEventSequence(-1)
+	generationID := ""
+	for index, event := range request.Recording.Events {
+		if !validPeerReplayEvent(
+			request.Recording.Scope,
+			event,
+			recordings.CanonicalEventSequence(index),
+			previous,
+			generationID,
+		) {
+			return recordings.ErrCorruptReplayInput
+		}
+		previous = event.Sequence
+		generationID = event.Cursor.StreamGenerationID
+	}
+	return nil
+}
+
+func validPeerReplayEvent(
+	scope recordings.CanonicalEventScope,
+	event recordings.CanonicalEvent,
+	expected recordings.CanonicalEventSequence,
+	previous recordings.CanonicalEventSequence,
+	generationID string,
+) bool {
+	return validPeerAppendEvent(event) &&
+		event.Scope == scope &&
+		event.Cursor.Sequence == event.Sequence &&
+		event.Cursor.StreamGenerationID != "" &&
+		(scope.FactorySessionID != "" || event.Sequence == expected) &&
+		(scope.FactorySessionID == "" || event.Sequence > previous) &&
+		(generationID == "" || event.Cursor.StreamGenerationID == generationID)
+}
+
+func (fake *peerRootServiceFake) CreateReplayPlan(
+	request recordings.CreateReplayPlanRequest,
+) (recordings.CreateReplayPlanResult, error) {
+	if err := validPeerReplayPlan(request); err != nil {
+		return recordings.CreateReplayPlanResult{}, err
+	}
+	if fake.replayPlans == nil {
+		fake.replayPlans = make(map[recordings.ReplayPlanHandle]*peerReplayPlan)
+	}
+	fake.nextReplayPlan++
+	handle := recordings.ReplayPlanHandle("peer-replay-" + strconv.Itoa(fake.nextReplayPlan))
+	facts := recordings.ReplayPlanFacts{
+		Handle:        handle,
+		RecordingID:   request.Recording.RecordingID,
+		Scope:         request.Recording.Scope,
+		TotalEvents:   len(request.Recording.Events),
+		SchemaVersion: request.SchemaVersion,
+		Timing:        request.Timing,
+	}
+	var expected *recordings.CanonicalEventCursor
+	if request.ExpectedThrough != nil {
+		cursor := *request.ExpectedThrough
+		expected = &cursor
+	}
+	fake.replayPlans[handle] = &peerReplayPlan{
+		facts:           facts,
+		events:          append([]recordings.CanonicalEvent(nil), request.Recording.Events...),
+		expectedThrough: expected,
+		selectedTick:    request.SelectedTick,
+	}
+	return recordings.CreateReplayPlanResult{Plan: facts}, nil
+}
+
+func (fake *peerRootServiceFake) ObserveReplay(
+	request recordings.ObserveReplayRequest,
+) (recordings.ObserveReplayResult, error) {
+	plan, ok := fake.replayPlans[request.Plan]
+	if !ok {
+		return recordings.ObserveReplayResult{}, recordings.ErrReplayPlanNotFound
+	}
+	if plan.processed < len(plan.events) {
+		plan.processed++
+	}
+	reduced, err := fake.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
+		Scope:        plan.facts.Scope,
+		Events:       append([]recordings.CanonicalEvent(nil), plan.events[:plan.processed]...),
+		SelectedTick: plan.selectedTick,
+	})
+	if err != nil {
+		return recordings.ObserveReplayResult{}, err
+	}
+	observation := recordings.ReplayObservation{
+		Kind:            recordings.ReplayProgress,
+		Plan:            request.Plan,
+		ProcessedEvents: plan.processed,
+		TotalEvents:     len(plan.events),
+		WorldState:      reduced.WorldState,
+	}
+	if plan.processed > 0 {
+		cursor := plan.events[plan.processed-1].Cursor
+		observation.Through = &cursor
+	}
+	if plan.processed == len(plan.events) {
+		observation.Kind = recordings.ReplayCompleted
+		if divergence := peerReplayDivergence(plan, observation.Through); divergence != nil {
+			observation.Kind = recordings.ReplayDiverged
+			observation.Divergence = divergence
 		}
 	}
-	return true
+	return recordings.ObserveReplayResult{Observation: observation}, nil
+}
+
+func peerReplayDivergence(
+	plan *peerReplayPlan,
+	through *recordings.CanonicalEventCursor,
+) *recordings.ReplayDivergenceFacts {
+	if plan.expectedThrough == nil {
+		return nil
+	}
+	actual := recordings.CanonicalEventCursor{}
+	if through != nil {
+		actual = *through
+	}
+	if actual == *plan.expectedThrough {
+		return nil
+	}
+	return &recordings.ReplayDivergenceFacts{
+		Expected: *plan.expectedThrough,
+		Observed: actual,
+	}
 }
 
 func (fake *peerRootServiceFake) BuildPortableArtifact(
 	request recordings.BuildPortableArtifactRequest,
 ) (recordings.BuildPortableArtifactResult, error) {
-	facts := request.Facts
-	if strings.TrimSpace(facts.SessionID) == "" {
-		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil || session.finalizedAt == nil {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
-	if !peerArtifactDigestOK(facts.SourceHash) || !peerArtifactDigestOK(facts.PolicyHash) {
-		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	status := peerRecordingStatus(request.RecordingID, session)
+	summary := recordings.PortableArtifactSummary{
+		RecordingID: status.RecordingID,
+		Reference:   status.Artifact,
+		Scope:       status.Scope,
+		State:       status.State,
+		EventCount:  len(session.events),
+		Failures:    append([]recordings.RecordingFailure{}, status.Failures...),
+		Available:   true,
 	}
-	artifacts := make([]recordings.PortableRecordingArtifactSummary, 0, len(facts.Artifacts))
-	for _, artifact := range facts.Artifacts {
-		if !peerArtifactDigestOK(artifact.ContentHash) {
-			return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
-		}
-		artifacts = append(artifacts, recordings.PortableRecordingArtifactSummary{
-			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
-			Label: artifact.Label, ContentHash: artifact.ContentHash,
-			SizeBytes: artifact.SizeBytes, CreatedAt: artifact.CreatedAt.UTC(),
-		})
+	if len(session.events) > 0 {
+		first := session.events[0].Cursor
+		last := session.events[len(session.events)-1].Cursor
+		summary.FirstCursor = &first
+		summary.LastCursor = &last
 	}
-	argumentsDigest := strings.TrimSpace(facts.ArgumentsDigest)
-	if argumentsDigest == "" {
-		argumentsDigest = facts.SourceHash
-	} else if !peerArtifactDigestOK(argumentsDigest) {
-		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	artifact := recordings.PortableArtifact{
+		SchemaVersion: recordings.PortableArtifactSchemaV1,
+		Summary:       summary,
+		Events:        append([]recordings.CanonicalEvent{}, session.events...),
+		Integrity: recordings.PortableArtifactIntegrity{
+			Algorithm: recordings.PortableArtifactIntegritySHA256,
+		},
 	}
-	recording := recordings.PortableRecording{
-		RecordingKind:              recordings.KindJavaScriptFactorySession,
-		SchemaVersion:              "2",
-		ReplayCompatibilityVersion: "1",
-		ArgumentsDigest:            argumentsDigest,
-		PolicyHash:                 facts.PolicyHash,
-		Artifacts:                  artifacts,
+	artifact.Integrity.Digest = peerPortableArtifactDigest(artifact)
+	if err := peerValidatePortableArtifact(artifact); err != nil {
+		return recordings.BuildPortableArtifactResult{}, err
 	}
-	recording.Session.ID = facts.SessionID
-	recording.Session.Status = facts.Status
-	recording.Session.OrchestratorKind = facts.OrchestratorKind
-	recording.Source.Ref = facts.SourceRef
-	recording.Source.Hash = facts.SourceHash
-	if facts.Result != nil {
-		recording.Result = &recordings.PortableRecordingResult{
-			Status:        facts.Result.Status,
-			Mode:          facts.Result.Mode,
-			PrimaryResult: append(json.RawMessage{}, facts.Result.PrimaryResult...),
-			ArtifactIDs:   append([]string{}, facts.Result.ArtifactIDs...),
-			Failure:       facts.Result.Failure,
-			Availability:  facts.Result.Availability,
-		}
-	}
-	return recordings.BuildPortableArtifactResult{Recording: recording}, nil
+	return recordings.BuildPortableArtifactResult{Artifact: artifact}, nil
 }
 
 func (fake *peerRootServiceFake) ValidatePortableArtifact(
 	request recordings.ValidatePortableArtifactRequest,
 ) (recordings.ValidatePortableArtifactResult, error) {
-	recording := request.Recording
-	if recording.ArgumentsDigest != "" && !peerArtifactDigestOK(recording.ArgumentsDigest) {
-		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	if err := peerValidatePortableArtifact(request.Artifact); err != nil {
+		return recordings.ValidatePortableArtifactResult{}, err
 	}
-	if recording.Source.Hash != "" && !peerArtifactDigestOK(recording.Source.Hash) {
-		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	return recordings.ValidatePortableArtifactResult{Summary: request.Artifact.Summary}, nil
+}
+
+func (fake *peerRootServiceFake) EncodePortableArtifact(
+	request recordings.EncodePortableArtifactRequest,
+) (recordings.EncodePortableArtifactResult, error) {
+	if err := peerValidatePortableArtifact(request.Artifact); err != nil {
+		return recordings.EncodePortableArtifactResult{}, err
 	}
-	if recording.PolicyHash != "" && !peerArtifactDigestOK(recording.PolicyHash) {
-		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
+	payload, err := json.Marshal(request.Artifact)
+	if err != nil {
+		return recordings.EncodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}
-	for _, artifact := range recording.Artifacts {
-		if artifact.ContentHash != "" && !peerArtifactDigestOK(artifact.ContentHash) {
-			return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingDigest
-		}
-	}
-	if strings.TrimSpace(recording.Session.ID) == "" {
-		return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
-	}
-	return recordings.ValidatePortableArtifactResult{}, nil
+	return recordings.EncodePortableArtifactResult{Payload: payload}, nil
 }
 
 func (fake *peerRootServiceFake) DecodePortableArtifact(
 	request recordings.DecodePortableArtifactRequest,
 ) (recordings.DecodePortableArtifactResult, error) {
 	if len(request.Payload) == 0 {
-		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidRecordingDecode
+		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}
-	var recording recordings.PortableRecording
-	if err := json.Unmarshal(request.Payload, &recording); err != nil {
-		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidRecordingDecode
+	var artifact recordings.PortableArtifact
+	if err := json.Unmarshal(request.Payload, &artifact); err != nil {
+		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}
 	if _, err := fake.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
-		Recording: recording,
+		Artifact: artifact,
 	}); err != nil {
 		return recordings.DecodePortableArtifactResult{}, err
 	}
-	return recordings.DecodePortableArtifactResult{Recording: recording}, nil
+	return recordings.DecodePortableArtifactResult{Artifact: artifact}, nil
 }
 
 func (fake *peerRootServiceFake) SummarizePortableArtifact(
 	request recordings.SummarizePortableArtifactRequest,
 ) (recordings.SummarizePortableArtifactResult, error) {
-	recording := request.Recording
-	if strings.TrimSpace(recording.Session.ID) == "" {
-		return recordings.SummarizePortableArtifactResult{}, recordings.ErrInvalidRecordingSummary
+	if err := peerValidatePortableArtifact(request.Artifact); err != nil {
+		return recordings.SummarizePortableArtifactResult{}, err
 	}
-	artifacts := append([]recordings.PortableRecordingArtifactSummary{}, recording.Artifacts...)
-	result := recordings.SummarizePortableArtifactResult{
-		SessionID: recording.Session.ID,
-		Status:    recording.Session.Status,
-		Artifacts: artifacts,
+	return recordings.SummarizePortableArtifactResult{
+		Summary: request.Artifact.Summary,
+	}, nil
+}
+
+func peerValidatePortableArtifact(artifact recordings.PortableArtifact) error {
+	if artifact.SchemaVersion != recordings.PortableArtifactSchemaV1 {
+		return recordings.ErrUnsupportedPortableArtifactSchema
 	}
-	if recording.Result != nil {
-		result.Availability = recording.Result.Availability
-		result.Failure = recording.Result.Failure
+	if artifact.Summary.RecordingID == "" || !artifact.Summary.Available ||
+		artifact.Summary.EventCount != len(artifact.Events) {
+		return recordings.ErrInvalidPortableArtifact
 	}
-	return result, nil
+	for index, event := range artifact.Events {
+		if event.Scope != artifact.Summary.Scope ||
+			event.Cursor.Sequence != event.Sequence ||
+			(index > 0 && event.Sequence != artifact.Events[index-1].Sequence+1) {
+			return recordings.ErrInvalidPortableArtifactOrder
+		}
+	}
+	if artifact.Integrity.Algorithm != recordings.PortableArtifactIntegritySHA256 ||
+		artifact.Integrity.Digest != peerPortableArtifactDigest(artifact) {
+		return recordings.ErrInvalidPortableArtifactIntegrity
+	}
+	return nil
+}
+
+func peerPortableArtifactDigest(artifact recordings.PortableArtifact) string {
+	artifact.Integrity.Digest = ""
+	payload, _ := json.Marshal(artifact)
+	digest := sha256.Sum256(payload)
+	return recordings.PortableArtifactIntegritySHA256 + ":" +
+		hex.EncodeToString(digest[:])
 }
