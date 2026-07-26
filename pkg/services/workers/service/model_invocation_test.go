@@ -470,6 +470,48 @@ func (workerModelService) RemoveModelAssets(
 	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (workerModelService) EnsureModelHost(
+	context.Context,
+	modelinference.EnsureModelHostRequest,
+) (modelinference.EnsureModelHostResult, error) {
+	return modelinference.EnsureModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) InspectModelHost(
+	context.Context,
+	modelinference.InspectModelHostRequest,
+) (modelinference.InspectModelHostResult, error) {
+	return modelinference.InspectModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) StopModelHost(
+	context.Context,
+	modelinference.StopModelHostRequest,
+) (modelinference.StopModelHostResult, error) {
+	return modelinference.StopModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) AcquireModelLease(
+	context.Context,
+	modelinference.AcquireModelLeaseRequest,
+) (modelinference.AcquireModelLeaseResult, error) {
+	return modelinference.AcquireModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetModelLease(
+	context.Context,
+	modelinference.GetModelLeaseRequest,
+) (modelinference.GetModelLeaseResult, error) {
+	return modelinference.GetModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) ReleaseModelLease(
+	context.Context,
+	modelinference.ReleaseModelLeaseRequest,
+) (modelinference.ReleaseModelLeaseResult, error) {
+	return modelinference.ReleaseModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }

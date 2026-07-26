@@ -42,6 +42,25 @@ type Service interface {
 	// changed state or the assets were already absent. Cancellation remains a
 	// typed Models-owned failure.
 	RemoveModelAssets(context.Context, RemoveModelAssetsRequest) (RemoveModelAssetsResult, error)
+	// EnsureModelHost starts or reuses the supervised host for one scoped model
+	// and waits until it is ready. Host processes, health clients, runtime
+	// handles, supervisor slots, and timers remain private implementation
+	// details.
+	EnsureModelHost(context.Context, EnsureModelHostRequest) (EnsureModelHostResult, error)
+	// InspectModelHost returns detached readiness facts for one supervised host.
+	InspectModelHost(context.Context, InspectModelHostRequest) (InspectModelHostResult, error)
+	// StopModelHost stops or unloads one supervised host and reports whether the
+	// request changed its lifecycle state.
+	StopModelHost(context.Context, StopModelHostRequest) (StopModelHostResult, error)
+	// AcquireModelLease reserves scoped model capacity for a non-empty holder
+	// and returns an opaque, detached Models-owned lease capability.
+	AcquireModelLease(context.Context, AcquireModelLeaseRequest) (AcquireModelLeaseResult, error)
+	// GetModelLease returns detached lease status, including whether an issued
+	// lease is active, released, or expired.
+	GetModelLease(context.Context, GetModelLeaseRequest) (GetModelLeaseResult, error)
+	// ReleaseModelLease safely releases an issued lease and returns its
+	// observable released/already-released outcome.
+	ReleaseModelLease(context.Context, ReleaseModelLeaseRequest) (ReleaseModelLeaseResult, error)
 	// ForRuntime binds this already-constructed service to one Factory Session's
 	// runtime values (CacheDirectory plus Models-owned RuntimeConfig projection).
 	// Construction and process-launcher ports remain owned by the injected

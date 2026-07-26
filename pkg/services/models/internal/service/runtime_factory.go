@@ -213,6 +213,48 @@ func (o *Root) RemoveModelAssets(
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
+func (o *Root) EnsureModelHost(
+	context.Context,
+	models.EnsureModelHostRequest,
+) (models.EnsureModelHostResult, error) {
+	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) InspectModelHost(
+	context.Context,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) StopModelHost(
+	context.Context,
+	models.StopModelHostRequest,
+) (models.StopModelHostResult, error) {
+	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) AcquireModelLease(
+	context.Context,
+	models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) GetModelLease(
+	context.Context,
+	models.GetModelLeaseRequest,
+) (models.GetModelLeaseResult, error) {
+	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (o *Root) ReleaseModelLease(
+	context.Context,
+	models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
 func (o *Root) ListModels(context.Context) (models.List, error) {
 	return models.List{}, missingDependencyError("Models runtime binding")
 }

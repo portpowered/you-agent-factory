@@ -281,6 +281,48 @@ func (testModelsService) ReleaseLease(context.Context, models.ReleaseLeaseReques
 	return nil
 }
 
+func (testModelsService) EnsureModelHost(
+	context.Context,
+	models.EnsureModelHostRequest,
+) (models.EnsureModelHostResult, error) {
+	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) InspectModelHost(
+	context.Context,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) StopModelHost(
+	context.Context,
+	models.StopModelHostRequest,
+) (models.StopModelHostResult, error) {
+	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) AcquireModelLease(
+	context.Context,
+	models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) GetModelLease(
+	context.Context,
+	models.GetModelLeaseRequest,
+) (models.GetModelLeaseResult, error) {
+	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (testModelsService) ReleaseModelLease(
+	context.Context,
+	models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
 func (testModelsService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{}, nil
 }
