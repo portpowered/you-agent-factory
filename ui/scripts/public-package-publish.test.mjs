@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   assertPublishVersion,
+  npmPackArguments,
   PUBLIC_PACKAGES,
   patchPublicPackageManifest,
 } from "./public-package-publish.mjs";
@@ -59,5 +60,11 @@ describe("public package publishing", () => {
       },
     });
     expect(manifest.version).toBe("0.0.0");
+  });
+
+  test("candidate packing disables lifecycle scripts", () => {
+    expect(npmPackArguments("/staged/package", "/candidate")).toContain(
+      "--ignore-scripts",
+    );
   });
 });

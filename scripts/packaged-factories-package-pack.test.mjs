@@ -174,6 +174,19 @@ test("repository-relative flattened artifact dependencies are rejected", async (
 	);
 });
 
+test("missing Goal factory compatibility artifact is rejected separately", async (t) => {
+	const { packageRoot, packDestination } = await fixturePackage(t);
+	await unlink(join(packageRoot, "factories", "goal", "factory.json"));
+
+	await assert.rejects(
+		packAndVerify({ packageDirectory: packageRoot, packDestination }),
+		{
+			message:
+				"@you-agent-factory/packaged-factories candidate omits factories/goal/factory.json",
+		},
+	);
+});
+
 test("npm report digest mismatch is rejected", async (t) => {
 	const { packageRoot, packDestination } = await fixturePackage(t);
 	const tarball = join(packDestination, "candidate.tgz");

@@ -280,6 +280,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   commit: API, Packaged Factories, and the canonical frontend family share one
   stable release version, preserve source manifests and frontend build outputs,
   and are recorded exactly once in `release-candidate-evidence.json`. The
+  shared `scripts/package-export-validation.mjs` check rejects any packed API,
+  Packaged Factories, or frontend candidate missing a concrete export target or
+  every match for a wildcard target. Keep the legacy
+  `factories/goal/factory.json` compatibility artifact as a separate Packaged
+  Factories required-file check, outside the general export-map contract, and
+  keep lifecycle scripts disabled for every candidate pack.
   tagged Release workflow uploads that complete set as one artifact and
   publishes only its downloaded package directories after rechecking their
   source commit. Local

@@ -14,6 +14,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+
 const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const semverPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -54,6 +56,15 @@ export function patchPublicPackageManifest(manifest, version) {
   }
   return next;
 }
+
+export const npmPackArguments = (stagedDirectory, outputDirectory) => [
+  "pack",
+  stagedDirectory,
+  "--json",
+  "--ignore-scripts",
+  "--pack-destination",
+  outputDirectory,
+];
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -112,7 +123,7 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
     );
   }
   await writeFile(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
-  return stagedDirectory;
+  return { manifest: patched, stagedDirectory };
 }
 
 async function snapshotBuildOutputs(stagingRoot) {
@@ -164,19 +175,13 @@ export async function preparePublicPackageCandidates({
   const candidates = [];
   try {
     for (const packageSpec of PUBLIC_PACKAGES) {
-      const stagedDirectory = await stagePackage({
+      const { manifest, stagedDirectory } = await stagePackage({
         packageSpec,
         version,
         stagingRoot,
       });
       const { stdout } = await runNpm(
-        [
-          "pack",
-          stagedDirectory,
-          "--json",
-          "--pack-destination",
-          resolvedOutput,
-        ],
+        npmPackArguments(stagedDirectory, resolvedOutput),
         { cwd: uiRoot, capture: true },
       );
       const [report] = JSON.parse(stdout);
@@ -185,6 +190,7 @@ export async function preparePublicPackageCandidates({
           `npm pack returned unexpected identity for ${packageSpec.name}`,
         );
       }
+      assertPackedExportTargets(report.name, manifest.exports, report.files);
       candidates.push({
         name: report.name,
         version: report.version,
