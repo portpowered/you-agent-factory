@@ -98,7 +98,7 @@ jobs:
 
   dry-run-candidate:
     name: Build and Smoke Exact Candidate (No Publish)
-    if: false
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -136,6 +136,54 @@ jobs:
           path: .artifacts/public-development-candidate/
           if-no-files-found: error
           retention-days: 7
+
+  api-candidate:
+    name: Build API Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/api-package-development-command.mjs --action dry-run
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/api-development-candidate/package
+          --package-directory packages/api
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
+
+  packaged-factories-candidate:
+    name: Build Packaged Factories Candidate (No Publish)
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_packaged_factories_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: >-
+          node scripts/packaged-factories-package-pr-dry-run.mjs
+          --event-name "${{ github.event_name }}"
+          --output-directory .artifacts/packaged-factories-development-candidate/package
+          --package-directory packages/packaged-factories
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+          --workspace-directory "${{ github.workspace }}"
 
   prepare-main-candidate:
     name: Prepare Protected Main Candidate
