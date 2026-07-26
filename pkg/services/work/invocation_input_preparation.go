@@ -25,9 +25,9 @@ type PreparedInvocationInput struct {
 	NormalizedArguments *NormalizedArguments
 }
 
-// ClonePreparedInvocationInput returns a detached copy safe to carry across a
-// transport-to-service boundary.
-func ClonePreparedInvocationInput(input *PreparedInvocationInput) *PreparedInvocationInput {
+// Clone returns a detached copy safe to carry across a transport-to-service
+// boundary.
+func (input *PreparedInvocationInput) Clone() *PreparedInvocationInput {
 	if input == nil {
 		return nil
 	}

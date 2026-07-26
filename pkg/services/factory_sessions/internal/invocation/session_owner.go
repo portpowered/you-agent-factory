@@ -226,7 +226,7 @@ func resolvedPreparedSessionInvocationInput(
 			Message: "prepared invocation input cannot be combined with args or content",
 		}
 	}
-	prepared := work.ClonePreparedInvocationInput(request.PreparedInvocationInput)
+	prepared := request.PreparedInvocationInput.Clone()
 	if prepared == nil || prepared.NormalizedArguments == nil || prepared.ResolvedInput != nil {
 		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
 			Message: "prepared signature invocation arguments are required",

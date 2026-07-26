@@ -286,7 +286,7 @@ func runFactoryInvocation(
 		invocationRequest.Args = nil
 		invocationRequest.Content = nil
 		invocationRequest.ContentProvided = false
-		invocationRequest.PreparedInvocationInput = work.ClonePreparedInvocationInput(cfg.PreparedInvocationInput)
+		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
 	outcome, err := invocation.InvokeFactory(ctx, target, invocationRequest, consume)
 	if err != nil {

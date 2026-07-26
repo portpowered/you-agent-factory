@@ -339,95 +339,6 @@ func TestRunCommand_NamedFlagPrefersProjectFactoryOverGlobal(t *testing.T) {
 	}
 }
 
-func portableFactoryPayloadWithDefaultHandling() []byte {
-	return []byte(`{
-  "name": "portable",
-  "workTypes": [{
-    "name": "story",
-    "handlingBehavior": ["DEFAULT"],
-    "states": [
-      {"name": "init", "type": "INITIAL"},
-      {"name": "complete", "type": "TERMINAL"},
-      {"name": "failed", "type": "FAILED"}
-    ]
-  }],
-  "workstations": [{
-    "name": "ws",
-    "inputs": [{"workType": "story", "state": "init"}],
-    "outputs": [{"workType": "story", "state": "complete"}],
-    "onFailure": [{"workType": "story", "state": "failed"}]
-  }]
-}`)
-}
-
-func portableFactoryPayloadWithInvocationSignature() []byte {
-	return []byte(`{
-  "name": "portable",
-  "invocationSignature": {
-    "parameters": [
-      {
-        "name": "input",
-        "description": "Primary text input for the portable factory.",
-        "required": true,
-        "bindings": [{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}]
-      },
-      {
-        "name": "mode",
-        "description": "Execution mode for the portable factory.",
-        "choices": ["fast", "safe"],
-        "defaultValue": "safe",
-        "bindings": [{"kind": "NAMED"}]
-      },
-      {
-        "name": "confirm",
-        "typeHint": "BOOLEAN_STRING",
-        "description": "Request confirmation mode.",
-        "bindings": [{"kind": "NAMED"}]
-      },
-      {
-        "name": "artifact",
-        "description": "Optional output file path.",
-        "aliases": ["out"],
-        "typeHint": "FILE_PATH",
-        "bindings": [{"kind": "NAMED"}]
-      }
-    ],
-    "outputContract": {
-      "mode": "FILE",
-      "pathParameter": "artifact",
-      "contentType": "text/plain",
-      "fileExtension": ".txt"
-    },
-    "examples": [
-      {
-        "name": "positional-input",
-        "argv": ["Fix the lint issues", "--mode", "safe", "--artifact", "report.md"]
-      },
-      {
-        "name": "stdin-input",
-        "argv": ["--mode", "fast"],
-        "stdin": "Fix the lint issues"
-      }
-    ]
-  },
-  "workTypes": [{
-    "name": "story",
-    "handlingBehavior": ["DEFAULT"],
-    "states": [
-      {"name": "init", "type": "INITIAL"},
-      {"name": "complete", "type": "TERMINAL"},
-      {"name": "failed", "type": "FAILED"}
-    ]
-  }],
-  "workstations": [{
-    "name": "ws",
-    "inputs": [{"workType": "story", "state": "init"}],
-    "outputs": [{"workType": "story", "state": "complete"}],
-    "onFailure": [{"workType": "story", "state": "failed"}]
-  }]
-}`)
-}
-
 func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -510,12 +421,12 @@ func TestResolveRunFactoryPromptNamedAndFileSelectionsPrepareEquivalentCanonical
 		var calls int
 		var request work.InvocationInputPreparationRequest
 		preparation := rootInvocationInputScript{prepare: func(
-			ctx context.Context,
+			_ context.Context,
 			got work.InvocationInputPreparationRequest,
 		) (work.PreparedInvocationInput, error) {
 			calls++
 			request = got
-			return work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, got)
+			return parityPreparedInvocation(), nil
 		}}
 		cfg := runcli.RunConfig{
 			Dir:                   factoryDir,
@@ -566,11 +477,14 @@ func TestResolveRunFactoryPromptNamedAndFileSelectionsReturnEquivalentStableFail
 		cmd.SetIn(strings.NewReader(""))
 		calls := 0
 		preparation := rootInvocationInputScript{prepare: func(
-			ctx context.Context,
-			request work.InvocationInputPreparationRequest,
+			_ context.Context,
+			_ work.InvocationInputPreparationRequest,
 		) (work.PreparedInvocationInput, error) {
 			calls++
-			return work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+			return work.PreparedInvocationInput{}, &work.ArgumentError{
+				Code:    work.ArgumentErrorCodeStringValidationMismatch,
+				Message: `parameter "mode" value "unsupported" is not one of the declared choices`,
+			}
 		}}
 		cfg := runcli.RunConfig{Dir: factoryDir, LoadFactoryConfigFile: loadTestFactoryConfigFile}
 		if flag == "factory" {
@@ -593,39 +507,6 @@ func TestResolveRunFactoryPromptNamedAndFileSelectionsReturnEquivalentStableFail
 	}
 	if namedCalls != 1 || fileCalls != 1 {
 		t.Fatalf("normalization calls = named:%d file:%d, want exactly one each", namedCalls, fileCalls)
-	}
-}
-
-func setupNamedFactoryInvocationTest(t *testing.T) (string, func()) {
-	t.Helper()
-
-	workingDirectory := t.TempDir()
-	homeDirectory := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	t.Setenv("HOME", homeDirectory)
-	t.Setenv("USERPROFILE", homeDirectory)
-
-	globalRoot, err := defaultNamedFactoriesRootForTest()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	factoryDir := filepath.Join(globalRoot, "alpha")
-	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
-		t.Fatalf("WriteFile(factory.json): %v", err)
-	}
-	return factoryDir, func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
 	}
 }
 

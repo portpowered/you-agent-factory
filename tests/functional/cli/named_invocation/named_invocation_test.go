@@ -128,17 +128,28 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 			RunType:         workers.MockWorkerRunTypeAccept,
 		}},
 	})
+	documentPath := filepath.Join(workingDirectory, "story.md")
+	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
+		t.Fatalf("write FILE_CONTENTS fixture: %v", err)
+	}
 	common := []string{
 		"--with-mock-workers", "--no-record", "--quiet",
-		mockWorkersPath, "equivalent canonical prompt",
+		mockWorkersPath,
+		"equivalent canonical prompt", "one.md", "two.md",
+		"--t", "alpha", "--tag", "beta",
+		"--count", "2",
+		"--file", documentPath,
+		"-",
 	}
-	namedStdout, namedStderr := executeCustomerCommand(
+	namedStdout, namedStderr := executeCustomerCommandWithStdin(
 		t, process, environment, workingDirectory,
 		append([]string{"you", "run", "--named", packagedGoalFactoryName}, common...),
+		"canonical stdin body",
 	)
-	fileStdout, fileStderr := executeCustomerCommand(
+	fileStdout, fileStderr := executeCustomerCommandWithStdin(
 		t, process, environment, workingDirectory,
 		append([]string{"you", "run", "--factory", factoryPath}, common...),
+		"canonical stdin body",
 	)
 	if namedStderr != "" || fileStderr != "" {
 		t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
@@ -160,11 +171,49 @@ func addEffectiveSignatureFixture(t *testing.T, factoryPath string) {
 	}
 	factory["invocationSignature"] = map[string]any{
 		"unknownNamedArgumentPolicy": "REJECT",
-		"parameters": []any{map[string]any{
-			"name":     "input",
-			"required": true,
-			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
-		}},
+		"parameters": []any{
+			map[string]any{
+				"name":     "input",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			},
+			map[string]any{
+				"name":      "files",
+				"valueMode": "VARIADIC",
+				"bindings":  []any{map[string]any{"kind": "POSITIONAL", "position": 2}},
+			},
+			map[string]any{
+				"name":         "tags",
+				"externalName": "tag",
+				"aliases":      []any{"t"},
+				"valueMode":    "REPEATED",
+				"sensitive":    true,
+				"bindings":     []any{map[string]any{"kind": "NAMED"}},
+			},
+			map[string]any{
+				"name":         "format",
+				"choices":      []any{"json", "text"},
+				"defaultValue": "json",
+				"bindings":     []any{map[string]any{"kind": "NAMED"}},
+			},
+			map[string]any{
+				"name":     "count",
+				"typeHint": "NUMBER_STRING",
+				"bindings": []any{map[string]any{"kind": "NAMED"}},
+			},
+			map[string]any{
+				"name":         "document",
+				"externalName": "document",
+				"aliases":      []any{"file"},
+				"typeHint":     "FILE_PATH",
+				"valueMode":    "FILE_CONTENTS",
+				"bindings":     []any{map[string]any{"kind": "NAMED"}},
+			},
+			map[string]any{
+				"name":     "body",
+				"bindings": []any{map[string]any{"kind": "STDIN"}},
+			},
+		},
 	}
 	updated, err := json.MarshalIndent(factory, "", "  ")
 	if err != nil {
@@ -237,6 +286,18 @@ func executeCustomerCommand(
 	args []string,
 ) (string, string) {
 	t.Helper()
+	return executeCustomerCommandWithStdin(t, process, environment, workingDirectory, args, "")
+}
+
+func executeCustomerCommandWithStdin(
+	t *testing.T,
+	process customerProcess,
+	environment []string,
+	workingDirectory string,
+	args []string,
+	stdin string,
+) (string, string) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
@@ -247,7 +308,7 @@ func executeCustomerCommand(
 	err := process.Execute(root.Input{
 		Args:             args,
 		Env:              environment,
-		Stdin:            strings.NewReader(""),
+		Stdin:            strings.NewReader(stdin),
 		Stdout:           &stdout,
 		Stderr:           &stderr,
 		Context:          ctx,
