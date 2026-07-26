@@ -7,38 +7,94 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-func TestComposeRunInputsProducesImmutableEffectiveSchema(t *testing.T) {
-	manifest := compositionManifest()
-	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{
-		{
-			Name:          "prompt",
-			ExternalName:  "prompt",
-			Aliases:       []string{"request"},
-			DefaultValues: []string{"one", "two"},
-			Bindings:      []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
-		},
-	}}
-
+func TestComposeRunInputsProducesCompleteEffectiveSchema(t *testing.T) {
+	manifest, signature := completeCompositionFixture()
 	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}
-	if len(effective.StaticInputs) != 4 {
+	if len(effective.StaticInputs) != 3 {
 		t.Fatalf("static inputs = %#v, want all global and run inputs", effective.StaticInputs)
 	}
-	if got := effective.FactoryParameters[0]; got.BindingID != "prompt" || !reflect.DeepEqual(got.Parameter.DefaultValues, []string{"one", "two"}) {
-		t.Fatalf("Factory parameter = %#v, want signature parameter and defaults", got)
+	if effective.UnknownNamedArgumentPolicy != work.InvocationUnknownNamedArgumentPolicyAllow {
+		t.Fatalf("unknown named argument policy = %q", effective.UnknownNamedArgumentPolicy)
+	}
+	want := completeEffectiveParameters()
+	if !reflect.DeepEqual(effective.FactoryParameters, want) {
+		t.Fatalf("Factory parameters = %#v, want %#v", effective.FactoryParameters, want)
+	}
+
+	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	if err != nil || len(againDiagnostics) != 0 || !reflect.DeepEqual(again, effective) {
+		t.Fatalf("repeated composition differs: first=%#v second=%#v diagnostics=%#v err=%v", effective, again, againDiagnostics, err)
+	}
+}
+
+func TestComposeRunInputsDetachesCallerAndResultCollections(t *testing.T) {
+	manifest, signature := completeCompositionFixture()
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	if err != nil || len(diagnostics) != 0 {
+		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
+	}
+	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	if err != nil || len(againDiagnostics) != 0 {
+		t.Fatalf("second ComposeRunInputs() err=%v diagnostics=%#v", err, againDiagnostics)
 	}
 
 	effective.StaticInputs[0].PublicSpellings[0] = "changed"
-	effective.FactoryParameters[0].Parameter.Aliases[0] = "changed"
-	effective.FactoryParameters[0].Parameter.DefaultValues[0] = "changed"
-	effective.FactoryParameters[0].Parameter.Bindings[0].Kind = "changed"
+	effective.FactoryParameters[0].Aliases[0] = "changed"
+	effective.FactoryParameters[0].Choices[0] = "changed"
+	effective.FactoryParameters[0].Bindings[0].Kind = "changed"
+	effective.FactoryParameters[1].DefaultValues[0] = "changed"
 	if manifest.Commands["you.run"].Flags["global"].Long != "verbose" {
 		t.Fatal("composition mutated the static manifest")
 	}
-	if signature.Parameters[0].Aliases[0] != "request" || signature.Parameters[0].DefaultValues[0] != "one" || signature.Parameters[0].Bindings[0].Kind != work.InvocationParameterBindingKindNamed {
+	if signature.Parameters[0].Aliases[0] != "exact-alias" || signature.Parameters[0].Choices[0] != "true" ||
+		signature.Parameters[0].Bindings[0].Kind != work.InvocationParameterBindingKindNamed ||
+		signature.Parameters[1].DefaultValues[0] != "one" {
 		t.Fatal("composition mutated the Factory invocation signature")
+	}
+	if !reflect.DeepEqual(again.FactoryParameters, completeEffectiveParameters()) || again.StaticInputs[0].PublicSpellings[0] == "changed" {
+		t.Fatalf("returned schema shares caller-owned or prior result collections: %#v", again)
+	}
+
+	signature.Parameters[0].Aliases[0] = "caller-changed"
+	signature.Parameters[0].Choices[0] = "caller-changed"
+	signature.Parameters[0].Bindings[0].Kind = "caller-changed"
+	signature.Parameters[1].DefaultValues[0] = "caller-changed"
+	staticCommand := manifest.Commands["you.run"]
+	outputFlag := staticCommand.Flags["output"]
+	outputFlag.Aliases[0] = "caller-changed"
+	staticCommand.Flags["output"] = outputFlag
+	manifest.Commands["you.run"] = staticCommand
+	if !reflect.DeepEqual(again.FactoryParameters, completeEffectiveParameters()) || staticInputByID(t, again.StaticInputs, "you.run.flag.output").PublicSpellings[1] != "emit" {
+		t.Fatalf("caller-owned mutations changed a resolved schema: %#v", again)
+	}
+}
+
+func TestComposeRunInputsPreservesSupportedTypeHints(t *testing.T) {
+	supported := []string{
+		work.InvocationParameterTypeHintString,
+		work.InvocationParameterTypeHintPath,
+		work.InvocationParameterTypeHintFilePath,
+		work.InvocationParameterTypeHintDirectoryPath,
+		work.InvocationParameterTypeHintNumberString,
+		work.InvocationParameterTypeHintBooleanString,
+	}
+	for _, typeHint := range supported {
+		t.Run(typeHint, func(t *testing.T) {
+			signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{
+				Name: "value", TypeHint: typeHint,
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+			}}}
+			effective, diagnostics, err := ComposeRunInputs(compositionManifest(), "you.run", signature)
+			if err != nil || len(diagnostics) != 0 {
+				t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
+			}
+			if got := effective.FactoryParameters[0].TypeHint; got != typeHint {
+				t.Fatalf("TypeHint = %q, want %q", got, typeHint)
+			}
+		})
 	}
 }
 
@@ -139,4 +195,85 @@ func compositionManifest() Manifest {
 			},
 		},
 	}}
+}
+
+func completeCompositionFixture() (Manifest, work.InvocationSignatureConfig) {
+	manifest := compositionManifest()
+	command := manifest.Commands["you.run"]
+	delete(command.Arguments, "input")
+	manifest.Commands["you.run"] = command
+	signature := work.InvocationSignatureConfig{
+		UnknownNamedArgumentPolicy: work.InvocationUnknownNamedArgumentPolicyAllow,
+		Parameters: []work.InvocationParameterConfig{
+			{
+				Name: "exact", Description: "one exact string", ExternalName: "exact-value",
+				Aliases: []string{"exact-alias"}, TypeHint: work.InvocationParameterTypeHintBooleanString,
+				Required: true, Sensitive: true, Choices: []string{"true", "false"}, DefaultValue: "true",
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+			},
+			{
+				Name: "files", TypeHint: work.InvocationParameterTypeHintFilePath,
+				ValueMode: work.InvocationParameterValueModeRepeated, DefaultValues: []string{"one", "two"},
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+			},
+			{
+				Name: "input", ValueMode: work.InvocationParameterValueModeFileContents,
+				TypeHint: work.InvocationParameterTypeHintPath,
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindStdin}},
+			},
+			{
+				Name: "rest", ValueMode: work.InvocationParameterValueModeVariadic,
+				TypeHint: work.InvocationParameterTypeHintDirectoryPath,
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 1}},
+			},
+		},
+	}
+	return manifest, signature
+}
+
+func completeEffectiveParameters() []EffectiveFactoryParameter {
+	return []EffectiveFactoryParameter{
+		{
+			BindingID: "exact", CanonicalName: "exact", PreferredExternalName: "exact-value",
+			Aliases: []string{"exact-alias"}, Description: "one exact string", Required: true,
+			Choices: []string{"true", "false"}, DefaultValue: stringPointer("true"),
+			ValueMode: work.InvocationParameterValueModeExact, ValueConsumption: EffectiveValueConsumptionSingle,
+			MinimumValues: 1, MaximumValues: 1, TypeHint: work.InvocationParameterTypeHintBooleanString,
+			Sensitive: true, Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+		},
+		{
+			BindingID: "files", CanonicalName: "files", PreferredExternalName: "files",
+			DefaultValues: []string{"one", "two"},
+			ValueMode:     work.InvocationParameterValueModeRepeated, ValueConsumption: EffectiveValueConsumptionRepeated,
+			MinimumValues: 0, MaximumValues: EffectiveUnboundedCardinality, TypeHint: work.InvocationParameterTypeHintFilePath,
+			Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+		},
+		{
+			BindingID: "input", CanonicalName: "input", PreferredExternalName: "input",
+			ValueMode: work.InvocationParameterValueModeFileContents, ValueConsumption: EffectiveValueConsumptionFileContents,
+			MinimumValues: 0, MaximumValues: 1, TypeHint: work.InvocationParameterTypeHintPath,
+			Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindStdin}},
+		},
+		{
+			BindingID: "rest", CanonicalName: "rest", PreferredExternalName: "rest",
+			ValueMode: work.InvocationParameterValueModeVariadic, ValueConsumption: EffectiveValueConsumptionRemainingPositionals,
+			MinimumValues: 0, MaximumValues: EffectiveUnboundedCardinality, TypeHint: work.InvocationParameterTypeHintDirectoryPath,
+			Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 1}},
+		},
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func staticInputByID(t *testing.T, inputs []EffectiveStaticInput, id string) EffectiveStaticInput {
+	t.Helper()
+	for _, input := range inputs {
+		if input.ID == id {
+			return input
+		}
+	}
+	t.Fatalf("static input %q not found in %#v", id, inputs)
+	return EffectiveStaticInput{}
 }

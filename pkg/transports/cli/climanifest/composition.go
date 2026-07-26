@@ -3,6 +3,7 @@ package climanifest
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -17,13 +18,23 @@ const (
 	CompositionCollisionBindingID   = "cli.composition.binding-id-collision"
 )
 
+const (
+	EffectiveValueConsumptionSingle               = "single-value"
+	EffectiveValueConsumptionRepeated             = "repeated-values"
+	EffectiveValueConsumptionRemainingPositionals = "remaining-positionals"
+	EffectiveValueConsumptionFileContents         = "file-contents"
+
+	EffectiveUnboundedCardinality = -1
+)
+
 // EffectiveInputSchema is the immutable result of composing one static CLI
 // command with one selected Factory invocation signature. Static inputs remain
 // manifest-owned; the Factory contributes only invocation parameters.
 type EffectiveInputSchema struct {
-	CommandID         string
-	StaticInputs      []EffectiveStaticInput
-	FactoryParameters []EffectiveFactoryParameter
+	CommandID                  string
+	UnknownNamedArgumentPolicy string
+	StaticInputs               []EffectiveStaticInput
+	FactoryParameters          []EffectiveFactoryParameter
 }
 
 // EffectiveStaticInput is one manifest-owned input in the selected command.
@@ -37,12 +48,27 @@ type EffectiveStaticInput struct {
 	ConsumesStdin    bool
 }
 
-// EffectiveFactoryParameter is one selected-Factory dynamic input. BindingID
-// is the parameter's canonical name, which is the stable key used by normalized
-// invocation argument maps and handler interpolation.
+// EffectiveFactoryParameter is one selected-Factory dynamic input with the
+// normalized facts consumed by help, validation, normalization, and completion.
+// BindingID and CanonicalName are the stable key used by normalized invocation
+// argument maps and handler interpolation.
 type EffectiveFactoryParameter struct {
-	BindingID string
-	Parameter work.InvocationParameterConfig
+	BindingID             string
+	CanonicalName         string
+	PreferredExternalName string
+	Aliases               []string
+	Description           string
+	Required              bool
+	Choices               []string
+	DefaultValue          *string
+	DefaultValues         []string
+	ValueMode             string
+	ValueConsumption      string
+	MinimumValues         int
+	MaximumValues         int
+	TypeHint              string
+	Sensitive             bool
+	Bindings              []work.InvocationParameterBindingConfig
 }
 
 // CompositionDiagnostic identifies both owners of one rejected collision.
@@ -70,9 +96,10 @@ func ComposeRunInputs(manifest Manifest, commandID string, signature work.Invoca
 	}
 
 	schema := EffectiveInputSchema{
-		CommandID:         commandID,
-		StaticInputs:      projectStaticInputs(command),
-		FactoryParameters: projectFactoryParameters(signature.Parameters),
+		CommandID:                  commandID,
+		UnknownNamedArgumentPolicy: normalizedUnknownNamedArgumentPolicy(signature.UnknownNamedArgumentPolicy),
+		StaticInputs:               projectStaticInputs(command),
+		FactoryParameters:          projectFactoryParameters(signature.Parameters),
 	}
 	diagnostics := compositionDiagnostics(manifest, command, signature.Parameters)
 	if len(diagnostics) != 0 {
@@ -121,15 +148,88 @@ func projectStaticInputs(command Command) []EffectiveStaticInput {
 func projectFactoryParameters(parameters []work.InvocationParameterConfig) []EffectiveFactoryParameter {
 	projected := make([]EffectiveFactoryParameter, 0, len(parameters))
 	for _, parameter := range parameters {
-		clone := parameter
-		clone.Aliases = append([]string(nil), parameter.Aliases...)
-		clone.Choices = append([]string(nil), parameter.Choices...)
-		clone.DefaultValues = append([]string(nil), parameter.DefaultValues...)
-		clone.Bindings = append([]work.InvocationParameterBindingConfig(nil), parameter.Bindings...)
-		projected = append(projected, EffectiveFactoryParameter{BindingID: parameter.Name, Parameter: clone})
+		canonicalName := strings.TrimSpace(parameter.Name)
+		preferredExternalName := strings.TrimSpace(parameter.ExternalName)
+		if preferredExternalName == "" {
+			preferredExternalName = canonicalName
+		}
+		valueMode := work.NormalizeInvocationValueMode(parameter.ValueMode)
+		minimumValues, maximumValues, consumption := effectiveValueFacts(valueMode, parameter.Required)
+		projected = append(projected, EffectiveFactoryParameter{
+			BindingID:             canonicalName,
+			CanonicalName:         canonicalName,
+			PreferredExternalName: preferredExternalName,
+			Aliases:               normalizedNonEmptyStrings(parameter.Aliases),
+			Description:           parameter.Description,
+			Required:              parameter.Required,
+			Choices:               append([]string(nil), parameter.Choices...),
+			DefaultValue:          cloneDefaultValue(parameter.DefaultValue),
+			DefaultValues:         append([]string(nil), parameter.DefaultValues...),
+			ValueMode:             valueMode,
+			ValueConsumption:      consumption,
+			MinimumValues:         minimumValues,
+			MaximumValues:         maximumValues,
+			TypeHint:              strings.TrimSpace(parameter.TypeHint),
+			Sensitive:             parameter.Sensitive,
+			Bindings:              normalizedBindings(parameter.Bindings),
+		})
 	}
 	sort.Slice(projected, func(i, j int) bool { return projected[i].BindingID < projected[j].BindingID })
 	return projected
+}
+
+func normalizedUnknownNamedArgumentPolicy(policy string) string {
+	trimmed := strings.TrimSpace(policy)
+	if trimmed == "" {
+		return work.InvocationUnknownNamedArgumentPolicyReject
+	}
+	return trimmed
+}
+
+func normalizedNonEmptyStrings(values []string) []string {
+	var normalized []string
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			normalized = append(normalized, trimmed)
+		}
+	}
+	return normalized
+}
+
+func normalizedBindings(bindings []work.InvocationParameterBindingConfig) []work.InvocationParameterBindingConfig {
+	normalized := make([]work.InvocationParameterBindingConfig, len(bindings))
+	for index, binding := range bindings {
+		normalized[index] = work.InvocationParameterBindingConfig{
+			Kind:     strings.TrimSpace(binding.Kind),
+			Position: binding.Position,
+		}
+	}
+	return normalized
+}
+
+func cloneDefaultValue(value string) *string {
+	if value == "" {
+		return nil
+	}
+	cloned := value
+	return &cloned
+}
+
+func effectiveValueFacts(valueMode string, required bool) (int, int, string) {
+	minimumValues := 0
+	if required {
+		minimumValues = 1
+	}
+	switch valueMode {
+	case work.InvocationParameterValueModeRepeated:
+		return minimumValues, EffectiveUnboundedCardinality, EffectiveValueConsumptionRepeated
+	case work.InvocationParameterValueModeVariadic:
+		return minimumValues, EffectiveUnboundedCardinality, EffectiveValueConsumptionRemainingPositionals
+	case work.InvocationParameterValueModeFileContents:
+		return minimumValues, 1, EffectiveValueConsumptionFileContents
+	default:
+		return minimumValues, 1, EffectiveValueConsumptionSingle
+	}
 }
 
 func compositionDiagnostics(manifest Manifest, command Command, parameters []work.InvocationParameterConfig) []CompositionDiagnostic {

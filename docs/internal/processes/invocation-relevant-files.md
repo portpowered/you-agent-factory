@@ -718,7 +718,11 @@ response-stream output.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
-  projection keeps manifest inputs separate from dynamic Factory parameters and
+  projection keeps manifest inputs separate from dynamic Factory parameters,
+  detaches all returned collections, and exposes canonical/preferred names,
+  default shape, normalized value mode, cardinality/consumption, type hints,
+  sensitivity, and bindings without requiring downstream adapters to reinterpret
+  the authored signature. It
   rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
   and stable-binding collisions with sorted diagnostics that identify both
   owners. Named and explicit-file selectors must not enter this composition
