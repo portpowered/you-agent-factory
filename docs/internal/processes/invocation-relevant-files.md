@@ -514,11 +514,13 @@ response-stream output.
   `pkg/services/operator_settings.ConfigDocumentService`: validate and encode the
   full candidate before filesystem side effects, publish through a uniquely
   created same-directory temporary file, and treat `Rename` as the single commit
-  boundary after write, sync, close, permission, and cancellation checks. Share
-  one explicit persistence lock between service copies and reads so concurrent
-  callers remain deterministic on platforms where overlapping replacement and
-  reads otherwise produce sharing violations; failed attempts remove only their
-  own temporary artifact and never rewrite the committed destination directly.
+  boundary after write, sync, close, permission, and cancellation checks. Hold
+  one explicit persistence lock across the complete read-merge-replace
+  transaction, and share that lock between service copies and standalone reads,
+  so concurrent partial updates preserve each other's fields and overlapping
+  replacements remain deterministic on platforms with sharing violations.
+  Failed attempts remove only their own temporary artifact and never rewrite
+  the committed destination directly.
   Prompted setup should use a write-free function contract that receives the
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist

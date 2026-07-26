@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -502,6 +503,7 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	target := "packages/api/generated/schemas/mock-workers.schema.json"
+	wantStale := []string{"packages/api/generated/manifest.json", target}
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))
 
 	before, err := os.ReadFile(stagedPath)
@@ -525,13 +527,13 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Check() error = %v", err)
 		}
-		if len(drift.Stale) == 1 && drift.Stale[0] == target {
+		if slices.Equal(drift.Stale, wantStale) {
 			detected = true
 			break
 		}
 	}
 	if !detected {
-		t.Fatalf("Check() stale = %#v, want [%q]", drift.Stale, target)
+		t.Fatalf("Check() stale = %#v, want %#v", drift.Stale, wantStale)
 	}
 }
 

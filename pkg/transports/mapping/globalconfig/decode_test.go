@@ -3,6 +3,7 @@ package globalconfig_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -212,6 +213,55 @@ func TestLoadFileConfig_MissingFileReturnsEmptyConfig(t *testing.T) {
 	}
 	if config.Runtime != defaultRuntimeSettings() {
 		t.Fatalf("runtime = %#v, want defaults %#v", config.Runtime, defaultRuntimeSettings())
+	}
+}
+
+func TestGeneratedLoaderAndConfigDocumentServiceAgreeOnEffectiveConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		document string
+		absent   bool
+	}{
+		{name: "absent", absent: true},
+		{name: "partial", document: `{
+			"defaults":{"workerModelProvider":"codex"},
+			"runtime":{"metrics":{"compress":true}}
+		}`},
+		{name: "complete", document: `{
+			"backendScopeID":"local-11111111-1111-4111-8111-111111111111",
+			"defaults":{"workerModelProvider":"claude","workerModel":"claude-next"},
+			"runtime":{
+				"logging":{"directory":"logs","maxSizeMB":11,"maxBackups":12,"maxAgeDays":13,"compress":true},
+				"metrics":{"directory":"metrics","maxSizeMB":21,"maxBackups":22,"maxAgeDays":23,"compress":false}
+			},
+			"workerPresets":[{"id":"build","modelProvider":"codex","model":"gpt-next","reasoningEffort":"high"}]
+		}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if !test.absent {
+				if err := os.WriteFile(path, []byte(test.document), 0o600); err != nil {
+					t.Fatalf("WriteFile: %v", err)
+				}
+			}
+			files := platformfilesystem.Local{}
+			loaded, err := operatorsettings.LoadFileConfig(files, globalconfig.Decode, path)
+			if err != nil {
+				t.Fatalf("LoadFileConfig() error = %v", err)
+			}
+			document, err := (operatorsettings.ConfigDocumentService{
+				Files:   files,
+				Decoder: globalconfig.Decode,
+			}).Load(path)
+			if err != nil {
+				t.Fatalf("ConfigDocumentService.Load() error = %v", err)
+			}
+			if got := document.FileConfig(); !reflect.DeepEqual(got, loaded) {
+				t.Fatalf("document service config = %#v, generated loader config = %#v", got, loaded)
+			}
+		})
 	}
 }
 

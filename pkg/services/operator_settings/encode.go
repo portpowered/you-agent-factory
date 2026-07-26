@@ -46,12 +46,16 @@ var ErrProviderModelInputCanceled = errors.New("provider/model input canceled")
 // Load reads and validates a complete operator configuration. A
 // missing destination is represented by an empty, valid document.
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
-	if service.Files == nil {
-		return ConfigDocument{}, fmt.Errorf("operator config filesystem is required")
-	}
 	if service.PersistenceLock != nil {
 		service.PersistenceLock.Lock()
 		defer service.PersistenceLock.Unlock()
+	}
+	return service.load(path)
+}
+
+func (service ConfigDocumentService) load(path string) (ConfigDocument, error) {
+	if service.Files == nil {
+		return ConfigDocument{}, fmt.Errorf("operator config filesystem is required")
 	}
 	data, err := service.Files.ReadFile(path)
 	if err != nil {
@@ -127,7 +131,13 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 	if err := operationContextError(ctx); err != nil {
 		return ConfigDocument{}, err
 	}
-	document, err := service.Load(path)
+	if service.PersistenceLock == nil {
+		return ConfigDocument{}, fmt.Errorf("operator config persistence lock is required")
+	}
+	service.PersistenceLock.Lock()
+	defer service.PersistenceLock.Unlock()
+
+	document, err := service.load(path)
 	if err != nil {
 		return ConfigDocument{}, err
 	}
@@ -141,7 +151,7 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 	if err := operationContextError(ctx); err != nil {
 		return ConfigDocument{}, err
 	}
-	if err := service.Persist(ctx, path, candidate); err != nil {
+	if err := service.persistLocked(ctx, path, candidate); err != nil {
 		return ConfigDocument{}, err
 	}
 	return candidate, nil
@@ -239,6 +249,21 @@ func (service ConfigDocumentService) Persist(ctx context.Context, path string, d
 	if service.PersistenceLock == nil {
 		return fmt.Errorf("operator config persistence lock is required")
 	}
+	service.PersistenceLock.Lock()
+	defer service.PersistenceLock.Unlock()
+	return service.persistLocked(ctx, path, document)
+}
+
+func (service ConfigDocumentService) persistLocked(ctx context.Context, path string, document ConfigDocument) error {
+	if ctx == nil {
+		return fmt.Errorf("operator config context is required")
+	}
+	if service.Files == nil {
+		return fmt.Errorf("operator config filesystem is required")
+	}
+	if service.CreateTemp == nil {
+		return fmt.Errorf("operator config temporary-file creator is required")
+	}
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return fmt.Errorf("operator config path is required")
@@ -250,8 +275,6 @@ func (service ConfigDocumentService) Persist(ctx context.Context, path string, d
 	if err != nil {
 		return err
 	}
-	service.PersistenceLock.Lock()
-	defer service.PersistenceLock.Unlock()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("persist operator config: %w", err)
 	}

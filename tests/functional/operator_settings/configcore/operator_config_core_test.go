@@ -24,12 +24,15 @@ func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *
 	initial := []byte(`{
   "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
   "defaults": {"workerModelProvider": "CLAUDE", "workerModel": "old-model"},
+  "runtime": {
+    "logging": {"directory":"custom/logs","maxSizeMB":11,"maxBackups":12,"maxAgeDays":13,"compress":true},
+    "metrics": {"directory":"custom/metrics","maxSizeMB":21,"maxBackups":22,"maxAgeDays":23,"compress":false}
+  },
   "workerPresets": [{"id":"research","modelProvider":"CODEX","model":"gpt-5"}]
 }`)
 	if err := os.WriteFile(configPath, initial, 0o600); err != nil {
 		t.Fatalf("write initial config: %v", err)
 	}
-
 	service := operatorConfigService()
 	provider, model := " openai ", " provider/private-model@next "
 	configured, err := service.ConfigureProviderModel(context.Background(), configPath, operatorsettings.ProviderModelUpdate{
@@ -76,6 +79,7 @@ func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *
 	if len(decoded.WorkerPresets) != 1 || decoded.WorkerPresets[0].ID != "research" {
 		t.Fatalf("persisted worker presets = %#v, want preserved research preset", decoded.WorkerPresets)
 	}
+	assertRuntimePreserved(t, decoded.Runtime)
 	if prompted.BackendScopeID() != "local-11111111-1111-4111-8111-111111111111" {
 		t.Fatalf("backend scope = %q, want preserved identity", prompted.BackendScopeID())
 	}
@@ -110,6 +114,21 @@ func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *
 	}
 	if !reflect.DeepEqual(afterRejected, beforeCanceled) {
 		t.Fatal("rejected provider changed the committed config")
+	}
+}
+
+func assertRuntimePreserved(t *testing.T, got operatorsettings.RuntimeSettings) {
+	t.Helper()
+	wantRuntime := operatorsettings.RuntimeSettings{
+		Logging: operatorsettings.RuntimeArtifactSettings{
+			Directory: "custom/logs", MaxSizeMB: 11, MaxBackups: 12, MaxAgeDays: 13, Compress: true,
+		},
+		Metrics: operatorsettings.RuntimeArtifactSettings{
+			Directory: "custom/metrics", MaxSizeMB: 21, MaxBackups: 22, MaxAgeDays: 23,
+		},
+	}
+	if got != wantRuntime {
+		t.Fatalf("persisted runtime = %#v, want preserved %#v", got, wantRuntime)
 	}
 }
 
