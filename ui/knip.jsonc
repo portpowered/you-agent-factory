@@ -4,8 +4,11 @@
     "src/main.tsx",
     "src/**/*.test.{ts,tsx,mjs}",
     "src/**/*.stories.tsx",
+    "src/testing/vitest.setup.ts",
+    "src/testing/guarded-suite-console.setup.ts",
     "integration/**/*.test.mjs",
-    "vitest.storybook.config.ts"
+    "vitest.storybook.config.ts",
+    "vite.config.ts"
   ],
   "project": [
     "src/**/*.{ts,tsx}",
@@ -19,7 +22,8 @@
     "src/api/generated/**",
     "fallback_dist/**",
     "scripts/release-dashboard-smoke.mjs",
-    "src/types/elkjs-bundled.d.ts"
+    "src/types/elkjs-bundled.d.ts",
+    "src/vite-env.d.ts"
   ],
   "ignoreExportsUsedInFile": true
 }
