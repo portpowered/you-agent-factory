@@ -1,17 +1,15 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
-  openBrowserPage,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const betaSessionID = "hosted-session-beta";
 const defaultSession = {
@@ -75,7 +73,12 @@ async function waitForExactTopology(page, expectedState, rejectedState) {
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
-async function exerciseExactSessionReplay(preview, viewport, refreshSelection) {
+async function exerciseExactSessionReplay(
+  preview,
+  viewport,
+  refreshSelection,
+  { expect, openBrowserPage },
+) {
   const rootLines = replayLines("root");
   const betaLines = replayLines("beta");
   const server = await startFactoryApiServer({
@@ -148,25 +151,15 @@ async function exerciseExactSessionReplay(preview, viewport, refreshSelection) {
   }
 }
 
-describe.sequential("hosted exact-session topology replay", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("hosted exact-session topology replay", () => {
   it(
     "renders only the selected hosted session in canonical same-tick order at desktop width",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       await exerciseExactSessionReplay(
         preview,
         { height: 900, width: 1440 },
         false,
+        { expect, openBrowserPage },
       );
     },
     browserScenarioTimeoutMs,
@@ -174,11 +167,12 @@ describe.sequential("hosted exact-session topology replay", () => {
 
   it(
     "renders only the selected hosted session at narrow width and refreshes from the authoritative default",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       await exerciseExactSessionReplay(
         preview,
         { height: 844, width: 390 },
         true,
+        { expect, openBrowserPage },
       );
     },
     browserScenarioTimeoutMs,

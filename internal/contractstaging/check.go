@@ -128,13 +128,10 @@ func verifyManifestMetadata(artifacts map[string][]byte) error {
 	if err := json.Unmarshal(payload, &manifest); err != nil {
 		return fmt.Errorf("decode manifest artifact: %w", err)
 	}
-	for _, key := range []string{"formatVersion", "packageId", "packageVersion", "sourceCommit", "familyFormatVersions", "exports"} {
+	for _, key := range []string{"formatVersion", "packageId", "packageVersion", "familyFormatVersions", "exports"} {
 		if _, ok := manifest[key]; !ok {
 			return fmt.Errorf("manifest metadata missing %s", key)
 		}
-	}
-	if sourceCommit, ok := manifest["sourceCommit"].(string); !ok || sourceCommit == "" {
-		return fmt.Errorf("manifest metadata missing sourceCommit")
 	}
 	return nil
 }

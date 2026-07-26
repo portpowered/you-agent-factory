@@ -100,3 +100,18 @@ test("formats browser integration slow-file summaries with categories", () => {
     "[ui-browser-integration]   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s [replay-timeline]",
   ]);
 });
+
+test("aggregates verbose parallel test timings when Vitest omits file timing lines", () => {
+  expect(
+    parseVitestFileDurationsFromLog(
+      [
+        " ✓ integration/a.integration.test.mjs > scenario > first 125ms",
+        " ✓ integration/a.integration.test.mjs > scenario > second 75ms",
+        " ✓ integration/b.integration.test.mjs > scenario > only 40ms",
+      ].join("\n"),
+    ),
+  ).toEqual([
+    { durationMs: 200, path: "integration/a.integration.test.mjs" },
+    { durationMs: 40, path: "integration/b.integration.test.mjs" },
+  ]);
+});

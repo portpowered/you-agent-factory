@@ -62,4 +62,16 @@ func TestManifestSchemaFixtures(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("valid development manifest without source provenance", func(t *testing.T) {
+		instance := readJSON(t, filepath.Join("testdata", "manifest", "valid-active.json"))
+		manifest, ok := instance.(map[string]any)
+		if !ok {
+			t.Fatalf("fixture = %T, want object", instance)
+		}
+		delete(manifest, "sourceCommit")
+		if err := schema.Validate(manifest); err != nil {
+			t.Fatalf("validate development manifest: %v", err)
+		}
+	})
 }

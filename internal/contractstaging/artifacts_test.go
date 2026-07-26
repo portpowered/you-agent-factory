@@ -2,12 +2,9 @@ package contractstaging_test
 
 import (
 	"encoding/json"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -25,17 +22,8 @@ func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t
 	if err := json.Unmarshal(manifestPayload, &manifest); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
-	sourceCommit, ok := manifest["sourceCommit"].(string)
-	if !ok || sourceCommit == "" {
-		t.Fatalf("manifest sourceCommit = %#v", manifest["sourceCommit"])
-	}
-	sourceArgs := append([]string{"-C", repositoryRoot, "rev-list", "-1", "HEAD", "--"}, contractstaging.SourceIdentityPaths()...)
-	head, err := exec.Command("git", sourceArgs...).Output()
-	if err != nil {
-		t.Fatalf("resolve package source commit: %v", err)
-	}
-	if sourceCommit != strings.TrimSpace(string(head)) {
-		t.Fatalf("manifest sourceCommit = %q, want package source commit %q", sourceCommit, strings.TrimSpace(string(head)))
+	if _, ok := manifest["sourceCommit"]; ok {
+		t.Fatalf("development manifest contains commit-derived provenance: %#v", manifest["sourceCommit"])
 	}
 
 	manifestSchema := compileArtifactSchema(t, artifacts["packages/api/generated/joined/contracts/manifest.schema.json"])

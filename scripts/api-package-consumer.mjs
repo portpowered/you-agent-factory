@@ -230,7 +230,8 @@ async function requireManifest(document, packageRoot, specifier) {
 		manifest.formatVersion !== "1.0.0" ||
 		typeof manifest.packageId !== "string" ||
 		typeof manifest.packageVersion !== "string" ||
-		!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(manifest.sourceCommit) ||
+		(manifest.sourceCommit !== undefined &&
+			!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(manifest.sourceCommit)) ||
 		Object.keys(
 			requireObject(
 				manifest.familyFormatVersions,

@@ -441,7 +441,15 @@ export function browserArtifactDirectory() {
   if (!configuredPath) {
     return null;
   }
-  return path.resolve(packageRoot, configuredPath);
+  const root = path.resolve(packageRoot, configuredPath);
+  if (process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION !== "true") {
+    return root;
+  }
+  const workerID =
+    process.env.VITEST_POOL_ID ??
+    process.env.VITEST_WORKER_ID ??
+    String(process.pid);
+  return path.join(root, `worker-${sanitizeArtifactLabel(workerID)}`);
 }
 
 function sanitizeArtifactLabel(value) {
@@ -591,6 +599,15 @@ async function browserPreviewPorts() {
     previewPort: previewPort ?? (await findAvailablePort()),
   };
   return sharedBrowserPorts;
+}
+
+async function isolatedBrowserPreviewPorts() {
+  const apiPort = await findAvailablePort();
+  let previewPort = await findAvailablePort();
+  while (previewPort === apiPort) {
+    previewPort = await findAvailablePort();
+  }
+  return { apiPort, previewPort };
 }
 
 function hasBun() {
@@ -969,8 +986,8 @@ function buildSessionSyncPreflightResponse(
   };
 }
 
-async function createBrowserPreview() {
-  const { apiPort, previewPort } = await browserPreviewPorts();
+async function createBrowserPreview(ports = null) {
+  const { apiPort, previewPort } = ports ?? (await browserPreviewPorts());
   const apiOrigin = `http://${previewHost}:${apiPort}`;
   const previewURL = `http://${previewHost}:${previewPort}/dashboard/ui/`;
   const sourceMapBuild =
@@ -1027,6 +1044,21 @@ async function createBrowserPreview() {
       await stopProcess(previewProcess);
     },
   };
+}
+
+export async function startIsolatedBrowserPreview() {
+  const preview = await startBrowserPreview();
+  const apiPort = await findAvailablePort();
+  return {
+    ...preview,
+    apiOrigin: `http://${previewHost}:${apiPort}`,
+    apiPort,
+    stop: async () => {},
+  };
+}
+
+export async function startDedicatedBrowserPreview() {
+  return createBrowserPreview(await isolatedBrowserPreviewPorts());
 }
 
 function browserPreviewState() {
@@ -1291,6 +1323,11 @@ export async function openBrowserPage(options = {}) {
   const context = await browser.newContext({
     acceptDownloads: options.acceptDownloads ?? false,
   });
+  if (options.apiOrigin) {
+    await context.addInitScript((apiOrigin) => {
+      globalThis.__agentFactoryBrowserTestAPIOrigin = apiOrigin;
+    }, options.apiOrigin);
+  }
   let page;
   try {
     if (artifactDirectory && !boundedArtifacts) {
