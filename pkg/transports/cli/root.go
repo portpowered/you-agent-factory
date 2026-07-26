@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -92,6 +93,7 @@ type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.Name
 type CommandOperations struct {
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
+	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
 	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
 	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -144,6 +146,7 @@ type CommandFactory struct {
 	lookupEnv                         func(string) (string, bool)
 	initializer                       startupcli.Initializer
 	namedFactoryCatalog               interfaces.NamedFactoryCatalog
+	completeFactoryNames              cobracompletion.FactoryNamesOperation
 	resolveNamedFactoryRoots          NamedFactoryRootsResolver
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	resolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -194,6 +197,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 	return CommandFactory{
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
+		completeFactoryNames:              operations.CompleteFactoryNames,
 		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
 		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
 		resolveCurrentFactoryDir:          operations.ResolveCurrentFactoryDir,
