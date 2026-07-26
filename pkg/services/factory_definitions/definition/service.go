@@ -28,10 +28,27 @@ const (
 // activation policy. UnimplementedService keeps the CTR-DEF root slice methods
 // assignable until nested IMP-DEF collaborators are wired.
 type Service struct {
-	factoryroot.UnimplementedService
+	nonCatalogDefaults
+	catalog.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
-	catalog           catalog.Service
+}
+
+type nonCatalogDefaults interface {
+	PrepareFactoryLayout(context.Context, factoryroot.PrepareFactoryLayoutRequest) (factoryroot.PrepareFactoryLayoutResult, error)
+	FlattenFactoryLayout(context.Context, factoryroot.FlattenFactoryLayoutRequest) (factoryroot.FlattenFactoryLayoutResult, error)
+	ExpandFactoryLayout(context.Context, factoryroot.ExpandFactoryLayoutRequest) (factoryroot.ExpandFactoryLayoutResult, error)
+	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
+	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
+	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
+	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
+	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
+	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
+	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
+	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
+	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
+	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
+	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
@@ -40,7 +57,12 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
 	}
-	return &Service{host: host, versionFileSystem: versionFileSystem}
+	return &Service{
+		nonCatalogDefaults: factoryroot.UnimplementedService{},
+		Service:            factoryroot.UnimplementedService{},
+		host:               host,
+		versionFileSystem:  versionFileSystem,
+	}
 }
 
 // NewWithCatalog constructs the Definitions root collaborator with private
@@ -51,74 +73,8 @@ func NewWithCatalog(
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	service := New(host, versionFileSystems...)
-	service.catalog = catalogService
+	service.Service = catalogService
 	return service
-}
-
-// ListNamedFactories delegates to the private catalog subservice when wired.
-func (s *Service) ListNamedFactories(
-	ctx context.Context,
-	request factoryroot.ListNamedFactoriesRequest,
-) (factoryroot.ListNamedFactoriesResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.ListNamedFactories(ctx, request)
-	}
-	return s.catalog.ListNamedFactories(ctx, request)
-}
-
-// GetNamedFactory delegates to the private catalog subservice when wired.
-func (s *Service) GetNamedFactory(
-	ctx context.Context,
-	request factoryroot.GetNamedFactoryRequest,
-) (factoryroot.GetNamedFactoryResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.GetNamedFactory(ctx, request)
-	}
-	return s.catalog.GetNamedFactory(ctx, request)
-}
-
-// ResolveNamedFactory delegates to the private catalog subservice when wired.
-func (s *Service) ResolveNamedFactory(
-	ctx context.Context,
-	request factoryroot.ResolveNamedFactoryRequest,
-) (factoryroot.ResolveNamedFactoryResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.ResolveNamedFactory(ctx, request)
-	}
-	return s.catalog.ResolveNamedFactory(ctx, request)
-}
-
-// DeleteNamedFactory delegates to the private catalog subservice when wired.
-func (s *Service) DeleteNamedFactory(
-	ctx context.Context,
-	request factoryroot.DeleteNamedFactoryRequest,
-) (factoryroot.DeleteNamedFactoryResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.DeleteNamedFactory(ctx, request)
-	}
-	return s.catalog.DeleteNamedFactory(ctx, request)
-}
-
-// GetCurrentFactoryPointer delegates to the private catalog subservice when wired.
-func (s *Service) GetCurrentFactoryPointer(
-	ctx context.Context,
-	request factoryroot.GetCurrentFactoryPointerRequest,
-) (factoryroot.GetCurrentFactoryPointerResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.GetCurrentFactoryPointer(ctx, request)
-	}
-	return s.catalog.GetCurrentFactoryPointer(ctx, request)
-}
-
-// SetCurrentFactoryPointer delegates to the private catalog subservice when wired.
-func (s *Service) SetCurrentFactoryPointer(
-	ctx context.Context,
-	request factoryroot.SetCurrentFactoryPointerRequest,
-) (factoryroot.SetCurrentFactoryPointerResult, error) {
-	if s == nil || s.catalog == nil {
-		return factoryroot.UnimplementedService{}.SetCurrentFactoryPointer(ctx, request)
-	}
-	return s.catalog.SetCurrentFactoryPointer(ctx, request)
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

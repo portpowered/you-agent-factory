@@ -189,7 +189,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	clock := provideFactoryDefinitionClock(edges2)
 	versionFileSystem := provideFactoryDefinitionVersionFileSystem(edges2)
-	v36 := provideFactoryDefinitionsFactory(v35, loader, v4, v5, namedPathResolver, clock, versionFileSystem)
+	v36 := provideFactoryDefinitionsFactory(v35, loader, v4, v5, namedPathResolver, namedFactoryCatalogFileSystem, clock, versionFileSystem)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v37, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)

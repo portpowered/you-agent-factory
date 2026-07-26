@@ -308,6 +308,7 @@ func provideFactoryDefinitionsFactory(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
+	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 ) factorysessionwire.FactoryDefinitionsFactory {
@@ -344,6 +345,7 @@ func provideFactoryDefinitionsFactory(
 			wirefactorydefinitions.FactorySnapshotCapturer(),
 			persistence.ReplaceFactoryLayout,
 			namedPaths,
+			namedFactoryCatalogFileSystem,
 		)
 	}
 }
