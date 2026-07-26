@@ -30,8 +30,11 @@ func initializeConfig(t testing.TB, ctx context.Context, session *builtcliaccept
 	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
 		outcome = "created"
 	}
-	result, err := session.Run(ctx, "--json", "factory", "list", "--dir", namedFactoriesRoot)
-	session.RequireSuccess(t, scenario, result, err)
+	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
+	result, err := session.Run(ctx, "run", "--factory", missingFactory)
+	if err == nil || !strings.Contains(result.Stdout+result.Stderr+err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
+	}
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}

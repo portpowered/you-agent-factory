@@ -64,6 +64,100 @@ func TestFactoryConfigInitCommandHandlerMapsEffectiveListRootsAndOutputs(t *test
 	}
 }
 
+func TestFactoryConfigInitCommandHandlerReportsEffectiveListBoundaryFailures(t *testing.T) {
+	workingDirectory := t.TempDir()
+	homeErr := errors.New("home unavailable")
+	rootsErr := errors.New("roots unavailable")
+	validInputs := resolvedTestInputs(t, resolvedTestValue{
+		id: "you.factory.list.flag.dir", source: resolvedinput.SourceManifestDefault,
+		value: resolvedinput.StringValue("factory"),
+	})
+	validGlobals := resolvedFactoryGlobals(t, false, false, false)
+	cases := []struct {
+		name     string
+		services commandregistry.FactoryConfigInitServices
+		context  context.Context
+		inputs   resolvedinput.Inputs
+		want     string
+	}{
+		{
+			name: "missing list service", context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			want: "factory list service is required",
+		},
+		{
+			name: "missing dir input",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  resolvedinput.Inputs{},
+			want:    "you.factory.list.flag.dir",
+		},
+		{
+			name: "missing home resolver",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    "home-directory resolver is required",
+		},
+		{
+			name: "home failure",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "", homeErr },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    homeErr.Error(),
+		},
+		{
+			name: "missing working directory",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+			},
+			context: t.Context(), inputs: validInputs,
+			want: "process working directory is required",
+		},
+		{
+			name: "missing roots resolver",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    "Factory Definitions root resolver is required",
+		},
+		{
+			name: "roots failure",
+			services: commandregistry.FactoryConfigInitServices{
+				ListFactories: func(factorycli.ListConfig) error { return nil },
+				HomeDir:       func() (string, error) { return "home", nil },
+				ResolveFactoryRoots: func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
+					return factorydefinitions.NamedFactoryRoots{}, rootsErr
+				},
+			},
+			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
+			inputs:  validInputs,
+			want:    rootsErr.Error(),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			handler := commandregistry.NewFactoryConfigInitCommandHandler(test.services)
+			cmd := &cobra.Command{}
+			cmd.SetContext(test.context)
+			err := handler.FactoryList(cmd, test.inputs, validGlobals)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("FactoryList() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 type resolvedTestValue struct {
 	id     string
 	source resolvedinput.Source
