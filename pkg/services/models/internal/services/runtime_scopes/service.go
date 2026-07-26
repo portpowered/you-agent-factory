@@ -12,6 +12,10 @@ import (
 // this Runtime Scopes service.
 var ErrScopeUnknown = errors.New("models runtime scope is unknown")
 
+// ErrScopeForeign reports a reference issued by another Runtime Scopes
+// service instance.
+var ErrScopeForeign = errors.New("models runtime scope is foreign")
+
 // Reference is an opaque identifier issued by a Runtime Scopes service.
 type Reference string
 

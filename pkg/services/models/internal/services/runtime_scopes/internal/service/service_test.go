@@ -165,6 +165,47 @@ func TestCloseRejectsMalformedAndUnknownReferencesWithoutChangingLiveScopes(t *t
 	}
 }
 
+func TestForeignReferenceIsRejectedWithoutAffectingEitherService(t *testing.T) {
+	t.Parallel()
+
+	issuer := runtimescopeswire.NewService()
+	receiver := runtimescopeswire.NewService()
+	issuerRef := openBinding(t, issuer, "issuer")
+	receiverRef := openBinding(t, receiver, "receiver")
+
+	if _, err := receiver.Resolve(issuerRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("Resolve foreign scope error = %v, want ErrScopeForeign", err)
+	}
+	if err := receiver.Close(issuerRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("Close foreign scope error = %v, want ErrScopeForeign", err)
+	}
+
+	assertFactoryDirectory(t, issuer, issuerRef, "issuer")
+	assertFactoryDirectory(t, receiver, receiverRef, "receiver")
+}
+
+func TestEqualBindingsReceiveDistinctInstanceBoundReferences(t *testing.T) {
+	t.Parallel()
+
+	first := runtimescopeswire.NewService()
+	second := runtimescopeswire.NewService()
+	firstRef := openBinding(t, first, "equal")
+	secondRef := openBinding(t, second, "equal")
+
+	if firstRef == secondRef {
+		t.Fatalf("independent services issued equal references %q", firstRef)
+	}
+	if _, err := first.Resolve(secondRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("first Resolve(second reference) error = %v, want ErrScopeForeign", err)
+	}
+	if _, err := second.Resolve(firstRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("second Resolve(first reference) error = %v, want ErrScopeForeign", err)
+	}
+
+	assertFactoryDirectory(t, first, firstRef, "equal")
+	assertFactoryDirectory(t, second, secondRef, "equal")
+}
+
 func openBinding(t *testing.T, service runtimescopes.Service, factoryDirectory string) runtimescopes.Reference {
 	t.Helper()
 	ref, err := service.Open(models.RuntimeBinding{
@@ -176,6 +217,22 @@ func openBinding(t *testing.T, service runtimescopes.Service, factoryDirectory s
 		t.Fatalf("Open %q scope: %v", factoryDirectory, err)
 	}
 	return ref
+}
+
+func assertFactoryDirectory(
+	t *testing.T,
+	service runtimescopes.Service,
+	ref runtimescopes.Reference,
+	want string,
+) {
+	t.Helper()
+	binding, err := service.Resolve(ref)
+	if err != nil {
+		t.Fatalf("Resolve %q scope: %v", want, err)
+	}
+	if got := binding.RuntimeConfig().FactoryDirectory; got != want {
+		t.Fatalf("FactoryDirectory = %q, want %q", got, want)
+	}
 }
 
 func assertOriginalBinding(t *testing.T, binding models.RuntimeBinding) {

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -15,6 +16,10 @@ import (
 // The counter is hashed before it enters a reference, so callers cannot select
 // a registry or scope by its allocation position.
 var nextIssuerID atomic.Uint64
+
+// knownIssuers distinguishes references issued by another process-scoped
+// registry from arbitrary unknown input without exposing issuer identity.
+var knownIssuers sync.Map
 
 type service struct {
 	mu           sync.RWMutex
@@ -28,8 +33,10 @@ var _ runtimescopes.Service = (*service)(nil)
 // New constructs an inert, process-local Runtime Scopes registry.
 func New() runtimescopes.Service {
 	issuerID := nextIssuerID.Add(1)
+	issuerToken := opaqueToken("issuer", issuerID)
+	knownIssuers.Store(issuerToken, struct{}{})
 	return &service{
-		issuerToken:  opaqueToken("issuer", issuerID),
+		issuerToken:  issuerToken,
 		liveBindings: make(map[runtimescopes.Reference]models.RuntimeBinding),
 	}
 }
@@ -56,6 +63,9 @@ func (s *service) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, e
 	if s == nil {
 		return models.RuntimeBinding{}, fmt.Errorf("%w: service is required", runtimescopes.ErrScopeUnknown)
 	}
+	if s.isForeign(ref) {
+		return models.RuntimeBinding{}, fmt.Errorf("%w: reference belongs to another service", runtimescopes.ErrScopeForeign)
+	}
 
 	s.mu.RLock()
 	binding, ok := s.liveBindings[ref]
@@ -70,6 +80,9 @@ func (s *service) Close(ref runtimescopes.Reference) error {
 	if s == nil {
 		return fmt.Errorf("%w: service is required", runtimescopes.ErrScopeUnknown)
 	}
+	if s.isForeign(ref) {
+		return fmt.Errorf("%w: reference belongs to another service", runtimescopes.ErrScopeForeign)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,6 +91,15 @@ func (s *service) Close(ref runtimescopes.Reference) error {
 	}
 	delete(s.liveBindings, ref)
 	return nil
+}
+
+func (s *service) isForeign(ref runtimescopes.Reference) bool {
+	issuerToken, _, ok := strings.Cut(string(ref), ".")
+	if !ok || issuerToken == s.issuerToken {
+		return false
+	}
+	_, known := knownIssuers.Load(issuerToken)
+	return known
 }
 
 func detachedBinding(cacheDirectory string, config *models.RuntimeConfig) models.RuntimeBinding {
