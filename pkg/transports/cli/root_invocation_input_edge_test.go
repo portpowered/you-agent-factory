@@ -30,6 +30,49 @@ func TestPrepareRunInvocationInputRequiresInjectedWorkRole(t *testing.T) {
 	}
 }
 
+func TestResolveRunFactoryPromptLeavesJavaScriptInputToWorkflowRuntime(t *testing.T) {
+	t.Parallel()
+
+	for _, extension := range []string{".js", ".mjs", ".cjs"} {
+		extension := extension
+		t.Run(extension, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := &cobra.Command{Use: "run"}
+			cmd.SetContext(context.Background())
+			cmd.Flags().String("factory", "", "")
+			cmd.Flags().String("named", "", "")
+			cmd.Flags().String("work", "", "")
+			path := filepath.Join(t.TempDir(), "workflow"+extension)
+			if err := cmd.Flags().Set("factory", path); err != nil {
+				t.Fatalf("set factory: %v", err)
+			}
+
+			cfg := runcli.RunConfig{
+				FactoryConfigPath: path,
+				LoadFactoryConfigFile: func(string) (*interfaces.FactoryConfig, error) {
+					t.Fatal("JavaScript workflow must not use declarative Factory schema loading")
+					return nil, nil
+				},
+			}
+			preparation := rootInvocationInputScript{prepare: func(
+				context.Context,
+				work.InvocationInputPreparationRequest,
+			) (work.PreparedInvocationInput, error) {
+				t.Fatal("JavaScript workflow must not use declarative Factory input preparation")
+				return work.PreparedInvocationInput{}, nil
+			}}
+
+			if err := resolveRunFactoryPrompt(cmd, &cfg, []string{"workflow input"}, preparation); err != nil {
+				t.Fatalf("resolve JavaScript workflow input: %v", err)
+			}
+			if cfg.PreparedInvocationInput != nil {
+				t.Fatalf("prepared invocation input = %#v, want JavaScript runtime ownership", cfg.PreparedInvocationInput)
+			}
+		})
+	}
+}
+
 func TestResolveFactoryInvocationInput_RequiresProcessStdinForExplicitDash(t *testing.T) {
 	_, err := collectRunInvocationStdin([]string{"-"}, nil, func() bool { return true })
 	if err == nil || !strings.Contains(err.Error(), "process stdin is required") {

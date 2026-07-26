@@ -787,6 +787,9 @@ func resolveRunFactoryPrompt(
 	if !factoryChanged && !namedChanged {
 		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
 	}
+	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
+		return nil
+	}
 
 	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
@@ -814,6 +817,15 @@ func resolveRunFactoryPrompt(
 		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
 	}
 	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func runFactorySourceUsesJavaScript(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, preparation work.InvocationInputPreparation) error {
