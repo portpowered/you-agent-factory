@@ -13,6 +13,11 @@ import { serializeFactoryValidationDefinition } from "../../lib/projection/facto
 export const FACTORY_VALIDATION_QUERY_KEY_PREFIX = "factory-validation";
 export const FACTORY_VALIDATION_DEBOUNCE_MS = 200;
 
+export interface FactoryValidationOptions {
+  debounceMs?: number;
+  validateDefinition?: typeof validateFactoryDefinition;
+}
+
 export function factoryValidationQueryKey(serializedDefinition: string | null) {
   return [FACTORY_VALIDATION_QUERY_KEY_PREFIX, serializedDefinition] as const;
 }
@@ -45,9 +50,7 @@ function useDebouncedFactoryValidationDefinition(
 export function useFactoryValidation(
   factoryDefinition: CanonicalFactoryDefinition | null,
   enabled: boolean,
-  options?: {
-    debounceMs?: number;
-  },
+  options?: FactoryValidationOptions,
 ) {
   const debouncedDefinition = useDebouncedFactoryValidationDefinition(
     factoryDefinition,
@@ -70,7 +73,8 @@ export function useFactoryValidation(
       }
 
       const requestedSerializedDefinition = serializedDefinition;
-      const result = await validateFactoryDefinition(debouncedDefinition, {
+      const result = await (options?.validateDefinition ??
+        validateFactoryDefinition)(debouncedDefinition, {
         signal,
       });
 
