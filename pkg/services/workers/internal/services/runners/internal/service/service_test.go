@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -34,18 +36,22 @@ func TestNewResolvesMatchingDetachedRegistrationsWithoutExecution(t *testing.T) 
 		t.Fatalf("New() error = %v", err)
 	}
 
-	codexBinding, ok := registry.Resolve(workers.RunnerIDCodex)
-	if !ok {
-		t.Fatal("Resolve(codex) found = false")
+	codexBinding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+	})
+	if err != nil {
+		t.Fatalf("Resolve(codex) error = %v", err)
 	}
 	if codexBinding.Identity != workers.RunnerIDCodex ||
 		codexBinding.Metadata.ID != workers.RunnerIDCodex ||
 		codexBinding.Runner != codex {
 		t.Fatalf("Resolve(codex) = %#v, want matching registration", codexBinding)
 	}
-	geminiBinding, ok := registry.Resolve(workers.RunnerIDGemini)
-	if !ok || geminiBinding.Runner != gemini {
-		t.Fatalf("Resolve(gemini) = (%#v, %t), want matching registration", geminiBinding, ok)
+	geminiBinding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDGemini,
+	})
+	if err != nil || geminiBinding.Runner != gemini {
+		t.Fatalf("Resolve(gemini) = (%#v, %v), want matching registration", geminiBinding, err)
 	}
 	if codex.calls != 0 || gemini.calls != 0 {
 		t.Fatalf("runner calls = (%d, %d), want zero", codex.calls, gemini.calls)
@@ -61,9 +67,11 @@ func TestNewSnapshotsCallerOwnedRegistrationMetadata(t *testing.T) {
 
 	input.Metadata.Capabilities.Baseline[0] = "mutated"
 	input.Metadata.Capabilities.Optional[0].Status = "mutated"
-	first, ok := registry.Resolve(workers.RunnerIDCodex)
-	if !ok {
-		t.Fatal("Resolve() found = false")
+	first, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
 	}
 	if first.Metadata.Capabilities.Baseline[0] !=
 		workers.RunnerBaselineCapabilityPromptSubmission {
@@ -76,7 +84,12 @@ func TestNewSnapshotsCallerOwnedRegistrationMetadata(t *testing.T) {
 
 	first.Metadata.Capabilities.Baseline[0] = "mutated-again"
 	first.Metadata.Capabilities.Optional[0].Detail = "mutated"
-	second, _ := registry.Resolve(workers.RunnerIDCodex)
+	second, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+	})
+	if err != nil {
+		t.Fatalf("second Resolve() error = %v", err)
+	}
 	if second.Metadata.Capabilities.Baseline[0] !=
 		workers.RunnerBaselineCapabilityPromptSubmission ||
 		second.Metadata.Capabilities.Optional[0].Detail != "" {
@@ -183,20 +196,114 @@ func TestNewRejectsInvalidRegistryAtomically(t *testing.T) {
 }
 
 func TestResolveRequiresExactCanonicalIdentity(t *testing.T) {
+	codex := &runnerSpy{}
+	gemini := &runnerSpy{}
 	registry, err := New([]runners.Registration{
-		registration(workers.RunnerIDCodex, "Codex", &runnerSpy{}),
+		registration(workers.RunnerIDCodex, "Codex", codex),
+		registration(workers.RunnerIDGemini, "Gemini", gemini),
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
 	for _, identity := range []string{"", "CODEX", " codex ", "unknown"} {
-		if binding, ok := registry.Resolve(identity); ok ||
+		binding, resolveErr := registry.Resolve(runners.ResolutionRequest{
+			Identity: identity,
+		})
+		want := workers.ErrUnknownRunnerSelection
+		if strings.TrimSpace(identity) == "" {
+			want = workers.ErrMissingRunnerSelection
+		}
+		if !errors.Is(resolveErr, want) ||
 			binding.Identity != "" ||
 			binding.Metadata.ID != "" ||
 			binding.Runner != nil {
-			t.Fatalf("Resolve(%q) = (%#v, %t), want empty miss", identity, binding, ok)
+			t.Fatalf("Resolve(%q) = (%#v, %v), want empty %v", identity, binding, resolveErr, want)
 		}
+	}
+	if codex.calls != 0 || gemini.calls != 0 {
+		t.Fatalf("runner calls = (%d, %d), want zero", codex.calls, gemini.calls)
+	}
+}
+
+func TestResolveRequiresSupportedCapabilitiesWithoutExecution(t *testing.T) {
+	codex := &runnerSpy{}
+	gemini := &runnerSpy{}
+	registry, err := New([]runners.Registration{
+		registration(workers.RunnerIDCodex, "Codex", codex),
+		registration(workers.RunnerIDGemini, "Gemini", gemini),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	first, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+		RequiredCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityImageInput,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve(supported) error = %v", err)
+	}
+	second, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+		RequiredCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityImageInput,
+		},
+	})
+	if err != nil {
+		t.Fatalf("second Resolve(supported) error = %v", err)
+	}
+	if first.Runner != codex || second.Runner != codex ||
+		first.Identity != second.Identity ||
+		!reflect.DeepEqual(first.Metadata, second.Metadata) {
+		t.Fatalf("repeated resolution = (%#v, %#v), want equivalent binding facts", first, second)
+	}
+
+	first.Metadata.Capabilities.Optional[0].Status = "mutated"
+	if second.Metadata.Capabilities.Optional[0].Status !=
+		workers.RunnerOptionalCapabilityStatusSupported {
+		t.Fatalf("second metadata = %#v, want detached collections", second.Metadata)
+	}
+	if codex.calls != 0 || gemini.calls != 0 {
+		t.Fatalf("runner calls = (%d, %d), want zero", codex.calls, gemini.calls)
+	}
+}
+
+func TestResolveRejectsUnsupportedCapabilityWithSafeContext(t *testing.T) {
+	codex := &runnerSpy{}
+	gemini := &runnerSpy{}
+	registry, err := New([]runners.Registration{
+		registration(workers.RunnerIDCodex, "Codex", codex),
+		registration(workers.RunnerIDGemini, "Gemini", gemini),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	binding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+		RequiredCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilitySessionResume,
+		},
+	})
+	if !errors.Is(err, workers.ErrUnsupportedRunnerCapability) {
+		t.Fatalf("Resolve(unsupported) error = %v, want canonical capability error", err)
+	}
+	var capabilityErr *workers.UnsupportedRunnerCapabilityError
+	if !errors.As(err, &capabilityErr) {
+		t.Fatalf("Resolve(unsupported) error = %T, want structured capability error", err)
+	}
+	if capabilityErr.RunnerID != workers.RunnerIDCodex ||
+		capabilityErr.Capability != workers.RunnerOptionalCapabilitySessionResume {
+		t.Fatalf("capability error = %#v, want detached selection context", capabilityErr)
+	}
+	if binding.Identity != "" || binding.Metadata.ID != "" || binding.Runner != nil {
+		t.Fatalf("Resolve(unsupported) binding = %#v, want unusable zero binding", binding)
+	}
+	if codex.calls != 0 || gemini.calls != 0 {
+		t.Fatalf("runner calls = (%d, %d), want zero", codex.calls, gemini.calls)
 	}
 }
 

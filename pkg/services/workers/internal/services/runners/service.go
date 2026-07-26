@@ -12,6 +12,13 @@ type Registration struct {
 	Runner   workers.Runner
 }
 
+// ResolutionRequest carries the explicit selection and optional capabilities
+// one Workers-private consumer requires.
+type ResolutionRequest struct {
+	Identity             string
+	RequiredCapabilities []workers.RunnerOptionalCapability
+}
+
 // Binding is one resolved registry entry. Metadata collections are detached
 // from registry state on every resolution.
 type Binding struct {
@@ -23,5 +30,5 @@ type Binding struct {
 // Service resolves immutable runner registrations without executing or
 // probing their implementations.
 type Service interface {
-	Resolve(identity string) (Binding, bool)
+	Resolve(ResolutionRequest) (Binding, error)
 }

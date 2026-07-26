@@ -36,16 +36,39 @@ func New(registrations []runners.Registration) (runners.Service, error) {
 	return &service{bindings: bindings}, nil
 }
 
-func (s *service) Resolve(identity string) (runners.Binding, bool) {
-	if s == nil {
-		return runners.Binding{}, false
+func (s *service) Resolve(
+	request runners.ResolutionRequest,
+) (runners.Binding, error) {
+	if strings.TrimSpace(request.Identity) == "" {
+		return runners.Binding{}, workers.ErrMissingRunnerSelection
 	}
-	binding, ok := s.bindings[identity]
+	if s == nil {
+		return runners.Binding{}, fmt.Errorf(
+			"%w: %q",
+			workers.ErrUnknownRunnerSelection,
+			request.Identity,
+		)
+	}
+	binding, ok := s.bindings[request.Identity]
 	if !ok {
-		return runners.Binding{}, false
+		return runners.Binding{}, fmt.Errorf(
+			"%w: %q",
+			workers.ErrUnknownRunnerSelection,
+			request.Identity,
+		)
+	}
+	supported := supportedOptionalCapabilities(binding.Metadata)
+	for _, required := range request.RequiredCapabilities {
+		if supported[required] {
+			continue
+		}
+		return runners.Binding{}, &workers.UnsupportedRunnerCapabilityError{
+			RunnerID:   binding.Identity,
+			Capability: required,
+		}
 	}
 	binding.Metadata = cloneMetadata(binding.Metadata)
-	return binding, true
+	return binding, nil
 }
 
 func validateRegistration(
@@ -126,4 +149,18 @@ func cloneMetadata(metadata workers.RunnerMetadata) workers.RunnerMetadata {
 		metadata.Capabilities.Optional...,
 	)
 	return metadata
+}
+
+func supportedOptionalCapabilities(
+	metadata workers.RunnerMetadata,
+) map[workers.RunnerOptionalCapability]bool {
+	supported := make(
+		map[workers.RunnerOptionalCapability]bool,
+		len(metadata.Capabilities.Optional),
+	)
+	for _, capability := range metadata.Capabilities.Optional {
+		supported[capability.Capability] =
+			capability.Status == workers.RunnerOptionalCapabilityStatusSupported
+	}
+	return supported
 }
