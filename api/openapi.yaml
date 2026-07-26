@@ -1263,6 +1263,22 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /packaged-factories:
+    get:
+      tags:
+        - Factory
+      operationId: listPackagedFactories
+      summary: List built-in packaged factories
+      description: Returns the backend-owned built-in factory catalog, including the selected artifacts the dashboard displays. The dashboard must consume this API rather than importing the publication package.
+      responses:
+        '200':
+          description: Published packaged factory catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackagedFactoryCatalogResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     SessionID:
@@ -5233,6 +5249,43 @@ components:
         - Forcefully terminate a durable session while preserving inspectable state.
         - Retry one failed or interrupted dispatch within the targeted session.
         - Interrupt one active dispatch within the targeted session.
+    PackagedFactoryCatalogResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - factories
+      properties:
+        factories:
+          type: array
+          description: Built-in Factory definitions in stable lexical name order.
+          items:
+            $ref: '#/components/schemas/PackagedFactoryCatalogEntry'
+    PackagedFactoryCatalogEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - project
+        - slug
+        - json
+        - yaml
+      properties:
+        name:
+          type: string
+          description: Public built-in Factory name, such as '@you/goal'.
+        project:
+          type: string
+          description: Stable Factory project identifier.
+        slug:
+          type: string
+          description: URL-safe Factory catalog identity.
+        json:
+          type: object
+          additionalProperties: true
+          description: Canonical Factory JSON artifact.
+        yaml:
+          type: string
+          description: Equivalent Factory YAML artifact.
     FactorySessionLifecycleControlOutcome:
       type: string
       description: Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
