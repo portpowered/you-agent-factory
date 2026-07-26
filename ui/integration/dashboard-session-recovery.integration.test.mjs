@@ -254,8 +254,6 @@ describe.sequential("dashboard session recovery browser integration", () => {
           ),
         ).toBe(true);
 
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
-        await new Promise((resolve) => setTimeout(resolve, 800));
         await clearTimelineCheckpoints(browserPage.page);
         await seedTimelineCheckpoint(
           browserPage.page,
@@ -269,10 +267,12 @@ describe.sequential("dashboard session recovery browser integration", () => {
             selectedTick: 9,
           },
         );
-        await browserPage.page.evaluate(() => {
-          window.__capturedEventStreamURLs = [];
+        // Stop the active dashboard before it can persist its old checkpoint
+        // over the stale fixture during the next navigation.
+        await browserPage.page.goto("about:blank");
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
         });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
 
         await waitForDurableCheckpoint("stale identity reconnect", async () => {
           const urls = await readCapturedEventStreamURLs(browserPage.page);
