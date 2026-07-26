@@ -708,7 +708,7 @@ cause rather than runner alone:
 | --- | --- | ---: | --- |
 | Dashboard app-shell lifecycle | `use-dashboard-snapshot-checkpoint-lifecycle.component.test.tsx` | 1,344ms | Replaced by the feature-owned `usePersistedTimelineCheckpoint` Bun contract; focused execution is about 203ms. |
 | Dashboard app-shell session wiring | `dashboard-session-timeline-isolation.component.test.tsx` | 1,089ms | Removed as duplicate coverage of timeline entries, dashboard session state, header tabs, and the snapshot hook. |
-| Module-mocked async hook | `use-dashboard-checkpoint-preflight.test.tsx` | 778ms | Next target: inject the resolver and mutation effects, remove hoisted provider mocks, then run under Bun. |
+| Module-mocked async hook | `use-dashboard-checkpoint-preflight.test.tsx` | 778ms | Replaced four Vitest files (884 lines) with one feature-owned Bun core contract using explicit resolver and mutation effects; focused execution is about 635ms and no longer constructs mocked application providers. |
 | Omnibus widget rendering | `current-selection-widget.provider-session-selection.test.tsx` | 720ms | Extract the provider-session selector contract from the complete current-selection widget. |
 | Graph/editor host composition | `react-flow-current-activity-card-host-contract.test.tsx` | 700ms | Retain the small host boundary; continue replacing aggregate imports with owner modules. |
 | Cross-owner dashboard wiring | `dashboard-replay-wiring.component.test.tsx` | 697ms | Keep one wiring proof and move projection cases to timeline/dashboard owners. |
@@ -720,6 +720,11 @@ The dominant categories remain production import fan-out, complete dashboard or
 widget mounts, and process-global module mocks. Assertion execution is not the
 primary cost. Migration therefore starts by narrowing ownership and dependency
 seams; changing only the runner for an app-sized test preserves most latency.
+
+After the preflight migration, the complete component command owns 228 Bun
+files and 130 remaining Vitest files and completes locally in 83.74s: about
+35.29s in Bun and 48.45s in Vitest. The last measured unit lane is 18.10s, so
+the combined non-browser correctness feedback is approximately 101.84s.
 
 Keep the taxonomy as unit, component, and browser tests. Native Bun is an
 execution sublane of component tests, not a fourth test type:
