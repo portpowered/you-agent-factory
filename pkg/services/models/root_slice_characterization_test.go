@@ -227,6 +227,35 @@ func assertCloseErrorIs(
 	}
 }
 
+func TestRootContractSeal_ManagedInvocationAndOpaqueReferenceValidation(t *testing.T) {
+	t.Parallel()
+
+	managedWorker := models.LocalWorker{
+		Type:          models.RuntimeWorkerTypeInference,
+		ModelLocality: string(models.LocalityLocal),
+	}
+	if err := models.ValidateLocalInvocationRequest(models.LocalInvocationRequest{
+		Worker: managedWorker,
+	}); !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("managed invocation without model = %v, want ErrNotFound", err)
+	}
+	managedWorker.Model = "local-model"
+	if err := models.ValidateLocalInvocationRequest(models.LocalInvocationRequest{
+		Worker: managedWorker,
+	}); err != nil {
+		t.Fatalf("managed invocation valid = %v", err)
+	}
+	if _, err := (models.RuntimeScopeRef{}).Parse(" "); err == nil {
+		t.Fatal("empty RuntimeScopeRef parse error = nil")
+	}
+	if _, err := (models.ModelLeaseRef{}).Parse(" "); err == nil {
+		t.Fatal("empty ModelLeaseRef parse error = nil")
+	}
+	if _, err := (models.ModelInvocationRef{}).Parse(" "); err == nil {
+		t.Fatal("empty ModelInvocationRef parse error = nil")
+	}
+}
+
 func TestRuntimeScope_ReferenceCarriesAcrossScopeBoundRequests(t *testing.T) {
 	t.Parallel()
 

@@ -450,6 +450,76 @@ func TestRootContractSeal_OpenScopeNeedsNoConstructionEffects(t *testing.T) {
 	}
 }
 
+func TestRootContractSeal_LegacyRequestValidationRemainsObservable(t *testing.T) {
+	t.Parallel()
+
+	if err := models.ValidateRuntimeBinding(models.RuntimeBinding{}); !errors.Is(
+		err, models.ErrInvalidRuntimeBinding,
+	) {
+		t.Fatalf("ValidateRuntimeBinding = %v, want ErrInvalidRuntimeBinding", err)
+	}
+	if err := models.ValidateRuntimeBinding(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	}); err != nil {
+		t.Fatalf("ValidateRuntimeBinding valid: %v", err)
+	}
+	validations := []struct {
+		name    string
+		invalid error
+		want    error
+		valid   error
+	}{
+		{
+			name:    "get model",
+			invalid: models.ValidateGetModelRequest(models.GetModelRequest{}),
+			want:    models.ErrNotFound,
+			valid: models.ValidateGetModelRequest(
+				models.GetModelRequest{Name: "local-model"},
+			),
+		},
+		{
+			name:    "pull model",
+			invalid: models.ValidatePullModelRequest(models.PullModelRequest{}),
+			want:    models.ErrNotFound,
+			valid: models.ValidatePullModelRequest(
+				models.PullModelRequest{Name: "local-model"},
+			),
+		},
+		{
+			name:    "inspect runtime",
+			invalid: models.ValidateInspectRuntimeRequest(models.InspectRuntimeRequest{}),
+			want:    models.ErrNotFound,
+			valid: models.ValidateInspectRuntimeRequest(
+				models.InspectRuntimeRequest{Name: "local-model"},
+			),
+		},
+		{
+			name:    "acquire lease",
+			invalid: models.ValidateAcquireLeaseRequest(models.AcquireLeaseRequest{}),
+			want:    models.ErrNotFound,
+			valid: models.ValidateAcquireLeaseRequest(
+				models.AcquireLeaseRequest{ModelName: "local-model"},
+			),
+		},
+		{
+			name:    "release lease",
+			invalid: models.ValidateReleaseLeaseRequest(models.ReleaseLeaseRequest{}),
+			want:    models.ErrHostLeaseNotFound,
+			valid: models.ValidateReleaseLeaseRequest(
+				models.ReleaseLeaseRequest{LeaseID: "lease-1"},
+			),
+		},
+	}
+	for _, validation := range validations {
+		if !errors.Is(validation.invalid, validation.want) {
+			t.Fatalf("%s invalid = %v, want %v", validation.name, validation.invalid, validation.want)
+		}
+		if validation.valid != nil {
+			t.Fatalf("%s valid = %v", validation.name, validation.valid)
+		}
+	}
+}
+
 func TestInvocationErrorFromManagedRuntime_ReadyAllowsInvocation(t *testing.T) {
 	t.Parallel()
 
