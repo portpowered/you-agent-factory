@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -74,15 +76,17 @@ func (executor *controlledExecutor) Execute(
 	}
 	release := executor.releases[dispatchID]
 	executor.mu.Unlock()
+	defer func() {
+		executor.mu.Lock()
+		executor.running--
+		executor.mu.Unlock()
+	}()
 	executor.started <- dispatchID
 	select {
 	case <-release:
 	case <-ctx.Done():
 		return workers.WorkResult{}, ctx.Err()
 	}
-	executor.mu.Lock()
-	executor.running--
-	executor.mu.Unlock()
 	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
 }
 
@@ -473,7 +477,7 @@ func TestPoolDispatchReturnsAttributedResultWithExecutorFailure(t *testing.T) {
 	}
 }
 
-func TestPoolStopWaitsForAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
+func TestPoolStopCancelsAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
 	t.Parallel()
 
 	executor := &blockingExecutor{
@@ -498,23 +502,24 @@ func TestPoolStopWaitsForAcceptedDispatchAndRejectsLaterDispatch(t *testing.T) {
 	}()
 	<-executor.started
 
-	stopDone := make(chan error, 1)
+	stopDone := make(chan struct {
+		outcome workers.WorkstationPoolLifecycleOutcome
+		err     error
+	}, 1)
 	go func() {
-		_, err := pool.Stop(context.Background())
-		stopDone <- err
+		outcome, err := pool.Stop(context.Background())
+		stopDone <- struct {
+			outcome workers.WorkstationPoolLifecycleOutcome
+			err     error
+		}{outcome: outcome, err: err}
 	}()
-	select {
-	case err := <-stopDone:
-		t.Fatalf("Stop() returned before accepted dispatch completed: %v", err)
-	default:
+	if err := <-dispatchDone; !errors.Is(err, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("Dispatch() error = %v, want ErrWorkstationDispatchCanceled", err)
 	}
-
-	close(executor.release)
-	if err := <-dispatchDone; err != nil {
-		t.Fatalf("Dispatch() error = %v", err)
-	}
-	if err := <-stopDone; err != nil {
-		t.Fatalf("Stop() error = %v", err)
+	stopped := <-stopDone
+	if stopped.err != nil ||
+		stopped.outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
+		t.Fatalf("Stop() = %q, %v", stopped.outcome, stopped.err)
 	}
 	if _, err := pool.Dispatch(
 		context.Background(),
@@ -685,6 +690,171 @@ func TestPoolCancelledWaiterReleasesBoundedQueueAccounting(t *testing.T) {
 	assertStarted(t, executor, "dispatch-next")
 	executor.release("dispatch-next")
 	assertDispatchErrors(t, results, 2)
+}
+
+func TestPoolExplicitCancellationPreventsQueuedExecutorEntry(t *testing.T) {
+	t.Parallel()
+
+	executor := newControlledExecutor("dispatch-running", "dispatch-queued")
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+		Capacity:        1,
+		QueueCapacity:   1,
+	})
+
+	running := dispatchResultAsync(pool, context.Background(), "dispatch-running", "review")
+	assertStarted(t, executor, "dispatch-running")
+	queued := dispatchResultAsync(pool, context.Background(), "dispatch-queued", "review")
+	waitForQueued(t, pool, "review", 1)
+
+	cancelled, err := pool.Cancel(
+		context.Background(),
+		workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-queued"},
+	)
+	if err != nil || cancelled.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
+		t.Fatalf("Cancel() = %#v, %v", cancelled, err)
+	}
+	repeated, err := pool.Cancel(
+		context.Background(),
+		workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-queued"},
+	)
+	if err != nil || repeated.Outcome != workers.WorkstationDispatchCancelOutcomeAlreadyCanceled {
+		t.Fatalf("repeated Cancel() = %#v, %v", repeated, err)
+	}
+	assertCanceledDispatch(t, <-queued)
+
+	executor.release("dispatch-running")
+	if completed := <-running; completed.err != nil {
+		t.Fatalf("running Dispatch() error = %v", completed.err)
+	}
+	select {
+	case unexpected := <-executor.started:
+		t.Fatalf("cancelled queued dispatch entered executor as %q", unexpected)
+	default:
+	}
+}
+
+func TestPoolExplicitAndCallerCancellationConvergeForRunningDispatches(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		cancel func(*Pool, context.CancelFunc) error
+	}{
+		{
+			name: "explicit",
+			cancel: func(pool *Pool, _ context.CancelFunc) error {
+				result, err := pool.Cancel(
+					context.Background(),
+					workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-explicit"},
+				)
+				if err == nil && result.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
+					return fmt.Errorf("Cancel() outcome = %q", result.Outcome)
+				}
+				return err
+			},
+		},
+		{
+			name: "caller context",
+			cancel: func(_ *Pool, cancel context.CancelFunc) error {
+				cancel()
+				return nil
+			},
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			dispatchID := "dispatch-" + strings.ReplaceAll(test.name, " ", "-")
+			executor := newControlledExecutor(dispatchID)
+			pool := New()
+			startPool(t, pool, workstations.Route{
+				WorkstationName: "review",
+				Executor:        executor,
+				Capacity:        1,
+				QueueCapacity:   1,
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			completed := dispatchResultAsync(pool, ctx, dispatchID, "review")
+			assertStarted(t, executor, dispatchID)
+			if err := test.cancel(pool, cancel); err != nil {
+				t.Fatalf("cancel dispatch: %v", err)
+			}
+			assertCanceledDispatch(t, <-completed)
+			executor.mu.Lock()
+			running := executor.running
+			executor.mu.Unlock()
+			if running != 0 {
+				t.Fatalf("executor activity after cancellation = %d", running)
+			}
+		})
+	}
+}
+
+func TestPoolLateCancellationDoesNotReplaceCommittedResult(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{
+		result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
+	}
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+	})
+	result, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-complete", "transition-complete", "review"),
+	)
+	if err != nil || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted {
+		t.Fatalf("Dispatch() = %#v, %v", result, err)
+	}
+	cancelled, err := pool.Cancel(
+		context.Background(),
+		workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-complete"},
+	)
+	if !errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal) ||
+		cancelled.Outcome != workers.WorkstationDispatchCancelOutcomeAlreadyTerminal {
+		t.Fatalf("late Cancel() = %#v, %v", cancelled, err)
+	}
+}
+
+func TestPoolStopCancelsQueuedAndRunningDispatchesBeforeReturning(t *testing.T) {
+	t.Parallel()
+
+	executor := newControlledExecutor("dispatch-running", "dispatch-queued")
+	pool := New()
+	startPool(t, pool, workstations.Route{
+		WorkstationName: "review",
+		Executor:        executor,
+		Capacity:        1,
+		QueueCapacity:   1,
+	})
+	running := dispatchResultAsync(pool, context.Background(), "dispatch-running", "review")
+	assertStarted(t, executor, "dispatch-running")
+	queued := dispatchResultAsync(pool, context.Background(), "dispatch-queued", "review")
+	waitForQueued(t, pool, "review", 1)
+
+	outcome, err := pool.Stop(context.Background())
+	if err != nil || outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
+		t.Fatalf("Stop() = %q, %v", outcome, err)
+	}
+	assertCanceledDispatch(t, <-running)
+	assertCanceledDispatch(t, <-queued)
+	executor.mu.Lock()
+	active := executor.running
+	executor.mu.Unlock()
+	if active != 0 {
+		t.Fatalf("executor activity after Stop() = %d", active)
+	}
+	if _, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-late", "transition-late", "review"),
+	); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
+		t.Fatalf("Dispatch() after Stop() error = %v", err)
+	}
 }
 
 func startPool(t *testing.T, pool *Pool, route workstations.Route) {

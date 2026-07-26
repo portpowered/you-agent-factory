@@ -15,6 +15,7 @@ type lifecycleState uint8
 const (
 	stateConstructed lifecycleState = iota
 	stateRunning
+	stateStopping
 	stateStopped
 )
 
@@ -24,6 +25,10 @@ type Pool struct {
 	mu     sync.RWMutex
 	state  lifecycleState
 	routes map[string]*routePool
+
+	dispatches map[string]*dispatchRecord
+	active     sync.WaitGroup
+	stopped    chan struct{}
 }
 
 type routePool struct {
@@ -34,14 +39,32 @@ type routePool struct {
 }
 
 type admission struct {
-	ready chan struct{}
+	ready    chan struct{}
+	running  bool
+	released bool
+}
+
+type dispatchRecord struct {
+	mu              sync.Mutex
+	dispatchID      string
+	workstationName string
+	transitionID    string
+	cancel          context.CancelFunc
+	terminal        bool
+	canceled        bool
+	result          workers.WorkstationDispatchResult
+	err             error
 }
 
 var _ workstations.Service = (*Pool)(nil)
 
 // New constructs an inert pool without starting background activity.
 func New() *Pool {
-	return &Pool{state: stateConstructed}
+	return &Pool{
+		state:      stateConstructed,
+		dispatches: make(map[string]*dispatchRecord),
+		stopped:    make(chan struct{}),
+	}
 }
 
 // Start atomically activates the supplied route snapshot.
@@ -66,7 +89,7 @@ func (p *Pool) Start(
 		return workers.WorkstationPoolLifecycleOutcomeStarted, nil
 	case stateRunning:
 		return workers.WorkstationPoolLifecycleOutcomeAlreadyRunning, nil
-	case stateStopped:
+	case stateStopping, stateStopped:
 		return "", workers.ErrWorkstationPoolStopped
 	default:
 		return "", workers.ErrWorkstationPoolUnavailable
@@ -80,12 +103,34 @@ func (p *Pool) Stop(ctx context.Context) (workers.WorkstationPoolLifecycleOutcom
 	}
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.state == stateStopped {
+	switch p.state {
+	case stateStopped:
+		p.mu.Unlock()
+		return workers.WorkstationPoolLifecycleOutcomeAlreadyStopped, nil
+	case stateStopping:
+		stopped := p.stopped
+		p.mu.Unlock()
+		<-stopped
 		return workers.WorkstationPoolLifecycleOutcomeAlreadyStopped, nil
 	}
+
+	p.state = stateStopping
+	active := make([]*dispatchRecord, 0, len(p.dispatches))
+	for _, record := range p.dispatches {
+		active = append(active, record)
+	}
+	p.mu.Unlock()
+
+	for _, record := range active {
+		record.commitCancellation(context.Canceled)
+	}
+	p.active.Wait()
+
+	p.mu.Lock()
 	p.routes = nil
 	p.state = stateStopped
+	close(p.stopped)
+	p.mu.Unlock()
 	return workers.WorkstationPoolLifecycleOutcomeStopped, nil
 }
 
@@ -104,7 +149,7 @@ func (p *Pool) Route(ctx context.Context, workstationName string) error {
 	switch p.state {
 	case stateConstructed:
 		return workers.ErrWorkstationPoolUnavailable
-	case stateStopped:
+	case stateStopping, stateStopped:
 		return workers.ErrWorkstationPoolStopped
 	case stateRunning:
 		if _, ok := p.routes[name]; !ok {
@@ -129,97 +174,163 @@ func (p *Pool) Dispatch(
 		return workers.WorkstationDispatchResult{}, err
 	}
 
-	route, releaseLifecycle, err := p.acquireRoute(name)
+	executionCtx, cancelExecution := context.WithCancel(ctx)
+	record := newDispatchRecord(request, name, cancelExecution)
+	route, entry, err := p.accept(record)
 	if err != nil {
+		cancelExecution()
 		return workers.WorkstationDispatchResult{}, err
 	}
-	defer releaseLifecycle()
-	if route.binding.Executor == nil {
-		return workers.WorkstationDispatchResult{}, workers.ErrMissingWorkstationBinding
+	defer p.active.Done()
+	defer cancelExecution()
+
+	if err := route.await(executionCtx, entry); err != nil {
+		return record.commitCancellation(err)
 	}
-	if err := route.admit(ctx); err != nil {
-		return workers.WorkstationDispatchResult{}, err
-	}
-	defer route.release()
+	defer route.release(entry)
 
 	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
 	execution.RunnerID = route.binding.RunnerSelection.RunnerID
 	execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
-	result, executeErr := route.binding.Executor.Execute(ctx, execution)
+	defer func() {
+		if panicValue := recover(); panicValue != nil {
+			record.commitFailure(fmt.Errorf("workstation executor panic: %v", panicValue))
+			panic(panicValue)
+		}
+	}()
+	result, executeErr := route.binding.Executor.Execute(executionCtx, execution)
 	result.DispatchID = execution.Dispatch.DispatchID
 	result.TransitionID = execution.Dispatch.TransitionID
-	return workers.WorkstationDispatchResult{
+	dispatchResult := workers.WorkstationDispatchResult{
 		DispatchID:      execution.Dispatch.DispatchID,
 		WorkstationName: name,
+		TerminalOutcome: terminalOutcome(executeErr),
 		Result:          result,
-	}, executeErr
+	}
+	if executionCtx.Err() != nil {
+		return record.commitCancellation(executionCtx.Err())
+	}
+	return record.commit(dispatchResult, executeErr)
 }
 
-func (p *Pool) acquireRoute(
-	name string,
-) (*routePool, func(), error) {
+// Cancel commits cancellation before signaling the execution context, so a
+// concurrent executor completion cannot replace the canonical terminal result.
+func (p *Pool) Cancel(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if err := contextError(ctx); err != nil {
+		return workers.WorkstationDispatchCancelResult{}, err
+	}
+	dispatchID := strings.TrimSpace(request.DispatchID)
+	if dispatchID == "" {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrInvalidWorkstationCancellation
+	}
+
 	p.mu.RLock()
+	record, ok := p.dispatches[dispatchID]
+	p.mu.RUnlock()
+	if !ok {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
+	}
+	return record.cancelOutcome()
+}
+
+func (p *Pool) accept(
+	record *dispatchRecord,
+) (*routePool, *admission, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	switch p.state {
 	case stateConstructed:
-		p.mu.RUnlock()
 		return nil, nil, workers.ErrWorkstationPoolUnavailable
-	case stateStopped:
-		p.mu.RUnlock()
+	case stateStopping, stateStopped:
 		return nil, nil, workers.ErrWorkstationPoolStopped
 	case stateRunning:
-		route, ok := p.routes[name]
+		route, ok := p.routes[record.workstationName]
 		if !ok {
-			p.mu.RUnlock()
 			return nil, nil, workers.ErrUnknownWorkstationRoute
 		}
-		return route, p.mu.RUnlock, nil
+		if route.binding.Executor == nil {
+			return nil, nil, workers.ErrMissingWorkstationBinding
+		}
+		if _, duplicate := p.dispatches[record.dispatchID]; duplicate {
+			return nil, nil, workers.ErrInvalidWorkstationDispatch
+		}
+		entry, err := route.reserve()
+		if err != nil {
+			return nil, nil, err
+		}
+		p.dispatches[record.dispatchID] = record
+		p.active.Add(1)
+		return route, entry, nil
 	default:
-		p.mu.RUnlock()
 		return nil, nil, workers.ErrWorkstationPoolUnavailable
 	}
 }
 
-func (route *routePool) admit(ctx context.Context) error {
+func (route *routePool) reserve() (*admission, error) {
 	route.mu.Lock()
+	defer route.mu.Unlock()
 	if route.running < route.binding.Capacity && len(route.waiting) == 0 {
 		route.running++
-		route.mu.Unlock()
-		return nil
+		entry := &admission{ready: make(chan struct{}), running: true}
+		close(entry.ready)
+		return entry, nil
 	}
 	if len(route.waiting) >= route.binding.QueueCapacity {
-		route.mu.Unlock()
-		return workers.ErrWorkstationSaturated
+		return nil, workers.ErrWorkstationSaturated
 	}
 	entry := &admission{ready: make(chan struct{})}
 	route.waiting = append(route.waiting, entry)
-	route.mu.Unlock()
+	return entry, nil
+}
 
+func (route *routePool) await(ctx context.Context, entry *admission) error {
 	select {
 	case <-entry.ready:
+		if err := ctx.Err(); err != nil {
+			route.release(entry)
+			return err
+		}
 		return nil
 	case <-ctx.Done():
-		return route.cancelWaiting(entry, ctx.Err())
+		route.cancel(entry)
+		return ctx.Err()
 	}
 }
 
-func (route *routePool) cancelWaiting(entry *admission, cancellation error) error {
+func (route *routePool) cancel(entry *admission) {
 	route.mu.Lock()
 	defer route.mu.Unlock()
+	if entry.running {
+		route.releaseLocked(entry)
+		return
+	}
 	for index, queued := range route.waiting {
 		if queued != entry {
 			continue
 		}
 		route.waiting = append(route.waiting[:index], route.waiting[index+1:]...)
-		return cancellation
+		entry.released = true
+		return
 	}
-	// Promotion already committed a running slot. Execution observes the
-	// cancelled context and release returns that slot exactly once.
-	return nil
 }
 
-func (route *routePool) release() {
+func (route *routePool) release(entry *admission) {
 	route.mu.Lock()
 	defer route.mu.Unlock()
+	route.releaseLocked(entry)
+}
+
+func (route *routePool) releaseLocked(entry *admission) {
+	if entry.released {
+		return
+	}
+	entry.released = true
+	if !entry.running {
+		return
+	}
 	route.running--
 	if len(route.waiting) == 0 {
 		return
@@ -227,7 +338,124 @@ func (route *routePool) release() {
 	next := route.waiting[0]
 	route.waiting = route.waiting[1:]
 	route.running++
+	next.running = true
 	close(next.ready)
+}
+
+func newDispatchRecord(
+	request workers.WorkstationDispatchRequest,
+	workstationName string,
+	cancel context.CancelFunc,
+) *dispatchRecord {
+	return &dispatchRecord{
+		dispatchID:      request.Execution.Dispatch.DispatchID,
+		workstationName: workstationName,
+		transitionID:    request.Execution.Dispatch.TransitionID,
+		cancel:          cancel,
+	}
+}
+
+func (record *dispatchRecord) commit(
+	result workers.WorkstationDispatchResult,
+	err error,
+) (workers.WorkstationDispatchResult, error) {
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	if record.terminal {
+		return record.result, record.err
+	}
+	record.terminal = true
+	record.result = result
+	record.err = err
+	return result, err
+}
+
+func (record *dispatchRecord) commitFailure(err error) {
+	result := record.baseResult()
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
+	result.Result.Outcome = workers.OutcomeFailed
+	result.Result.Error = err.Error()
+	_, _ = record.commit(result, err)
+}
+
+func (record *dispatchRecord) commitCancellation(
+	cause error,
+) (workers.WorkstationDispatchResult, error) {
+	record.mu.Lock()
+	if record.terminal {
+		result, err := record.result, record.err
+		record.mu.Unlock()
+		return result, err
+	}
+	result, err, cancel := record.commitCancellationLocked(cause)
+	record.mu.Unlock()
+	cancel()
+	return result, err
+}
+
+func (record *dispatchRecord) commitCancellationLocked(
+	cause error,
+) (workers.WorkstationDispatchResult, error, context.CancelFunc) {
+	record.terminal = true
+	record.canceled = true
+	record.result = record.baseResult()
+	record.result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	record.result.Result.Outcome = workers.OutcomeFailed
+	record.result.Result.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	record.err = canceledDispatchError(cause)
+	return record.result, record.err, record.cancel
+}
+
+func (record *dispatchRecord) cancelOutcome() (
+	workers.WorkstationDispatchCancelResult,
+	error,
+) {
+	record.mu.Lock()
+	if record.terminal {
+		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		var err error = workers.ErrWorkstationDispatchAlreadyTerminal
+		if record.canceled {
+			outcome = workers.WorkstationDispatchCancelOutcomeAlreadyCanceled
+			err = nil
+		}
+		record.mu.Unlock()
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: record.dispatchID,
+			Outcome:    outcome,
+		}, err
+	}
+	_, _, cancel := record.commitCancellationLocked(context.Canceled)
+	record.mu.Unlock()
+	cancel()
+	return workers.WorkstationDispatchCancelResult{
+		DispatchID: record.dispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}, nil
+}
+
+func (record *dispatchRecord) baseResult() workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      record.dispatchID,
+		WorkstationName: record.workstationName,
+		Result: workers.WorkResult{
+			DispatchID:   record.dispatchID,
+			TransitionID: record.transitionID,
+		},
+	}
+}
+
+func canceledDispatchError(cause error) error {
+	if cause == nil {
+		return workers.ErrWorkstationDispatchCanceled
+	}
+	return fmt.Errorf("%w: %w", workers.ErrWorkstationDispatchCanceled, cause)
+}
+
+func terminalOutcome(err error) workers.WorkstationDispatchTerminalOutcome {
+	if err != nil {
+		return workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	return workers.WorkstationDispatchTerminalOutcomeCompleted
 }
 
 func validDispatch(request workers.WorkstationDispatchRequest) (string, error) {

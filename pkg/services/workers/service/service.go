@@ -293,6 +293,18 @@ func (s *Service) DispatchWorkstation(
 	return s.workstations.Dispatch(ctx, request)
 }
 
+// CancelWorkstationDispatch delegates explicit cancellation to the private
+// workstation owner.
+func (s *Service) CancelWorkstationDispatch(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Cancel(ctx, request)
+}
+
 func workstationRoutes(
 	bindings []workers.AssembledRuntimeBinding,
 ) ([]workstations.Route, error) {

@@ -17,11 +17,27 @@ type ModelInvoker interface {
 // lifecycle transition.
 type WorkstationPoolLifecycleOutcome string
 
+// WorkstationDispatchTerminalOutcome classifies the one terminal result
+// committed for an accepted workstation dispatch.
+type WorkstationDispatchTerminalOutcome string
+
+// WorkstationDispatchCancelOutcome describes an idempotent explicit
+// cancellation request.
+type WorkstationDispatchCancelOutcome string
+
 const (
 	WorkstationPoolLifecycleOutcomeStarted        WorkstationPoolLifecycleOutcome = "STARTED"
 	WorkstationPoolLifecycleOutcomeAlreadyRunning WorkstationPoolLifecycleOutcome = "ALREADY_RUNNING"
 	WorkstationPoolLifecycleOutcomeStopped        WorkstationPoolLifecycleOutcome = "STOPPED"
 	WorkstationPoolLifecycleOutcomeAlreadyStopped WorkstationPoolLifecycleOutcome = "ALREADY_STOPPED"
+
+	WorkstationDispatchTerminalOutcomeCompleted WorkstationDispatchTerminalOutcome = "COMPLETED"
+	WorkstationDispatchTerminalOutcomeFailed    WorkstationDispatchTerminalOutcome = "FAILED"
+	WorkstationDispatchTerminalOutcomeCanceled  WorkstationDispatchTerminalOutcome = "CANCELED"
+
+	WorkstationDispatchCancelOutcomeCanceled        WorkstationDispatchCancelOutcome = "CANCELED"
+	WorkstationDispatchCancelOutcomeAlreadyCanceled WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
+	WorkstationDispatchCancelOutcomeAlreadyTerminal WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
 
 	// DefaultWorkstationCapacity preserves bounded behavior for bindings that
 	// predate explicit workstation admission limits.
@@ -46,6 +62,16 @@ var (
 	// ErrWorkstationSaturated reports a route whose running and waiting capacity
 	// are both occupied.
 	ErrWorkstationSaturated = errors.New("Workers workstation route is saturated")
+	// ErrInvalidWorkstationCancellation reports a cancellation without an ID.
+	ErrInvalidWorkstationCancellation = errors.New("invalid Workers workstation cancellation request")
+	// ErrUnknownWorkstationDispatch reports cancellation for an unaccepted ID.
+	ErrUnknownWorkstationDispatch = errors.New("Workers workstation dispatch is unknown")
+	// ErrWorkstationDispatchCanceled classifies the canonical cancelled terminal
+	// result from caller, explicit, or pool-stop cancellation.
+	ErrWorkstationDispatchCanceled = errors.New("Workers workstation dispatch is canceled")
+	// ErrWorkstationDispatchAlreadyTerminal reports late cancellation after a
+	// non-cancelled terminal result was committed.
+	ErrWorkstationDispatchAlreadyTerminal = errors.New("Workers workstation dispatch is already terminal")
 )
 
 // WorkstationPoolStartRequest supplies the detached runtime bindings that are
@@ -89,7 +115,20 @@ type WorkstationDispatchRequest struct {
 type WorkstationDispatchResult struct {
 	DispatchID      string
 	WorkstationName string
+	TerminalOutcome WorkstationDispatchTerminalOutcome
 	Result          WorkResult
+}
+
+// WorkstationDispatchCancelRequest identifies one accepted dispatch.
+type WorkstationDispatchCancelRequest struct {
+	DispatchID string
+}
+
+// WorkstationDispatchCancelResult reports whether cancellation was newly
+// committed, already committed, or arrived after another terminal result.
+type WorkstationDispatchCancelResult struct {
+	DispatchID string
+	Outcome    WorkstationDispatchCancelOutcome
 }
 
 // RuntimeBuildRoleKind identifies the kind of role peers ask Workers to
@@ -185,4 +224,6 @@ type Service interface {
 	WorkstationRoute(context.Context, WorkstationRouteRequest) (WorkstationRouteResult, error)
 	// DispatchWorkstation executes through the binding for the requested route.
 	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
+	// CancelWorkstationDispatch cancels queued or running workstation work.
+	CancelWorkstationDispatch(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
 }

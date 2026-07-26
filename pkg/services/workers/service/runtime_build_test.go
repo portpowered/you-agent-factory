@@ -259,6 +259,58 @@ func TestServicePreservesCanonicalWorkstationSaturationThroughRoot(t *testing.T)
 	}
 }
 
+func TestServiceDelegatesExplicitWorkstationCancellationThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	executor := &rootBlockingExecutor{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	if _, err := root.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName:      "review",
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      executor,
+			Capacity:      1,
+			QueueCapacity: 1,
+		}}},
+	); err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+
+	completed := make(chan struct {
+		result workers.WorkstationDispatchResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := root.DispatchWorkstation(
+			context.Background(),
+			rootDispatchRequest("dispatch-cancel", "review"),
+		)
+		completed <- struct {
+			result workers.WorkstationDispatchResult
+			err    error
+		}{result: result, err: err}
+	}()
+	<-executor.started
+
+	cancelled, err := root.CancelWorkstationDispatch(
+		context.Background(),
+		workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-cancel"},
+	)
+	if err != nil || cancelled.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
+		t.Fatalf("CancelWorkstationDispatch() = %#v, %v", cancelled, err)
+	}
+	dispatch := <-completed
+	if !errors.Is(dispatch.err, workers.ErrWorkstationDispatchCanceled) ||
+		dispatch.result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled ||
+		dispatch.result.DispatchID != "dispatch-cancel" {
+		t.Fatalf("DispatchWorkstation() = %#v, %v", dispatch.result, dispatch.err)
+	}
+}
+
 func rootDispatchRequest(dispatchID string, workstationName string) workers.WorkstationDispatchRequest {
 	return workers.WorkstationDispatchRequest{
 		WorkstationName: workstationName,
