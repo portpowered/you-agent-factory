@@ -103,6 +103,10 @@ func writeGoalFailureInvalidTopology(t *testing.T) (string, string) {
 	return dir, factoryPath
 }
 
+// FND-12 captured CLI typed-failure baseline: invalid factory topology fails
+// before invocation with a structured ErrorResponse on stderr. Invoked by
+// `make fnd-12-cli-behavior-baselines`. Does not own PR #1262 CLI-manifest
+// baselines.
 func TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure(t *testing.T) {
 	dir, factoryPath := writeGoalFailureInvalidTopology(t)
 	result := executeGoalFailureProcess(t, "", dir, serviceedges.Edges{},

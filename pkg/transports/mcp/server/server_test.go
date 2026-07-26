@@ -30,6 +30,11 @@ func TestNewValidatesDirectDependencies(t *testing.T) {
 	}
 }
 
+// FND-12 captured MCP success baseline: initialize/list/call succeed over
+// stdio JSON-RPC with a catalog tool result. Invoked by
+// `make fnd-12-mcp-behavior-baselines`. Does not refresh or re-own PR #1262
+// docs/models/mcp CLI-manifest baselines.
+//
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
 	t.Parallel()
@@ -125,6 +130,10 @@ func TestServeStdioValidatesRuntimeInputsAndCancellation(t *testing.T) {
 	}
 }
 
+// FND-12 captured MCP typed-failure baseline: unknown tool / unsupported
+// method return protocol-visible JSON-RPC errors. Invoked by
+// `make fnd-12-mcp-behavior-baselines`. Does not refresh or re-own PR #1262
+// docs/models/mcp CLI-manifest baselines.
 func TestSDKProtocolErrors(t *testing.T) {
 	t.Parallel()
 	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
