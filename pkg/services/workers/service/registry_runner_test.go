@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -284,6 +285,38 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 	}
 }
 
+func TestInvocationRequestFromRunnerPreservesExecutionContext(t *testing.T) {
+	t.Parallel()
+
+	want := workers.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-context-1",
+			WorkstationName: "gemini-workstation",
+			ProjectID:       "project-context",
+			InputTokens:     []any{"dispatch-token"},
+		},
+		WorkerType:         "gemini-worker",
+		WorkstationType:    "model-workstation",
+		RunnerID:           workers.RunnerIDGemini,
+		ProjectID:          "project-context",
+		InputTokens:        []any{"request-token"},
+		Model:              "gemini-2.5-flash",
+		ModelProvider:      "gemini",
+		SystemPrompt:       "system context",
+		UserMessage:        "user context",
+		OutputSchema:       `{"type":"object"}`,
+		EnvVars:            map[string]string{"GEMINI_CONTEXT": "configured"},
+		ProcessEnvironment: []string{"PATH=/fixture", "INHERITED=present"},
+		Worktree:           "worktrees/gemini-context",
+		WorkingDirectory:   "C:/fixture/gemini-context",
+	}
+
+	got := invocationRequestFromRunner(want).Execution()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Execution() = %#v, want %#v", got, want)
+	}
+}
+
 func TestConductorInvocationRunnerBypassedWhenProviderOverrideDisablesRegistryDecorators(t *testing.T) {
 	t.Parallel()
 
@@ -431,14 +464,16 @@ func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *provid
 }
 
 type geminiConductorCommandRunner struct {
-	calls  int
-	result workers.CommandResult
+	calls   int
+	request workers.CommandRequest
+	result  workers.CommandResult
 }
 
 func (r *geminiConductorCommandRunner) Run(
-	context.Context,
-	workers.CommandRequest,
+	_ context.Context,
+	request workers.CommandRequest,
 ) (workers.CommandResult, error) {
 	r.calls++
+	r.request = request
 	return r.result, nil
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
@@ -117,14 +116,16 @@ func (i *Integration) skipPermissionsEnabled() bool {
 }
 
 func providerRequestFromInvocation(request inference.InvocationRequest) workerexecution.ProviderInferenceRequest {
-	return workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: request.InvocationID()},
-		ModelProvider: string(modelprovider.ProviderGemini),
-		Model:         request.Model(),
-		SystemPrompt:  request.SystemPrompt(),
-		UserMessage:   request.UserMessage(),
-		OutputSchema:  request.OutputSchema(),
+	providerRequest := request.Execution()
+	if providerRequest.Dispatch.DispatchID == "" {
+		providerRequest.Dispatch.DispatchID = request.InvocationID()
 	}
+	providerRequest.ModelProvider = string(modelprovider.ProviderGemini)
+	providerRequest.Model = request.Model()
+	providerRequest.SystemPrompt = request.SystemPrompt()
+	providerRequest.UserMessage = request.UserMessage()
+	providerRequest.OutputSchema = request.OutputSchema()
+	return providerRequest
 }
 
 func failureFromAdapterFacts(facts adapter.FailureFacts) inference.Failure {

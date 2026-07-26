@@ -59,6 +59,41 @@ func TestGeminiConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
+func TestGeminiConductorPreservesConfiguredEnvironmentAndWorkingDirectory(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderGemini,
+		"gemini-2.5-flash",
+	))
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+workingDirectory: .
+env:
+  GEMINI_CONTEXT_FIXTURE: configured
+---
+Test workstation.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini conductor context"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("gemini context answer COMPLETE"),
+	})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("terminal place tokens = %d, want 1 completed work item; listed=%#v", got, listed)
+	}
+	request := runner.LastRequest()
+	if request.WorkDir != support.ResolvedRuntimePath(dir, ".") {
+		t.Fatalf("work dir = %q, want configured factory working directory", request.WorkDir)
+	}
+	if !containsEnv(request.Env, "GEMINI_CONTEXT_FIXTURE=configured") {
+		t.Fatalf("command environment omitted configured Gemini context")
+	}
+}
+
 func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -106,6 +141,15 @@ func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 func containsArgPair(args []string, flag, value string) bool {
 	for index := 0; index+1 < len(args); index++ {
 		if args[index] == flag && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func containsEnv(env []string, expected string) bool {
+	for _, value := range env {
+		if value == expected {
 			return true
 		}
 	}

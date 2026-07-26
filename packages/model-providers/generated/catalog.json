@@ -241,7 +241,7 @@
         "sessionResume": false,
         "structuredOutput": false,
         "toolExecution": true,
-        "workingDirectory": false,
+        "workingDirectory": true,
         "worktree": false
       },
       "maximumResponseFidelityCapabilities": {

@@ -77,7 +77,6 @@ func validateOptionalCapabilities(req workerexecution.ProviderInferenceRequest) 
 		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
 		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
 		workerexecution.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
 		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {

@@ -17,7 +17,7 @@ maximumExecutionCapabilities:
   sessionResume: false
   structuredOutput: false
   toolExecution: true
-  workingDirectory: false
+  workingDirectory: true
   worktree: false
 maximumResponseFidelityCapabilities:
   nativeStreaming: false

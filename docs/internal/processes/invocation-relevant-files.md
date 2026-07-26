@@ -3,6 +3,16 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- A conductor-routed native integration must carry the complete cloned
+  `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
+  Keep provider selection and response delivery conductor-owned, while the
+  provider-owned command builder receives the original environment, process
+  environment, working directory, worktree, dispatch metadata, worker and
+  workstation metadata, project ID, and input tokens. Prove configured
+  environment and working-directory delivery through `root.BuildProcess` with
+  an injected command-runner edge; do not expose configured secrets in events
+  or assertion output.
+
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
