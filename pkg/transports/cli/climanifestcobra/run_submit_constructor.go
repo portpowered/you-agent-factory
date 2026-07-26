@@ -111,10 +111,25 @@ func buildRunnableRunSubmitCommand(
 	if err := registerRunSubmitLocalFlags(cmd, record, bindings); err != nil {
 		return nil, fmt.Errorf("build run/submit family command: %w", err)
 	}
+	relationships, err := planStandaloneCommandRelationships(record)
+	if err != nil {
+		return nil, fmt.Errorf("build run/submit family command: %w", err)
+	}
+	if err := projectCobraFlagGroupAnnotations(cmd, record.ID, relationships); err != nil {
+		return nil, fmt.Errorf("build run/submit family command: %w", err)
+	}
 	if err := registry.AttachHandlers(cmd, record.ID); err != nil {
 		return nil, fmt.Errorf("build run/submit family command: %w", err)
 	}
 	return cmd, nil
+}
+
+func planStandaloneCommandRelationships(record climanifest.Command) ([]plannedRelationship, error) {
+	arguments := make([]climanifest.Argument, 0, len(record.Arguments))
+	for _, argument := range record.Arguments {
+		arguments = append(arguments, argument)
+	}
+	return planRelationships([]plannedCommand{{record: record, arguments: arguments}}, 0)
 }
 
 func buildRunSubmitCommandFromRecord(record climanifest.Command) (*cobra.Command, error) {

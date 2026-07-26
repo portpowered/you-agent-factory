@@ -159,7 +159,13 @@ func validateRunInputPolicy(run Command) error {
 	if err := validateRunStaticServerSurface(run); err != nil {
 		return err
 	}
-	for _, relationshipID := range []string{"you.run.rel.selectors", "you.run.rel.work-invocation-input", "you.run.rel.recording"} {
+	for _, relationshipID := range []string{
+		"you.run.rel.selectors",
+		"you.run.rel.work-invocation-input",
+		"you.run.rel.recording",
+		"you.run.rel.quiet-json",
+		"you.run.rel.quiet-output",
+	} {
 		if _, ok := run.Relationships[relationshipID]; !ok {
 			return fmt.Errorf("command %q missing relationship %q", run.ID, relationshipID)
 		}

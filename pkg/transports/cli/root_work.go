@@ -449,6 +449,15 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return err
 	}
 	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+		return err
+	}
+	if err := runcli.ValidateInvocationOutputSelection(
+		resolvedConfig.SuppressDashboardRendering,
+		globals.json,
+		cmd.Flags().Changed("output"),
+	); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
 	if helpRequested(cmd) {

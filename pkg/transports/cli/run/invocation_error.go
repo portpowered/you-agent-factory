@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	InvocationErrorCodeFailed    = "RUN_INVOCATION_FAILED"
-	InvocationErrorCodeCancelled = "RUN_INVOCATION_CANCELLED"
-	InvocationErrorCodeTimeout   = "RUN_INVOCATION_TIMEOUT"
-	CurrentFactoryNotFoundCode   = "CURRENT_FACTORY_NOT_FOUND"
-	CurrentFactoryInvalidCode    = "CURRENT_FACTORY_INVALID"
+	InvocationErrorCodeFailed       = "RUN_INVOCATION_FAILED"
+	InvocationErrorCodeCancelled    = "RUN_INVOCATION_CANCELLED"
+	InvocationErrorCodeTimeout      = "RUN_INVOCATION_TIMEOUT"
+	CurrentFactoryNotFoundCode      = "CURRENT_FACTORY_NOT_FOUND"
+	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
+	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
+	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
 )
 
 type InvocationError struct {
@@ -83,7 +85,7 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 	switch code {
 	case CurrentFactoryNotFoundCode:
 		family = factoryapi.ErrorFamilyNotFound
-	case CurrentFactoryInvalidCode:
+	case CurrentFactoryInvalidCode, InvocationOutputConflictCode, InvocationOutputUnsupportedCode:
 		family = factoryapi.ErrorFamilyBadRequest
 	}
 	return factoryapi.ErrorResponse{
@@ -152,10 +154,26 @@ func normalizeInvocationOutputMode(raw string) (string, error) {
 	case InvocationOutputResponseStream:
 		return InvocationOutputResponseStream, nil
 	default:
-		return "", fmt.Errorf(
-			"unsupported --output value %q; supported values are primary (default) and response-stream",
-			trimmed,
-		)
+		return "", &InvocationError{
+			Code: InvocationOutputUnsupportedCode,
+			Message: fmt.Sprintf(
+				"unsupported --output value %q; supported values are primary (default) and response-stream",
+				trimmed,
+			),
+		}
+	}
+}
+
+// ValidateInvocationOutputSelection rejects competing public stdout selectors.
+// JSON plus response-stream is one accepted JSON-stream selection; quiet cannot
+// be combined with either global JSON or an explicit --output selection.
+func ValidateInvocationOutputSelection(quiet, jsonOutput, explicitOutput bool) error {
+	if !quiet || (!jsonOutput && !explicitOutput) {
+		return nil
+	}
+	return &InvocationError{
+		Code:    InvocationOutputConflictCode,
+		Message: "--quiet cannot be used with --json or --output",
 	}
 }
 
@@ -169,13 +187,13 @@ func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 	}
 	if cfg.Continuously {
 		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
+			Code:    InvocationOutputUnsupportedCode,
 			Message: "response-stream output is not supported with --continuously",
 		}
 	}
 	if !invocationMode {
 		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
+			Code:    InvocationOutputUnsupportedCode,
 			Message: "response-stream output requires a one-shot factory invocation such as you run --named or you run --factory with positional text or piped stdin",
 		}
 	}

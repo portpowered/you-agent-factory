@@ -105,6 +105,13 @@ primary-result behavior.
   generic validator rejects the invocation. Keep the relationship as the sole
   validation authority and prove the resolved handler or operation is not
   invoked for the conflicting input.
+- Run output selectors are validated immediately after the command's custom
+  manifest-backed flag parser and before Current Factory selection or
+  Initializer activation. Because `you run` deliberately owns that parsing
+  compatibility boundary, map output conflicts and unsupported values to their
+  manifest-declared `ErrorResponse` there; JSON plus `response-stream` is the
+  accepted JSON-stream mode, while quiet conflicts with global JSON and every
+  explicit `--output` selection.
 - An inherited generic flag reuses its ancestor's persistent Cobra record, so
   its projected metadata must match the declaration after normalizing only the
   stable input ID, scope, inheritance reference, and lifecycle item ID.

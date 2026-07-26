@@ -1,6 +1,7 @@
 package run
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -144,5 +145,41 @@ func TestValidateInvocationOutputMode_AllowsJSONResponseStream(t *testing.T) {
 	}, true)
 	if err != nil {
 		t.Fatalf("validateInvocationOutputMode with JSON: %v", err)
+	}
+}
+
+func TestValidateInvocationOutputSelection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		quiet          bool
+		jsonOutput     bool
+		explicitOutput bool
+		wantConflict   bool
+	}{
+		{name: "human"},
+		{name: "quiet", quiet: true},
+		{name: "single JSON", jsonOutput: true},
+		{name: "JSON response stream", jsonOutput: true, explicitOutput: true},
+		{name: "quiet and JSON", quiet: true, jsonOutput: true, wantConflict: true},
+		{name: "quiet and explicit output", quiet: true, explicitOutput: true, wantConflict: true},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateInvocationOutputSelection(test.quiet, test.jsonOutput, test.explicitOutput)
+			if !test.wantConflict {
+				if err != nil {
+					t.Fatalf("ValidateInvocationOutputSelection() error = %v", err)
+				}
+				return
+			}
+			var invocationErr *InvocationError
+			if !errors.As(err, &invocationErr) || invocationErr.Code != InvocationOutputConflictCode {
+				t.Fatalf("error = %#v, want %s InvocationError", err, InvocationOutputConflictCode)
+			}
+		})
 	}
 }

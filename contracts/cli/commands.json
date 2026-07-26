@@ -11292,6 +11292,34 @@
               }
             ]
           },
+          "you.run.rel.quiet-json": {
+            "id": "you.run.rel.quiet-json",
+            "kind": "conflict",
+            "participants": [
+              {
+                "type": "flag",
+                "id": "you.run.flag.quiet"
+              },
+              {
+                "type": "flag",
+                "id": "you.run.flag.json"
+              }
+            ]
+          },
+          "you.run.rel.quiet-output": {
+            "id": "you.run.rel.quiet-output",
+            "kind": "conflict",
+            "participants": [
+              {
+                "type": "flag",
+                "id": "you.run.flag.quiet"
+              },
+              {
+                "type": "flag",
+                "id": "you.run.flag.output"
+              }
+            ]
+          },
           "you.run.rel.site-server": {
             "id": "you.run.rel.site-server",
             "kind": "dependency",
