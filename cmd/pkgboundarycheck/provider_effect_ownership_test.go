@@ -39,6 +39,38 @@ type Provider interface {
 	}
 }
 
+func TestRunRejectsProvidersSubpackageDurableProviderEffectOwner(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/providers/catalog/contract.go", `package catalog
+
+import "context"
+
+// Deliberate fixture: only the Providers Execution leaf may declare this port.
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want non-Execution Providers provider-effect ownership rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited durable provider-effect ownership",
+		"pkg/services/providers/catalog",
+		"canonical owner: " + providersLeafEffectContractPackage,
+		"Providers Execution leaf",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunAllowsEdgesAggregatingProvidersLeafEffectContract(t *testing.T) {
 	t.Parallel()
 

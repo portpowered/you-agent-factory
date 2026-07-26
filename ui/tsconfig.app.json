@@ -2,7 +2,6 @@
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
       "@you-agent-factory/components": ["packages/components/src/index.ts"],

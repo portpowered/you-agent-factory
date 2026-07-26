@@ -151,6 +151,10 @@ func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFind
 }
 
 func isDurableProvidersLeafOwner(packagePath string) bool {
+	return packagePath == providersLeafEffectContractPackage
+}
+
+func isProvidersServicePackage(packagePath string) bool {
 	return packagePath == strings.TrimSuffix(providersServiceRootPrefix, "/") ||
 		strings.HasPrefix(packagePath, providersServiceRootPrefix)
 }
@@ -208,7 +212,7 @@ func competingProviderCatalogOrExecutionAbstraction(
 	if typed.Name == nil {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if isDurableProvidersLeafOwner(packagePath) || isAbsorbedWorkersProviderSurface(packagePath) {
+	if isProvidersServicePackage(packagePath) || isAbsorbedWorkersProviderSurface(packagePath) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	if !isCompetingProviderAbstractionPackage(packagePath) {
