@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
 
 type recordingRuntimeAssembly struct {
@@ -34,6 +35,71 @@ func (spy *inertConstructionSpy) Run(
 ) (workers.CommandResult, error) {
 	spy.commandCalls++
 	return workers.CommandResult{}, errors.New("unexpected runner execution")
+}
+
+func TestServiceDelegatesWorkstationLifecycleThroughWorkersRoot(t *testing.T) {
+	t.Parallel()
+
+	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	request := workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{
+		{RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
+		{RoleName: "implement", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
+	}}
+
+	started, err := root.StartWorkstationPool(context.Background(), request)
+	if err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+	if started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
+		t.Fatalf("StartWorkstationPool() outcome = %q, want STARTED", started.Outcome)
+	}
+	route, err := root.WorkstationRoute(
+		context.Background(),
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	)
+	if err != nil {
+		t.Fatalf("WorkstationRoute() error = %v", err)
+	}
+	if !route.Available || route.WorkstationName != "review" {
+		t.Fatalf("WorkstationRoute() = %#v", route)
+	}
+
+	stopped, err := root.StopWorkstationPool(context.Background())
+	if err != nil {
+		t.Fatalf("StopWorkstationPool() error = %v", err)
+	}
+	if stopped.Outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
+		t.Fatalf("StopWorkstationPool() outcome = %q, want STOPPED", stopped.Outcome)
+	}
+	if _, err := root.WorkstationRoute(
+		context.Background(),
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
+		t.Fatalf("WorkstationRoute() after stop error = %v, want ErrWorkstationPoolStopped", err)
+	}
+}
+
+func TestServiceWorkstationLifecyclePreservesTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	var unavailable workers.Service = (*Service)(nil)
+	if _, err := unavailable.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{},
+	); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
+		t.Fatalf("nil StartWorkstationPool() error = %v, want ErrWorkstationPoolUnavailable", err)
+	}
+
+	root := &Service{workstations: workstationswire.NewService()}
+	if _, err := root.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName: "worker",
+			RoleKind: workers.RuntimeBuildRoleKindWorker,
+		}}},
+	); !errors.Is(err, workers.ErrInvalidWorkstationPoolStart) {
+		t.Fatalf("worker binding start error = %v, want ErrInvalidWorkstationPoolStart", err)
+	}
 }
 
 func (assembly *recordingRuntimeAssembly) Build(

@@ -13,6 +13,57 @@ type ModelInvoker interface {
 	InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error)
 }
 
+// WorkstationPoolLifecycleOutcome describes an idempotent workstation-pool
+// lifecycle transition.
+type WorkstationPoolLifecycleOutcome string
+
+const (
+	WorkstationPoolLifecycleOutcomeStarted        WorkstationPoolLifecycleOutcome = "STARTED"
+	WorkstationPoolLifecycleOutcomeAlreadyRunning WorkstationPoolLifecycleOutcome = "ALREADY_RUNNING"
+	WorkstationPoolLifecycleOutcomeStopped        WorkstationPoolLifecycleOutcome = "STOPPED"
+	WorkstationPoolLifecycleOutcomeAlreadyStopped WorkstationPoolLifecycleOutcome = "ALREADY_STOPPED"
+)
+
+var (
+	// ErrInvalidWorkstationPoolStart reports malformed workstation bindings.
+	ErrInvalidWorkstationPoolStart = errors.New("invalid Workers workstation-pool start request")
+	// ErrWorkstationPoolUnavailable reports a pool that has not been started.
+	ErrWorkstationPoolUnavailable = errors.New("Workers workstation pool is unavailable")
+	// ErrWorkstationPoolStopped reports a terminal pool that cannot be restarted.
+	ErrWorkstationPoolStopped = errors.New("Workers workstation pool is stopped")
+	// ErrUnknownWorkstationRoute reports a route outside the started snapshot.
+	ErrUnknownWorkstationRoute = errors.New("Workers workstation route is unknown")
+)
+
+// WorkstationPoolStartRequest supplies the detached runtime bindings that are
+// available to the workstation pool. Only workstation bindings are accepted.
+type WorkstationPoolStartRequest struct {
+	Bindings []AssembledRuntimeBinding
+}
+
+// WorkstationPoolStartResult reports whether start activated the pool or
+// observed an already-running pool.
+type WorkstationPoolStartResult struct {
+	Outcome WorkstationPoolLifecycleOutcome
+}
+
+// WorkstationPoolStopResult reports whether stop performed the terminal
+// transition or observed an already-stopped pool.
+type WorkstationPoolStopResult struct {
+	Outcome WorkstationPoolLifecycleOutcome
+}
+
+// WorkstationRouteRequest names a configured workstation route.
+type WorkstationRouteRequest struct {
+	WorkstationName string
+}
+
+// WorkstationRouteResult reports availability in the active route snapshot.
+type WorkstationRouteResult struct {
+	WorkstationName string
+	Available       bool
+}
+
 // RuntimeBuildRoleKind identifies the kind of role peers ask Workers to
 // assemble during a runtime build.
 type RuntimeBuildRoleKind string
@@ -91,4 +142,10 @@ type Service interface {
 	// BuildRuntime assembles detached execution bindings from explicit
 	// Workers-owned inputs.
 	BuildRuntime(context.Context, RuntimeBuildRequest) (RuntimeBuildResult, error)
+	// StartWorkstationPool activates one immutable workstation-route snapshot.
+	StartWorkstationPool(context.Context, WorkstationPoolStartRequest) (WorkstationPoolStartResult, error)
+	// StopWorkstationPool permanently stops workstation admission and activity.
+	StopWorkstationPool(context.Context) (WorkstationPoolStopResult, error)
+	// WorkstationRoute reports whether a route belongs to the active snapshot.
+	WorkstationRoute(context.Context, WorkstationRouteRequest) (WorkstationRouteResult, error)
 }
