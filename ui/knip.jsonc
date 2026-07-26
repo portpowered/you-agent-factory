@@ -4,9 +4,13 @@
     "src/main.tsx",
     "src/**/*.test.{ts,tsx,mjs}",
     "src/**/*.stories.tsx",
+    "src/testing/bun/component.setup.ts",
+    "src/testing/mocks/*.ts",
+    "src/testing/vitest-monaco-editor-mock.tsx",
     "src/testing/vitest.setup.ts",
     "src/vite-env.d.ts",
     "integration/**/*.test.mjs",
+    "vitest.lanes.config.ts",
     "vitest.storybook.config.ts"
   ],
   "project": [
