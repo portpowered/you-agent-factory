@@ -182,6 +182,82 @@ type Provider = leaf.Provider
 	}
 }
 
+func TestRunRejectsEdgesRedefiningImportedProvidersLeafEffectContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name              string
+		importDeclaration string
+		aggregatedType    string
+		localDeclaration  string
+	}{
+		{
+			name:              "defined selector type",
+			importDeclaration: `import leaf "github.com/portpowered/infinite-you/` + providersLeafEffectContractPackage + `"`,
+			aggregatedType:    "leaf.Provider",
+			localDeclaration:  "type LocalProvider leaf.Provider",
+		},
+		{
+			name:              "embedded canonical interface",
+			importDeclaration: `import leaf "github.com/portpowered/infinite-you/` + providersLeafEffectContractPackage + `"`,
+			aggregatedType:    "leaf.Provider",
+			localDeclaration: `type LocalProvider interface {
+	leaf.Provider
+}`,
+		},
+		{
+			name:              "defined dot-imported type",
+			importDeclaration: `import . "github.com/portpowered/infinite-you/` + providersLeafEffectContractPackage + `"`,
+			aggregatedType:    "Provider",
+			localDeclaration:  "type LocalProvider Provider",
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
+
+import "context"
+
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+			writeGoSourceFile(
+				t,
+				repoRoot,
+				"pkg/services/edges/definition.go",
+				"package edges\n\n"+
+					testCase.importDeclaration+"\n\n"+
+					"type Edges struct {\n\tProviderOverride "+testCase.aggregatedType+"\n}\n\n"+
+					testCase.localDeclaration+"\n",
+			)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want edges redefining Providers leaf effect contract rejected")
+			}
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited provider-effect contract redefinition",
+				"pkg/services/edges",
+				"LocalProvider",
+				"aggregate the exact Providers leaf effect contract unchanged",
+				"canonical owner: " + providersLeafEffectContractPackage,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestRunAllowsEdgesAliasingUnrelatedProviderType(t *testing.T) {
 	t.Parallel()
 
@@ -201,6 +277,14 @@ type Edges struct{}
 // Deliberate fixture: selector spelling is insufficient; this alias does not
 // resolve to the canonical Providers Execution leaf.
 type Provider = credentials.Provider
+
+// Deliberate fixtures: the defined and embedded forms are also allowed when
+// their import does not resolve to the canonical Providers Execution leaf.
+type LocalProvider credentials.Provider
+
+type EmbeddedProvider interface {
+	credentials.Provider
+}
 `)
 
 	stderr := &bytes.Buffer{}

@@ -82,7 +82,10 @@ primary-result behavior.
   ownership belongs to the Providers Execution leaf
   (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
   encodes that ownership with deliberate fixtures, while Workers continues to
-  host the live declaration until later Providers packets land. Catalog
+  host the live declaration until later Providers packets land. The checker
+  resolves imports before classifying aliases, defined selector types, or
+  interfaces embedding the canonical leaf, so local type names and valid Go
+  declaration forms cannot create a second edges-owned contract. Catalog
   enumeration and one-attempt execution share one Providers-owned source of
   truth that absorbs Standardized Providers protocol/registry/open-config/testkit;
   the checker rejects competing provider catalog, registry, conductor, or

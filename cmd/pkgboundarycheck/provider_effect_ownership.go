@@ -195,7 +195,7 @@ func isProvidersServicePackage(packagePath string) bool {
 
 func isProviderEffectPortDeclaration(typed *ast.TypeSpec, imports map[string]string) bool {
 	return declaresProviderEffectMethod(typed, imports) ||
-		aliasesProvidersLeafEffectContract(typed, imports)
+		redefinesProvidersLeafEffectContract(typed, imports)
 }
 
 func edgesProviderEffectRedefinition(
@@ -270,16 +270,42 @@ func fieldCount(fields *ast.FieldList) int {
 	return count
 }
 
-func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec, imports map[string]string) bool {
-	if typed.Name == nil || !typed.Assign.IsValid() {
+func redefinesProvidersLeafEffectContract(typed *ast.TypeSpec, imports map[string]string) bool {
+	if typed.Name == nil {
 		return false
 	}
-	selector, ok := typed.Type.(*ast.SelectorExpr)
-	if !ok {
+	if referencesProvidersLeafEffectContract(typed.Type, imports) {
+		return true
+	}
+	interfaceType, ok := typed.Type.(*ast.InterfaceType)
+	if !ok || interfaceType.Methods == nil {
+		return false
+	}
+	for _, method := range interfaceType.Methods.List {
+		if len(method.Names) == 0 &&
+			referencesProvidersLeafEffectContract(method.Type, imports) {
+			return true
+		}
+	}
+	return false
+}
+
+func referencesProvidersLeafEffectContract(expression ast.Expr, imports map[string]string) bool {
+	parenthesized, ok := expression.(*ast.ParenExpr)
+	if ok {
+		return referencesProvidersLeafEffectContract(parenthesized.X, imports)
+	}
+	identifier, ok := expression.(*ast.Ident)
+	if ok {
+		return identifier.Name == providerEffectPortTypeName &&
+			imports["."] == providersLeafEffectContractImport
+	}
+	selector, ok := expression.(*ast.SelectorExpr)
+	if !ok || selector.Sel == nil || selector.Sel.Name != providerEffectPortTypeName {
 		return false
 	}
 	packageName, ok := selector.X.(*ast.Ident)
-	if !ok || selector.Sel == nil || selector.Sel.Name != providerEffectPortTypeName {
+	if !ok {
 		return false
 	}
 	return imports[packageName.Name] == providersLeafEffectContractImport
@@ -296,7 +322,7 @@ func importedPackagePaths(file *ast.File) map[string]string {
 		if specification.Name != nil {
 			packageName = specification.Name.Name
 		}
-		if packageName == "_" || packageName == "." {
+		if packageName == "_" {
 			continue
 		}
 		imports[packageName] = importPath
