@@ -6,20 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
-
-// nextIssuerID gives each process-local registry a distinct token namespace.
-// The counter is hashed before it enters a reference, so callers cannot select
-// a registry or scope by its allocation position.
-var nextIssuerID atomic.Uint64
-
-// knownIssuers distinguishes references issued by another process-scoped
-// registry from arbitrary unknown input without exposing issuer identity.
-var knownIssuers sync.Map
 
 type service struct {
 	mu           sync.RWMutex
@@ -31,12 +21,9 @@ type service struct {
 var _ runtimescopes.Service = (*service)(nil)
 
 // New constructs an inert, process-local Runtime Scopes registry.
-func New() runtimescopes.Service {
-	issuerID := nextIssuerID.Add(1)
-	issuerToken := opaqueToken("issuer", issuerID)
-	knownIssuers.Store(issuerToken, struct{}{})
+func New(issuerID string) runtimescopes.Service {
 	return &service{
-		issuerToken:  issuerToken,
+		issuerToken:  opaqueToken("issuer", issuerID),
 		liveBindings: make(map[runtimescopes.Reference]models.RuntimeBinding),
 	}
 }
@@ -54,7 +41,8 @@ func (s *service) Open(binding models.RuntimeBinding) (runtimescopes.Reference, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextScopeID++
-	ref := runtimescopes.Reference(s.issuerToken + "." + opaqueToken("scope", s.nextScopeID))
+	scopeIdentity := fmt.Sprintf("%s:%d", s.issuerToken, s.nextScopeID)
+	ref := runtimescopes.Reference(s.issuerToken + "." + opaqueToken("scope", scopeIdentity))
 	s.liveBindings[ref] = detachedBinding(binding.CacheDirectory, snapshot)
 	return ref, nil
 }
@@ -94,12 +82,11 @@ func (s *service) Close(ref runtimescopes.Reference) error {
 }
 
 func (s *service) isForeign(ref runtimescopes.Reference) bool {
-	issuerToken, _, ok := strings.Cut(string(ref), ".")
-	if !ok || issuerToken == s.issuerToken {
+	issuerToken, scopeToken, ok := strings.Cut(string(ref), ".")
+	if !ok || !validToken(issuerToken) || !validToken(scopeToken) {
 		return false
 	}
-	_, known := knownIssuers.Load(issuerToken)
-	return known
+	return issuerToken != s.issuerToken
 }
 
 func detachedBinding(cacheDirectory string, config *models.RuntimeConfig) models.RuntimeBinding {
@@ -125,7 +112,15 @@ func cloneRuntimeConfig(config *models.RuntimeConfig) *models.RuntimeConfig {
 	return &cloned
 }
 
-func opaqueToken(namespace string, id uint64) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("models-runtime-scope:%s:%d", namespace, id)))
+func opaqueToken(namespace string, identity string) string {
+	sum := sha256.Sum256([]byte("models-runtime-scope:" + namespace + ":" + identity))
 	return hex.EncodeToString(sum[:16])
+}
+
+func validToken(value string) bool {
+	if len(value) != 32 || value == strings.Repeat("0", 32) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }

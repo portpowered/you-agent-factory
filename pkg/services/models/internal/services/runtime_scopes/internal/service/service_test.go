@@ -2,6 +2,10 @@ package service_test
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -28,7 +32,7 @@ func TestOpenReturnsOpaqueReferenceThatResolvesDetachedBinding(t *testing.T) {
 		}},
 		Resources: []models.RuntimeResource{{ID: "model-resource", Capacity: 2}},
 	}
-	service := runtimescopeswire.NewService()
+	service := newService(t, "open-resolve")
 	ref, err := service.Open(models.RuntimeBinding{
 		CacheDirectory: "cache",
 		RuntimeConfig:  func() *models.RuntimeConfig { return config },
@@ -65,7 +69,7 @@ func TestOpenReturnsOpaqueReferenceThatResolvesDetachedBinding(t *testing.T) {
 func TestOpenRejectsInvalidBindingWithoutIssuingReference(t *testing.T) {
 	t.Parallel()
 
-	service := runtimescopeswire.NewService()
+	service := newService(t, "invalid-binding")
 	ref, err := service.Open(models.RuntimeBinding{CacheDirectory: "cache"})
 	if !errors.Is(err, models.ErrInvalidRuntimeBinding) {
 		t.Fatalf("Open error = %v, want ErrInvalidRuntimeBinding", err)
@@ -83,7 +87,7 @@ func TestConstructionAndOpenOnlySnapshotTheAcceptedBinding(t *testing.T) {
 	t.Parallel()
 
 	loaderCalls := 0
-	service := runtimescopeswire.NewService()
+	service := newService(t, "inert-construction")
 	if service == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -114,7 +118,7 @@ func TestConstructionAndOpenOnlySnapshotTheAcceptedBinding(t *testing.T) {
 func TestCloseInvalidatesOnlyTheSelectedScope(t *testing.T) {
 	t.Parallel()
 
-	service := runtimescopeswire.NewService()
+	service := newService(t, "close-isolation")
 	firstRef := openBinding(t, service, "first")
 	secondRef := openBinding(t, service, "second")
 
@@ -140,7 +144,7 @@ func TestCloseInvalidatesOnlyTheSelectedScope(t *testing.T) {
 func TestCloseRejectsMalformedAndUnknownReferencesWithoutChangingLiveScopes(t *testing.T) {
 	t.Parallel()
 
-	service := runtimescopeswire.NewService()
+	service := newService(t, "unknown-references")
 	liveRef := openBinding(t, service, "live")
 
 	for _, ref := range []runtimescopes.Reference{
@@ -168,8 +172,8 @@ func TestCloseRejectsMalformedAndUnknownReferencesWithoutChangingLiveScopes(t *t
 func TestForeignReferenceIsRejectedWithoutAffectingEitherService(t *testing.T) {
 	t.Parallel()
 
-	issuer := runtimescopeswire.NewService()
-	receiver := runtimescopeswire.NewService()
+	issuer := newService(t, "foreign-issuer")
+	receiver := newService(t, "foreign-receiver")
 	issuerRef := openBinding(t, issuer, "issuer")
 	receiverRef := openBinding(t, receiver, "receiver")
 
@@ -187,8 +191,8 @@ func TestForeignReferenceIsRejectedWithoutAffectingEitherService(t *testing.T) {
 func TestEqualBindingsReceiveDistinctInstanceBoundReferences(t *testing.T) {
 	t.Parallel()
 
-	first := runtimescopeswire.NewService()
-	second := runtimescopeswire.NewService()
+	first := newService(t, "equal-first")
+	second := newService(t, "equal-second")
 	firstRef := openBinding(t, first, "equal")
 	secondRef := openBinding(t, second, "equal")
 
@@ -204,6 +208,59 @@ func TestEqualBindingsReceiveDistinctInstanceBoundReferences(t *testing.T) {
 
 	assertFactoryDirectory(t, first, firstRef, "equal")
 	assertFactoryDirectory(t, second, secondRef, "equal")
+}
+
+func TestReferenceFromIndependentProcessCannotResolveOrCloseLocalScope(t *testing.T) {
+	local := newService(t, "subprocess-parent")
+	localRef := openBinding(t, local, "local")
+
+	command := exec.Command(os.Args[0], "-test.run=^TestRuntimeScopesSubprocessHelper$")
+	command.Env = append(os.Environ(), "RUNTIME_SCOPES_SUBPROCESS=1")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run Runtime Scopes subprocess helper: %v", err)
+	}
+	foreignRef := runtimescopes.Reference(strings.TrimSpace(string(output)))
+	if foreignRef == "" {
+		t.Fatal("subprocess returned an empty reference")
+	}
+	if foreignRef == localRef {
+		t.Fatalf("independent processes issued equal references %q", foreignRef)
+	}
+	if _, err := local.Resolve(foreignRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("Resolve subprocess reference error = %v, want ErrScopeForeign", err)
+	}
+	if err := local.Close(foreignRef); !errors.Is(err, runtimescopes.ErrScopeForeign) {
+		t.Fatalf("Close subprocess reference error = %v, want ErrScopeForeign", err)
+	}
+	assertFactoryDirectory(t, local, localRef, "local")
+}
+
+func TestRuntimeScopesSubprocessHelper(t *testing.T) {
+	if os.Getenv("RUNTIME_SCOPES_SUBPROCESS") != "1" {
+		t.Skip("subprocess helper")
+	}
+	service := newService(t, "subprocess-child")
+	fmt.Print(openBinding(t, service, "foreign"))
+	os.Exit(0)
+}
+
+func TestConstructionRejectsMissingIssuerIdentity(t *testing.T) {
+	if service, err := runtimescopeswire.NewService(nil); err == nil || service != nil {
+		t.Fatalf("NewService(nil) = (%v, %v), want nil service and error", service, err)
+	}
+	if service, err := runtimescopeswire.NewService(func() string { return "  " }); err == nil || service != nil {
+		t.Fatalf("NewService(empty identity) = (%v, %v), want nil service and error", service, err)
+	}
+}
+
+func newService(t *testing.T, issuerID string) runtimescopes.Service {
+	t.Helper()
+	service, err := runtimescopeswire.NewService(func() string { return issuerID })
+	if err != nil {
+		t.Fatalf("NewService(%q): %v", issuerID, err)
+	}
+	return service
 }
 
 func openBinding(t *testing.T, service runtimescopes.Service, factoryDirectory string) runtimescopes.Reference {

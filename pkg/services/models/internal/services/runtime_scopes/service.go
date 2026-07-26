@@ -19,6 +19,11 @@ var ErrScopeForeign = errors.New("models runtime scope is foreign")
 // Reference is an opaque identifier issued by a Runtime Scopes service.
 type Reference string
 
+// IssuerIDGenerator supplies a collision-resistant identity for one Runtime
+// Scopes service instance. The composition boundary owns this dependency so
+// the registry does not use time, randomness, environment, or global state.
+type IssuerIDGenerator func() string
+
 // Service opens, resolves, and closes detached Models runtime bindings without
 // constructing or activating Models runtime collaborators.
 type Service interface {

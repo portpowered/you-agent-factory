@@ -8,7 +8,6 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
-	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
 
 func TestConcurrentOpenAndResolvePreserveScopeIsolation(t *testing.T) {
@@ -19,7 +18,7 @@ func TestConcurrentOpenAndResolvePreserveScopeIsolation(t *testing.T) {
 		resolveIterations = 20
 	)
 
-	service := runtimescopeswire.NewService()
+	service := newService(t, "concurrent-open")
 	refs := make([]runtimescopes.Reference, scopeCount)
 	errCh := make(chan error, scopeCount*resolveIterations)
 
@@ -100,7 +99,7 @@ func TestConcurrentResolveAndCloseReturnOnlyLiveOrStaleOutcomes(t *testing.T) {
 		resolveIterations = 50
 	)
 
-	service := runtimescopeswire.NewService()
+	service := newService(t, "concurrent-close")
 	closingRef := openBinding(t, service, "closing")
 	liveRef := openBinding(t, service, "live")
 	start := make(chan struct{})
