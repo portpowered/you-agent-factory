@@ -7,9 +7,9 @@ import type {
   DashboardWorkstationRequest,
 } from "../src/api/dashboard";
 import type { FactoryEvent } from "../src/api/events";
-import { resetSelectionHistoryStore } from "../src/features/current-selection/base/public";
+import { resetSelectionHistoryStore } from "../src/features/current-selection/base/state/selectionHistoryStore";
 import { resetDashboardSessionStore } from "../src/features/dashboard/state/dashboardSessionStore";
-import { AppNotificationToaster } from "../src/features/notifications/public";
+import { AppNotificationToaster } from "../src/features/notifications/components/app-notification-toaster";
 import type { WorldState } from "../src/features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
 import { DashboardSessionTestProvider } from "../src/testing/dashboard-session-test-provider";
