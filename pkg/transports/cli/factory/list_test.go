@@ -15,6 +15,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -100,6 +101,76 @@ func TestList_RendersEffectiveCatalogMetadataDiagnosticsAndPackagedLocation(t *t
 	if entries[1].FactoryDirectory != absentFactoryLocation ||
 		entries[1].InvocationExample != "" {
 		t.Fatalf("packaged metadata = %#v", entries[1])
+	}
+}
+
+func TestListAndFactoryNameProjectionHaveEffectiveCatalogParity(t *testing.T) {
+	result := factorydefinitions.ListEffectiveFactoriesResult{
+		Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
+			{
+				Name: "@you/zeta",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Packaged Factory"},
+				},
+			},
+			{
+				Name: "alpha",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Project Alpha"},
+				},
+			},
+			{
+				Name: "middle-global",
+				Definition: &factorydefinitions.FactoryConfig{
+					Description: &factorydefinitions.NameValueConfig{Value: "Global Factory"},
+				},
+			},
+		},
+		Diagnostics: []factorydefinitions.EffectiveFactoryCatalogDiagnostic{{
+			Source:  factorydefinitions.EffectiveFactoryCatalogSourceGlobal,
+			Name:    "broken",
+			Code:    factorydefinitions.EffectiveFactoryCatalogDiagnosticMalformed,
+			Message: "Factory definition is malformed",
+		}},
+	}
+	catalog := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return result, nil
+	}
+	readCurrent := func(string) (string, error) { return "", fs.ErrNotExist }
+
+	var output bytes.Buffer
+	if err := List(catalog, readCurrent, ListConfig{
+		Context: context.Background(), ProjectRoot: "project-root", GlobalRoot: "global-root",
+		JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	var rows []ListEntry
+	if err := json.Unmarshal(output.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list output: %v", err)
+	}
+
+	projected, err := completionprojection.ProjectFactoryNames(context.Background(), result)
+	if err != nil {
+		t.Fatalf("ProjectFactoryNames() error = %v", err)
+	}
+	if len(projected.Candidates) != len(rows) {
+		t.Fatalf("candidate count = %d, list row count = %d", len(projected.Candidates), len(rows))
+	}
+	for index := range rows {
+		candidate := projected.Candidates[index]
+		if candidate.Value != rows[index].Name ||
+			candidate.Description != rows[index].Description {
+			t.Fatalf(
+				"candidate %d = %#v, list row = %#v",
+				index,
+				candidate,
+				rows[index],
+			)
+		}
 	}
 }
 

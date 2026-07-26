@@ -16,7 +16,9 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 )
 
 func TestBuildProcessFactoryListProjectsEffectiveCatalogWithoutRuntimeOrWrites(t *testing.T) {
@@ -128,6 +130,40 @@ func assertRootEffectiveList(
 	if !strings.Contains(diagnostics, "global broken (malformed)") ||
 		strings.Contains(diagnostics, "do-not-leak") {
 		t.Fatalf("diagnostics = %q, want safe malformed-entry context", diagnostics)
+	}
+	assertRootFactoryNameProjectionParity(t, entries)
+}
+
+func assertRootFactoryNameProjectionParity(t *testing.T, entries []rootListEntry) {
+	t.Helper()
+	catalog := factorydefinitions.ListEffectiveFactoriesResult{
+		Entries: make([]factorydefinitions.EffectiveFactoryCatalogEntry, len(entries)),
+	}
+	for index, entry := range entries {
+		catalog.Entries[index] = factorydefinitions.EffectiveFactoryCatalogEntry{
+			Name: entry.Name,
+			Definition: &factorydefinitions.FactoryConfig{
+				Description: &factorydefinitions.NameValueConfig{Value: entry.Description},
+			},
+		}
+	}
+	projected, err := completionprojection.ProjectFactoryNames(context.Background(), catalog)
+	if err != nil {
+		t.Fatalf("ProjectFactoryNames() error = %v", err)
+	}
+	if len(projected.Candidates) != len(entries) {
+		t.Fatalf("projected candidates = %d, root-built list entries = %d", len(projected.Candidates), len(entries))
+	}
+	for index, candidate := range projected.Candidates {
+		if candidate.Value != entries[index].Name ||
+			candidate.Description != entries[index].Description {
+			t.Fatalf(
+				"projected candidate %d = %#v, root-built list entry = %#v",
+				index,
+				candidate,
+				entries[index],
+			)
+		}
 	}
 }
 
