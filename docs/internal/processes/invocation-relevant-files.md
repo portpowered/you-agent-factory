@@ -89,7 +89,11 @@ primary-result behavior.
   execution-contract abstractions outside Providers and the absorbed Workers
   `provider/` migration-debt surfaces. `pkg/services/edges`
   may aggregate the exact leaf effect contract unchanged and must not redefine
-  or alias it. Invoke implementations
+  or alias it. The checker recognizes the effect by its `Infer` method
+  signature rather than a local type name and resolves aliases through the
+  declaring file's imports, so unrelated `Provider` interfaces and aliases
+  remain valid. Prove ownership behavior with deliberate `run()` fixtures
+  rather than package-local source inventories. Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
   result agreement, and exactly-once close before they reach orchestration.

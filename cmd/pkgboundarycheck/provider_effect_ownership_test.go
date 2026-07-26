@@ -27,7 +27,7 @@ type Provider interface {
 	}
 }
 
-func TestRunRejectsNonProvidersDurableProviderEffectOwner(t *testing.T) {
+func TestRunRejectsRenamedNonProvidersDurableProviderEffectOwner(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -36,8 +36,8 @@ func TestRunRejectsNonProvidersDurableProviderEffectOwner(t *testing.T) {
 import "context"
 
 // Deliberate fixture: a non-Providers package claims durable ownership of the
-// provider inference effect port.
-type Provider interface {
+// provider inference effect port under a different local type name.
+type InferencePort interface {
 	Infer(context.Context, string) (string, error)
 }
 `)
@@ -51,12 +51,32 @@ type Provider interface {
 	for _, want := range []string{
 		"prohibited durable provider-effect ownership",
 		"pkg/services/factory_runtime/providereffect",
+		"InferencePort",
 		"canonical owner: " + providersLeafEffectContractPackage,
 		"Providers Execution leaf",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestRunAllowsUnrelatedProviderInterface(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/platform/credentials/provider.go", `package credentials
+
+// Deliberate fixture: the common Provider name alone does not make this an
+// inference/process effect port.
+type Provider interface {
+	Get(string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want unrelated Provider interface allowed; stderr=%q", err, stderr.String())
 	}
 }
 
@@ -159,6 +179,33 @@ type Provider = leaf.Provider
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestRunAllowsEdgesAliasingUnrelatedProviderType(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/platform/credentials/provider.go", `package credentials
+
+type Provider interface {
+	Get(string) (string, error)
+}
+`)
+	writeGoSourceFile(t, repoRoot, "pkg/services/edges/definition.go", `package edges
+
+import credentials "github.com/portpowered/infinite-you/pkg/platform/credentials"
+
+type Edges struct{}
+
+// Deliberate fixture: selector spelling is insufficient; this alias does not
+// resolve to the canonical Providers Execution leaf.
+type Provider = credentials.Provider
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want unrelated Provider alias allowed; stderr=%q", err, stderr.String())
 	}
 }
 

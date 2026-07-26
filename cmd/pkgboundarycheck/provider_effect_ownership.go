@@ -7,8 +7,10 @@ import (
 	"go/token"
 	"io"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -60,7 +62,6 @@ type providerEffectOwnershipFinding struct {
 }
 
 func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFinding, error) {
-	var findings []providerEffectOwnershipFinding
 	scanRoot := filepath.Join(repoRoot, "pkg")
 	if _, err := os.Stat(scanRoot); err != nil {
 		if os.IsNotExist(err) {
@@ -69,70 +70,13 @@ func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFind
 		return nil, fmt.Errorf("stat provider-effect scan root: %w", err)
 	}
 
+	var findings []providerEffectOwnershipFinding
 	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if entry.Name() == "testdata" || entry.Name() == "vendor" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-		relative, err := filepath.Rel(repoRoot, path)
+		fileFindings, err := scanProviderEffectOwnershipFile(repoRoot, path, entry, walkErr)
 		if err != nil {
 			return err
 		}
-		relative = filepath.ToSlash(relative)
-		packagePath := filepath.ToSlash(filepath.Dir(relative))
-
-		fileSet := token.NewFileSet()
-		file, err := parser.ParseFile(fileSet, path, nil, 0)
-		if err != nil {
-			return fmt.Errorf("parse provider-effect ownership file %s: %w", relative, err)
-		}
-
-		for _, declaration := range file.Decls {
-			generic, ok := declaration.(*ast.GenDecl)
-			if !ok || generic.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range generic.Specs {
-				typed, ok := specification.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				if packagePath == edgesPackagePath {
-					if finding, hit := edgesProviderEffectRedefinition(packagePath, relative, typed); hit {
-						findings = append(findings, finding)
-					}
-					continue
-				}
-				if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, relative, typed); hit {
-					findings = append(findings, finding)
-					continue
-				}
-				if !isProviderEffectPortDeclaration(typed) {
-					continue
-				}
-				if isDurableProvidersLeafOwner(packagePath) {
-					continue
-				}
-				if packagePath == workersProviderEffectMigrationDebtPackage {
-					// Live Workers declaration is migration debt only.
-					continue
-				}
-				findings = append(findings, providerEffectOwnershipFinding{
-					kind:        "durable-owner",
-					packagePath: packagePath,
-					filePath:    relative,
-					typeName:    typed.Name.Name,
-				})
-			}
-		}
+		findings = append(findings, fileFindings...)
 		return nil
 	})
 	if err != nil {
@@ -151,6 +95,95 @@ func scanProviderEffectOwnership(repoRoot string) ([]providerEffectOwnershipFind
 	return findings, nil
 }
 
+func scanProviderEffectOwnershipFile(
+	repoRoot string,
+	path string,
+	entry os.DirEntry,
+	walkErr error,
+) ([]providerEffectOwnershipFinding, error) {
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	if entry.IsDir() {
+		if entry.Name() == "testdata" || entry.Name() == "vendor" {
+			return nil, filepath.SkipDir
+		}
+		return nil, nil
+	}
+	if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		return nil, nil
+	}
+	relative, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		return nil, err
+	}
+	relative = filepath.ToSlash(relative)
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parse provider-effect ownership file %s: %w", relative, err)
+	}
+	return providerEffectOwnershipFindingsForFile(
+		filepath.ToSlash(filepath.Dir(relative)),
+		relative,
+		file,
+	), nil
+}
+
+func providerEffectOwnershipFindingsForFile(
+	packagePath string,
+	filePath string,
+	file *ast.File,
+) []providerEffectOwnershipFinding {
+	imports := importedPackagePaths(file)
+	var findings []providerEffectOwnershipFinding
+	for _, declaration := range file.Decls {
+		generic, ok := declaration.(*ast.GenDecl)
+		if !ok || generic.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range generic.Specs {
+			typed, ok := specification.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if finding, hit := providerEffectOwnershipFindingForType(
+				packagePath,
+				filePath,
+				typed,
+				imports,
+			); hit {
+				findings = append(findings, finding)
+			}
+		}
+	}
+	return findings
+}
+
+func providerEffectOwnershipFindingForType(
+	packagePath string,
+	filePath string,
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) (providerEffectOwnershipFinding, bool) {
+	if packagePath == edgesPackagePath {
+		return edgesProviderEffectRedefinition(packagePath, filePath, typed, imports)
+	}
+	if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, filePath, typed); hit {
+		return finding, true
+	}
+	if !isProviderEffectPortDeclaration(typed, imports) ||
+		isDurableProvidersLeafOwner(packagePath) ||
+		packagePath == workersProviderEffectMigrationDebtPackage {
+		return providerEffectOwnershipFinding{}, false
+	}
+	return providerEffectOwnershipFinding{
+		kind:        "durable-owner",
+		packagePath: packagePath,
+		filePath:    filePath,
+		typeName:    typed.Name.Name,
+	}, true
+}
+
 func isDurableProvidersLeafOwner(packagePath string) bool {
 	return packagePath == providersLeafEffectContractPackage
 }
@@ -160,22 +193,16 @@ func isProvidersServicePackage(packagePath string) bool {
 		strings.HasPrefix(packagePath, providersServiceRootPrefix)
 }
 
-func isProviderEffectPortDeclaration(typed *ast.TypeSpec) bool {
-	if typed.Name == nil || typed.Name.Name != providerEffectPortTypeName {
-		return false
-	}
-	switch typed.Type.(type) {
-	case *ast.InterfaceType:
-		return true
-	default:
-		return typed.Assign.IsValid()
-	}
+func isProviderEffectPortDeclaration(typed *ast.TypeSpec, imports map[string]string) bool {
+	return declaresProviderEffectMethod(typed, imports) ||
+		aliasesProvidersLeafEffectContract(typed, imports)
 }
 
 func edgesProviderEffectRedefinition(
 	packagePath string,
 	filePath string,
 	typed *ast.TypeSpec,
+	imports map[string]string,
 ) (providerEffectOwnershipFinding, bool) {
 	if typed.Name == nil {
 		return providerEffectOwnershipFinding{}, false
@@ -183,9 +210,7 @@ func edgesProviderEffectRedefinition(
 	if typed.Name.Name == "Edges" {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if isProviderEffectPortDeclaration(typed) ||
-		declaresProviderEffectMethod(typed) ||
-		aliasesProvidersLeafEffectContract(typed) {
+	if isProviderEffectPortDeclaration(typed, imports) {
 		return providerEffectOwnershipFinding{
 			kind:        "edges-redefinition",
 			packagePath: packagePath,
@@ -196,14 +221,17 @@ func edgesProviderEffectRedefinition(
 	return providerEffectOwnershipFinding{}, false
 }
 
-func declaresProviderEffectMethod(typed *ast.TypeSpec) bool {
+func declaresProviderEffectMethod(typed *ast.TypeSpec, imports map[string]string) bool {
 	interfaceType, ok := typed.Type.(*ast.InterfaceType)
 	if !ok || interfaceType.Methods == nil {
 		return false
 	}
 	for _, method := range interfaceType.Methods.List {
 		for _, name := range method.Names {
-			if name.Name == providerEffectMethodName {
+			signature, ok := method.Type.(*ast.FuncType)
+			if name.Name == providerEffectMethodName &&
+				ok &&
+				isProviderEffectMethodSignature(signature, imports) {
 				return true
 			}
 		}
@@ -211,7 +239,38 @@ func declaresProviderEffectMethod(typed *ast.TypeSpec) bool {
 	return false
 }
 
-func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec) bool {
+func isProviderEffectMethodSignature(signature *ast.FuncType, imports map[string]string) bool {
+	if fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
+		return false
+	}
+	contextSelector, ok := signature.Params.List[0].Type.(*ast.SelectorExpr)
+	if !ok || contextSelector.Sel == nil || contextSelector.Sel.Name != "Context" {
+		return false
+	}
+	contextPackage, ok := contextSelector.X.(*ast.Ident)
+	if !ok || imports[contextPackage.Name] != "context" {
+		return false
+	}
+	errorResult, ok := signature.Results.List[len(signature.Results.List)-1].Type.(*ast.Ident)
+	return ok && errorResult.Name == "error"
+}
+
+func fieldCount(fields *ast.FieldList) int {
+	if fields == nil {
+		return 0
+	}
+	count := 0
+	for _, field := range fields.List {
+		if len(field.Names) == 0 {
+			count++
+			continue
+		}
+		count += len(field.Names)
+	}
+	return count
+}
+
+func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec, imports map[string]string) bool {
 	if typed.Name == nil || !typed.Assign.IsValid() {
 		return false
 	}
@@ -219,7 +278,30 @@ func aliasesProvidersLeafEffectContract(typed *ast.TypeSpec) bool {
 	if !ok {
 		return false
 	}
-	return selector.Sel != nil && selector.Sel.Name == providerEffectPortTypeName
+	packageName, ok := selector.X.(*ast.Ident)
+	if !ok || selector.Sel == nil || selector.Sel.Name != providerEffectPortTypeName {
+		return false
+	}
+	return imports[packageName.Name] == providersLeafEffectContractImport
+}
+
+func importedPackagePaths(file *ast.File) map[string]string {
+	imports := make(map[string]string, len(file.Imports))
+	for _, specification := range file.Imports {
+		importPath, err := strconv.Unquote(specification.Path.Value)
+		if err != nil {
+			continue
+		}
+		packageName := pathpkg.Base(importPath)
+		if specification.Name != nil {
+			packageName = specification.Name.Name
+		}
+		if packageName == "_" || packageName == "." {
+			continue
+		}
+		imports[packageName] = importPath
+	}
+	return imports
 }
 
 func competingProviderCatalogOrExecutionAbstraction(

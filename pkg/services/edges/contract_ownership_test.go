@@ -7,7 +7,6 @@ import (
 	"go/printer"
 	"go/token"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,74 +75,6 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestProviderInferencePortHasSingleLeafOwner(t *testing.T) {
-	t.Parallel()
-
-	workersRoot := filepath.Join("..", "workers")
-	const workersMigrationDebt = "provider/inferencecontract/contract.go"
-	err := filepath.WalkDir(workersRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		return reportUnauthorizedWorkersProviderRedeclarations(t, workersRoot, path, workersMigrationDebt)
-	})
-	if err != nil {
-		t.Fatalf("scan Workers provider contracts: %v", err)
-	}
-}
-
-func reportUnauthorizedWorkersProviderRedeclarations(
-	t *testing.T,
-	workersRoot string,
-	path string,
-	workersMigrationDebt string,
-) error {
-	t.Helper()
-
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		return err
-	}
-	relative, err := filepath.Rel(workersRoot, path)
-	if err != nil {
-		return err
-	}
-	relative = filepath.ToSlash(relative)
-	for _, declaration := range file.Decls {
-		generic, ok := declaration.(*ast.GenDecl)
-		if !ok || generic.Tok != token.TYPE {
-			continue
-		}
-		for _, specification := range generic.Specs {
-			typed, ok := specification.(*ast.TypeSpec)
-			if !ok || !isWorkersProviderEffectPort(typed) {
-				continue
-			}
-			if relative != workersMigrationDebt {
-				t.Errorf(
-					"%s redeclares Provider; durable ownership belongs to the Providers Execution leaf, and Workers migration debt may remain only at %s",
-					relative,
-					workersMigrationDebt,
-				)
-			}
-		}
-	}
-	return nil
-}
-
-func isWorkersProviderEffectPort(typed *ast.TypeSpec) bool {
-	if typed.Name == nil || typed.Name.Name != "Provider" {
-		return false
-	}
-	if _, isInterface := typed.Type.(*ast.InterfaceType); isInterface {
-		return true
-	}
-	return typed.Assign.IsValid()
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
