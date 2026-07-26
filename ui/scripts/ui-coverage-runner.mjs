@@ -26,7 +26,7 @@ export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "4";
 export const defaultShardMainCoveredMaxWorkers = "1";
 export { defaultCapturedStdoutMaxBuffer, defaultSlowFileSummaryLimit };
-export const defaultUiCoverageShardTotal = 10;
+export const defaultUiCoverageShardTotal = 4;
 export const defaultTimingReportsDir = ".vitest-report-timings";
 export const uiPerformanceTestPattern = "**/performance/*.test.ts";
 

@@ -81,11 +81,10 @@ Object.assign(bunTestWindow, {
 
 for (const key of Object.getOwnPropertyNames(bunTestWindow)) {
   if (!(key in globalThis)) {
-    Object.defineProperty(
-      globalThis,
-      key,
-      Object.getOwnPropertyDescriptor(bunTestWindow, key)!,
-    );
+    const descriptor = Object.getOwnPropertyDescriptor(bunTestWindow, key);
+    if (descriptor) {
+      Object.defineProperty(globalThis, key, descriptor);
+    }
   }
 }
 

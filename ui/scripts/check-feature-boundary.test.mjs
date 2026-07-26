@@ -205,6 +205,7 @@ test("CLI reports allowlisted legacy debt during a passing run", async () => {
               relativeFilePath: "src/features/beta/components/widget.tsx",
             },
           ]),
+          AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT: "1",
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
         },
       }),
@@ -243,6 +244,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
               relativeFilePath: "src/features/beta/components/widget.tsx",
             },
           ]),
+          AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT: "1",
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
         },
       }),
@@ -262,6 +264,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
               relativeFilePath: "src/features/beta/components/widget.tsx",
             },
           ]),
+          AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT: "1",
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
         },
       }),
@@ -282,11 +285,41 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
               relativeFilePath: "src/features/beta/components/widget.tsx",
             },
           ]),
+          AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT: "1",
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
         },
       }),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining("Allowlisted legacy debt:"),
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("CLI permits focused cross-feature imports in advisory mode", async () => {
+  const { featuresDir, tempRoot } = await createFeatureTree({
+    alpha: {
+      "hooks/use-alpha.ts": "export function useAlpha() { return null; }\n",
+    },
+    beta: {
+      "components/widget.tsx":
+        'import { useAlpha } from "../../alpha/hooks/use-alpha";\nexport function Widget() { return null; }\n',
+    },
+  });
+
+  try {
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: tempRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_ALLOWLIST: "[]",
+          AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+        },
+      }),
+    ).resolves.toMatchObject({
+      stdout: expect.stringContaining("Feature boundary advisory passed."),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });

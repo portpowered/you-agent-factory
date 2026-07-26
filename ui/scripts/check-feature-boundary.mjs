@@ -24,6 +24,8 @@ const skippedFileSuffixes = [
 ];
 const allowlistOverride =
   process.env.AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_ALLOWLIST;
+const strictBoundaryMode =
+  process.env.AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT === "1";
 
 function getConfiguredAllowlist() {
   if (!allowlistOverride) {
@@ -343,7 +345,10 @@ async function main() {
     )
     .join("\n\n");
 
-  if (report.violations.length > 0 || report.staleAllowlistEntries.length > 0) {
+  if (
+    strictBoundaryMode &&
+    (report.violations.length > 0 || report.staleAllowlistEntries.length > 0)
+  ) {
     const violationReport = report.violations
       .map((entry) => formatViolation(entry.relativeFilePath, entry))
       .join("\n\n");
@@ -366,6 +371,18 @@ async function main() {
         .join("\n\n"),
     );
     process.exitCode = 1;
+    return;
+  }
+
+  if (report.violations.length > 0 || report.staleAllowlistEntries.length > 0) {
+    console.log(
+      [
+        "Feature boundary advisory passed.",
+        `${report.violations.length} focused cross-feature import(s) and ${report.staleAllowlistEntries.length} stale allowlist entry/entries were observed.`,
+        "Focused direct imports are permitted when they avoid aggregate module fan-out; aggregate public barrels remain prohibited by check:test-lanes.",
+        "Set AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT=1 to audit the legacy strict policy.",
+      ].join("\n"),
+    );
     return;
   }
 

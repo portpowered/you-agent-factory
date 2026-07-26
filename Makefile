@@ -120,7 +120,7 @@ endef
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
-.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance
+.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
@@ -715,6 +715,9 @@ endif
 
 ui-test:
 	cd ui && $(UI_SCRIPT) test:unit
+
+ui-component-test:
+	cd ui && $(UI_SCRIPT) test:component
 
 ui-performance-test:
 	cd ui && $(UI_SCRIPT) test:performance

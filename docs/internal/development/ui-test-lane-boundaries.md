@@ -6,9 +6,17 @@ coverage for import/export and graph-editing flows. Use it when adding regressio
 or deciding whether an assertion belongs in unit/jsdom coverage or Chromium.
 
 Canonical lane names match [development.md](development.md): **Unit** (Node),
-**Component** (jsdom), and **Browser** (`ui/integration/`). The required UI
+**Component** (browserless DOM emulation), and **Browser** (`ui/integration/`). The required UI
 Coverage lane runs the Node unit project only; component, browser, and
 performance tests are separate confidence lanes and do not affect its threshold.
+
+The component lane runs browserless tests in two compatibility groups: Bun is
+the default for tests without Vitest-only capabilities, and Vitest temporarily
+owns files that still use `vi` APIs or explicit Vitest environment directives.
+`bun run test:component` measures both groups together and fails when their total
+wall time exceeds 150 seconds (override with `UI_COMPONENT_MAX_DURATION_MS`).
+CI runs this as the dedicated **Frontend Component** lane. Performance tests do
+not share that budget or lane.
 
 Component setup is capability-based. `ui/src/testing/vitest.setup.ts` contains
 only the guarded console policy, Testing Library configuration, and React act
@@ -116,11 +124,14 @@ New regression?
 └─ Visual-only story state? → Storybook story + optional Storybook Vitest lane
 ```
 
-Prefer focused public entry points such as `timeline/public/store`,
-`timeline/public/stream-identity`, and
-`dashboard/public/runtime-cache-scope`. Aggregate dashboard and timeline public
-barrels are prohibited because small tests otherwise compile unrelated stores,
-persistence code, and widgets.
+Prefer the narrowest import that expresses ownership. A focused public entry
+point such as `timeline/public/store` is useful when multiple consumers need a
+stable contract; a direct focused cross-feature import is also permitted when it
+prevents module fan-out. Aggregate feature `public/index` barrels and the general
+shared-component barrel are prohibited because small tests otherwise compile
+unrelated stores, persistence code, and widgets. The feature-boundary scanner is
+advisory by default during this latency migration; set
+`AGENT_FACTORY_UI_CROSS_FEATURE_BOUNDARY_STRICT=1` for a legacy-policy audit.
 
 ## Related references
 

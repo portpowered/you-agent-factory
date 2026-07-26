@@ -1,7 +1,7 @@
 import "../../../../../testing/vitest-dom-capabilities.setup";
 
 import { fireEvent, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, it, mock } from "bun:test";
 
 import { CurrentFactoryDefinitionError } from "../../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";

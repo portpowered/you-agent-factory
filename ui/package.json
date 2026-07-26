@@ -54,7 +54,7 @@
     "storybook:test-runner:ci": "vitest run --config vitest.storybook.config.ts --project=storybook",
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",
     "test:classified": "vitest run --config vitest.lanes.config.ts --maxWorkers=2 --retry=0",
-    "test:component": "bun run test:component:bun && bun run test:component:vitest",
+    "test:component": "bun scripts/run-component-tests.ts",
     "test:component:bun": "bun scripts/run-bun-component-tests.ts",
     "test:component:vitest": "bun scripts/run-vitest-component-tests.ts",
     "test:integration": "bun run build && node scripts/run-ui-integration-with-timings.mjs",

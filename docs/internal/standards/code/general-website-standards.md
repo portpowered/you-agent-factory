@@ -58,7 +58,7 @@ Preferred structure:
 - `ui/src/api/` for transport, handwritten API wrappers, request/response normalization, generated OpenAPI types, and API-focused tests
 - `ui/src/components/` for shared presentational, dashboard, and primitive UI building blocks
 - `ui/src/features/` for feature-specific UI, hooks, view models, state, messages, selectors, and orchestration
-- `ui/src/features/<feature>/public/` for the feature's intentional import boundary
+- `ui/src/features/<feature>/public/` for focused, stable feature entry points when an explicit public contract is useful
 - `ui/src/features/<feature>/components/` for feature-owned React components
 - `ui/src/features/<feature>/hooks/` for feature-owned stateful React hooks
 - `ui/src/features/<feature>/lib/` for feature-owned pure logic, projections, operations, parsers, and helpers
@@ -78,7 +78,8 @@ Rules:
 - Shared UI primitives **MUST NOT** depend on feature-specific modules.
 - Feature modules **MAY** depend on shared components, shared utilities, testing helpers in tests, and API modules.
 - Feature root directories under `ui/src/features/<feature>/` **MUST** contain subdirectories only. New feature files belong under an approved subdirectory such as `public/`, `components/`, `hooks/`, `messages/`, `state/`, `selectors/`, `lib/`, or a more specific domain folder.
-- Cross-feature imports **SHOULD** go through another feature's `public/` boundary unless a narrower local exception is already established and documented by existing code.
+- Cross-feature imports **MAY** target a focused owned module directly when that keeps the dependency graph narrow, especially for component-test latency. Aggregate `public/index` feature barrels **SHOULD NOT** be introduced for import convenience because they compile and initialize unrelated feature code.
+- Focused `public/` subpaths remain appropriate when a feature needs a stable API for multiple consumers. They **SHOULD** re-export only the named capability and **MUST NOT** fan out through a feature-wide barrel.
 - Feature-local state and hooks **SHOULD** remain inside the owning feature. Create cross-feature `ui/src/lib/` or shared component utilities only when there is a real cross-feature owner and reuse case.
 - Network transport, parsing, and server contract details **MUST NOT** live inline inside rendering components.
 - Generated API clients **MUST** remain generated artifacts; handwritten wrappers belong alongside them rather than inside them.
