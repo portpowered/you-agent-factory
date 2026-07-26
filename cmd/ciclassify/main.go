@@ -204,15 +204,17 @@ func classifyPath(path string) (string, []string) {
 		return "readme", []string{laneReadme}
 	case strings.HasPrefix(path, "docs/reference/"), path == "docs/README.md":
 		return "documentation-reference", []string{laneDocsReference}
+	case strings.HasPrefix(path, "docs/"):
+		return "documentation", nil
 	case strings.HasPrefix(path, "factory/"):
 		return "factory-content", nil
 	case strings.HasPrefix(path, "api/"), strings.HasPrefix(path, "contracts/"), strings.HasPrefix(path, "pkg/transports/http/"), strings.HasPrefix(path, "pkg/transports/mapping/"), strings.HasPrefix(path, "ui/src/api/generated/"):
 		return "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}
-	case strings.HasPrefix(path, "packages/api/"):
+	case strings.HasPrefix(path, "packages/api/"), strings.HasPrefix(path, "scripts/api-package"):
 		return "api-package", []string{laneAPIPackage, laneFrontend, laneBackend, laneUIBackendIntegration}
-	case strings.HasPrefix(path, "packages/packaged-factories/"):
+	case strings.HasPrefix(path, "packages/packaged-factories/"), strings.HasPrefix(path, "scripts/packaged-factories"):
 		return "packaged-factories-package", []string{lanePackagedFactoriesPackage, laneBackend}
-	case strings.HasPrefix(path, "packages/model-providers/"):
+	case strings.HasPrefix(path, "packages/model-providers/"), strings.HasPrefix(path, "scripts/model-provider"):
 		return "model-providers-package", []string{laneModelProvidersPackage, laneBackend}
 	case isLocalInferencePath(path):
 		return "local-inference", []string{laneBackend, laneLocalInference}
@@ -236,7 +238,7 @@ func newLanePlans() map[string]lanePlan {
 		laneFrontend:                 {Name: laneFrontend, Command: "make typecheck ui-lint test-ui-coverage test-ui-browser-integration"},
 		laneBackend:                  {Name: laneBackend, Command: "make build test-backend-verification"},
 		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-durable-session-real-backend-integration-test"},
-		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-smoke"},
+		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
 		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
 		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},
 		laneLocalInference:           {Name: laneLocalInference, Command: "make verify-pr-inference"},
