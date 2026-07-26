@@ -118,6 +118,7 @@
     "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
     "pkg/services/factory_runtime/internal/orchestrators/petri",
+    "pkg/services/factory_runtime/internal/rootobservation",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
     "pkg/services/factory_runtime/orchestratorcontract",
@@ -228,6 +229,9 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/internal/services/projection_query",
+    "pkg/services/recordings/internal/services/projection_query/internal/service",
+    "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
@@ -737,6 +741,11 @@
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/javascript",
@@ -1287,6 +1296,21 @@
       "packagePath": "pkg/services/recordings/events/snapshot",
       "disposition": "move",
       "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
     },
     {
       "packagePath": "pkg/services/recordings/projections",

@@ -13,6 +13,8 @@ const (
 	docsHelpFixture = "testdata/docs_help.txt"
 )
 
+// FND-12 captured CLI success baseline: customer-visible `you --help` stdout
+// matches the checked-in fixture. Invoked by `make fnd-12-cli-behavior-baselines`.
 func TestRootHelpBaseline_MatchesFixture(t *testing.T) {
 	assertHelpMatchesFixture(t, rootHelpFixture, []string{"--help"})
 }

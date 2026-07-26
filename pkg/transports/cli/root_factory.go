@@ -8,6 +8,44 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
+	root := newRootCommandWithGeneratedRepresentativeFamily(options)
+	if root == nil {
+		return nil
+	}
+	previous := root.PersistentPreRunE
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if requiresSystemInitialization(cmd.CommandPath(), args) {
+			if options.initializer == nil {
+				return fmt.Errorf("system initializer is required")
+			}
+			homeDir, err := resolveProcessHomeDir(options)
+			if err != nil {
+				return err
+			}
+			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
+				return fmt.Errorf("initialize system: %w", err)
+			}
+		}
+		if previous != nil {
+			return previous(cmd, args)
+		}
+		return nil
+	}
+	return root
+}
+
+func requiresSystemInitialization(commandPath string, args []string) bool {
+	switch commandPath {
+	case "you":
+		return len(args) > 0
+	case "you factory list", "you mcp serve", "you run":
+		return true
+	default:
+		return false
+	}
+}
+
 type factoryConfigInitProductionCommands struct {
 	Factory *cobra.Command
 	Config  *cobra.Command

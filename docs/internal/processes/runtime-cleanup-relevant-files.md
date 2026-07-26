@@ -359,6 +359,11 @@ functional test). The prohibition runs on the `make lint` package-boundary path;
 pre-existing live-tree debt is inventory-only in
 `petri-public-surface-baseline.json` with an exact deletion gate pointing at
 Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
+Each entry's count must match every live occurrence of that exact
+file/import/symbol edge; after creating or editing the inventory, run
+`make pkg-boundary` so an omitted edge or undercount cannot leave the base
+branch lint-broken. Correct a count only when history proves all occurrences
+predate the deletion gate; new references must be retired instead of baselined.
 
 ## Focused Verification
 
@@ -796,3 +801,92 @@ result-owner values. The outer service/runtime-host compatibility adapter maps
 generated open input before calling the gateway and assembles generated open,
 list, detail, reconnect, terminal-result, and partial-result responses only
 after the domain call returns.
+
+## Factory Runtime root contract slices
+
+Cross-service Factory Runtime consumers depend on the singular root `Service`
+in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
+`composition_contracts.go`. Do not publish a second peer-facing Runtime authority
+(hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
+`JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
+slices. Prove each published slice with a colocated `factory_test`
+characterization that implements a fake `Service` using only the root package
+and approved peer contracts, without importing `factory_runtime/internal`.
+
+Plain control request/result vocabulary is consolidated in `work_move_errors.go`
+(`PauseRequest`/`PauseResult`, `ResumeRequest`/`ResumeResult`,
+`TerminateRequest`/`TerminateResult`, `WaitToCompleteRequest`/`WaitToCompleteResult`,
+`MoveWorkRequest`/`MoveWorkResult`). Peers call `Service` methods
+(`ControlPause`, `ControlResume`, `ControlTerminate`,
+`ControlWaitToComplete`, `ControlMoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
+`ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
+errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`,
+`ErrMoveWorkRequestConflict`). Concrete root methods must classify lifecycle
+state at the `Service` boundary so repeated pause/resume returns `NO_OP` and
+failures remain matchable with root sentinels. When a consumer-owned adapter
+retains a domain-specific error contract, map the root sentinel back at that
+adapter rather than leaking the consumer package's sentinel through `Service`.
+Do not route control through hosting `Lifecycle.Stop` as the peer authority for
+this slice.
+
+Plain observation request/result/value vocabulary lives in
+`projection_contracts.go` (`ObserveRequest`/`ObserveResult`,
+`Observation`, `ObservationProgress`, `ObservationDispatchSummary`,
+`ObservationResultView`, `ObservationResourceView`, `ObservationHealth`).
+Peers call `Service.Observe` and branch on
+`ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
+legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
+JavaScript runtime-record types as the peer source of truth for this slice.
+`GetEngineStateSnapshot` remains only on the migration-era `APIFactory`
+interface; never embed `APIFactory` into the singular root `Service`. Adapters
+that still need legacy snapshots must request or explicitly assert
+`APIFactory`, while root-slice peer fakes implement `Service` without a legacy
+snapshot method.
+Concrete sanitized projection from legacy engine snapshots lives under
+`factory_runtime/internal/rootobservation` so raw `EngineStateSnapshot` types
+stay off the public Runtime package surface enforced by `make pkg-boundary`.
+Adding that new production package (any non-test `.go` under a new
+`pkg/services/...` directory) also requires regenerating
+`docs/internal/packaged-service-structure/package-target-manifest.json` with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory` then
+`-write-owner-packages`, and adding the matching retain row to
+`docs/internal/baselines/ownership-inventory.json` (sorted by `packagePath`)
+so `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
+green.
+Migration adapter fakes that explicitly implement `APIFactory` should return
+`LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
+prohibited Petri public-surface symbols in non-internal packages.
+
+Plain dispatch-plan request/result vocabulary lives in
+`execution_contracts.go` (`PlanDispatchRequest`/`PlanDispatchResult`,
+`AcceptDispatchResultRequest`/`AcceptDispatchResultResult`,
+`DispatchPlanOutcome` including `DUPLICATE_IDEMPOTENT`, and
+`DispatchResultOutcome`). Peers call `Service` methods
+(`PlanDispatch`, `AcceptDispatchResult`) and branch on root typed errors
+(`ErrDuplicateDispatchIntent`, `ErrUnknownDispatchCorrelation`,
+`ErrInvalidDispatchResultBoundary`, plus `ErrNotRunning`/`ErrNotFound`). Do not
+expose Petri transition objects or Workers construction/implementation types,
+and do not require a separate public Dispatch Service for this slice.
+
+Plain checkpoint request/result/value vocabulary lives in
+`javascript_checkpoint_contract.go` (`CaptureCheckpointRequest`/`CaptureCheckpointResult`,
+`LoadCheckpointRequest`/`LoadCheckpointResult`,
+`RestoreCheckpointRequest`/`RestoreCheckpointResult`, `Checkpoint` with opaque
+`Payload` bytes, and `CheckpointOutcome`). Peers call `Service` methods
+(`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`)
+and branch on root typed errors (`ErrCheckpointNotFound`, `ErrCorruptCheckpoint`,
+`ErrIncompatibleCheckpoint`, plus `ErrNotRunning`/`ErrNotFound`). Do not expose
+Petri marking snapshots or JavaScript checkpoint strategy types as peer-facing
+vocabulary, and do not claim Recordings immutable history ownership from this
+slice.
+
+Sealed CTR-RUN root invariants for IMP-RUN unlock live in the root-only peer
+characterization in `javascript_child_contract_test.go`: one peer-shaped `Service`
+consumer reaches control, observation, dispatch-plan, and checkpoint slices
+through the singular root and asserts representative success plus typed
+failures using only the published root package (no `factory_runtime/internal`,
+Petri, or JavaScript strategy imports). Concrete `factoryImpl` entrypoints for
+those slices are consolidated in `runtime/worker_pool.go` (kept out of
+`runtime/factory.go` to preserve the backend-size file limit). Nested IMP-RUN
+moves, Wire/root, CLI-manifest, provider-conductor, Workers construction, and
+OpenAPI package-motion edits remain outside this seal.

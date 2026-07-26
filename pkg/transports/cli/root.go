@@ -295,44 +295,6 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	return parseErr
 }
 
-func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
-	root := newRootCommandWithGeneratedRepresentativeFamily(options)
-	if root == nil {
-		return nil
-	}
-	previous := root.PersistentPreRunE
-	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if requiresSystemInitialization(cmd.CommandPath(), args) {
-			if options.initializer == nil {
-				return fmt.Errorf("system initializer is required")
-			}
-			homeDir, err := resolveProcessHomeDir(options)
-			if err != nil {
-				return err
-			}
-			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
-				return fmt.Errorf("initialize system: %w", err)
-			}
-		}
-		if previous != nil {
-			return previous(cmd, args)
-		}
-		return nil
-	}
-	return root
-}
-
-func requiresSystemInitialization(commandPath string, args []string) bool {
-	switch commandPath {
-	case "you":
-		return len(args) > 0
-	case "you factory list", "you mcp serve", "you run":
-		return true
-	default:
-		return false
-	}
-}
-
 func buildWorkflowExecutionService(
 	ctx context.Context,
 	options CommandFactory,
@@ -757,6 +719,9 @@ func resolveRunNamedFactorySelection(
 	resolveNamedFactoryRoots NamedFactoryRootsResolver,
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if namedFactoryCatalog == nil {
 		return fmt.Errorf("Factory Definitions named-factory catalog is required")
 	}
@@ -771,6 +736,9 @@ func resolveRunNamedFactorySelection(
 		return fmt.Errorf("resolve current working directory for --named: process working directory is required")
 	}
 	roots, err := resolveNamedFactoryRoots(homeDir, cwd)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return fmt.Errorf("resolve named-Factory roots: %w", err)
 	}
@@ -779,12 +747,18 @@ func resolveRunNamedFactorySelection(
 		roots.Global,
 		cfg.NamedFactoryName,
 	)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		candidates, candidateErr := resolveNamedFactoryCandidatePaths(
 			roots.Project,
 			roots.Global,
 			cfg.NamedFactoryName,
 		)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 		if candidateErr != nil {
 			return err
 		}
@@ -817,6 +791,7 @@ func resolveRunFactoryPrompt(
 		signatureSource = cfg.FactoryConfigPath
 	}
 	signature, err := runcli.ResolveFactoryInvocationSignature(
+		cmd.Context(),
 		cfg.LoadFactoryConfigFile,
 		signatureSource,
 	)

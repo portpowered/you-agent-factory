@@ -2748,6 +2748,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3433,6 +3439,24 @@
     },
     {
       "packagePath": "pkg/services/recordings/events/snapshot",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"

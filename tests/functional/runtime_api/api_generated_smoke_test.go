@@ -20,6 +20,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
+// FND-12 captured HTTP success baseline: live generated server serves a
+// protocol-visible Work submit/read path. Invoked by
+// `make fnd-12-http-behavior-baselines`.
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
 	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
 
@@ -114,6 +117,8 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredS
 	}
 }
 
+// FND-12 captured HTTP typed-failure baseline: empty structured submit returns
+// HTTP 400. Invoked by `make fnd-12-http-behavior-baselines`.
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true)

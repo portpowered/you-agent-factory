@@ -43,6 +43,7 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 
 type registeredWorkRuntime struct {
 	factory.Factory
+	factory.Service
 }
 
 func TestServiceRoutesWorkThroughRegisteredSessionRuntime(t *testing.T) {
@@ -80,6 +81,25 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	_, err := assembly.ResolveWorkRuntime("missing")
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+type conflictingRootRuntime struct {
+	factory.Service
+}
+
+func (conflictingRootRuntime) ControlMoveWork(
+	context.Context,
+	factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{}, factory.ErrMoveWorkRequestConflict
+}
+
+func TestWorkRuntimeAdapterMapsRootMoveConflictToWorkContract(t *testing.T) {
+	adapter := workRuntimeAdapter{runtime: conflictingRootRuntime{}}
+	_, err := adapter.MoveWork(context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "request-1")
+	if !errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
+		t.Fatalf("MoveWork error = %v, want %v", err, work.ErrMoveWorkRequestAlreadyApplied)
 	}
 }
 

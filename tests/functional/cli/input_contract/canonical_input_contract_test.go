@@ -28,7 +28,7 @@ func TestCanonicalRunInputCompositionAndResolution(t *testing.T) {
 		}},
 	}}}
 
-	effective, diagnostics, err := climanifest.ComposeRunInputs(manifest, "you.run", signature)
+	effective, diagnostics, err := climanifest.ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}

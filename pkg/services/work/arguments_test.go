@@ -185,6 +185,144 @@ func TestNormalizeArguments_SignatureRejectsUnroutableStdin(t *testing.T) {
 	assertArgumentErrorCode(t, err, ArgumentErrorCodeUnroutableStdin)
 }
 
+func TestNormalizeArguments_CLIAndStructuredInputsHaveCanonicalParity(t *testing.T) {
+	stdin := "from stdin"
+	signature := &InvocationSignatureConfig{Parameters: []InvocationParameterConfig{
+		positionalParameter("topic", 1, true),
+		{
+			Name:      "files",
+			ValueMode: valueModeVariadic,
+			Bindings: []InvocationParameterBindingConfig{{
+				Kind: bindingKindPositional, Position: 2,
+			}},
+		},
+		{
+			Name: "tags", ExternalName: "tag", Aliases: []string{"t"},
+			ValueMode: valueModeRepeated, Sensitive: true,
+			Bindings: []InvocationParameterBindingConfig{{Kind: bindingKindNamed}},
+		},
+		namedParameter("format", "", nil, false, "", "json"),
+		stdinParameter("body", ""),
+	}}
+	cli, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature:      signature,
+		PositionalArgs: []string{"runtime schemas", "one.txt", "two.txt"},
+		NamedArgs: []NamedArgumentInput{{
+			Key: "t", Values: []string{"internal", "release"},
+		}},
+		StdinText: &stdin,
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments(CLI): %v", err)
+	}
+	api, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature: signature,
+		DirectArgs: []NamedArgumentInput{
+			{Key: "topic", Values: []string{"runtime schemas"}},
+			{Key: "files", Values: []string{"one.txt", "two.txt"}},
+			{Key: "tags", Values: []string{"internal", "release"}},
+			{Key: "body", Values: []string{"from stdin"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments(API): %v", err)
+	}
+
+	cliFacts := canonicalArgumentFacts(cli)
+	apiFacts := canonicalArgumentFacts(api)
+	if !reflect.DeepEqual(cliFacts, apiFacts) {
+		t.Fatalf("canonical CLI facts = %#v, want API parity %#v", cliFacts, apiFacts)
+	}
+}
+
+func TestNormalizeArguments_CLIAndStructuredInputsShareFailureCodes(t *testing.T) {
+	invalidSecret := "credential-that-must-not-leak"
+	stdin := "unroutable"
+	required := signatureConfig(positionalParameter("topic", 1, true))
+	namedOnly := signatureConfig(namedParameter("output", "", nil, false, "", ""))
+	choiceSignature := signatureConfig(InvocationParameterConfig{
+		Name: "token", Sensitive: true, Choices: []string{"allowed"},
+		Bindings: []InvocationParameterBindingConfig{{Kind: bindingKindNamed}},
+	})
+	typeSignature := signatureConfig(InvocationParameterConfig{
+		Name: "token", Sensitive: true, TypeHint: typeHintNumberString,
+		Bindings: []InvocationParameterBindingConfig{{Kind: bindingKindNamed}},
+	})
+	conflictSignature := signatureConfig(InvocationParameterConfig{
+		Name: "topic",
+		Bindings: []InvocationParameterBindingConfig{
+			{Kind: bindingKindPositional, Position: 1},
+			{Kind: bindingKindNamed},
+		},
+	})
+
+	tests := []struct {
+		name string
+		want ArgumentErrorCode
+		cli  NormalizeArgumentsInput
+		api  NormalizeArgumentsInput
+	}{
+		{
+			name: "missing required input", want: ArgumentErrorCodeMissingRequiredInput,
+			cli: NormalizeArgumentsInput{Signature: required},
+			api: NormalizeArgumentsInput{Signature: required},
+		},
+		{
+			name: "unknown argument", want: ArgumentErrorCodeUnknownArgument,
+			cli: NormalizeArgumentsInput{Signature: namedOnly, NamedArgs: []NamedArgumentInput{{Key: "mystery", Values: []string{"value"}}}},
+			api: NormalizeArgumentsInput{Signature: namedOnly, DirectArgs: []NamedArgumentInput{{Key: "mystery", Values: []string{"value"}}}},
+		},
+		{
+			name: "source conflict", want: ArgumentErrorCodeSourceConflict,
+			cli: NormalizeArgumentsInput{
+				Signature: conflictSignature, PositionalArgs: []string{"first"},
+				NamedArgs: []NamedArgumentInput{{Key: "topic", Values: []string{"second"}}},
+			},
+			api: NormalizeArgumentsInput{
+				Signature: conflictSignature,
+				DirectArgs: []NamedArgumentInput{
+					{Key: "topic", Values: []string{"first"}},
+					{Key: "topic", Values: []string{"second"}},
+				},
+			},
+		},
+		{
+			name: "choice validation mismatch", want: ArgumentErrorCodeStringValidationMismatch,
+			cli: NormalizeArgumentsInput{Signature: choiceSignature, NamedArgs: []NamedArgumentInput{{Key: "token", Values: []string{invalidSecret}}}},
+			api: NormalizeArgumentsInput{Signature: choiceSignature, DirectArgs: []NamedArgumentInput{{Key: "token", Values: []string{invalidSecret}}}},
+		},
+		{
+			name: "type validation mismatch", want: ArgumentErrorCodeStringValidationMismatch,
+			cli: NormalizeArgumentsInput{Signature: typeSignature, NamedArgs: []NamedArgumentInput{{Key: "token", Values: []string{invalidSecret}}}},
+			api: NormalizeArgumentsInput{Signature: typeSignature, DirectArgs: []NamedArgumentInput{{Key: "token", Values: []string{invalidSecret}}}},
+		},
+		{
+			name: "positional overflow", want: ArgumentErrorCodePositionalOverflow,
+			cli: NormalizeArgumentsInput{Signature: required, PositionalArgs: []string{"one", "two"}},
+			api: NormalizeArgumentsInput{Signature: required, PositionalArgs: []string{"one", "two"}},
+		},
+		{
+			name: "unroutable stdin", want: ArgumentErrorCodeUnroutableStdin,
+			cli: NormalizeArgumentsInput{Signature: namedOnly, StdinText: &stdin},
+			api: NormalizeArgumentsInput{Signature: namedOnly, StdinText: &stdin},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, cliErr := NormalizeArguments(test.cli)
+			_, apiErr := NormalizeArguments(test.api)
+			assertArgumentErrorCode(t, cliErr, test.want)
+			assertArgumentErrorCode(t, apiErr, test.want)
+			for _, err := range []error{cliErr, apiErr} {
+				if strings.Contains(err.Error(), invalidSecret) {
+					t.Fatalf("sensitive value leaked in diagnostic: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestNormalizeArguments_CompatibilityFallsBackToSharedTextResolver(t *testing.T) {
 	stdin := "from stdin"
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
@@ -219,6 +357,134 @@ func TestNormalizeArguments_CompatibilityPreservesAPIContentFallback(t *testing.
 	}
 	if got.CompatibilityInput.Text != "hello" {
 		t.Fatalf("text = %q, want hello", got.CompatibilityInput.Text)
+	}
+}
+
+func TestNormalizeArguments_CompatibilityAcceptsOnlyDocumentedInputSources(t *testing.T) {
+	positionalText := "from compatibility text"
+	stdinText := "from stdin"
+	tests := []struct {
+		name       string
+		input      NormalizeArgumentsInput
+		wantText   string
+		wantSource InputSourceLabel
+	}{
+		{
+			name: "positional arguments",
+			input: NormalizeArgumentsInput{
+				PositionalArgs: []string{"from", "arguments"},
+			},
+			wantText:   "from arguments",
+			wantSource: InputSourcePositionalText,
+		},
+		{
+			name: "stdin",
+			input: NormalizeArgumentsInput{
+				StdinText: &stdinText,
+			},
+			wantText:   stdinText,
+			wantSource: InputSourceStdinText,
+		},
+		{
+			name: "compatibility text",
+			input: NormalizeArgumentsInput{
+				CompatibilityText: &positionalText,
+			},
+			wantText:   positionalText,
+			wantSource: InputSourceLabel(ArgumentSourceKindCompatibilityText),
+		},
+		{
+			name: "compatibility content",
+			input: NormalizeArgumentsInput{
+				CompatibilityContent: []WorkContentPart{{
+					Type: WorkContentPartTypeText,
+					Text: "from content",
+				}},
+			},
+			wantText:   "from content",
+			wantSource: InputSourceLabel(ArgumentSourceKindCompatibilityContent),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeArguments(test.input)
+			if err != nil {
+				t.Fatalf("NormalizeArguments: %v", err)
+			}
+			if got.CompatibilityInput == nil ||
+				got.CompatibilityInput.Text != test.wantText ||
+				got.CompatibilityInput.Source != test.wantSource {
+				t.Fatalf("compatibility input = %#v, want text %q source %q", got.CompatibilityInput, test.wantText, test.wantSource)
+			}
+			if len(got.Arguments) != 0 || len(got.UnknownNamedArgs) != 0 {
+				t.Fatalf("no-signature input synthesized argument facts: %#v", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeArguments_CompatibilityRejectsSignatureOnlyNamedInputs(t *testing.T) {
+	tests := []struct {
+		name  string
+		input NormalizeArgumentsInput
+	}{
+		{
+			name: "CLI named argument",
+			input: NormalizeArgumentsInput{
+				NamedArgs: []NamedArgumentInput{{Key: "mode", Values: []string{"fast"}}},
+			},
+		},
+		{
+			name: "API structured argument",
+			input: NormalizeArgumentsInput{
+				DirectArgs: []NamedArgumentInput{{Key: "mode", Values: []string{"fast"}}},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeArguments(test.input)
+			assertArgumentErrorCode(t, err, ArgumentErrorCodeInvalidActiveSignature)
+			if got.CompatibilityInput != nil || len(got.Arguments) != 0 {
+				t.Fatalf("rejected named input returned partial facts: %#v", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeArguments_CompatibilitySourceConflictsUseStableCode(t *testing.T) {
+	positionalText := "from compatibility text"
+	stdinText := "from stdin"
+	tests := []NormalizeArgumentsInput{
+		{PositionalArgs: []string{"from arguments"}, StdinText: &stdinText},
+		{CompatibilityText: &positionalText, StdinText: &stdinText},
+		{
+			CompatibilityContent: []WorkContentPart{{
+				Type: WorkContentPartTypeText,
+				Text: "from content",
+			}},
+			PositionalArgs: []string{"from arguments"},
+		},
+	}
+	for index, input := range tests {
+		got, err := NormalizeArguments(input)
+		if got.CompatibilityInput != nil {
+			t.Fatalf("case %d returned partial compatibility input: %#v", index, got)
+		}
+		var inputErr *InputError
+		var argumentErr *ArgumentError
+		switch {
+		case errors.As(err, &inputErr):
+			if inputErr.Code != InputErrorCodeSourceConflict {
+				t.Fatalf("case %d code = %q, want source conflict", index, inputErr.Code)
+			}
+		case errors.As(err, &argumentErr):
+			if argumentErr.Code != ArgumentErrorCodeSourceConflict {
+				t.Fatalf("case %d code = %q, want source conflict", index, argumentErr.Code)
+			}
+		default:
+			t.Fatalf("case %d error = %v, want stable source-conflict error", index, err)
+		}
 	}
 }
 
@@ -307,4 +573,33 @@ func assertArgumentErrorCode(t *testing.T, err error, want ArgumentErrorCode) {
 	if argumentErr.Code != want {
 		t.Fatalf("code = %q, want %q", argumentErr.Code, want)
 	}
+}
+
+type canonicalArgumentFact struct {
+	Values     []string
+	Provenance string
+	Sensitive  bool
+	Redacted   bool
+}
+
+func canonicalArgumentFacts(normalized NormalizedArguments) map[string]canonicalArgumentFact {
+	facts := make(map[string]canonicalArgumentFact, len(normalized.Arguments))
+	for name, argument := range normalized.Arguments {
+		provenance := "explicit"
+		redacted := false
+		if len(argument.Sources) > 0 {
+			provenance = "default"
+		}
+		for _, source := range argument.Sources {
+			if source.Kind != ArgumentSourceKindDefault {
+				provenance = "explicit"
+			}
+			redacted = redacted || source.Redact
+		}
+		facts[name] = canonicalArgumentFact{
+			Values:     append([]string(nil), argument.Values...),
+			Provenance: provenance, Sensitive: argument.Sensitive, Redacted: redacted,
+		}
+	}
+	return facts
 }

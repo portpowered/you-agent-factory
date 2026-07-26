@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -9,14 +10,19 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 )
 
 func ResolveFactoryInvocationSignature(
+	ctx context.Context,
 	load interfaces.FactoryConfigFileLoader,
 	sourcePath string,
 ) (*interfaces.InvocationSignatureConfig, error) {
 	if strings.TrimSpace(sourcePath) == "" {
 		return nil, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if load == nil {
 		return nil, fmt.Errorf("Factory Definitions config file loader is required")
@@ -25,10 +31,32 @@ func ResolveFactoryInvocationSignature(
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if cfg.InvocationSignature == nil {
 		return nil, nil
 	}
 	return cfg.InvocationSignature, nil
+}
+
+// ResolveFactoryInvocationInputSchema performs the read-only selection lookup
+// around pure static-plus-Factory composition. The source path may identify a
+// named Factory's already-resolved config or an explicit authored Factory
+// source; selection identity and location are intentionally absent from the
+// returned schema.
+func ResolveFactoryInvocationInputSchema(
+	ctx context.Context,
+	manifest climanifest.Manifest,
+	commandID string,
+	load interfaces.FactoryConfigFileLoader,
+	sourcePath string,
+) (climanifest.EffectiveInputSchema, []climanifest.CompositionDiagnostic, error) {
+	signature, err := ResolveFactoryInvocationSignature(ctx, load, sourcePath)
+	if err != nil {
+		return climanifest.EffectiveInputSchema{}, nil, err
+	}
+	return climanifest.ComposeRunInputs(manifest, commandID, signature)
 }
 
 type factoryInvocationHelpData struct {

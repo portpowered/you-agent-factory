@@ -99,6 +99,16 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause || pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
+	pauseNoOp := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		server.URL()+"/factory-sessions/~default/pause",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		"repeat pause packaged goal session",
+	)
+	if pauseNoOp.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pauseNoOp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("repeat pause response = %#v, want no-op pause", pauseNoOp)
+	}
 
 	submitted := submitGeneratedGoalWork(t, server.URL(), "paused-goal-submit", "customer goal request text")
 	listed := support.ListDefaultSessionWork(t, server.URL())
@@ -117,6 +127,16 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 	)
 	if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume || resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("resume response = %#v, want accepted resume", resume)
+	}
+	resumeNoOp := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		server.URL()+"/factory-sessions/~default/resume",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		"repeat resume packaged goal session",
+	)
+	if resumeNoOp.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+		resumeNoOp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("repeat resume response = %#v, want no-op resume", resumeNoOp)
 	}
 
 	completed := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{stringPointerValue(submitted.WorkId)}, 15*time.Second)

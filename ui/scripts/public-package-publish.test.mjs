@@ -1,8 +1,16 @@
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
-
 import {
+  FRONTEND_ONLY_CANDIDATE_SCOPE,
+  TAGGED_RELEASE_CANDIDATE_SCOPE,
+} from "../../scripts/public-package-set.mjs";
+import {
+  assertFrontendCandidateEvidence,
   assertPublishVersion,
   PUBLIC_PACKAGES,
+  packCandidate,
   patchPublicPackageManifest,
 } from "./public-package-publish.mjs";
 
@@ -59,5 +67,59 @@ describe("public package publishing", () => {
       },
     });
     expect(manifest.version).toBe("0.0.0");
+  });
+
+  test("candidate packing suppresses lifecycle script side effects", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "you-package-lifecycle-fixture-"),
+    );
+    const stagedDirectory = path.join(root, "package");
+    const outputDirectory = path.join(root, "candidate");
+    const sentinel = path.join(root, "lifecycle-ran");
+    try {
+      await Promise.all([mkdir(stagedDirectory), mkdir(outputDirectory)]);
+      await Promise.all([
+        writeFile(
+          path.join(stagedDirectory, "package.json"),
+          `${JSON.stringify({
+            name: "@you-agent-factory/lifecycle-fixture",
+            version: "1.0.0",
+            scripts: { prepack: "node create-sentinel.mjs" },
+          })}\n`,
+        ),
+        writeFile(
+          path.join(stagedDirectory, "create-sentinel.mjs"),
+          `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(sentinel)}, "ran");\n`,
+        ),
+      ]);
+      const { stdout } = await packCandidate({
+        stagedDirectory,
+        outputDirectory,
+      });
+      expect(JSON.parse(stdout)[0].name).toBe(
+        "@you-agent-factory/lifecycle-fixture",
+      );
+      await expect(access(sentinel)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts only a complete frontend-only development candidate", () => {
+    const evidence = {
+      scope: FRONTEND_ONLY_CANDIDATE_SCOPE,
+      version: "0.0.0-dev.123.abcdef123456",
+      packages: PUBLIC_PACKAGES.map(({ name }) => ({
+        name,
+        version: "0.0.0-dev.123.abcdef123456",
+      })),
+    };
+    expect(assertFrontendCandidateEvidence(evidence)).toBe(evidence);
+    expect(() =>
+      assertFrontendCandidateEvidence({
+        ...evidence,
+        scope: TAGGED_RELEASE_CANDIDATE_SCOPE,
+      }),
+    ).toThrow("expected frontend-only candidate scope");
   });
 });
